@@ -21,8 +21,7 @@
 
 <br>
 
-<!-- 截图占位：请将截图文件放入 docs/screenshots/ 目录 -->
-<!-- ![首页](docs/screenshots/dashboard.png) -->
+![系统看板](docs/screenshots/系统看板.png)
 
 </div>
 
@@ -57,15 +56,17 @@ GenBox 是一个本地部署的 **一站式 AI 创作工具箱**，将多个 AI 
 
 ## 🖼️ 界面预览 | Screenshots
 
-> 请将截图放入 `docs/screenshots/` 目录，以下为占位示例
-
 | 系统看板 | 生图界面 | 媒体库 |
 |---------|---------|--------|
-| <!-- ![看板](docs/screenshots/dashboard.png) --> 📷 待添加 | <!-- ![生图](docs/screenshots/generate.png) --> 📷 待添加 | <!-- ![媒体库](docs/screenshots/gallery.png) --> 📷 待添加 |
+| ![看板](docs/screenshots/系统看板.png) | ![生图](docs/screenshots/生图界面.png) | ![媒体库](docs/screenshots/媒体库1.png) |
 
-| Provider 管理 | 视频卡片 | 设置面板 |
+| Provider 管理 | 视频卡片 | 历史记录 |
 |--------------|---------|---------|
-| <!-- ![Provider](docs/screenshots/providers.png) --> 📷 待添加 | <!-- ![视频](docs/screenshots/video.png) --> 📷 待添加 | <!-- ![设置](docs/screenshots/settings.png) --> 📷 待添加 |
+| ![Provider](docs/screenshots/Provider%20管理.png) | ![视频](docs/screenshots/视频卡片.png) | ![历史](docs/screenshots/历史页.png) |
+
+| Provider 设置 | 媒体库(视频) |
+|--------------|-------------|
+| ![设置](docs/screenshots/Provider设置面样.png) | ![媒体库视频](docs/screenshots/媒体库2.png) |
 
 ---
 
