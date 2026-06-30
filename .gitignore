@@ -1,0 +1,44 @@
+# ──────────────────────────────────────────────────────────────
+# Image Gen Studio - .gitignore
+# ──────────────────────────────────────────────────────────────
+
+# ══ 密钥 & 敏感配置（禁止入库！）══
+.env
+.env.local
+.env.production
+storage/providers.json
+
+# ══ 运行时数据（用户生成，禁止入库）══
+storage/gallery/
+storage/videos/
+storage/video_thumbs/
+storage/history.jsonl
+storage/video_history.jsonl
+storage/logs.jsonl
+storage/memory/
+
+# ══ Python ══
+__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+venv/
+env/
+
+# ══ IDE ══
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ══ OS ══
+.DS_Store
+Thumbs.db
+
+# ══ 日志 ══
+*.log
+logs/
+
+# ══ 临时文件 ══
+*.tmp
+*.temp

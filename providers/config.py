@@ -1,0 +1,280 @@
+"""
+全局配置：动态 Provider 注册系统
+- storage/providers.json: 运行时配置（前端可写）
+- .env: 默认值兜底
+"""
+import json
+import os
+from pathlib import Path
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env")
+
+BASE_DIR = Path(__file__).parent
+STORAGE_DIR = BASE_DIR / "storage"
+STORAGE_DIR.mkdir(exist_ok=True)
+GALLERY_DIR = STORAGE_DIR / "gallery"
+GALLERY_DIR.mkdir(exist_ok=True)
+
+PROVIDERS_FILE = STORAGE_DIR / "providers.json"
+
+
+# ──────────────────────────────────────────────────────────────
+# 数据模型
+# ──────────────────────────────────────────────────────────────
+class ProviderConfig(BaseModel):
+    """单个 Provider 配置"""
+    id: str                    # 唯一标识 (如 gpt-image, gemini, my-flux)
+    name: str                  # 显示名称 (如 GPT Image 2)
+    type: str                  # "image" | "llm"
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""            # 默认模型 ID
+    models: List[str] = []     # 可选模型列表（用于下拉选择）
+    size: str = ""             # 图片尺寸（仅 image 类型）
+    quality: str = ""          # 图片质量（仅 image 类型）
+    enabled: bool = True
+    color: str = "#0ea5e9"     # UI 卡片颜色
+    extra: Dict[str, Any] = {} # 扩展参数
+
+
+class ProvidersConfig(BaseModel):
+    """完整配置文件"""
+    providers: List[ProviderConfig] = []
+    version: int = 1
+
+
+# ──────────────────────────────────────────────────────────────
+# 默认配置（首次运行自动生成，或从 .env 读取真实值）
+# ──────────────────────────────────────────────────────────────
+DEFAULT_PROVIDERS: List[Dict[str, Any]] = [
+    {
+        "id": "gpt-image",
+        "name": "GPT Image 2",
+        "type": "image",
+        "api_key": os.getenv("GPT_IMAGE_API_KEY", ""),
+        "base_url": os.getenv("GPT_IMAGE_BASE_URL", "https://api.openai.com/v1"),
+        "model": "gpt-image-2",
+        "models": [],
+        "size": "1024x1024",
+        "quality": "high",
+        "color": "#22c55e",
+        "enabled": False,
+    },
+    {
+        "id": "gemini",
+        "name": "Gemini 3.1 Flash",
+        "type": "image",
+        "api_key": os.getenv("GEMINI_API_KEY", ""),
+        "base_url": os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com"),
+        "model": "gemini-2.0-flash-exp-image-generation",
+        "models": [],
+        "size": "",
+        "quality": "",
+        "color": "#3b82f6",
+        "enabled": False,
+    },
+    {
+        "id": "qwen",
+        "name": "Qwen2API",
+        "type": "image",
+        "api_key": os.getenv("QWEN_API_KEY", ""),
+        "base_url": os.getenv("QWEN_BASE_URL", "http://localhost:8090/v1"),
+        "model": "qwen3.6-plus",
+        "models": [],
+        "size": "1024*1024",
+        "quality": "",
+        "color": "#f97316",
+        "enabled": False,
+    },
+    {
+        "id": "llm-default",
+        "name": "LLM 提示词优化",
+        "type": "llm",
+        "api_key": os.getenv("LLM_API_KEY", ""),
+        "base_url": os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
+        "model": "gpt-4o-mini",
+        "models": [],
+        "size": "",
+        "quality": "",
+        "color": "#a855f7",
+        "enabled": False,
+    },
+]
+
+
+# ──────────────────────────────────────────────────────────────
+# 配置管理器
+# ──────────────────────────────────────────────────────────────
+class ConfigManager:
+    """管理 Provider 配置的加载/保存/读取"""
+
+    def __init__(self):
+        self._config: Optional[ProvidersConfig] = None
+
+    @property
+    def config(self) -> ProvidersConfig:
+        if self._config is None:
+            self._config = self._load()
+        return self._config
+
+    def _load(self) -> ProvidersConfig:
+        """加载配置：优先 providers.json → 回退默认 + .env"""
+        if PROVIDERS_FILE.exists():
+            try:
+                raw = json.loads(PROVIDERS_FILE.read_text(encoding="utf-8"))
+                cfg = ProvidersConfig(**raw)
+                # 合并 .env 中有但 JSON 没有的 key（防止 JSON 缺字段）
+                self._merge_env_defaults(cfg)
+                return cfg
+            except Exception as e:
+                print(f"[Config] providers.json 解析失败，使用默认配置: {e}")
+
+        cfg = ProvidersConfig(providers=[ProviderConfig(**p) for p in DEFAULT_PROVIDERS])
+        self._save(cfg)
+        return cfg
+
+    def _merge_env_defaults(self, cfg: ProvidersConfig):
+        """将 .env 的值合并进已有配置（补充空字段）"""
+        env_map = {
+            "gpt-image": {"api_key": "GPT_IMAGE_API_KEY", "base_url": "GPT_IMAGE_BASE_URL"},
+            "gemini": {"api_key": "GEMINI_API_KEY", "base_url": "GEMINI_BASE_URL"},
+            "qwen": {"api_key": "QWEN_API_KEY", "base_url": "QWEN_BASE_URL"},
+            "llm-default": {"api_key": "LLM_API_KEY", "base_url": "LLM_BASE_URL"},
+        }
+        for p in cfg.providers:
+            if p.id in env_map:
+                for field, env_key in env_map[p.id].items():
+                    env_val = os.getenv(env_key, "")
+                    if not getattr(p, field, "") and env_val:
+                        setattr(p, field, env_val)
+
+    def _save(self, cfg: ProvidersConfig):
+        """内部保存方法"""
+        PROVIDERS_FILE.write_text(
+            cfg.model_dump_json(indent=2, exclude_none=True),
+            encoding="utf-8"
+        )
+        self._config = cfg
+
+    def save(self, cfg: ProvidersConfig = None):
+        """保存配置到 providers.json"""
+        target = cfg or self._config
+        if target is None:
+            return
+        PROVIDERS_FILE.write_text(
+            target.model_dump_json(indent=2, exclude_none=True),
+            encoding="utf-8"
+        )
+        self._config = target
+
+    def get_image_providers(self) -> List[ProviderConfig]:
+        """获取所有启用的图片生成 Provider"""
+        return [p for p in self.config.providers if p.type == "image" and p.enabled]
+
+    def get_llm_provider(self) -> Optional[ProviderConfig]:
+        """获取第一个启用的 LLM Provider"""
+        for p in self.config.providers:
+            if p.type == "llm" and p.enabled and p.api_key:
+                return p
+        return None
+
+    def reload(self):
+        """强制重新加载"""
+        self._config = None
+        return self.config
+
+
+# 全局单例
+cfg_mgr = ConfigManager()
+
+
+# ──────────────────────────────────────────────────────────────
+# 兼容旧代码的 Settings 对象（逐步废弃）
+# ──────────────────────────────────────────────────────────────
+class LegacySettings:
+    """兼容层：让旧 provider 代码继续工作"""
+
+    @property
+    def gpt_image_api_key(self):
+        p = self._find("gpt-image"); return p.api_key if p else ""
+
+    @property
+    def gpt_image_base_url(self):
+        p = self._find("gpt-image"); return p.base_url if p else "https://api.openai.com/v1"
+
+    @property
+    def gpt_image_model(self):
+        p = self._find("gpt-image"); return p.model if p else "gpt-image-2"
+
+    @property
+    def gpt_image_size(self):
+        p = self._find("gpt-image"); return p.size if p else "1024x1024"
+
+    @property
+    def gpt_image_quality(self):
+        p = self._find("gpt-image"); return p.quality if p else "high"
+
+    @property
+    def gemini_api_key(self):
+        p = self._find("gemini"); return p.api_key if p else ""
+
+    @property
+    def gemini_base_url(self):
+        p = self._find("gemini"); return p.base_url if p else "https://generativelanguage.googleapis.com"
+
+    @property
+    def gemini_model(self):
+        p = self._find("gemini"); return p.model if p else "gemini-3.1-flash-preview-05-20"
+
+    @property
+    def qwen_api_key(self):
+        p = self._find("qwen"); return p.api_key if p else ""
+
+    @property
+    def qwen_base_url(self):
+        p = self._find("qwen"); return p.base_url if p else "http://localhost:8090/v1"
+
+    @property
+    def qwen_model(self):
+        p = self._find("qwen"); return p.model if p else "qwen2.5-72b-instruct"
+
+    @property
+    def qwen_size(self):
+        p = self._find("qwen"); return p.size if p else "1024*1024"
+
+    @property
+    def llm_api_key(self):
+        p = self._find("llm-default"); return p.api_key if p else ""
+
+    @property
+    def llm_base_url(self):
+        p = self._find("llm-default"); return p.base_url if p else "https://api.openai.com/v1"
+
+    @property
+    def llm_model(self):
+        p = self._find("llm-default"); return p.model if p else "gpt-4o-mini"
+
+    @property
+    def host(self): return "0.0.0.0"
+
+    @property
+    def port(self): return 8765
+
+    @property
+    def debug(self): return True
+
+    class Config:
+        extra = "allow"
+
+    def _find(self, pid: str):
+        for p in cfg_mgr.config.providers:
+            if p.id == pid:
+                return p
+        return None
+
+
+settings = LegacySettings()
