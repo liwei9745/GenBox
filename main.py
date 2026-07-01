@@ -4,6 +4,7 @@ FastAPI 主入口
 """
 import os
 import sys
+import platform
 import threading
 import asyncio
 import json as _json
@@ -1819,8 +1820,47 @@ async def get_dashboard():
 
     total_score = round(connectivity_score + config_score + disk_score + dep_score)
 
+    # ── 平台信息 ──
+    _os_name = platform.system()           # Windows / Linux / Darwin
+    _os_release = platform.release()       # 10 / 22H2 / 5.15.0
+    _os_version = platform.version()       # 10.0.19041
+    _os_machine = platform.machine()       # AMD64 / x86_64 / ARM64
+    _os_arch = "64-bit" if _os_machine in ("AMD64", "x86_64", "arm64", "aarch64") else "32-bit"
+    _python_ver = platform.python_version()
+    _hostname = platform.node()
+
+    if _os_name == "Windows":
+        try:
+            _os_full = f"Windows {platform.platform().split('-')[0].replace('Windows', '').strip() or _os_release}"
+        except Exception:
+            _os_full = f"Windows {_os_release}"
+        # Try to get Windows 10/11 edition
+        try:
+            ver = platform.version()
+            build = int(ver.split('.')[-1]) if ver.split('.')[-1].isdigit() else 0
+            if build >= 22000:
+                _os_full = f"Windows 11 (Build {build})"
+            elif build >= 10240:
+                _os_full = f"Windows 10 (Build {build})"
+        except Exception:
+            pass
+    elif _os_name == "Linux":
+        try:
+            _os_full = f"{platform.freedesktop_os_release().get('PRETTY_NAME', f'Linux {_os_release}')}"
+        except Exception:
+            _os_full = f"Linux {_os_release}"
+    elif _os_name == "Darwin":
+        _os_full = f"macOS {platform.mac_ver()[0]}"
+    else:
+        _os_full = f"{_os_name} {_os_release}"
+
     return {
         "system": {
+            "os": _os_full,
+            "arch": _os_arch,
+            "machine": _os_machine,
+            "python": _python_ver,
+            "hostname": _hostname,
             "uptime_seconds": int(now - app_start_time),
             "disk_total_gb": disk_total_gb,
             "disk_used_gb": disk_used_gb,
@@ -1988,59 +2028,68 @@ async def check_connectivity():
 
 @app.get("/api/dashboard/network")
 async def check_network_status():
-    """检测国内外主流大模型厂商端点网络连通性（自动使用系统代理）"""
-    import socket
+    """检测国内外主流大模型厂商端点网络连通性（HTTP HEAD 请求，自动使用系统代理）"""
+    import httpx as _httpx
 
     endpoints = {
-        "OpenAI": ("api.openai.com", 443, True),
-        "Gemini": ("generativelanguage.googleapis.com", 443, True),
-        "Anthropic": ("api.anthropic.com", 443, True),
-        "Agnes": ("apihub.agnes-ai.com", 443, False),
-        "Qwen": ("dashscope.aliyuncs.com", 443, False),
-        "Zhipu": ("open.bigmodel.cn", 443, False),
-        "Volcengine": ("visual.volcengineapi.com", 443, False),
-        "Baidu": ("aip.baidubce.com", 443, False),
-        "Tencent": ("hunyuan.tencentcloudapi.com", 443, False),
-        "Moonshot": ("api.moonshot.cn", 443, False),
-        "DeepSeek": ("api.deepseek.com", 443, False),
-        "MiniMax": ("api.minimax.chat", 443, False),
+        "OpenAI": ("https://api.openai.com/v1/models", True),
+        "Gemini": ("https://generativelanguage.googleapis.com/", True),
+        "Anthropic": ("https://api.anthropic.com/v1/messages", True),
+        "Agnes": ("https://apihub.agnes-ai.com/v1/models", False),
+        "Qwen": ("https://dashscope.aliyuncs.com/compatible-mode/v1/models", False),
+        "Zhipu": ("https://open.bigmodel.cn/api/paas/v4/models", False),
+        "Volcengine": ("https://visual.volcengineapi.com/", False),
+        "Baidu": ("https://aip.baidubce.com/", False),
+        "Tencent": ("https://hunyuan.tencentcloudapi.com/", False),
+        "Moonshot": ("https://api.moonshot.cn/v1/models", False),
+        "DeepSeek": ("https://api.deepseek.com/v1/models", False),
+        "MiniMax": ("https://api.minimax.chat/v1/models", False),
     }
 
     proxy_host, proxy_port = _detect_proxy()
+    proxy_url = None
+    if proxy_host:
+        proxy_url = f"http://{proxy_host}:{proxy_port}"
+
     results = {}
 
-    def _test_direct(host, port):
-        s = socket.create_connection((host, port), timeout=3)
-        s.close()
-
-    def _test_via_proxy(host, port, ph, pp):
-        s = socket.create_connection((ph, pp), timeout=3)
-        s.sendall(f'CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n\r\n'.encode())
-        resp = s.recv(4096).decode()
-        s.close()
-        if '200' not in resp:
-            raise Exception('Proxy CONNECT failed')
-
-    for name, (host, port, need_proxy) in endpoints.items():
+    async def _test_one(name, url, need_proxy):
         try:
             start = time.time()
-            if need_proxy and proxy_host:
-                _test_via_proxy(host, port, proxy_host, proxy_port)
-            else:
-                _test_direct(host, port)
-            elapsed = round((time.time() - start) * 1000)
-            results[name] = {"status": "ok", "ms": elapsed}
-        except Exception:
-            if need_proxy and proxy_host:
+            async with _httpx.AsyncClient(
+                timeout=_httpx.Timeout(5.0),
+                verify=False,
+                proxy=proxy_url if (need_proxy and proxy_url) else None,
+                follow_redirects=True,
+            ) as client:
+                r = await client.head(url)
+                elapsed = round((time.time() - start) * 1000)
+                # 200/301/302/401/403 都算可达
+                if r.status_code < 500:
+                    results[name] = {"status": "ok", "ms": elapsed}
+                else:
+                    results[name] = {"status": "error", "ms": elapsed, "error": f"HTTP {r.status_code}"}
+        except Exception as e:
+            # 如果需要代理但代理失败，尝试直连
+            if need_proxy and proxy_url:
                 try:
                     start = time.time()
-                    _test_direct(host, port)
-                    elapsed = round((time.time() - start) * 1000)
-                    results[name] = {"status": "ok", "ms": elapsed}
+                    async with _httpx.AsyncClient(timeout=_httpx.Timeout(5.0), verify=False, follow_redirects=True) as client:
+                        r = await client.head(url)
+                        elapsed = round((time.time() - start) * 1000)
+                        if r.status_code < 500:
+                            results[name] = {"status": "ok", "ms": elapsed}
+                        else:
+                            results[name] = {"status": "error", "ms": elapsed, "error": f"HTTP {r.status_code}"}
                 except Exception:
-                    results[name] = {"status": "error", "ms": 0}
+                    results[name] = {"status": "error", "ms": 0, "error": str(e)[:60]}
             else:
-                results[name] = {"status": "error", "ms": 0}
+                results[name] = {"status": "error", "ms": 0, "error": str(e)[:60]}
+
+    # 并发测试所有端点
+    import asyncio as _asyncio
+    tasks = [_test_one(name, url, need) for name, (url, need) in endpoints.items()]
+    await _asyncio.gather(*tasks)
 
     return {"results": results, "proxy": {"host": proxy_host, "port": proxy_port}}
 
@@ -2085,7 +2134,6 @@ async def server_control(action: str = "status"):
         subprocess.Popen(["python", "main.py"], cwd=str(STORAGE_DIR.parent))
         return {"status": "restarting"}
     elif action == "stop":
-        import os
         os._exit(0)
         return {"status": "stopping"}
     return {"status": "unknown"}

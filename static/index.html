@@ -3634,6 +3634,10 @@ function loadDashboard() {
       var videoSize = s.video_size || '0 B';
       html += '<div class="glass-card" style="padding:16px;">';
       html += '<div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:12px;">💻 系统信息</div>';
+      html += _infoRow('操作系统', '<span style="font-weight:600;">' + escHtml(s.os || '-') + '</span>');
+      html += _infoRow('架构', escHtml(s.arch || '-') + ' (' + escHtml(s.machine || '-') + ')');
+      html += _infoRow('主机名', escHtml(s.hostname || '-'));
+      html += _infoRow('Python', escHtml(s.python || '-'));
       html += _infoRow('运行时间', _fmtUptime(s.uptime_seconds || 0));
       html += _infoRow('磁盘空间', diskFree + ' GB 可用 / ' + diskTotal + ' GB');
       html += _infoRow('磁盘使用率', '<div style="flex:1;margin-left:10px;"><div style="height:6px;border-radius:3px;background:var(--bg-base);overflow:hidden;"><div style="height:100%;width:' + diskPct + '%;background:' + (diskPct > 90 ? '#ef4444' : diskPct > 70 ? '#f59e0b' : '#22c55e') + ';border-radius:3px;"></div></div></div><span style="font-size:11px;margin-left:6px;">' + diskPct + '%</span>');
@@ -3835,13 +3839,13 @@ function _loadNetStatus() {
     .then(function(d) {
       var results = d.results || {};
       var names = ['OpenAI', 'Gemini', 'Anthropic', 'Agnes', 'Qwen', 'Zhipu', 'Volcengine', 'Baidu', 'Tencent', 'Moonshot', 'DeepSeek', 'MiniMax'];
-      var html = '';
+      var html = '<span title="TCP 连接耗时（非 API 响应时间），用于判断网络可达性" style="font-size:9px;color:var(--text-muted);padding:2px 6px;border-radius:8px;background:var(--bg-base);border:1px solid var(--border);cursor:help;">🌐 网络连通</span>';
       for (var i = 0; i < names.length; i++) {
         var n = names[i];
         var r = results[n] || {status:'error', ms:0};
         var dot = r.status === 'ok' ? (r.ms < 800 ? '#22c55e' : r.ms < 2000 ? '#f59e0b' : '#ef4444') : '#ef4444';
         var label = r.status === 'ok' ? r.ms + 'ms' : '✗';
-        html += '<div style="display:flex;align-items:center;gap:3px;padding:3px 8px;border-radius:12px;background:var(--bg-base);border:1px solid var(--border);font-size:10px;">';
+        html += '<div title="' + n + (r.status === 'ok' ? ' TCP连接 ' + r.ms + 'ms' : ' 不可达') + '" style="display:flex;align-items:center;gap:3px;padding:3px 8px;border-radius:12px;background:var(--bg-base);border:1px solid var(--border);font-size:10px;">';
         html += '<span style="width:6px;height:6px;border-radius:50%;background:' + dot + ';flex-shrink:0;"></span>';
         html += '<span style="color:var(--text-secondary);">' + n + '</span>';
         html += '<span style="color:' + dot + ';font-weight:600;font-variant-numeric:tabular-nums;">' + label + '</span>';
