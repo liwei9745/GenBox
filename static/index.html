@@ -4308,7 +4308,10 @@ function renderProviderEdit() {
       var isOpen = providerEditOpenIdx === idx;
       var modelOpts = '';
       if (p.models && p.models.length) {
-        modelOpts = p.models.map(function(m){ return '<option value="' + escAttr(m) + '"' + (p.model===m?' selected':'') + '>' + escHtml(m) + '</option>'; }).join('');
+        var groupFn = p.type === 'video' ? groupVideoModels : (p.type === 'image' ? groupImageModels : null);
+        modelOpts = (groupFn && p.models.length > 3)
+          ? buildModelOptsGrouped(p.models, p.model || '', groupFn)
+          : p.models.map(function(m){ return '<option value="' + escAttr(m) + '"' + (p.model===m?' selected':'') + '>' + escHtml(m) + '</option>'; }).join('');
       } else {
         modelOpts = '<option value="" disabled>请先拉取模型</option>';
         if (p.model) modelOpts = '<option value="' + escAttr(p.model) + '" selected>' + escHtml(p.model) + ' (手动)</option>' + modelOpts;
@@ -5087,6 +5090,78 @@ function getVideoProviderCapabilities(p) {
   return capSet;
 }
 
+function groupVideoModels(models) {
+  var groups = {};
+  var order = [];
+  for (var i = 0; i < models.length; i++) {
+    var m = models[i];
+    var ml = m.toLowerCase();
+    var cat;
+    if (ml.indexOf('upsample') !== -1 || (ml.indexOf('-4k') !== -1 && ml.indexOf('veo') === -1)) {
+      cat = '视频放大 (Upsample)';
+    } else if (ml.indexOf('i2v') !== -1) {
+      if (ml.indexOf('veo_3') !== -1) cat = 'Veo 3.x 图生视频 (I2V)';
+      else if (ml.indexOf('veo_2') !== -1) cat = 'Veo 2.x 图生视频 (I2V)';
+      else cat = '图生视频 (I2V)';
+    } else if (ml.indexOf('r2v') !== -1) {
+      cat = 'Veo 3.x 多图视频 (R2V)';
+    } else if (ml.indexOf('interpolation') !== -1) {
+      cat = '插帧 (Interpolation)';
+    } else if (ml.indexOf('t2v') !== -1 || ml.indexOf('veo_') !== -1) {
+      if (ml.indexOf('veo_3') !== -1) cat = 'Veo 3.x 文生视频 (T2V)';
+      else if (ml.indexOf('veo_2') !== -1) cat = 'Veo 2.x 文生视频 (T2V)';
+      else cat = '文生视频 (T2V)';
+    } else {
+      cat = '其他';
+    }
+    if (!groups[cat]) { groups[cat] = []; order.push(cat); }
+    groups[cat].push(m);
+  }
+  return { groups: groups, order: order };
+}
+
+function groupImageModels(models) {
+  var groups = {};
+  var order = [];
+  for (var i = 0; i < models.length; i++) {
+    var m = models[i];
+    var ml = m.toLowerCase();
+    var cat;
+    if (ml.indexOf('imagen') !== -1) {
+      cat = 'Imagen';
+    } else if (ml.indexOf('gemini-3.1-flash') !== -1 || ml.indexOf('gemini-3_1-flash') !== -1) {
+      cat = 'Gemini 3.1 Flash 图片';
+    } else if (ml.indexOf('gemini-3.0-pro') !== -1 || ml.indexOf('gemini-3_0-pro') !== -1) {
+      cat = 'Gemini 3.0 Pro 图片';
+    } else if (ml.indexOf('gemini-2.5') !== -1 || ml.indexOf('gemini-2_5') !== -1) {
+      cat = 'Gemini 2.5 Flash 图片';
+    } else if (ml.indexOf('gemini') !== -1) {
+      cat = 'Gemini 其他';
+    } else {
+      cat = '其他';
+    }
+    if (!groups[cat]) { groups[cat] = []; order.push(cat); }
+    groups[cat].push(m);
+  }
+  return { groups: groups, order: order };
+}
+
+function buildModelOptsGrouped(models, selectedModel, groupFn) {
+  var result = groupFn(models);
+  var html = '';
+  for (var g = 0; g < result.order.length; g++) {
+    var cat = result.order[g];
+    var catModels = result.groups[cat];
+    html += '<optgroup label="' + escHtml(cat) + ' (' + catModels.length + ')">';
+    for (var m = 0; m < catModels.length; m++) {
+      var md = catModels[m];
+      html += '<option value="' + escAttr(md) + '"' + (selectedModel === md ? ' selected' : '') + '>' + escHtml(md) + '</option>';
+    }
+    html += '</optgroup>';
+  }
+  return html;
+}
+
 function isModelMatchMode(modelName, mode) {
   var ml = (modelName || '').toLowerCase();
   if (mode === 'ti2vid') {
@@ -5125,9 +5200,9 @@ function renderVideoProviderCards() {
       var filteredModels = allModels.filter(function(m) { return isModelMatchMode(m, activeMode); });
       // If no filtered models, show all (no restriction)
       if (filteredModels.length === 0) filteredModels = allModels;
-      var modelOpts = filteredModels.map(function(m){
-        return '<option value="' + m + '">' + m + '</option>';
-      }).join('');
+      var modelOpts = filteredModels.length > 3
+        ? buildModelOptsGrouped(filteredModels, '', groupVideoModels)
+        : filteredModels.map(function(m){ return '<option value="' + escAttr(m) + '">' + escHtml(m) + '</option>'; }).join('');
       var capSet = getVideoProviderCapabilities(p);
       var capBadges = '';
       if (capSet['t2v'] || capSet['ti2vid']) {
