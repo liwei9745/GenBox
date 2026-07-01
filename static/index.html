@@ -2519,9 +2519,32 @@ function startGenPolling(genId) {
       var ptxt = document.getElementById('progressText');
       if (pfill) pfill.style.width = data.progress + '%';
 
+      // 更新进度文本
+      if (ptxt && data.status !== 'completed') {
+        var states = data.provider_states || {};
+        var names = Object.keys(states).map(function(k) { return states[k].name || k; });
+        var generating = Object.values(states).filter(function(s) { return s.status === 'generating'; });
+        var done = Object.values(states).filter(function(s) { return s.status === 'completed' || s.status === 'failed'; });
+        if (generating.length > 0) {
+          if (ptxt) ptxt.textContent = generating.map(function(s) { return s.name || s.model; }).join(', ') + ' 生成中... (' + done.length + '/' + names.length + ' 完成)';
+        } else if (done.length < names.length) {
+          if (ptxt) ptxt.textContent = '排队中... (' + done.length + '/' + names.length + ' 完成)';
+        }
+      }
+
       if (data.provider_states) {
         window._lastProviderStates = data.provider_states;
         renderGenPerProviderBars(data.provider_states);
+        // 更新实时日志
+        var logEl = document.getElementById('genLogArea');
+        if (logEl) {
+          var allLogs = [];
+          Object.keys(data.provider_states).forEach(function(k) {
+            var logs = data.provider_states[k].log || [];
+            logs.forEach(function(l) { if (allLogs.indexOf(l) === -1) allLogs.push(l); });
+          });
+          if (allLogs.length > 0) logEl.textContent = allLogs.join('\n');
+        }
         Object.keys(data.provider_states).forEach(function(key) {
           var s = data.provider_states[key];
           // Fix 3: 增量显示已完成结果到预览区

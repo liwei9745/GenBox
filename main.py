@@ -559,8 +559,23 @@ async def _process_image_gen(gen_id: str):
         state["progress"] = 10
         state["log"].append(f"[{time.strftime('%H:%M:%S')}] ▸ 开始生成 - 模型: {p_cfg.name or pid}")
 
+        # 后台递增进度（10% → 90%）
+        async def _tick_progress():
+            while state["status"] == "generating":
+                await asyncio.sleep(2)
+                if state["status"] == "generating":
+                    elapsed = time.time() - t0
+                    state["progress"] = min(90, 10 + int(elapsed / 60 * 80))
+
+        tick_task = asyncio.create_task(_tick_progress())
         try:
             res = await _gen_one(p_cfg, prompt, **kwargs)
+        finally:
+            tick_task.cancel()
+            try:
+                await tick_task
+            except asyncio.CancelledError:
+                pass
             t1 = time.time()
             res.elapsed_seconds = round(t1 - t0, 1)
             res.started_at = t0
@@ -676,11 +691,13 @@ async def get_generate_status(gen_id: str):
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
 
-    # 计算整体进度
+    # 计算整体进度（加权平均每个 provider 的进度）
     states = task["provider_states"]
     total = len(states)
-    done = sum(1 for s in states.values() if s["status"] in ("completed", "failed"))
-    progress = round(done / total * 100) if total > 0 else 0
+    if total > 0:
+        progress = round(sum(s.get("progress", 0) for s in states.values()) / total)
+    else:
+        progress = 0
 
     # 判断最终状态
     status = task["status"]
