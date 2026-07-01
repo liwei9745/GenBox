@@ -918,8 +918,8 @@
     }
     #providerModal.show { display: flex; }
     .provider-modal-box {
-      width: min(1100px, 92vw);
-      max-height: 88vh;
+      width: min(1440px, 95vw);
+      max-height: 92vh;
       background: var(--bg-surface);
       border: 1px solid var(--border);
       border-radius: 16px;
@@ -4406,20 +4406,28 @@ function renderProviderEdit() {
                 '<span style="font-size:10px;color:var(--text-muted);">🌐 多端点容灾（可选，端点失效自动切换）</span>' +
                 '<span id="epCount_' + idx + '" style="font-size:9px;color:var(--text-muted);">' + (p.endpoints ? p.endpoints.length : 0) + ' 个端点</span>' +
               '</div>' +
-              '<div id="epList_' + idx + '" style="display:flex;flex-direction:column;gap:4px;">' +
+              '<div id="epList_' + idx + '" style="display:flex;flex-direction:column;gap:6px;">' +
                 (p.endpoints || []).map(function(ep, ei) {
-                  return '<div class="ep-item" style="display:flex;gap:4px;align-items:center;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-base);font-size:10px;">' +
-                    '<input type="text" placeholder="备注名" value="' + escAttr(ep.name || '') + '" data-ep-idx="' + ei + '" data-field="name" style="width:60px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-primary);font-size:10px;">' +
-                    '<input type="text" placeholder="URL" value="' + escAttr(ep.url || '') + '" data-ep-idx="' + ei + '" data-field="url" style="flex:1;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-primary);font-size:10px;">' +
-                    '<input type="password" placeholder="API Key" value="' + escAttr(ep.key || '') + '" data-ep-idx="' + ei + '" data-field="key" style="flex:1;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-primary);font-size:10px;">' +
-                    '<label style="display:flex;align-items:center;gap:2px;font-size:9px;color:var(--text-muted);cursor:pointer;flex-shrink:0;">' +
-                      '<input type="checkbox" ' + (ep.enabled !== false ? 'checked' : '') + ' data-ep-idx="' + ei + '" data-field="enabled" style="accent-color:var(--accent);width:12px;height:12px;">' +
-                    '</label>' +
-                    '<button onclick="removeEndpoint(' + idx + ',' + ei + ')" style="font-size:10px;padding:2px 5px;border-radius:4px;border:1px solid #f8717133;background:transparent;color:#f87171;cursor:pointer;flex-shrink:0;">✕</button>' +
+                  return '<div class="ep-item" style="border-radius:8px;border:1px solid var(--border);background:var(--bg-base);padding:8px 10px;">' +
+                    // Row 1: Name + controls
+                    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">' +
+                      '<span style="font-size:9px;color:var(--text-muted);flex-shrink:0;">#' + (ei+1) + '</span>' +
+                      '<input type="text" placeholder="端点备注名（如：主站、备用）" value="' + escAttr(ep.name || '') + '" data-ep-idx="' + ei + '" data-field="name" style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg-card);color:var(--text-primary);font-size:11px;font-weight:500;">' +
+                      '<label style="display:flex;align-items:center;gap:3px;font-size:9px;color:var(--text-muted);cursor:pointer;flex-shrink:0;" title="启用/禁用此端点">' +
+                        '<input type="checkbox" ' + (ep.enabled !== false ? 'checked' : '') + ' data-ep-idx="' + ei + '" data-field="enabled" style="accent-color:#22c55e;width:13px;height:13px;">' +
+                        '<span>启用</span>' +
+                      '</label>' +
+                      '<button onclick="removeEndpoint(' + idx + ',' + ei + ')" title="删除此端点" style="font-size:10px;padding:3px 7px;border-radius:5px;border:1px solid #f8717133;background:transparent;color:#f87171;cursor:pointer;flex-shrink:0;">✕</button>' +
+                    '</div>' +
+                    // Row 2: URL + Key
+                    '<div style="display:flex;gap:6px;">' +
+                      '<input type="text" placeholder="URL（如 https://api.example.com/v1）" value="' + escAttr(ep.url || '') + '" data-ep-idx="' + ei + '" data-field="url" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg-card);color:var(--text-primary);font-size:11px;font-family:monospace;">' +
+                      '<input type="password" placeholder="API Key" value="' + escAttr(ep.key || '') + '" data-ep-idx="' + ei + '" data-field="key" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg-card);color:var(--text-primary);font-size:11px;font-family:monospace;">' +
+                    '</div>' +
                   '</div>';
                 }).join('') +
               '</div>' +
-              '<button onclick="addEndpoint(' + idx + ')" style="margin-top:4px;font-size:10px;padding:3px 8px;border-radius:4px;border:1px dashed var(--border);background:transparent;color:var(--accent);cursor:pointer;">+ 添加端点</button>' +
+              '<button onclick="addEndpoint(' + idx + ')" style="margin-top:6px;font-size:10px;padding:4px 10px;border-radius:6px;border:1px dashed var(--border);background:transparent;color:var(--accent);cursor:pointer;display:flex;align-items:center;gap:4px;">+ 添加端点</button>' +
             '</div>' +
             // 模型选择
             '<div style="margin-bottom:8px;">' +
@@ -4522,16 +4530,25 @@ function addEndpoint(idx) {
   var ei = list.children.length;
   var div = document.createElement('div');
   div.className = 'ep-item';
-  div.style.cssText = 'display:flex;gap:4px;align-items:center;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-base);font-size:10px;';
+  div.style.cssText = 'border-radius:8px;border:1px solid var(--border);background:var(--bg-base);padding:8px 10px;';
   div.innerHTML =
-    '<input type="text" placeholder="备注名" data-ep-idx="' + ei + '" data-field="name" style="width:60px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-primary);font-size:10px;">' +
-    '<input type="text" placeholder="URL" data-ep-idx="' + ei + '" data-field="url" style="flex:1;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-primary);font-size:10px;">' +
-    '<input type="password" placeholder="API Key" data-ep-idx="' + ei + '" data-field="key" style="flex:1;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-primary);font-size:10px;">' +
-    '<label style="display:flex;align-items:center;gap:2px;font-size:9px;color:var(--text-muted);cursor:pointer;flex-shrink:0;">' +
-      '<input type="checkbox" checked data-ep-idx="' + ei + '" data-field="enabled" style="accent-color:var(--accent);width:12px;height:12px;">' +
-    '</label>' +
-    '<button onclick="removeEndpoint(' + idx + ',' + ei + ')" style="font-size:10px;padding:2px 5px;border-radius:4px;border:1px solid #f8717133;background:transparent;color:#f87171;cursor:pointer;flex-shrink:0;">✕</button>';
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">' +
+      '<span style="font-size:9px;color:var(--text-muted);flex-shrink:0;">#' + (ei+1) + '</span>' +
+      '<input type="text" placeholder="端点备注名（如：主站、备用）" data-ep-idx="' + ei + '" data-field="name" style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg-card);color:var(--text-primary);font-size:11px;font-weight:500;">' +
+      '<label style="display:flex;align-items:center;gap:3px;font-size:9px;color:var(--text-muted);cursor:pointer;flex-shrink:0;" title="启用/禁用此端点">' +
+        '<input type="checkbox" checked data-ep-idx="' + ei + '" data-field="enabled" style="accent-color:#22c55e;width:13px;height:13px;">' +
+        '<span>启用</span>' +
+      '</label>' +
+      '<button onclick="removeEndpoint(' + idx + ',' + ei + ')" title="删除此端点" style="font-size:10px;padding:3px 7px;border-radius:5px;border:1px solid #f8717133;background:transparent;color:#f87171;cursor:pointer;flex-shrink:0;">✕</button>' +
+    '</div>' +
+    '<div style="display:flex;gap:6px;">' +
+      '<input type="text" placeholder="URL（如 https://api.example.com/v1）" data-ep-idx="' + ei + '" data-field="url" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg-card);color:var(--text-primary);font-size:11px;font-family:monospace;">' +
+      '<input type="password" placeholder="API Key" data-ep-idx="' + ei + '" data-field="key" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg-card);color:var(--text-primary);font-size:11px;font-family:monospace;">' +
+    '</div>';
   list.appendChild(div);
+  // Focus the name input
+  var nameInput = div.querySelector('[data-field="name"]');
+  if (nameInput) nameInput.focus();
   var cnt = document.getElementById('epCount_' + idx);
   if (cnt) cnt.textContent = list.children.length + ' 个端点';
 }
