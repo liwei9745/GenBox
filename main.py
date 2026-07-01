@@ -570,12 +570,6 @@ async def _process_image_gen(gen_id: str):
         tick_task = asyncio.create_task(_tick_progress())
         try:
             res = await _gen_one(p_cfg, prompt, **kwargs)
-        finally:
-            tick_task.cancel()
-            try:
-                await tick_task
-            except asyncio.CancelledError:
-                pass
             t1 = time.time()
             res.elapsed_seconds = round(t1 - t0, 1)
             res.started_at = t0
@@ -616,6 +610,12 @@ async def _process_image_gen(gen_id: str):
                 "elapsed_seconds": round(t1 - t0, 1), "started_at": t0, "finished_at": t1,
             }
             task["results"][key] = state["result"]
+        finally:
+            tick_task.cancel()
+            try:
+                await tick_task
+            except asyncio.CancelledError:
+                pass
 
     # 逐个执行（受信号量限制整体并发）
     async with image_gen_semaphore:
