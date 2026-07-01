@@ -4325,10 +4325,14 @@ function renderProviderEdit() {
       var isOpen = providerEditOpenIdx === idx;
       var modelOpts = '';
       if (p.models && p.models.length) {
+        var filteredModels = filterModelsByType(p.models, p.type);
         var groupFn = p.type === 'video' ? groupVideoModels : (p.type === 'image' ? groupImageModels : null);
-        modelOpts = (groupFn && p.models.length > 3)
-          ? buildModelOptsGrouped(p.models, p.model || '', groupFn)
-          : p.models.map(function(m){ return '<option value="' + escAttr(m) + '"' + (p.model===m?' selected':'') + '>' + escHtml(m) + '</option>'; }).join('');
+        modelOpts = (groupFn && filteredModels.length > 3)
+          ? buildModelOptsGrouped(filteredModels, p.model || '', groupFn)
+          : filteredModels.map(function(m){ return '<option value="' + escAttr(m) + '"' + (p.model===m?' selected':'') + '>' + escHtml(m) + '</option>'; }).join('');
+        if (filteredModels.length === 0 && p.models.length > 0) {
+          modelOpts = '<option value="" disabled>无匹配当前类型的模型 (共' + p.models.length + '个)</option>';
+        }
       } else {
         modelOpts = '<option value="" disabled>请先拉取模型</option>';
         if (p.model) modelOpts = '<option value="' + escAttr(p.model) + '" selected>' + escHtml(p.model) + ' (手动)</option>' + modelOpts;
@@ -4396,11 +4400,33 @@ function renderProviderEdit() {
               '<textarea class="modal-input" id="keys_' + idx + '" rows="3" style="width:100%;padding:6px 10px;font-size:10px;font-family:monospace;resize:vertical;box-sizing:border-box;" placeholder="sk-xxx1&#10;sk-xxx2&#10;sk-xxx3&#10;（留空则使用上方单个 API Key）">' + escHtml((p.api_keys || []).join('\n')) + '</textarea>' +
               (p.keypool && p.keypool.keys ? '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;">' + p.keypool.keys.map(function(k,i){ return '<span style="font-size:9px;padding:2px 6px;border-radius:6px;border:1px solid ' + (k.available ? '#22c55e44' : '#ef444444') + ';background:' + (k.available ? '#22c55e11' : '#ef444411') + ';color:' + (k.available ? '#22c55e' : '#ef4444') + ';" title="连续失败:' + k.fail_count + ' 成功:' + k.total_calls + '">' + (k.available ? '🟢' : '🔴') + ' ' + escHtml(k.key) + (k.cooldown_remaining > 0 ? ' ⏳' + Math.ceil(k.cooldown_remaining) + 's' : '') + '</span>'; }).join('') + '</div>' : '') +
             '</div>' +
+            // 多端点（endpoints）
+            '<div style="margin-bottom:8px;">' +
+              '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">' +
+                '<span style="font-size:10px;color:var(--text-muted);">🌐 多端点容灾（可选，端点失效自动切换）</span>' +
+                '<span id="epCount_' + idx + '" style="font-size:9px;color:var(--text-muted);">' + (p.endpoints ? p.endpoints.length : 0) + ' 个端点</span>' +
+              '</div>' +
+              '<div id="epList_' + idx + '" style="display:flex;flex-direction:column;gap:4px;">' +
+                (p.endpoints || []).map(function(ep, ei) {
+                  return '<div class="ep-item" style="display:flex;gap:4px;align-items:center;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-base);font-size:10px;">' +
+                    '<input type="text" placeholder="备注名" value="' + escAttr(ep.name || '') + '" data-ep-idx="' + ei + '" data-field="name" style="width:60px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-primary);font-size:10px;">' +
+                    '<input type="text" placeholder="URL" value="' + escAttr(ep.url || '') + '" data-ep-idx="' + ei + '" data-field="url" style="flex:1;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-primary);font-size:10px;">' +
+                    '<input type="password" placeholder="API Key" value="' + escAttr(ep.key || '') + '" data-ep-idx="' + ei + '" data-field="key" style="flex:1;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-primary);font-size:10px;">' +
+                    '<label style="display:flex;align-items:center;gap:2px;font-size:9px;color:var(--text-muted);cursor:pointer;flex-shrink:0;">' +
+                      '<input type="checkbox" ' + (ep.enabled !== false ? 'checked' : '') + ' data-ep-idx="' + ei + '" data-field="enabled" style="accent-color:var(--accent);width:12px;height:12px;">' +
+                    '</label>' +
+                    '<button onclick="removeEndpoint(' + idx + ',' + ei + ')" style="font-size:10px;padding:2px 5px;border-radius:4px;border:1px solid #f8717133;background:transparent;color:#f87171;cursor:pointer;flex-shrink:0;">✕</button>' +
+                  '</div>';
+                }).join('') +
+              '</div>' +
+              '<button onclick="addEndpoint(' + idx + ')" style="margin-top:4px;font-size:10px;padding:3px 8px;border-radius:4px;border:1px dashed var(--border);background:transparent;color:var(--accent);cursor:pointer;">+ 添加端点</button>' +
+            '</div>' +
             // 模型选择
             '<div style="margin-bottom:8px;">' +
               '<div style="display:flex;gap:6px;align-items:center;margin-bottom:3px;">' +
                 '<span style="font-size:10px;color:var(--text-muted);">默认模型</span>' +
                 '<span style="font-size:9px;color:var(--accent);">↻ 从上游拉取</span>' +
+                (p.models && p.models.length ? '<span style="font-size:9px;color:var(--text-muted);">(' + filterModelsByType(p.models, p.type).length + '/' + p.models.length + ' 匹配' + p.type + ')</span>' : '') +
               '</div>' +
               '<div style="display:flex;gap:6px;">' +
                 '<select class="modal-input" style="flex:1;padding:6px 8px;font-size:11px;" id="model_' + idx + '">' + modelOpts + '</select>' +
@@ -4460,6 +4486,7 @@ function saveProvider(idx) {
     base_url: document.getElementById('url_' + idx).value,
     api_key: document.getElementById('key_' + idx).value,
     api_keys: (document.getElementById('keys_' + idx).value || '').split('\n').map(function(s){ return s.trim(); }).filter(function(s){ return s.length > 0; }),
+    endpoints: collectEndpoints(idx),
     model: document.getElementById('model_' + idx).value,
     color: document.getElementById('color_' + idx).value,
     enabled: document.getElementById('en_' + idx).checked,
@@ -4489,10 +4516,82 @@ function deleteProvider(id) {
   }).catch(function(e){ setStatus('删除失败: ' + e.message); });
 }
 
+function addEndpoint(idx) {
+  var list = document.getElementById('epList_' + idx);
+  if (!list) return;
+  var ei = list.children.length;
+  var div = document.createElement('div');
+  div.className = 'ep-item';
+  div.style.cssText = 'display:flex;gap:4px;align-items:center;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-base);font-size:10px;';
+  div.innerHTML =
+    '<input type="text" placeholder="备注名" data-ep-idx="' + ei + '" data-field="name" style="width:60px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-primary);font-size:10px;">' +
+    '<input type="text" placeholder="URL" data-ep-idx="' + ei + '" data-field="url" style="flex:1;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-primary);font-size:10px;">' +
+    '<input type="password" placeholder="API Key" data-ep-idx="' + ei + '" data-field="key" style="flex:1;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-primary);font-size:10px;">' +
+    '<label style="display:flex;align-items:center;gap:2px;font-size:9px;color:var(--text-muted);cursor:pointer;flex-shrink:0;">' +
+      '<input type="checkbox" checked data-ep-idx="' + ei + '" data-field="enabled" style="accent-color:var(--accent);width:12px;height:12px;">' +
+    '</label>' +
+    '<button onclick="removeEndpoint(' + idx + ',' + ei + ')" style="font-size:10px;padding:2px 5px;border-radius:4px;border:1px solid #f8717133;background:transparent;color:#f87171;cursor:pointer;flex-shrink:0;">✕</button>';
+  list.appendChild(div);
+  var cnt = document.getElementById('epCount_' + idx);
+  if (cnt) cnt.textContent = list.children.length + ' 个端点';
+}
+
+function removeEndpoint(idx, ei) {
+  var list = document.getElementById('epList_' + idx);
+  if (!list) return;
+  var items = list.querySelectorAll('.ep-item');
+  if (items[ei]) items[ei].remove();
+  // Re-index
+  var remaining = list.querySelectorAll('.ep-item');
+  for (var r = 0; r < remaining.length; r++) {
+    var inputs = remaining[r].querySelectorAll('input');
+    for (var j = 0; j < inputs.length; j++) {
+      inputs[j].setAttribute('data-ep-idx', r);
+    }
+    var btn = remaining[r].querySelector('button');
+    if (btn) btn.setAttribute('onclick', 'removeEndpoint(' + idx + ',' + r + ')');
+  }
+  var cnt = document.getElementById('epCount_' + idx);
+  if (cnt) cnt.textContent = remaining.length + ' 个端点';
+}
+
+function collectEndpoints(idx) {
+  var list = document.getElementById('epList_' + idx);
+  if (!list) return [];
+  var items = list.querySelectorAll('.ep-item');
+  var endpoints = [];
+  for (var i = 0; i < items.length; i++) {
+    var inputs = items[i].querySelectorAll('input');
+    var ep = { name: '', url: '', key: '', enabled: true };
+    for (var j = 0; j < inputs.length; j++) {
+      var field = inputs[j].getAttribute('data-field');
+      if (field === 'enabled') ep.enabled = inputs[j].checked;
+      else if (field === 'name') ep.name = inputs[j].value;
+      else if (field === 'url') ep.url = inputs[j].value;
+      else if (field === 'key') ep.key = inputs[j].value;
+    }
+    if (ep.url || ep.key) endpoints.push(ep);
+  }
+  return endpoints;
+}
+
 function testProvider(id) {
+  var btn = event && event.target;
+  if (btn) { btn.disabled = true; btn.textContent = '测试中...'; }
   _authFetch('/api/providers/test/' + id).then(function(r){return r.json();}).then(function(d){
-    alert(d.success ? '✅ 测试成功!' : '❌ 失败: ' + (d.error||''));
-  }).catch(function(e){ alert('❌ 测试失败: ' + e.message); });
+    if (d.endpoints && d.endpoints.length > 0) {
+      var lines = d.endpoints.map(function(ep) {
+        var icon = ep.success ? '✅' : '❌';
+        var latency = ep.latency_ms ? ep.latency_ms + 'ms' : '';
+        var name = ep.name || ep.url;
+        return icon + ' ' + name + (ep.success ? ' (' + latency + ')' : ' - ' + (ep.error || '失败') + ' (' + latency + ')');
+      });
+      alert((d.success ? '✅ 至少一个端点可用' : '❌ 所有端点失败') + '\n\n' + lines.join('\n'));
+    } else {
+      alert(d.success ? '✅ 测试成功!' : '❌ 失败: ' + (d.error||''));
+    }
+  }).catch(function(e){ alert('❌ 测试失败: ' + e.message); })
+  .finally(function(){ if (btn) { btn.disabled = false; btn.textContent = '测试'; } });
 }
 
 function fetchModels(idx) {
@@ -5105,6 +5204,39 @@ function getVideoProviderCapabilities(p) {
     mc.forEach(function(c) { capSet[c] = true; });
   });
   return capSet;
+}
+
+function filterModelsByType(models, providerType) {
+  if (!models || !models.length) return models;
+  return models.filter(function(m) {
+    var ml = m.toLowerCase();
+    if (providerType === 'image') {
+      // 生图模型：包含 image, 图片尺寸关键字, 或不包含视频关键字
+      if (ml.indexOf('t2v') !== -1 || ml.indexOf('i2v') !== -1 || ml.indexOf('r2v') !== -1) return false;
+      if (ml.indexOf('veo_') !== -1) return false;
+      if (ml.indexOf('interpolation') !== -1) return false;
+      if (ml.indexOf('video') !== -1 && ml.indexOf('image') === -1) return false;
+      return true;
+    }
+    if (providerType === 'video') {
+      // 生视频模型：包含 t2v, i2v, r2v, veo_, interpolation, video
+      if (ml.indexOf('t2v') !== -1 || ml.indexOf('i2v') !== -1 || ml.indexOf('r2v') !== -1) return true;
+      if (ml.indexOf('veo_') !== -1) return true;
+      if (ml.indexOf('interpolation') !== -1) return true;
+      if (ml.indexOf('video') !== -1) return true;
+      return false;
+    }
+    if (providerType === 'llm') {
+      // LLM 模型：排除图片和视频模型
+      if (ml.indexOf('t2v') !== -1 || ml.indexOf('i2v') !== -1 || ml.indexOf('r2v') !== -1) return false;
+      if (ml.indexOf('veo_') !== -1) return false;
+      if (ml.indexOf('interpolation') !== -1) return false;
+      if (ml.indexOf('-4k') !== -1 || ml.indexOf('-2k') !== -1) return false;
+      if (ml.indexOf('upsample') !== -1) return false;
+      return true;
+    }
+    return true;
+  });
 }
 
 function groupVideoModels(models) {

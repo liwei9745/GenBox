@@ -111,52 +111,80 @@ async def generate_for_provider(
     根据 Provider 配置自动选择协议并生图
     这是核心入口，所有 Provider 都走这里
     支持 t2i (文生图) 和 i2i (图生图) 两种模式
-    支持多账号轮询（api_keys 字段）
+    支持多端点轮询（endpoints 字段）+ 多账号轮询（api_keys 字段）
     """
     from .key_pool import key_pool_manager
 
     protocol = kwargs.get("protocol") or _detect_protocol(cfg)
 
-    # 获取 API Key（多账号轮询优先）
-    effective_keys = cfg.get_effective_keys()
-    if not effective_keys:
-        return ImageResult(success=False, error=f"[{cfg.name}] API Key 未配置", model=cfg.id)
+    # 获取端点列表（endpoints 优先，fallback 到 base_url+api_key）
+    endpoints = cfg.get_active_endpoints()
 
-    pool = key_pool_manager.get_or_create(cfg.id, effective_keys)
-    api_key = await pool.get_key()
-    if not api_key:
-        return ImageResult(success=False, error=f"[{cfg.name}] 所有 API Key 均在冷却中，请稍后重试", model=cfg.id)
+    if endpoints:
+        # 多端点模式：逐个尝试
+        last_error = None
+        for ep in endpoints:
+            if not ep.url or not ep.key:
+                continue
+            result = await _try_generate_with_endpoint(cfg, prompt, ep.url, ep.key, protocol, **kwargs)
+            if result.success:
+                return result
+            last_error = result.error
+        return ImageResult(
+            success=False,
+            error=f"[{cfg.name}] 所有端点均失败: {last_error or '无可用端点'}",
+            model=cfg.id
+        )
+    else:
+        # 旧模式：单 URL + 多 Key 轮询
+        effective_keys = cfg.get_effective_keys()
+        if not effective_keys:
+            return ImageResult(success=False, error=f"[{cfg.name}] API Key 未配置", model=cfg.id)
 
-    # 临时注入 key 到 cfg（不修改原始配置）
+        pool = key_pool_manager.get_or_create(cfg.id, effective_keys)
+        api_key = await pool.get_key()
+        if not api_key:
+            return ImageResult(success=False, error=f"[{cfg.name}] 所有 API Key 均在冷却中，请稍后重试", model=cfg.id)
+
+        original_key = cfg.api_key
+        cfg.api_key = api_key
+        try:
+            result = await _dispatch_generate(cfg, prompt, protocol, **kwargs)
+        except Exception as e:
+            result = ImageResult(success=False, error=f"[{cfg.name}] {str(e)}", model=cfg.id)
+
+        if result.success:
+            pool.mark_success(api_key)
+        else:
+            error_msg = (result.error or "").lower()
+            if "429" in error_msg or "too many requests" in error_msg or "insufficient_quota" in error_msg or "quota" in error_msg:
+                retry_after = 0.0
+                if "retry" in error_msg:
+                    import re
+                    m = re.search(r'retry[_-]?after[:\s]*(\d+)', error_msg)
+                    if m:
+                        retry_after = float(m.group(1))
+                pool.mark_error(api_key, retry_after)
+            elif "401" in error_msg or "unauthorized" in error_msg or "invalid" in error_msg:
+                pool.mark_error(api_key, retry_after=600.0)
+
+        cfg.api_key = original_key
+        return result
+
+
+async def _try_generate_with_endpoint(cfg, prompt, url, key, protocol, **kwargs) -> ImageResult:
+    """使用指定端点尝试生成（临时注入 url 和 key）"""
+    original_url = cfg.base_url
     original_key = cfg.api_key
-    cfg.api_key = api_key
-
+    cfg.base_url = url
+    cfg.api_key = key
     try:
         result = await _dispatch_generate(cfg, prompt, protocol, **kwargs)
     except Exception as e:
         result = ImageResult(success=False, error=f"[{cfg.name}] {str(e)}", model=cfg.id)
-
-    # 根据结果更新 pool 状态
-    if result.success:
-        pool.mark_success(api_key)
-    else:
-        error_msg = (result.error or "").lower()
-        # 检测 429 / 配额耗尽 → 冷却该 key
-        if "429" in error_msg or "too many requests" in error_msg or "insufficient_quota" in error_msg or "quota" in error_msg:
-            # 尝试从错误信息中提取 retry-after
-            retry_after = 0.0
-            if "retry" in error_msg:
-                import re
-                m = re.search(r'retry[_-]?after[:\s]*(\d+)', error_msg)
-                if m:
-                    retry_after = float(m.group(1))
-            pool.mark_error(api_key, retry_after)
-        elif "401" in error_msg or "unauthorized" in error_msg or "invalid" in error_msg:
-            # API Key 无效，长时间冷却
-            pool.mark_error(api_key, retry_after=600.0)
-
-    # 恢复原始 key
-    cfg.api_key = original_key
+    finally:
+        cfg.base_url = original_url
+        cfg.api_key = original_key
     return result
 
 

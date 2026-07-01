@@ -25,6 +25,23 @@ PROVIDERS_FILE = STORAGE_DIR / "providers.json"
 # ──────────────────────────────────────────────────────────────
 # 数据模型
 # ──────────────────────────────────────────────────────────────
+class EndpointConfig(BaseModel):
+    """单个端点配置（URL + API Key）"""
+    url: str = ""
+    key: str = ""
+    enabled: bool = True
+    name: str = ""             # 端点备注名（可选）
+
+    @property
+    def display_name(self) -> str:
+        if self.name:
+            return self.name
+        short_url = self.url.replace("https://", "").replace("http://", "")
+        if len(short_url) > 30:
+            short_url = short_url[:30] + "..."
+        return short_url
+
+
 class ProviderConfig(BaseModel):
     """单个 Provider 配置"""
     id: str                    # 唯一标识 (如 gpt-image, gemini, my-flux)
@@ -33,6 +50,7 @@ class ProviderConfig(BaseModel):
     api_key: str = ""
     api_keys: List[str] = []   # 多账号轮询（优先于 api_key）
     base_url: str = ""
+    endpoints: List[EndpointConfig] = []  # 多端点（URL+Key），用于端点轮询/容灾
     model: str = ""            # 默认模型 ID
     models: List[str] = []     # 可选模型列表（用于下拉选择）
     size: str = ""             # 图片尺寸（仅 image 类型）
@@ -48,6 +66,16 @@ class ProviderConfig(BaseModel):
         if not keys and self.api_key and self.api_key.strip():
             keys = [self.api_key.strip()]
         return keys
+
+    def get_active_endpoints(self) -> List[EndpointConfig]:
+        """获取启用的端点列表；如果没有端点则从 base_url+api_key 构造一个"""
+        active = [ep for ep in (self.endpoints or []) if ep.enabled and ep.url and ep.key]
+        if active:
+            return active
+        if self.base_url and (self.api_key or self.get_effective_keys()):
+            key = self.api_key or (self.get_effective_keys()[0] if self.get_effective_keys() else "")
+            return [EndpointConfig(url=self.base_url, key=key)]
+        return []
 
 
 class ProxyConfig(BaseModel):
@@ -221,6 +249,14 @@ class ConfigManager:
             if p.id in env_map:
                 for field, env_key in env_map[p.id].items():
                     val = getattr(p, field, "")
+                    # 如果有 endpoints，优先用第一个启用端点的值
+                    if not val and p.endpoints:
+                        active_eps = [ep for ep in p.endpoints if ep.enabled and ep.url and ep.key]
+                        if active_eps:
+                            if field == "base_url":
+                                val = active_eps[0].url
+                            elif field == "api_key":
+                                val = active_eps[0].key
                     if val:
                         updates[env_key] = val
 

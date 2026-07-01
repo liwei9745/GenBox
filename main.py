@@ -61,14 +61,23 @@ class GalleryItem(BaseModel):
     thumbnail: str
 
 
+class EndpointReq(BaseModel):
+    """端点请求体"""
+    url: str = ""
+    key: str = ""
+    enabled: bool = True
+    name: str = ""
+
+
 class ProviderCreateReq(BaseModel):
     """创建/更新 Provider 的请求体"""
     id: str
     name: str
-    type: str                          # "image" | "llm"
+    type: str                          # "image" | "llm" | "video"
     api_key: str = ""
     api_keys: List[str] = []           # 多账号轮询
     base_url: str = ""
+    endpoints: List[EndpointReq] = []  # 多端点
     model: str = ""
     models: List[str] = []
     size: str = ""
@@ -385,23 +394,60 @@ async def setup_status():
 
 @app.get("/api/providers/test/{provider_id}")
 async def test_provider(provider_id: str):
-    """测试单个 Provider 连通性（用简单 prompt）"""
+    """测试 Provider 连通性：多端点时逐个测试，返回每个端点的结果"""
+    import time as _time
+    import httpx as _httpx
+
     for p in cfg_mgr.config.providers:
         if p.id == provider_id:
-            from providers import generate_for_provider
-            try:
-                result = await generate_for_provider(p, "a cute cat, simple test image")
-                return {
-                    "success": result.success,
-                    "error": result.error,
-                    "local_path": result.local_path,
-                }
-            except Exception as e:
-                return {
-                    "success": False,
-                    "error": f"[测试异常] {str(e)}",
-                    "local_path": None,
-                }
+            endpoints = p.get_active_endpoints()
+            if not endpoints:
+                return {"success": False, "error": "无可用端点", "endpoints": []}
+
+            ep_results = []
+            for ep in endpoints:
+                ep_start = _time.time()
+                try:
+                    # 轻量连通性检查：GET /models 或简单请求
+                    async with _httpx.AsyncClient(timeout=15.0, verify=False) as client:
+                        headers = {"Authorization": f"Bearer {ep.key}"}
+                        # 尝试 models 端点
+                        r = await client.get(f"{ep.url.rstrip('/')}/models", headers=headers)
+                        latency = round((_time.time() - ep_start) * 1000)
+                        if r.status_code in (200, 401):
+                            ep_results.append({
+                                "url": ep.url,
+                                "name": ep.name or ep.display_name,
+                                "success": True,
+                                "latency_ms": latency,
+                                "status_code": r.status_code,
+                                "error": None
+                            })
+                        else:
+                            ep_results.append({
+                                "url": ep.url,
+                                "name": ep.name or ep.display_name,
+                                "success": False,
+                                "latency_ms": latency,
+                                "status_code": r.status_code,
+                                "error": f"HTTP {r.status_code}"
+                            })
+                except Exception as e:
+                    latency = round((_time.time() - ep_start) * 1000)
+                    ep_results.append({
+                        "url": ep.url,
+                        "name": ep.name or ep.display_name,
+                        "success": False,
+                        "latency_ms": latency,
+                        "status_code": 0,
+                        "error": str(e)[:100]
+                    })
+
+            any_ok = any(ep["success"] for ep in ep_results)
+            return {
+                "success": any_ok,
+                "endpoints": ep_results,
+            }
     raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' 不存在")
 
 
