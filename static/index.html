@@ -2122,6 +2122,15 @@ function loadProviders() {
   }).catch(function(e){ if (e.message !== 'AUTH_REQUIRED') setStatus('Provider 加载失败'); });
 }
 
+function onImageModelChange(pid, newModel) {
+  for (var i = 0; i < allProviders.length; i++) {
+    if (allProviders[i].id === pid) {
+      allProviders[i].model = newModel;
+      break;
+    }
+  }
+}
+
 function renderProviderList() {
   var container = document.getElementById('providerList');
   var html = '';
@@ -2133,6 +2142,10 @@ function renderProviderList() {
       var configured = p.api_key || p.has_key;
       var disabled = !p.enabled || !configured;
       var qty = providerQuantities[p.id] || 1;
+      var allModels = p.models && p.models.length > 0 ? p.models : (p.model ? [p.model] : []);
+      var modelOpts = allModels.length > 3
+        ? buildModelOptsGrouped(allModels, p.model || '', groupImageModels)
+        : allModels.map(function(m){ return '<option value="' + escAttr(m) + '"' + (p.model===m?' selected':'') + '>' + escHtml(m) + '</option>'; }).join('');
       html += '<div class="provider-card ' + (sel ? 'selected' : '') + ' ' + (disabled ? 'disabled' : '') + '" ' +
               'draggable="' + (!disabled) + '" ' +
               'ondragstart="onProviderDragStart(event, \'' + p.id + '\', ' + (imageProviders.indexOf(p)) + ')" ' +
@@ -2143,9 +2156,13 @@ function renderProviderList() {
         '<div class="provider-dot" style="background:' + (p.color || '#5b8def') + ';"></div>' +
         '<div style="flex:1;min-width:0;">' +
           '<div class="provider-name">' + escHtml(p.name) + '</div>' +
-          '<div class="provider-model">' + (p.model || '未选模型') + '</div>' +
         '</div>' +
         '<div class="provider-check"></div>' +
+      '</div>' +
+      '<div style="padding:2px 0 2px 22px;">' +
+        '<select onchange="onImageModelChange(\'' + p.id + '\', this.value)" ' + (!sel ? 'disabled' : '') + ' style="width:100%;font-size:11px;padding:4px 8px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);' + (!sel ? 'opacity:0.5;' : '') + '">' +
+          (modelOpts || '<option value="">无可用模型</option>') +
+        '</select>' +
       '</div>' +
       '<div class="provider-qty-row" style="display:flex;align-items:center;gap:6px;padding:2px 0 6px 22px;">' +
         '<span style="font-size:10px;color:var(--text-muted);">数量</span>' +
