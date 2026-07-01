@@ -142,14 +142,12 @@ class ConfigManager:
         return self._config
 
     def _load(self) -> ProvidersConfig:
-        """加载配置：providers.json + .env 合并"""
+        """加载配置：providers.json 优先，.env 仅兜底空字段"""
         if PROVIDERS_FILE.exists():
             try:
                 raw = json.loads(PROVIDERS_FILE.read_text(encoding="utf-8"))
                 cfg = ProvidersConfig(**raw)
-                # 启动时始终用 .env 覆盖 providers.json（.env 优先级更高）
                 self._sync_env_to_config(cfg)
-                self._save(cfg)  # 回写合并结果
                 return cfg
             except Exception as e:
                 print(f"[Config] providers.json 解析失败，使用默认配置: {e}")
@@ -160,7 +158,7 @@ class ConfigManager:
         return cfg
 
     def _sync_env_to_config(self, cfg: ProvidersConfig):
-        """启动时将 .env 的值同步到 config（.env 优先级高于 providers.json）"""
+        """启动时将 .env 的值同步到 config（仅当 providers.json 中该字段为空时才用 .env 兜底）"""
         env_map = {
             "gpt-image": {"api_key": "GPT_IMAGE_API_KEY", "base_url": "GPT_IMAGE_BASE_URL"},
             "gemini": {"api_key": "GEMINI_API_KEY", "base_url": "GEMINI_BASE_URL"},
@@ -175,7 +173,8 @@ class ConfigManager:
             if p.id in env_map:
                 for field, env_key in env_map[p.id].items():
                     env_val = os.getenv(env_key, "")
-                    if env_val:
+                    current_val = getattr(p, field, "")
+                    if env_val and not current_val:
                         setattr(p, field, env_val)
 
     def _save(self, cfg: ProvidersConfig):
