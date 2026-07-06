@@ -1432,7 +1432,7 @@
       <div class="nav-item" onclick="openProviderModal()">
         <span class="nav-icon">⚙</span> 模型设置
       </div>
-      <div class="nav-item" onclick="openLLMSettings()">
+      <div class="nav-item" onclick="openProviderModal('llm')">
         <span class="nav-icon">🤖</span> 提示词优化设置
       </div>
       <div class="nav-item" onclick="openThemeModal()">
@@ -1685,10 +1685,10 @@
                 </label>
                 <div style="flex:1;min-width:0;"></div>
                 <button id="btnPreviewLLM" onclick="previewLLMOptimize()" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:11px;cursor:pointer;transition:all 0.2s;white-space:nowrap;flex-shrink:0;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">
-                  👁 预览
+                  ✨ 点击优化
                 </button>
-                <button onclick="openLLMSettings()" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:11px;cursor:pointer;transition:all 0.2s;white-space:nowrap;flex-shrink:0;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">
-                  ⚙ 设置
+                <button id="btnUndoLLM" onclick="undoLLMOptimize()" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:11px;cursor:pointer;transition:all 0.2s;white-space:nowrap;flex-shrink:0;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">
+                  ↩ 撤销回退
                 </button>
               </div>
 
@@ -2420,14 +2420,15 @@ function loadModelDropdown() {
   optGlobal.value = '_global';
   optGlobal.textContent = '🌐 全局（对所有模型生效）';
   sel.appendChild(optGlobal);
-  // 收集所有 image provider 的模型（去重）
+  // 收集所有 image provider 的模型（去重 + 过滤非生图模型）
   var models = [];
   for (var i = 0; i < allProviders.length; i++) {
     var p = allProviders[i];
     if (p.type === 'image' && p.enabled !== false) {
       var pModels = (p.models && p.models.length) ? p.models : [p.model || 'default'];
-      for (var j = 0; j < pModels.length; j++) {
-        var m = pModels[j];
+      var filtered = filterModelsByType(pModels, 'image');
+      for (var j = 0; j < filtered.length; j++) {
+        var m = filtered[j];
         if (models.indexOf(m) < 0) models.push(m);
       }
     }
@@ -2560,12 +2561,8 @@ function renderProviderList() {
       var disabled = !p.enabled || !configured;
 
       var allModels = p.models && p.models.length > 0 ? p.models : (p.model ? [p.model] : []);
-      // 过滤掉视频模型
-      var filteredModels = allModels.filter(function(m) {
-        var ml = m.toLowerCase();
-        return ml.indexOf('video') < 0 && ml.indexOf('i2v') < 0 && ml.indexOf('t2v') < 0 &&
-               ml.indexOf('r2v') < 0 && ml.indexOf(' interpolation') < 0 && ml.indexOf('upsample') < 0;
-      });
+      // 过滤掉非生图模型（视频模型 + LLM模型）
+      var filteredModels = filterModelsByType(allModels, 'image');
       if (filteredModels.length === 0) filteredModels = allModels;
       var modelOpts = filteredModels.length > 3
         ? buildModelOptsGrouped(filteredModels, p.model || '', groupImageModels)
@@ -5626,9 +5623,11 @@ function selectLLMProvider(id){
 // LLM 预览优化
 // ═══════════════════════════════════════════════════════════════════
 var llmPreviewData = null;
+var llmOriginalPrompt = ''; // 存储优化前的原始提示词
 function previewLLMOptimize(){
   var prompt = document.getElementById('txtPrompt').value.trim();
   if(!prompt){ alert('请先输入提示词'); return; }
+  llmOriginalPrompt = prompt; // 保存原始提示词
   var btn = document.getElementById('btnPreviewLLM');
   var box = document.getElementById('llmPreviewBox');
   btn.textContent = '⏳ 优化中...';
@@ -5650,12 +5649,12 @@ function previewLLMOptimize(){
       errEl.textContent = '⚠️ ' + d.error;
       errEl.style.display = 'block';
     }
-    btn.textContent = '👁 重新预览';
+    btn.textContent = '✨ 重新优化';
     btn.disabled = false;
   }).catch(function(e){
     document.getElementById('llmPreviewError').textContent = '⚠️ 请求失败: ' + e.message;
     document.getElementById('llmPreviewError').style.display = 'block';
-    btn.textContent = '👁 预览优化效果';
+    btn.textContent = '✨ 点击优化';
     btn.disabled = false;
   });
 }
@@ -5668,6 +5667,13 @@ function insertLLMPreview(){
 function closeLLMPreview(){
   document.getElementById('llmPreviewBox').style.display = 'none';
   llmPreviewData = null;
+}
+function undoLLMOptimize(){
+  if(llmOriginalPrompt){
+    document.getElementById('txtPrompt').value = llmOriginalPrompt;
+    llmOriginalPrompt = '';
+    setStatus('已撤销优化，恢复原始提示词');
+  }
 }
 
 
@@ -5893,11 +5899,16 @@ function filterModelsByType(models, providerType) {
   return models.filter(function(m) {
     var ml = m.toLowerCase();
     if (providerType === 'image') {
-      // 生图模型：包含 image, 图片尺寸关键字, 或不包含视频关键字
+      // 排除视频模型
       if (ml.indexOf('t2v') !== -1 || ml.indexOf('i2v') !== -1 || ml.indexOf('r2v') !== -1) return false;
       if (ml.indexOf('veo_') !== -1) return false;
       if (ml.indexOf('interpolation') !== -1) return false;
       if (ml.indexOf('video') !== -1 && ml.indexOf('image') === -1) return false;
+      // 排除 LLM/文本模型（非生图模型）
+      if (ml.indexOf('gpt-5') !== -1 && ml.indexOf('image') === -1) return false;
+      if (ml === 'auto') return false;
+      if (ml.indexOf('codex') !== -1 && ml.indexOf('image') === -1) return false;
+      if (ml.indexOf('-mini') !== -1 && ml.indexOf('image') === -1 && ml.indexOf('gemini') === -1) return false;
       return true;
     }
     if (providerType === 'video') {
