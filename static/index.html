@@ -1314,7 +1314,7 @@
       <div>
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
           <span style="font-size:14px;">&#x1F916;</span>
-          <span style="font-size:13px;font-weight:700;">LLM 提示词优化</span>
+          <span style="font-size:13px;font-weight:700;">提示词优化</span>
         </div>
         <div class="sw-card">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
@@ -1365,7 +1365,7 @@
       <button onclick="addProviderWithType('llm')" class="sw-type-btn" style="border-color:#f59e0b44;">
         <span style="font-size:20px;">&#x1F916;</span>
         <div>
-          <div style="font-size:13px;font-weight:600;color:#f59e0b;">LLM 提示词优化</div>
+          <div style="font-size:13px;font-weight:600;color:#f59e0b;">提示词优化</div>
           <div style="font-size:10px;color:var(--text-muted);">GPT-4o / Claude / Qwen 等</div>
         </div>
       </button>
@@ -1383,11 +1383,11 @@
 <div id="llmModal">
   <div class="theme-box">
     <div class="theme-head">
-      <h2 style="font-size:16px;font-weight:700;">🤖 LLM 提示词优化设置</h2>
+      <h2 style="font-size:16px;font-weight:700;">🤖 提示词优化设置</h2>
       <button class="btn-ghost" onclick="closeLLMModal()">✕</button>
     </div>
     <div class="theme-body">
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">配置用于优化提示词的大语言模型。生图时勾选「LLM 优化提示词」将自动调用此模型增强提示词。</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">配置用于优化提示词的大语言模型。生图时勾选「提示词优化」将自动调用此模型增强提示词。</div>
       <div style="display:grid;gap:12px;" id="llmProviderList">加载中...</div>
     </div>
     <div class="theme-foot" style="display:flex;justify-content:space-between;align-items:center;">
@@ -1433,7 +1433,7 @@
         <span class="nav-icon">⚙</span> 模型设置
       </div>
       <div class="nav-item" onclick="openLLMSettings()">
-        <span class="nav-icon">🤖</span> LLM 优化设置
+        <span class="nav-icon">🤖</span> 提示词优化设置
       </div>
       <div class="nav-item" onclick="openThemeModal()">
         <span class="nav-icon">🎨</span> 主题设置
@@ -1483,13 +1483,16 @@
 
             <!-- ═══ 图像设置 (参照 chatgpt2api 风格) ═══ -->
             <div class="glass-card" style="padding:16px;">
-              <div class="param-label" style="margin-bottom:12px;font-size:13px;font-weight:700;">⚙ 图像设置</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                <div class="param-label" style="margin:0;font-size:13px;font-weight:700;">⚙ 图像设置</div>
+                <button onclick="saveImageSettings()" style="padding:4px 10px;font-size:10px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;transition:all 0.15s;" onmouseover="this.style.background='var(--accent)';this.style.color='#fff'" onmouseout="this.style.background='transparent';this.style.color='var(--accent)'">💾 保存</button>
+              </div>
 
-              <!-- 模型选择 -->
+              <!-- 模型选择（含全局） -->
               <div class="param-group" style="margin-bottom:12px;">
                 <div class="param-label" style="font-size:10px;margin-bottom:6px;">模型</div>
-                <select id="selModel" style="width:100%;padding:8px 12px;font-size:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);">
-                  <option value="">加载中...</option>
+                <select id="selModel" onchange="onImageSettingsModelChange()" style="width:100%;padding:8px 12px;font-size:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);">
+                  <option value="_global">🌐 全局（对所有模型生效）</option>
                 </select>
               </div>
 
@@ -1665,7 +1668,7 @@
 
               <!-- 增强结果展示 -->
               <div class="enhance-result" id="enhanceResult">
-                <div class="enhance-label">✨ LLM 优化后</div>
+                <div class="enhance-label">✨ 提示词优化后</div>
                 <div class="enhance-text" id="enhanceText"></div>
                 <div class="enhance-actions">
                   <button class="btn-ghost" onclick="insertEnhance()">↩ 插入到输入框</button>
@@ -1678,7 +1681,7 @@
               <div style="margin-top:12px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-surface);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;white-space:nowrap;flex-shrink:0;">
                   <input type="checkbox" id="chkEnhance" style="accent-color:var(--accent);width:14px;height:14px;">
-                  <span style="color:var(--accent);font-weight:600;">✨</span> LLM 优化
+                  <span style="color:var(--accent);font-weight:600;">✨</span> 提示词优化
                 </label>
                 <div style="flex:1;min-width:0;"></div>
                 <button id="btnPreviewLLM" onclick="previewLLMOptimize()" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:11px;cursor:pointer;transition:all 0.2s;white-space:nowrap;flex-shrink:0;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">
@@ -2287,7 +2290,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 模型选择联动
   var selModel = document.getElementById('selModel');
-  if (selModel) selModel.addEventListener('change', onModelSelectChange);
+  if (selModel) selModel.addEventListener('change', onImageSettingsModelChange);
 
   // 放大选项开关
   var chkUpscale = document.getElementById('chkUpscale');
@@ -2403,23 +2406,22 @@ function setQty(el, val) {
 }
 
 // 模型选择联动：更新 provider 的 model 字段
-function onModelSelectChange() {
-  var modelVal = document.getElementById('selModel').value;
-  if (!modelVal) return;
-  // 找到当前选中的 image provider 并更新其 model
-  for (var i = 0; i < allProviders.length; i++) {
-    if (allProviders[i].type === 'image' && selectedProviders.indexOf(allProviders[i].id) >= 0) {
-      allProviders[i].model = modelVal;
-    }
-  }
-}
+// ═══════════════════════════════════════════════════════════════════
+// 图像设置：模型切换 + 保存/加载 per-model 设置
+// ═══════════════════════════════════════════════════════════════════
 
-// 加载模型下拉列表（从选中的 image provider 获取）
+// 加载模型下拉列表（含"全局"选项）
 function loadModelDropdown() {
   var sel = document.getElementById('selModel');
+  var currentVal = sel.value || '_global';
   sel.innerHTML = '';
+  // 全局选项
+  var optGlobal = document.createElement('option');
+  optGlobal.value = '_global';
+  optGlobal.textContent = '🌐 全局（对所有模型生效）';
+  sel.appendChild(optGlobal);
+  // 收集所有 image provider 的模型（去重）
   var models = [];
-  // 收集所有选中的 image provider 的模型
   for (var i = 0; i < allProviders.length; i++) {
     var p = allProviders[i];
     if (p.type === 'image' && p.enabled !== false) {
@@ -2430,13 +2432,82 @@ function loadModelDropdown() {
       }
     }
   }
-  if (!models.length) models = ['gpt-image-2'];
   for (var k = 0; k < models.length; k++) {
     var opt = document.createElement('option');
     opt.value = models[k];
     opt.textContent = models[k];
     sel.appendChild(opt);
   }
+  // 恢复选中值
+  sel.value = currentVal;
+}
+
+// 切换模型时加载对应设置
+function onImageSettingsModelChange() {
+  var modelVal = document.getElementById('selModel').value;
+  loadImageSettings(modelVal);
+}
+
+// 加载指定模型的设置到 UI
+function loadImageSettings(modelKey) {
+  var all = loadProviderSettings();
+  var ps = all[modelKey] || all['_global'] || {};
+
+  // 质量
+  var q = ps.quality || '';
+  document.querySelectorAll('#qualityBtns .quality-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.val === q);
+  });
+  document.getElementById('selQuality').value = q;
+
+  // 宽高比
+  var ratio = ps.ratio || '1:1';
+  document.querySelectorAll('#ratioGrid .ratio-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.ratio === ratio);
+  });
+  document.getElementById('selRatio').value = ratio;
+
+  // 尺寸
+  if (ratio !== 'auto' && RATIO_SIZES[ratio]) {
+    var sz = RATIO_SIZES[ratio];
+    document.getElementById('inputW').value = sz[0];
+    document.getElementById('inputH').value = sz[1];
+  } else if (ps.w && ps.h) {
+    document.getElementById('inputW').value = ps.w;
+    document.getElementById('inputH').value = ps.h;
+  }
+
+  // 数量
+  var qty = ps.qty || 1;
+  document.querySelectorAll('#qtyBtns .qty-btn').forEach(function(b){
+    b.classList.toggle('active', parseInt(b.dataset.val) === qty);
+  });
+  document.getElementById('selQty').value = qty;
+}
+
+// 保存当前模型的设置
+function saveImageSettings() {
+  var modelKey = document.getElementById('selModel').value || '_global';
+  var all = loadProviderSettings();
+  all[modelKey] = {
+    quality: document.getElementById('selQuality').value || '',
+    ratio: document.getElementById('selRatio').value || '1:1',
+    w: parseInt(document.getElementById('inputW').value) || 1024,
+    h: parseInt(document.getElementById('inputH').value) || 1024,
+    qty: parseInt(document.getElementById('selQty').value) || 1,
+  };
+  try {
+    localStorage.setItem('genbox_image_settings', JSON.stringify(all));
+    var label = modelKey === '_global' ? '全局' : modelKey;
+    setStatus('✅ 已保存「' + label + '」的图像设置');
+  } catch(e) { setStatus('❌ 保存失败'); }
+}
+
+// 加载所有设置（从 localStorage）
+function loadProviderSettings() {
+  try {
+    return JSON.parse(localStorage.getItem('genbox_image_settings') || '{}');
+  } catch(e) { return {}; }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2482,38 +2553,23 @@ function renderProviderList() {
   var html = '';
   var imageProviders = allProviders.filter(function(p){ return p.type === 'image'; });
 
-  // 加载 per-provider 设置
-  var pSettings = loadProviderSettings();
-
   for (var i = 0; i < imageProviders.length; i++) {
     (function(p, idx){
       var sel = selectedProviders.indexOf(p.id) !== -1;
       var configured = p.api_key || p.has_key;
       var disabled = !p.enabled || !configured;
-      var qty = providerQuantities[p.id] || 1;
-
-      // 读取该 provider 的独立设置
-      var ps = pSettings[p.id] || {};
-      var psQuality = ps.quality || '';
-      var psRatio = ps.ratio || '1:1';
-      var psW = ps.w || 1024;
-      var psH = ps.h || 1024;
-      var psQty = ps.qty || 1;
 
       var allModels = p.models && p.models.length > 0 ? p.models : (p.model ? [p.model] : []);
-      // 过滤掉视频模型（包含 video/i2v/t2v/r2v 等关键词）
+      // 过滤掉视频模型
       var filteredModels = allModels.filter(function(m) {
         var ml = m.toLowerCase();
         return ml.indexOf('video') < 0 && ml.indexOf('i2v') < 0 && ml.indexOf('t2v') < 0 &&
                ml.indexOf('r2v') < 0 && ml.indexOf(' interpolation') < 0 && ml.indexOf('upsample') < 0;
       });
-      if (filteredModels.length === 0) filteredModels = allModels; // fallback: 如果过滤后为空则显示全部
+      if (filteredModels.length === 0) filteredModels = allModels;
       var modelOpts = filteredModels.length > 3
         ? buildModelOptsGrouped(filteredModels, p.model || '', groupImageModels)
         : filteredModels.map(function(m){ return '<option value="' + escAttr(m) + '"' + (p.model===m?' selected':'') + '>' + escHtml(m) + '</option>'; }).join('');
-
-      // 构建宽高比选项 HTML（简化版，每个 provider 独立）
-      var ratioHtml = buildRatioBtns(p.id, psRatio);
 
       html += '<div class="provider-card ' + (sel ? 'selected' : '') + ' ' + (disabled ? 'disabled' : '') + '" ' +
               'draggable="' + (!disabled) + '" ' +
@@ -2528,49 +2584,11 @@ function renderProviderList() {
         '</div>' +
         '<div class="provider-check"></div>' +
       '</div>' +
-
-      // ── 模型选择 ──
-      '<div style="padding:2px 0 2px 22px;">' +
+      '<div style="padding:2px 0 6px 22px;">' +
         '<select onchange="onImageModelChange(\'' + p.id + '\', this.value)" ' + (!sel ? 'disabled' : '') + ' style="width:100%;font-size:11px;padding:4px 8px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);' + (!sel ? 'opacity:0.5;' : '') + '">' +
           (modelOpts || '<option value="">无可用模型</option>') +
         '</select>' +
-      '</div>' +
-
-      // ── 质量 + 数量行 ──
-      '<div style="display:flex;gap:6px;padding:4px 0 2px 22px;align-items:center;">' +
-        '<div style="display:flex;gap:3px;">' +
-          '<button class="pquality-btn ' + (psQuality===''?'active':'') + '" onclick="event.stopPropagation();setProviderQuality(\'' + p.id + '\',\'\',this)" title="自动">A</button>' +
-          '<button class="pquality-btn ' + (psQuality==='low'?'active':'') + '" onclick="event.stopPropagation();setProviderQuality(\'' + p.id + '\',\'low\',this)" title="低">低</button>' +
-          '<button class="pquality-btn ' + (psQuality==='medium'?'active':'') + '" onclick="event.stopPropagation();setProviderQuality(\'' + p.id + '\',\'medium\',this)" title="中">中</button>' +
-          '<button class="pquality-btn ' + (psQuality==='high'?'active':'') + '" onclick="event.stopPropagation();setProviderQuality(\'' + p.id + '\',\'high\',this)" title="高">高</button>' +
-        '</div>' +
-        '<div style="flex:1;"></div>' +
-        '<span style="font-size:10px;color:var(--text-muted);">数量</span>' +
-        '<div style="display:flex;align-items:center;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--bg-surface);">' +
-          '<button onclick="event.stopPropagation();adjustProviderQty(\'' + p.id + '\',-1)" style="width:20px;height:24px;border:none;background:var(--bg-card);color:var(--text-primary);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;" ' + (disabled ? 'disabled' : '') + '>−</button>' +
-          '<span id="pqty_' + p.id + '" style="width:28px;text-align:center;font-size:11px;color:var(--text-primary);">' + psQty + '</span>' +
-          '<button onclick="event.stopPropagation();adjustProviderQty(\'' + p.id + '\',1)" style="width:20px;height:24px;border:none;background:var(--bg-card);color:var(--text-primary);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;" ' + (disabled ? 'disabled' : '') + '>+</button>' +
-        '</div>' +
-      '</div>' +
-
-      // ── 宽高比 + 尺寸 ──
-      '<div style="padding:2px 0 2px 22px;">' +
-        '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;" id="pratio_' + p.id + '">' +
-          ratioHtml +
-        '</div>' +
-        '<div style="display:flex;align-items:center;gap:4px;">' +
-          '<input type="number" id="pw_' + p.id + '" value="' + psW + '" min="256" max="4096" step="64" ' + (!sel ? 'disabled' : '') + ' ' +
-            'onchange="onProviderSizeChange(\'' + p.id + '\')" ' +
-            'style="width:50%;padding:3px 6px;font-size:10px;text-align:center;border:1px solid var(--border);border-radius:4px;background:var(--bg-surface);color:var(--text-primary);' + (!sel ? 'opacity:0.5;' : '') + '">' +
-          '<span style="color:var(--text-muted);font-size:10px;">×</span>' +
-          '<input type="number" id="ph_' + p.id + '" value="' + psH + '" min="256" max="4096" step="64" ' + (!sel ? 'disabled' : '') + ' ' +
-            'onchange="onProviderSizeChange(\'' + p.id + '\')" ' +
-            'style="width:50%;padding:3px 6px;font-size:10px;text-align:center;border:1px solid var(--border);border-radius:4px;background:var(--bg-surface);color:var(--text-primary);' + (!sel ? 'opacity:0.5;' : '') + '">' +
-        '</div>' +
-      '</div>' +
-
-      // ── 间距 ──
-      '<div style="height:4px;"></div>';
+      '</div>';
     })(imageProviders[i], i);
   }
 
@@ -3186,29 +3204,42 @@ function doGenerate() {
     elapsedEl.textContent = elapsed;
   }, 200);
 
-  // 从 per-provider 设置构建参数
-  var pSettings = loadProviderSettings();
-  var qtyMap = {};
-  var providerSettingsMap = {};
+  // 从图像设置面板构建参数
+  var imageSettings = loadProviderSettings();
+  var selectedModel = document.getElementById('selModel').value || '_global';
 
+  // 获取当前模型的设置（fallback 到全局）
+  var currentSettings = imageSettings[selectedModel] || imageSettings['_global'] || {};
+  var genQuality = currentSettings.quality || '';
+  var genRatio = currentSettings.ratio || '1:1';
+  var genW = currentSettings.w || 1024;
+  var genH = currentSettings.h || 1024;
+  var genQty = currentSettings.qty || 1;
+
+  // 构建尺寸
+  var genSize;
+  if (genRatio === 'auto') {
+    genSize = inferSize(prompt);
+  } else if (genRatio && RATIO_SIZES[genRatio]) {
+    var rsz = RATIO_SIZES[genRatio];
+    genSize = rsz[0] + 'x' + rsz[1];
+  } else {
+    genSize = genW + 'x' + genH;
+  }
+
+  // 构建 quantities（所有选中的 provider 都用同一个数量）
+  var qtyMap = {};
   for (var qi = 0; qi < selectedProviders.length; qi++) {
-    var pid = selectedProviders[qi];
-    var ps = pSettings[pid] || {};
-    var q = ps.qty || 1;
-    qtyMap[pid] = q;
-    var pSize;
-    if (ps.ratio === 'auto') {
-      pSize = inferSize(prompt);
-    } else if (ps.ratio && RATIO_SIZES[ps.ratio]) {
-      var rsz = RATIO_SIZES[ps.ratio];
-      pSize = rsz[0] + 'x' + rsz[1];
-    } else if (ps.w && ps.h) {
-      pSize = ps.w + 'x' + ps.h;
+    qtyMap[selectedProviders[qi]] = genQty;
+  }
+
+  // 如果选了特定模型，更新对应 provider 的 model
+  if (selectedModel !== '_global') {
+    for (var pi = 0; pi < allProviders.length; pi++) {
+      if (allProviders[pi].type === 'image' && selectedProviders.indexOf(allProviders[pi].id) >= 0) {
+        allProviders[pi].model = selectedModel;
+      }
     }
-    providerSettingsMap[pid] = {
-      quality: ps.quality || undefined,
-      size: pSize || undefined,
-    };
   }
 
   var payload = {
@@ -3217,11 +3248,12 @@ function doGenerate() {
     enhance_prompt: document.getElementById('chkEnhance').checked,
     llm_provider_id: localStorage.getItem('igs_llm_provider') || undefined,
     mode: currentMode,
+    size: genSize,
+    quality: genQuality || undefined,
     continuous: document.getElementById('chkContinuous').checked,
     system_prompt: systemPrompt,
     continuous_id: window.continuousSessionId || null,
     quantities: qtyMap,
-    provider_settings: providerSettingsMap,
   };
   if (currentMode === 'i2i' && uploadedImageData) {
     payload.image_data = uploadedImageData;
@@ -4833,7 +4865,7 @@ function submitSetupWizard() {
   if (agnesVKey) saves.push(saveWizardProvider('agnes-video', 'Agnes Video', 'video', agnesVUrl || 'https://apihub.agnes-ai.com/v1', agnesVKey, '#ec4899'));
   if (gemVKey) saves.push(saveWizardProvider('gemini-video', 'Gemini Video', 'video', gemVUrl || '', gemVKey, '#6366f1'));
   if (qwenVKey) saves.push(saveWizardProvider('qwen-video', 'Qwen Video', 'video', qwenVUrl || '', qwenVKey, '#f97316'));
-  if (llmKey) saves.push(saveWizardProvider('llm-default', 'LLM 提示词优化', 'llm', llmUrl || '', llmKey, '#a855f7'));
+  if (llmKey) saves.push(saveWizardProvider('llm-default', '提示词优化', 'llm', llmUrl || '', llmKey, '#a855f7'));
 
   if (!saves.length) { alert('\u8BF7\u81F3\u5C11\u586B\u5199\u4E00\u4E2A API Key'); return; }
   Promise.all(saves).then(function(){
@@ -4925,7 +4957,7 @@ function renderProviderEdit() {
   var groups = [
     { type: 'image', icon: '🎨', title: '生图模型', hint: '用于生成图片的模型，如 Stable Diffusion、Midjourney、Flux 等', accent: '#22c55e' },
     { type: 'video', icon: '🎬', title: '生视频模型', hint: '用于生成视频的模型，如 Gemini Veo、Sora 等', accent: '#3b82f6' },
-    { type: 'llm', icon: '🤖', title: 'LLM 提示词优化', hint: '用于优化提示词的大语言模型，如 GPT-4o、Claude 等', accent: '#f59e0b' },
+    { type: 'llm', icon: '🤖', title: '提示词优化', hint: '用于优化提示词的大语言模型，如 GPT-4o、Claude 等', accent: '#f59e0b' },
   ];
 
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;min-height:420px;">';

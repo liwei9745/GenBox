@@ -210,12 +210,21 @@ LLM_BASE_URL=https://api.openai.com/v1
 
 | 项目 | 作者 | 贡献 |
 |------|------|------|
-| [chatgpt2api](https://github.com/yukkcat/chatgpt2api) | [yukkcat](https://github.com/yukkcat) | GPT Image 生图接口支持 |
+| [chatgpt2api](https://github.com/basketikun/chatgpt2api) | [basketikun](https://github.com/basketikun) | GPT Image 生图接口支持 |
+| [4k-image-api](https://github.com/jianjianai/4k-image-api) | [简简aw](https://github.com/jianjianai) | 图片变形 + Lanczos3 超分辨率 |
 | [flow2api](https://github.com/TheSmallHanCat/flow2api) | [TheSmallHanCat](https://github.com/TheSmallHanCat) | Gemini 生图/生视频接口支持 |
 | [AIClient2API](https://github.com/justlovemaki/AIClient2API) | [justlovemaki](https://github.com/justlovemaki) | Agnes 生图/生视频接口支持 |
 | [qwen2API](https://github.com/YuJunZhiXue/qwen2API) | [YuJunZhiXue](https://github.com/YuJunZhiXue) | Qwen 生图/生视频接口支持 |
 
-> 💡 遇到问题？推荐加入 [chatgpt2api 交流群](https://qm.qq.com/q/your-group)（QQ群号：1005859624），这里有热心的开发者可以帮你解答困惑。
+### 原版项目贡献者
+
+感谢所有为上游项目做出贡献的开发者：
+
+[![Contributors](https://contrib.rocks/image?repo=basketikun/chatgpt2api)](https://github.com/basketikun/chatgpt2api/graphs/contributors)
+
+### Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=liwei9745/GenBox&type=Date)](https://star-history.com/#liwei9745/GenBox&Date)
 
 ---
 
