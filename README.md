@@ -56,17 +56,21 @@ GenBox 是一个本地部署的 **一站式 AI 创作工具箱**，将多个 AI 
 
 ## 🖼️ 界面预览 | Screenshots
 
+<div align="center">
+
 | 系统看板 | 生图界面 | 媒体库 |
-|---------|---------|--------|
-| ![看板](docs/screenshots/系统看板.png) | ![生图](docs/screenshots/生图界面.png) | ![媒体库](docs/screenshots/媒体库1.png) |
+|:-------:|:-------:|:-----:|
+| <img src="docs/screenshots/系统看板.png" width="280" alt="看板"> | <img src="docs/screenshots/生图界面.png" width="280" alt="生图"> | <img src="docs/screenshots/媒体库1.png" width="280" alt="媒体库"> |
 
-| Provider 管理 | 视频卡片 | 历史记录 |
-|--------------|---------|---------|
-| ![Provider](docs/screenshots/Provider%20管理.png) | ![视频](docs/screenshots/视频卡片.png) | ![历史](docs/screenshots/历史页.png) |
+| Provider 管理 | Provider 设置 | 视频卡片 |
+|:------------:|:------------:|:-------:|
+| <img src="docs/screenshots/Provider 管理.png" width="280" alt="Provider"> | <img src="docs/screenshots/Provider设置.png" width="280" alt="设置"> | <img src="docs/screenshots/视频卡片.png" width="280" alt="视频"> |
 
-| Provider 设置 | 媒体库(视频) |
-|--------------|-------------|
-| ![设置](docs/screenshots/Provider设置面样.png) | ![媒体库视频](docs/screenshots/媒体库2.png) |
+| 历史记录 | 媒体库(视频) |
+|:-------:|:----------:|
+| <img src="docs/screenshots/历史页.png" width="280" alt="历史"> | <img src="docs/screenshots/媒体库2.png" width="280" alt="媒体库视频"> |
+
+</div>
 
 ---
 
@@ -220,11 +224,19 @@ LLM_BASE_URL=https://api.openai.com/v1
 
 感谢所有为上游项目做出贡献的开发者：
 
-[![Contributors](https://contrib.rocks/image?repo=basketikun/chatgpt2api)](https://github.com/basketikun/chatgpt2api/graphs/contributors)
+<a href="https://github.com/basketikun/chatgpt2api/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=basketikun/chatgpt2api" />
+</a>
 
 ### Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=liwei9745/GenBox&type=Date)](https://star-history.com/#liwei9745/GenBox&Date)
+<a href="https://star-history.com/#liwei9745/GenBox&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=liwei9745/GenBox&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=liwei9745/GenBox&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=liwei9745/GenBox&type=Date" width="600" />
+ </picture>
+</a>
 
 ---
 
