@@ -447,6 +447,55 @@
     }
     .btn-ghost:hover { border-color: var(--border-light); color: var(--text-secondary); }
 
+    /* ── 图像设置按钮组 ── */
+    .quality-btn, .qty-btn {
+      padding: 6px 12px;
+      font-size: 11px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    .quality-btn:hover, .qty-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(91,141,239,0.06);
+    }
+    .quality-btn.active, .qty-btn.active {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+    .ratio-btn {
+      padding: 8px 4px;
+      font-size: 11px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .ratio-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(91,141,239,0.06);
+    }
+    .ratio-btn.active {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+
     /* ── 进度条 ── */
     .progress-wrap {
       background: var(--bg-surface);
@@ -1405,39 +1454,97 @@
               <div id="providerList" style="display:flex;flex-direction:column;gap:8px;">加载中...</div>
             </div>
 
-            <!-- 参数设置 -->
+            <!-- ═══ 图像设置 (参照 chatgpt2api 风格) ═══ -->
             <div class="glass-card" style="padding:16px;">
-              <div class="param-label" style="margin-bottom:10px;">参数设置</div>
+              <div class="param-label" style="margin-bottom:12px;font-size:13px;font-weight:700;">⚙ 图像设置</div>
 
-              <div class="param-group">
-                <div class="param-label" style="font-size:10px;">尺寸</div>
-                <select id="selSize" style="padding:8px 12px;font-size:12px;">
-                  <option value="auto">🌐 自动 (根据提示词)</option>
-                  <option value="">⚙ 默认</option>
-                  <option value="1024x1024">1:1 · 1024×1024</option>
-                  <option value="1536x1024">3:2 · 1536×1024</option>
-                  <option value="1792x1024">16:9 · 1792×1024</option>
-                  <option value="1820x780">21:9 · 1820×780 (超宽)</option>
-                  <option value="1024x1792">9:16 · 1024×1792</option>
+              <!-- 模型选择 -->
+              <div class="param-group" style="margin-bottom:12px;">
+                <div class="param-label" style="font-size:10px;margin-bottom:6px;">模型</div>
+                <select id="selModel" style="width:100%;padding:8px 12px;font-size:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);">
+                  <option value="">加载中...</option>
                 </select>
               </div>
 
-              <!-- 连续生图开关 -->
-              <div class="param-group" style="margin-top:10px;padding:10px;background:rgba(91,141,239,0.06);border-radius:8px;">
+              <!-- 质量 -->
+              <div class="param-group" style="margin-bottom:12px;">
+                <div class="param-label" style="font-size:10px;margin-bottom:6px;">质量</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;" id="qualityBtns">
+                  <button class="quality-btn active" data-val="" onclick="setQuality(this,'')">自动</button>
+                  <button class="quality-btn" data-val="low" onclick="setQuality(this,'low')">低</button>
+                  <button class="quality-btn" data-val="medium" onclick="setQuality(this,'medium')">中</button>
+                  <button class="quality-btn" data-val="high" onclick="setQuality(this,'high')">高</button>
+                </div>
+                <input type="hidden" id="selQuality" value="">
+              </div>
+
+              <!-- 尺寸 -->
+              <div class="param-group" style="margin-bottom:12px;">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+                  <div class="param-label" style="font-size:10px;margin:0;">尺寸</div>
+                  <span style="font-size:10px;color:var(--text-muted);cursor:help;" title="自定义宽高，像素值会按比例适配到模型支持的范围">ⓘ</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <div style="flex:1;">
+                    <input type="number" id="inputW" value="1024" min="256" max="4096" step="64"
+                      style="width:100%;padding:8px;font-size:12px;text-align:center;border-radius:8px;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);"
+                      oninput="onSizeInput()">
+                  </div>
+                  <span style="color:var(--text-muted);font-size:12px;">×</span>
+                  <div style="flex:1;">
+                    <input type="number" id="inputH" value="1024" min="256" max="4096" step="64"
+                      style="width:100%;padding:8px;font-size:12px;text-align:center;border-radius:8px;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);"
+                      oninput="onSizeInput()">
+                  </div>
+                </div>
+              </div>
+
+              <!-- 宽高比 -->
+              <div class="param-group" style="margin-bottom:12px;">
+                <div class="param-label" style="font-size:10px;margin-bottom:6px;">宽高比</div>
+                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;" id="ratioGrid">
+                  <button class="ratio-btn active" data-ratio="1:1" onclick="setRatio(this,'1:1')" title="1:1 · 1024×1024">1:1</button>
+                  <button class="ratio-btn" data-ratio="2:3" onclick="setRatio(this,'2:3')" title="2:3 · 832×1248">2:3</button>
+                  <button class="ratio-btn" data-ratio="3:2" onclick="setRatio(this,'3:2')" title="3:2 · 1248×832">3:2</button>
+                  <button class="ratio-btn" data-ratio="3:4" onclick="setRatio(this,'3:4')" title="3:4 · 896×1152">3:4</button>
+                  <button class="ratio-btn" data-ratio="4:3" onclick="setRatio(this,'4:3')" title="4:3 · 1152×896">4:3</button>
+                  <button class="ratio-btn" data-ratio="9:16" onclick="setRatio(this,'9:16')" title="9:16 · 768×1360">9:16</button>
+                  <button class="ratio-btn" data-ratio="16:9" onclick="setRatio(this,'16:9')" title="16:9 · 1360×768 电影画幅">16:9</button>
+                  <button class="ratio-btn" data-ratio="1:1-2k" onclick="setRatio(this,'1:1-2k')" title="1:1 2K · 1536×1536">1:1(2K)</button>
+                  <button class="ratio-btn" data-ratio="16:9-2k" onclick="setRatio(this,'16:9-2k')" title="16:9 2K · 2048×1152">16:9(2K)</button>
+                  <button class="ratio-btn" data-ratio="9:16-2k" onclick="setRatio(this,'9:16-2k')" title="9:16 2K · 1152×2048">9:16(2K)</button>
+                  <button class="ratio-btn" data-ratio="16:9-4k" onclick="setRatio(this,'16:9-4k')" title="16:9 4K · 4096×2304">16:9(4K)</button>
+                  <button class="ratio-btn" data-ratio="9:16-4k" onclick="setRatio(this,'9:16-4k')" title="9:16 4K · 2304×4096">9:16(4K)</button>
+                  <button class="ratio-btn" data-ratio="auto" onclick="setRatio(this,'auto')" title="自动 (根据提示词推断)" style="grid-column:span 2;">auto</button>
+                </div>
+                <input type="hidden" id="selRatio" value="1:1">
+              </div>
+
+              <!-- 生成数量 -->
+              <div class="param-group" style="margin-bottom:12px;">
+                <div class="param-label" style="font-size:10px;margin-bottom:6px;">生成数量</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;" id="qtyBtns">
+                  <button class="qty-btn active" data-val="1" onclick="setQty(this,1)">1 张</button>
+                  <button class="qty-btn" data-val="2" onclick="setQty(this,2)">2 张</button>
+                  <button class="qty-btn" data-val="3" onclick="setQty(this,3)">3 张</button>
+                  <button class="qty-btn" data-val="4" onclick="setQty(this,4)">4 张</button>
+                  <button class="qty-btn" data-val="5" onclick="setQty(this,5)">5 张</button>
+                  <button class="qty-btn" data-val="6" onclick="setQty(this,6)">6 张</button>
+                  <button class="qty-btn" data-val="7" onclick="setQty(this,7)">7 张</button>
+                  <button class="qty-btn" data-val="8" onclick="setQty(this,8)">8 张</button>
+                  <button class="qty-btn" data-val="9" onclick="setQty(this,9)">9 张</button>
+                  <button class="qty-btn" data-val="10" onclick="setQty(this,10)">10 张</button>
+                </div>
+                <input type="hidden" id="selQty" value="1">
+              </div>
+
+              <!-- 连续生图 -->
+              <div class="param-group" style="padding:10px;background:rgba(91,141,239,0.06);border-radius:8px;">
                 <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
                   <span style="font-size:11px;color:var(--text-primary);font-weight:500;">🔗 连续生图</span>
                   <input type="checkbox" id="chkContinuous" style="width:16px;height:16px;accent-color:var(--accent);">
                 </label>
                 <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">保持风格一致性，适合连续漫画/系列图</div>
-              </div>
-
-              <div class="param-group">
-                <div class="param-label" style="font-size:10px;">质量</div>
-                <select id="selQuality" style="padding:8px 12px;font-size:12px;">
-                  <option value="">默认</option>
-                  <option value="standard">标准</option>
-                  <option value="high">高清</option>
-                </select>
               </div>
 
               <!-- 尺寸自适应：生成后本地放大 -->
@@ -1476,7 +1583,8 @@
                 </div>
               </div>
 
-              <div class="param-group" id="strengthGroup" style="display:none;">
+              <!-- 变换强度 (i2i 模式) -->
+              <div class="param-group" id="strengthGroup" style="display:none;margin-top:10px;">
                 <div class="param-label" style="font-size:10px;">变换强度 <span id="strengthVal" style="color:var(--accent);float:right;">0.55</span></div>
                 <input type="range" id="selStrength" min="0.1" max="0.95" step="0.05" value="0.55"
                   style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('strengthVal').textContent=this.value">
@@ -2148,6 +2256,16 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('strengthVal').textContent = this.value;
   });
 
+  // 模型选择联动
+  var selModel = document.getElementById('selModel');
+  if (selModel) selModel.addEventListener('change', onModelSelectChange);
+
+  // 放大选项开关
+  var chkUpscale = document.getElementById('chkUpscale');
+  if (chkUpscale) chkUpscale.addEventListener('change', function() {
+    document.getElementById('upscaleOpts').style.display = this.checked ? '' : 'none';
+  });
+
   // ESC 关闭弹窗
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
@@ -2181,6 +2299,116 @@ function switchNav(name, el) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// 图像设置：宽高比 / 质量 / 数量 / 尺寸联动
+// ═══════════════════════════════════════════════════════════════════
+
+// 宽高比 → 尺寸映射（标准 1024 基准）
+var RATIO_SIZES = {
+  '1:1':      [1024, 1024],
+  '2:3':      [832,  1248],
+  '3:2':      [1248, 832],
+  '3:4':      [896,  1152],
+  '4:3':      [1152, 896],
+  '9:16':     [768,  1360],
+  '16:9':     [1360, 768],   // 电影画幅
+  '1:1-2k':   [1536, 1536],
+  '16:9-2k':  [2048, 1152],
+  '9:16-2k':  [1152, 2048],
+  '16:9-4k':  [4096, 2304],
+  '9:16-4k':  [2304, 4096],
+};
+
+function setRatio(el, ratio) {
+  // 更新选中状态
+  document.querySelectorAll('#ratioGrid .ratio-btn').forEach(function(b){ b.classList.remove('active'); });
+  el.classList.add('active');
+  document.getElementById('selRatio').value = ratio;
+
+  // 联动尺寸输入框
+  if (ratio === 'auto') {
+    // auto 模式：保持当前输入值不变
+    return;
+  }
+  var sz = RATIO_SIZES[ratio];
+  if (sz) {
+    document.getElementById('inputW').value = sz[0];
+    document.getElementById('inputH').value = sz[1];
+  }
+}
+
+function onSizeInput() {
+  // 手动输入尺寸时，清除宽高比选中状态（除非恰好匹配某个预设）
+  var w = parseInt(document.getElementById('inputW').value) || 1024;
+  var h = parseInt(document.getElementById('inputH').value) || 1024;
+  var matched = false;
+  for (var ratio in RATIO_SIZES) {
+    var sz = RATIO_SIZES[ratio];
+    if (sz[0] === w && sz[1] === h) {
+      // 匹配到预设，高亮对应按钮
+      document.querySelectorAll('#ratioGrid .ratio-btn').forEach(function(b){
+        b.classList.toggle('active', b.dataset.ratio === ratio);
+      });
+      document.getElementById('selRatio').value = ratio;
+      matched = true;
+      break;
+    }
+  }
+  if (!matched) {
+    document.querySelectorAll('#ratioGrid .ratio-btn').forEach(function(b){ b.classList.remove('active'); });
+    document.getElementById('selRatio').value = '';
+  }
+}
+
+function setQuality(el, val) {
+  document.querySelectorAll('#qualityBtns .quality-btn').forEach(function(b){ b.classList.remove('active'); });
+  el.classList.add('active');
+  document.getElementById('selQuality').value = val;
+}
+
+function setQty(el, val) {
+  document.querySelectorAll('#qtyBtns .qty-btn').forEach(function(b){ b.classList.remove('active'); });
+  el.classList.add('active');
+  document.getElementById('selQty').value = val;
+}
+
+// 模型选择联动：更新 provider 的 model 字段
+function onModelSelectChange() {
+  var modelVal = document.getElementById('selModel').value;
+  if (!modelVal) return;
+  // 找到当前选中的 image provider 并更新其 model
+  for (var i = 0; i < allProviders.length; i++) {
+    if (allProviders[i].type === 'image' && selectedProviders.indexOf(allProviders[i].id) >= 0) {
+      allProviders[i].model = modelVal;
+    }
+  }
+}
+
+// 加载模型下拉列表（从选中的 image provider 获取）
+function loadModelDropdown() {
+  var sel = document.getElementById('selModel');
+  sel.innerHTML = '';
+  var models = [];
+  // 收集所有选中的 image provider 的模型
+  for (var i = 0; i < allProviders.length; i++) {
+    var p = allProviders[i];
+    if (p.type === 'image' && p.enabled !== false) {
+      var pModels = (p.models && p.models.length) ? p.models : [p.model || 'default'];
+      for (var j = 0; j < pModels.length; j++) {
+        var m = pModels[j];
+        if (models.indexOf(m) < 0) models.push(m);
+      }
+    }
+  }
+  if (!models.length) models = ['gpt-image-2'];
+  for (var k = 0; k < models.length; k++) {
+    var opt = document.createElement('option');
+    opt.value = models[k];
+    opt.textContent = models[k];
+    sel.appendChild(opt);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // 子标签: 文生图 / 图生图
 // ═══════════════════════════════════════════════════════════════════
 function switchSubTab(mode) {
@@ -2204,6 +2432,7 @@ function loadProviders() {
     allProviders = data.providers || [];
     loadProviderOrder();
     renderProviderList();
+    loadModelDropdown();  // 更新模型下拉列表
     setStatus('Provider 已加载 · ' + allProviders.filter(function(p){return p.type==='image';}).length + ' 个生图模型');
   }).catch(function(e){ if (e.message !== 'AUTH_REQUIRED') setStatus('Provider 加载失败'); });
 }
@@ -2483,14 +2712,6 @@ function handleFileVar(f) {
   reader.readAsDataURL(f);
 }
 
-// ── 放大选项开关 ──
-document.addEventListener('DOMContentLoaded', function() {
-  var chk = document.getElementById('chkUpscale');
-  if (chk) chk.addEventListener('change', function() {
-    document.getElementById('upscaleOpts').style.display = this.checked ? '' : 'none';
-  });
-});
-
 // ═══════════════════════════════════════════════════════════════════
 // 尺寸推断
 // ═══════════════════════════════════════════════════════════════════
@@ -2768,10 +2989,37 @@ function doGenerate() {
     elapsedEl.textContent = elapsed;
   }, 200);
 
-  var sizeVal = document.getElementById('selSize').value;
-  var finalSize = undefined;
-  if (sizeVal === 'auto') finalSize = inferSize(prompt);
-  else if (sizeVal) finalSize = sizeVal;
+  // 从宽高比/尺寸输入获取最终尺寸
+  var ratio = document.getElementById('selRatio').value;
+  var finalSize;
+  if (ratio === 'auto') {
+    finalSize = inferSize(prompt);
+  } else if (ratio && RATIO_SIZES[ratio]) {
+    var sz = RATIO_SIZES[ratio];
+    finalSize = sz[0] + 'x' + sz[1];
+  } else {
+    // 手动输入
+    var w = parseInt(document.getElementById('inputW').value) || 1024;
+    var h = parseInt(document.getElementById('inputH').value) || 1024;
+    finalSize = w + 'x' + h;
+  }
+
+  // 生成数量 → quantities dict（每个选中的 provider 都生成 N 张）
+  var genQty = parseInt(document.getElementById('selQty').value) || 1;
+  var qtyMap = {};
+  for (var qi = 0; qi < selectedProviders.length; qi++) {
+    qtyMap[selectedProviders[qi]] = genQty;
+  }
+
+  // 更新选中 provider 的模型
+  var modelOverride = document.getElementById('selModel').value;
+  if (modelOverride) {
+    for (var pi = 0; pi < allProviders.length; pi++) {
+      if (allProviders[pi].type === 'image' && selectedProviders.indexOf(allProviders[pi].id) >= 0) {
+        allProviders[pi].model = modelOverride;
+      }
+    }
+  }
 
   var payload = {
     prompt: prompt,
@@ -2784,7 +3032,7 @@ function doGenerate() {
     continuous: document.getElementById('chkContinuous').checked,
     system_prompt: systemPrompt,
     continuous_id: window.continuousSessionId || null,
-    quantities: providerQuantities,
+    quantities: qtyMap,
   };
   if (currentMode === 'i2i' && uploadedImageData) {
     payload.image_data = uploadedImageData;
