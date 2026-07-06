@@ -496,6 +496,30 @@
       font-weight: 600;
     }
 
+    /* ── Per-provider 设置按钮 ── */
+    .pquality-btn, .pratio-btn {
+      padding: 3px 6px;
+      font-size: 9px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.12s;
+      font-family: inherit;
+      line-height: 1.2;
+    }
+    .pquality-btn:hover, .pratio-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .pquality-btn.active, .pratio-btn.active {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+
     /* ── 进度条 ── */
     .progress-wrap {
       background: var(--bg-surface);
@@ -1450,7 +1474,10 @@
 
             <!-- 模型选择 -->
             <div class="glass-card" style="padding:16px;">
-              <div class="param-label" style="margin-bottom:10px;">选择模型</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <div class="param-label" style="margin:0;">选择模型</div>
+                <button onclick="saveAllProviderSettings()" style="padding:3px 8px;font-size:10px;border-radius:4px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;transition:all 0.15s;" onmouseover="this.style.background='var(--accent)';this.style.color='#fff'" onmouseout="this.style.background='transparent';this.style.color='var(--accent)'">💾 保存设置</button>
+              </div>
               <div id="providerList" style="display:flex;flex-direction:column;gap:8px;">加载中...</div>
             </div>
 
@@ -1510,9 +1537,11 @@
                   <button class="ratio-btn" data-ratio="4:3" onclick="setRatio(this,'4:3')" title="4:3 · 1152×896">4:3</button>
                   <button class="ratio-btn" data-ratio="9:16" onclick="setRatio(this,'9:16')" title="9:16 · 768×1360">9:16</button>
                   <button class="ratio-btn" data-ratio="16:9" onclick="setRatio(this,'16:9')" title="16:9 · 1360×768 电影画幅">16:9</button>
+                  <button class="ratio-btn" data-ratio="21:9" onclick="setRatio(this,'21:9')" title="21:9 · 1536×656 超宽银幕">21:9</button>
                   <button class="ratio-btn" data-ratio="1:1-2k" onclick="setRatio(this,'1:1-2k')" title="1:1 2K · 1536×1536">1:1(2K)</button>
                   <button class="ratio-btn" data-ratio="16:9-2k" onclick="setRatio(this,'16:9-2k')" title="16:9 2K · 2048×1152">16:9(2K)</button>
                   <button class="ratio-btn" data-ratio="9:16-2k" onclick="setRatio(this,'9:16-2k')" title="9:16 2K · 1152×2048">9:16(2K)</button>
+                  <button class="ratio-btn" data-ratio="21:9-2k" onclick="setRatio(this,'21:9-2k')" title="21:9 2K · 2560×1092 超宽银幕2K">21:9(2K)</button>
                   <button class="ratio-btn" data-ratio="16:9-4k" onclick="setRatio(this,'16:9-4k')" title="16:9 4K · 4096×2304">16:9(4K)</button>
                   <button class="ratio-btn" data-ratio="9:16-4k" onclick="setRatio(this,'9:16-4k')" title="9:16 4K · 2304×4096">9:16(4K)</button>
                   <button class="ratio-btn" data-ratio="auto" onclick="setRatio(this,'auto')" title="自动 (根据提示词推断)" style="grid-column:span 2;">auto</button>
@@ -2311,9 +2340,11 @@ var RATIO_SIZES = {
   '4:3':      [1152, 896],
   '9:16':     [768,  1360],
   '16:9':     [1360, 768],   // 电影画幅
+  '21:9':     [1536, 656],   // 超宽银幕
   '1:1-2k':   [1536, 1536],
   '16:9-2k':  [2048, 1152],
   '9:16-2k':  [1152, 2048],
+  '21:9-2k':  [2560, 1092],  // 超宽银幕 2K
   '16:9-4k':  [4096, 2304],
   '9:16-4k':  [2304, 4096],
 };
@@ -2451,19 +2482,42 @@ function renderProviderList() {
   var html = '';
   var imageProviders = allProviders.filter(function(p){ return p.type === 'image'; });
 
+  // 加载 per-provider 设置
+  var pSettings = loadProviderSettings();
+
   for (var i = 0; i < imageProviders.length; i++) {
-    (function(p){
+    (function(p, idx){
       var sel = selectedProviders.indexOf(p.id) !== -1;
       var configured = p.api_key || p.has_key;
       var disabled = !p.enabled || !configured;
       var qty = providerQuantities[p.id] || 1;
+
+      // 读取该 provider 的独立设置
+      var ps = pSettings[p.id] || {};
+      var psQuality = ps.quality || '';
+      var psRatio = ps.ratio || '1:1';
+      var psW = ps.w || 1024;
+      var psH = ps.h || 1024;
+      var psQty = ps.qty || 1;
+
       var allModels = p.models && p.models.length > 0 ? p.models : (p.model ? [p.model] : []);
-      var modelOpts = allModels.length > 3
-        ? buildModelOptsGrouped(allModels, p.model || '', groupImageModels)
-        : allModels.map(function(m){ return '<option value="' + escAttr(m) + '"' + (p.model===m?' selected':'') + '>' + escHtml(m) + '</option>'; }).join('');
+      // 过滤掉视频模型（包含 video/i2v/t2v/r2v 等关键词）
+      var filteredModels = allModels.filter(function(m) {
+        var ml = m.toLowerCase();
+        return ml.indexOf('video') < 0 && ml.indexOf('i2v') < 0 && ml.indexOf('t2v') < 0 &&
+               ml.indexOf('r2v') < 0 && ml.indexOf(' interpolation') < 0 && ml.indexOf('upsample') < 0;
+      });
+      if (filteredModels.length === 0) filteredModels = allModels; // fallback: 如果过滤后为空则显示全部
+      var modelOpts = filteredModels.length > 3
+        ? buildModelOptsGrouped(filteredModels, p.model || '', groupImageModels)
+        : filteredModels.map(function(m){ return '<option value="' + escAttr(m) + '"' + (p.model===m?' selected':'') + '>' + escHtml(m) + '</option>'; }).join('');
+
+      // 构建宽高比选项 HTML（简化版，每个 provider 独立）
+      var ratioHtml = buildRatioBtns(p.id, psRatio);
+
       html += '<div class="provider-card ' + (sel ? 'selected' : '') + ' ' + (disabled ? 'disabled' : '') + '" ' +
               'draggable="' + (!disabled) + '" ' +
-              'ondragstart="onProviderDragStart(event, \'' + p.id + '\', ' + (imageProviders.indexOf(p)) + ')" ' +
+              'ondragstart="onProviderDragStart(event, \'' + p.id + '\', ' + idx + ')" ' +
               'ondragover="onProviderDragOver(event, \'' + p.id + '\')" ' +
               'ondrop="onProviderDrop(event, \'' + p.id + '\')" ' +
               'ondragend="resetDragStyle()" ' +
@@ -2474,24 +2528,167 @@ function renderProviderList() {
         '</div>' +
         '<div class="provider-check"></div>' +
       '</div>' +
+
+      // ── 模型选择 ──
       '<div style="padding:2px 0 2px 22px;">' +
         '<select onchange="onImageModelChange(\'' + p.id + '\', this.value)" ' + (!sel ? 'disabled' : '') + ' style="width:100%;font-size:11px;padding:4px 8px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);' + (!sel ? 'opacity:0.5;' : '') + '">' +
           (modelOpts || '<option value="">无可用模型</option>') +
         '</select>' +
       '</div>' +
-      '<div class="provider-qty-row" style="display:flex;align-items:center;gap:6px;padding:2px 0 6px 22px;">' +
+
+      // ── 质量 + 数量行 ──
+      '<div style="display:flex;gap:6px;padding:4px 0 2px 22px;align-items:center;">' +
+        '<div style="display:flex;gap:3px;">' +
+          '<button class="pquality-btn ' + (psQuality===''?'active':'') + '" onclick="event.stopPropagation();setProviderQuality(\'' + p.id + '\',\'\',this)" title="自动">A</button>' +
+          '<button class="pquality-btn ' + (psQuality==='low'?'active':'') + '" onclick="event.stopPropagation();setProviderQuality(\'' + p.id + '\',\'low\',this)" title="低">低</button>' +
+          '<button class="pquality-btn ' + (psQuality==='medium'?'active':'') + '" onclick="event.stopPropagation();setProviderQuality(\'' + p.id + '\',\'medium\',this)" title="中">中</button>' +
+          '<button class="pquality-btn ' + (psQuality==='high'?'active':'') + '" onclick="event.stopPropagation();setProviderQuality(\'' + p.id + '\',\'high\',this)" title="高">高</button>' +
+        '</div>' +
+        '<div style="flex:1;"></div>' +
         '<span style="font-size:10px;color:var(--text-muted);">数量</span>' +
         '<div style="display:flex;align-items:center;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--bg-surface);">' +
-          '<button onclick="adjustQty(\'' + p.id + '\',-1)" style="width:22px;height:26px;border:none;background:var(--bg-card);color:var(--text-primary);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;" ' + (disabled ? 'disabled' : '') + '>−</button>' +
-          '<input type="number" class="provider-qty" data-pid="' + p.id + '" value="' + qty + '" min="1" max="4" onchange="onQtyChange(this)" style="width:36px;height:26px;border:none;border-left:1px solid var(--border);border-right:1px solid var(--border);background:transparent;text-align:center;font-size:12px;color:var(--text-primary);padding:0;" ' + (disabled ? 'disabled' : '') + '>' +
-          '<button onclick="adjustQty(\'' + p.id + '\',1)" style="width:22px;height:26px;border:none;background:var(--bg-card);color:var(--text-primary);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;" ' + (disabled ? 'disabled' : '') + '>+</button>' +
+          '<button onclick="event.stopPropagation();adjustProviderQty(\'' + p.id + '\',-1)" style="width:20px;height:24px;border:none;background:var(--bg-card);color:var(--text-primary);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;" ' + (disabled ? 'disabled' : '') + '>−</button>' +
+          '<span id="pqty_' + p.id + '" style="width:28px;text-align:center;font-size:11px;color:var(--text-primary);">' + psQty + '</span>' +
+          '<button onclick="event.stopPropagation();adjustProviderQty(\'' + p.id + '\',1)" style="width:20px;height:24px;border:none;background:var(--bg-card);color:var(--text-primary);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;" ' + (disabled ? 'disabled' : '') + '>+</button>' +
         '</div>' +
-      '</div>';
-    })(imageProviders[i]);
+      '</div>' +
+
+      // ── 宽高比 + 尺寸 ──
+      '<div style="padding:2px 0 2px 22px;">' +
+        '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;" id="pratio_' + p.id + '">' +
+          ratioHtml +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:4px;">' +
+          '<input type="number" id="pw_' + p.id + '" value="' + psW + '" min="256" max="4096" step="64" ' + (!sel ? 'disabled' : '') + ' ' +
+            'onchange="onProviderSizeChange(\'' + p.id + '\')" ' +
+            'style="width:50%;padding:3px 6px;font-size:10px;text-align:center;border:1px solid var(--border);border-radius:4px;background:var(--bg-surface);color:var(--text-primary);' + (!sel ? 'opacity:0.5;' : '') + '">' +
+          '<span style="color:var(--text-muted);font-size:10px;">×</span>' +
+          '<input type="number" id="ph_' + p.id + '" value="' + psH + '" min="256" max="4096" step="64" ' + (!sel ? 'disabled' : '') + ' ' +
+            'onchange="onProviderSizeChange(\'' + p.id + '\')" ' +
+            'style="width:50%;padding:3px 6px;font-size:10px;text-align:center;border:1px solid var(--border);border-radius:4px;background:var(--bg-surface);color:var(--text-primary);' + (!sel ? 'opacity:0.5;' : '') + '">' +
+        '</div>' +
+      '</div>' +
+
+      // ── 间距 ──
+      '<div style="height:4px;"></div>';
+    })(imageProviders[i], i);
   }
 
   container.innerHTML = html || '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">暂无模型，<a href="#" onclick="openProviderModal();return false;" style="color:var(--accent);">去添加</a></div>';
   updateSelCount();
+}
+
+// 构建 per-provider 宽高比按钮
+function buildRatioBtns(pid, activeRatio) {
+  var ratios = [
+    ['1:1','1:1'], ['2:3','2:3'], ['3:2','3:2'], ['3:4','3:4'], ['4:3','4:3'],
+    ['9:16','9:16'], ['16:9','16:9'], ['21:9','21:9'],
+    ['auto','auto']
+  ];
+  var html = '';
+  for (var i = 0; i < ratios.length; i++) {
+    var r = ratios[i][0];
+    var label = ratios[i][1];
+    var isActive = r === activeRatio;
+    html += '<button class="pratio-btn ' + (isActive ? 'active' : '') + '" ' +
+            'onclick="event.stopPropagation();setProviderRatio(\'' + pid + '\',\'' + r + '\',this)" ' +
+            'title="' + r + '">' + label + '</button>';
+  }
+  return html;
+}
+
+// per-provider 宽高比选择
+function setProviderRatio(pid, ratio, el) {
+  // 更新按钮状态
+  el.parentElement.querySelectorAll('.pratio-btn').forEach(function(b){ b.classList.remove('active'); });
+  el.classList.add('active');
+  // 联动尺寸
+  if (ratio !== 'auto' && RATIO_SIZES[ratio]) {
+    var sz = RATIO_SIZES[ratio];
+    document.getElementById('pw_' + pid).value = sz[0];
+    document.getElementById('ph_' + pid).value = sz[1];
+  }
+  saveProviderSetting(pid, 'ratio', ratio);
+}
+
+// per-provider 质量选择
+function setProviderQuality(pid, val, el) {
+  el.parentElement.querySelectorAll('.pquality-btn').forEach(function(b){ b.classList.remove('active'); });
+  el.classList.add('active');
+  saveProviderSetting(pid, 'quality', val);
+}
+
+// per-provider 数量调整
+function adjustProviderQty(pid, delta) {
+  var el = document.getElementById('pqty_' + pid);
+  var v = parseInt(el.textContent) || 1;
+  v = Math.max(1, Math.min(10, v + delta));
+  el.textContent = v;
+  providerQuantities[pid] = v;
+  saveProviderSetting(pid, 'qty', v);
+}
+
+// per-provider 尺寸输入
+function onProviderSizeChange(pid) {
+  var w = parseInt(document.getElementById('pw_' + pid).value) || 1024;
+  var h = parseInt(document.getElementById('ph_' + pid).value) || 1024;
+  saveProviderSetting(pid, 'w', w);
+  saveProviderSetting(pid, 'h', h);
+  // 尝试匹配宽高比
+  var matched = '';
+  for (var ratio in RATIO_SIZES) {
+    var sz = RATIO_SIZES[ratio];
+    if (sz[0] === w && sz[1] === h) { matched = ratio; break; }
+  }
+  var ratioBtns = document.getElementById('pratio_' + pid);
+  if (ratioBtns) {
+    ratioBtns.querySelectorAll('.pratio-btn').forEach(function(b){
+      b.classList.toggle('active', b.title === matched);
+    });
+  }
+  saveProviderSetting(pid, 'ratio', matched);
+}
+
+// ── per-provider 设置持久化 ──
+function loadProviderSettings() {
+  try {
+    return JSON.parse(localStorage.getItem('genbox_provider_settings') || '{}');
+  } catch(e) { return {}; }
+}
+
+function saveProviderSetting(pid, key, val) {
+  var all = loadProviderSettings();
+  if (!all[pid]) all[pid] = {};
+  all[pid][key] = val;
+  try { localStorage.setItem('genbox_provider_settings', JSON.stringify(all)); } catch(e) {}
+}
+
+function saveAllProviderSettings() {
+  var imageProviders = allProviders.filter(function(p){ return p.type === 'image'; });
+  var all = loadProviderSettings();
+  for (var i = 0; i < imageProviders.length; i++) {
+    var p = imageProviders[i];
+    if (!all[p.id]) all[p.id] = {};
+    // 从 DOM 读取当前值
+    var wEl = document.getElementById('pw_' + p.id);
+    var hEl = document.getElementById('ph_' + p.id);
+    var qEl = document.getElementById('pqty_' + p.id);
+    if (wEl) all[p.id].w = parseInt(wEl.value) || 1024;
+    if (hEl) all[p.id].h = parseInt(hEl.value) || 1024;
+    if (qEl) all[p.id].qty = parseInt(qEl.textContent) || 1;
+    // 质量和宽高比从按钮读取
+    var qCard = document.querySelector('.provider-card[data-id="' + p.id + '"]');
+    if (qCard) {
+      var qBtn = qCard.querySelector('.pquality-btn.active');
+      if (qBtn) all[p.id].quality = qBtn.title === '自动' ? '' : qBtn.title === '低' ? 'low' : qBtn.title === '中' ? 'medium' : 'high';
+      var rBtn = qCard.querySelector('.pratio-btn.active');
+      if (rBtn) all[p.id].ratio = rBtn.title;
+    }
+  }
+  try {
+    localStorage.setItem('genbox_provider_settings', JSON.stringify(all));
+    setStatus('✅ 模型设置已保存');
+  } catch(e) { setStatus('❌ 保存失败'); }
 }
 
 // Image provider drag sort
@@ -2989,36 +3186,29 @@ function doGenerate() {
     elapsedEl.textContent = elapsed;
   }, 200);
 
-  // 从宽高比/尺寸输入获取最终尺寸
-  var ratio = document.getElementById('selRatio').value;
-  var finalSize;
-  if (ratio === 'auto') {
-    finalSize = inferSize(prompt);
-  } else if (ratio && RATIO_SIZES[ratio]) {
-    var sz = RATIO_SIZES[ratio];
-    finalSize = sz[0] + 'x' + sz[1];
-  } else {
-    // 手动输入
-    var w = parseInt(document.getElementById('inputW').value) || 1024;
-    var h = parseInt(document.getElementById('inputH').value) || 1024;
-    finalSize = w + 'x' + h;
-  }
-
-  // 生成数量 → quantities dict（每个选中的 provider 都生成 N 张）
-  var genQty = parseInt(document.getElementById('selQty').value) || 1;
+  // 从 per-provider 设置构建参数
+  var pSettings = loadProviderSettings();
   var qtyMap = {};
-  for (var qi = 0; qi < selectedProviders.length; qi++) {
-    qtyMap[selectedProviders[qi]] = genQty;
-  }
+  var providerSettingsMap = {};
 
-  // 更新选中 provider 的模型
-  var modelOverride = document.getElementById('selModel').value;
-  if (modelOverride) {
-    for (var pi = 0; pi < allProviders.length; pi++) {
-      if (allProviders[pi].type === 'image' && selectedProviders.indexOf(allProviders[pi].id) >= 0) {
-        allProviders[pi].model = modelOverride;
-      }
+  for (var qi = 0; qi < selectedProviders.length; qi++) {
+    var pid = selectedProviders[qi];
+    var ps = pSettings[pid] || {};
+    var q = ps.qty || 1;
+    qtyMap[pid] = q;
+    var pSize;
+    if (ps.ratio === 'auto') {
+      pSize = inferSize(prompt);
+    } else if (ps.ratio && RATIO_SIZES[ps.ratio]) {
+      var rsz = RATIO_SIZES[ps.ratio];
+      pSize = rsz[0] + 'x' + rsz[1];
+    } else if (ps.w && ps.h) {
+      pSize = ps.w + 'x' + ps.h;
     }
+    providerSettingsMap[pid] = {
+      quality: ps.quality || undefined,
+      size: pSize || undefined,
+    };
   }
 
   var payload = {
@@ -3027,12 +3217,11 @@ function doGenerate() {
     enhance_prompt: document.getElementById('chkEnhance').checked,
     llm_provider_id: localStorage.getItem('igs_llm_provider') || undefined,
     mode: currentMode,
-    size: finalSize,
-    quality: document.getElementById('selQuality').value || undefined,
     continuous: document.getElementById('chkContinuous').checked,
     system_prompt: systemPrompt,
     continuous_id: window.continuousSessionId || null,
     quantities: qtyMap,
+    provider_settings: providerSettingsMap,
   };
   if (currentMode === 'i2i' && uploadedImageData) {
     payload.image_data = uploadedImageData;

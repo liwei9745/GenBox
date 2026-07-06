@@ -44,10 +44,11 @@ class GenerateRequest(BaseModel):
     system_prompt: Optional[str] = None  # 系统提示词（专业模式）
     continuous_id: Optional[str] = None  # 连续生图会话 ID（用于保持一致性）
     quantities: dict = {}              # {provider_id: 数量(int)}，如 {"gpt-image": 2, "gemini": 1}
+    # ── Per-provider 设置 ──
+    provider_settings: dict = {}       # {provider_id: {quality, size, ...}}
     # ── 尺寸自适应：小图生成 + 本地放大 ──
-    # 当用户请求大尺寸时，先用 API 生成小图再本地放大（省钱省时）
-    upscale_to: Optional[str] = None   # "2048x2048" 等，空=不放大
-    upscale_method: str = "lanczos3"   # lanczos3 | bicubic | nearest
+    upscale_to: Optional[str] = None
+    upscale_method: str = "lanczos3"
 
 
 class GenerateResponse(BaseModel):
@@ -589,10 +590,19 @@ async def generate(req: GenerateRequest):
 
     all_providers = {p.id: p for p in cfg_mgr.config.providers}
 
-    # 构建任务列表 (pid, seq, qty)
+    # 构建任务列表 (pid, seq, qty) + per-provider kwargs
     task_list = []
+    provider_kwargs_map = {}  # {pid: kwargs} per-provider overrides
     for pid in provider_ids:
         qty = req.quantities.get(pid, 1) if req.quantities else 1
+        # 为每个 provider 构建独立的 kwargs
+        p_kwargs = dict(kwargs)  # 复制全局 kwargs
+        p_setting = req.provider_settings.get(pid, {})
+        if p_setting.get("size"):
+            p_kwargs["size"] = p_setting["size"]
+        if p_setting.get("quality"):
+            p_kwargs["quality"] = p_setting["quality"]
+        provider_kwargs_map[pid] = p_kwargs
         for seq in range(qty):
             if pid in all_providers:
                 task_list.append((pid, seq, qty))
@@ -627,6 +637,7 @@ async def generate(req: GenerateRequest):
         "task_index": 0,
         "all_providers": {pid: all_providers[pid] for pid in provider_ids if pid in all_providers},
         "kwargs": kwargs,
+        "provider_kwargs_map": provider_kwargs_map,  # per-provider 参数覆盖
         "start_time": time.time(),
         "results": {},
         "continuous": req.continuous,
@@ -750,7 +761,9 @@ async def _process_image_gen(gen_id: str):
                 key = f"{p}_{s}" if q > 1 else p
                 p_cfg = task["all_providers"].get(p)
                 if p_cfg:
-                    await _run_one(key, p, s, p_cfg, task["enhanced_prompt"] or task["prompt"], task["kwargs"])
+                    # 使用 per-provider kwargs（如果存在），否则 fallback 到全局 kwargs
+                    p_kwargs = task.get("provider_kwargs_map", {}).get(p, task["kwargs"])
+                    await _run_one(key, p, s, p_cfg, task["enhanced_prompt"] or task["prompt"], p_kwargs)
 
         await asyncio.gather(*[_run_provider_group(pid, items) for pid, items in provider_tasks.items()])
 
