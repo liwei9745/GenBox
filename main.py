@@ -24,7 +24,7 @@ from config import (
     cfg_mgr, GALLERY_DIR, STORAGE_DIR, ProviderConfig, ProvidersConfig,
     is_prod_mode, get_admin_key, verify_admin_key, generate_admin_key, reset_admin_key,
 )
-from providers import generate_multi, enhance_prompt_with_llm, enhance_prompt_with_llm_detailed, ImageResult, fetch_models_from_upstream
+from providers import generate_multi, enhance_prompt_with_llm, enhance_prompt_with_llm_detailed, ImageResult, fetch_models_from_upstream, _save_image
 
 
 # ──────────────────────────────────────────────────────────────
@@ -44,6 +44,10 @@ class GenerateRequest(BaseModel):
     system_prompt: Optional[str] = None  # 系统提示词（专业模式）
     continuous_id: Optional[str] = None  # 连续生图会话 ID（用于保持一致性）
     quantities: dict = {}              # {provider_id: 数量(int)}，如 {"gpt-image": 2, "gemini": 1}
+    # ── 尺寸自适应：小图生成 + 本地放大 ──
+    # 当用户请求大尺寸时，先用 API 生成小图再本地放大（省钱省时）
+    upscale_to: Optional[str] = None   # "2048x2048" 等，空=不放大
+    upscale_method: str = "lanczos3"   # lanczos3 | bicubic | nearest
 
 
 class GenerateResponse(BaseModel):
@@ -493,6 +497,58 @@ async def fetch_models(provider_id: str):
 
 
 # ──────────────────────────────────────────────────────────────
+# 本地图片放大（Pillow Lanczos3）— 移植自 4K Image API
+# ──────────────────────────────────────────────────────────────
+def _do_local_upscale(local_path: str, target_size: str, method: str = "lanczos3") -> str:
+    """将已保存的图片本地放大到目标尺寸，返回新路径（原图不动）"""
+    import io
+    from PIL import Image as _PILImage
+
+    # 解析目标尺寸
+    parts = target_size.split("x")
+    if len(parts) != 2:
+        raise ValueError(f"无效尺寸格式: {target_size}")
+    target_w, target_h = int(parts[0]), int(parts[1])
+
+    # 读取原图
+    src = Path(local_path)
+    if not src.exists():
+        raise FileNotFoundError(f"原图不存在: {local_path}")
+    img = _PILImage.open(src)
+    orig_w, orig_h = img.size
+
+    # 已满足目标尺寸
+    if target_w <= orig_w and target_h <= orig_h:
+        return local_path
+
+    # 等比缩放
+    scale = min(target_w / orig_w, target_h / orig_h)
+    new_w = int(orig_w * scale)
+    new_h = int(orig_h * scale)
+
+    resample_map = {"lanczos3": _PILImage.LANCZOS, "bicubic": _PILImage.BICUBIC, "nearest": _PILImage.NEAREST}
+    resample = resample_map.get(method, _PILImage.LANCZOS)
+
+    upscaled = img.resize((new_w, new_h), resample)
+
+    # 保存到新文件（保留原图）
+    upscaled_path = src.parent / f"{src.stem}_upscaled_{new_w}x{new_h}{src.suffix}"
+    upscaled.save(str(upscaled_path), format="PNG", quality=95)
+
+    # 写入 PNG 元数据（Prompt 等）
+    try:
+        from PIL import PngImagePlugin
+        info = PngImagePlugin.PngInfo()
+        info.add_text("UpscaledFrom", str(orig_w) + "x" + str(orig_h))
+        info.add_text("UpscaleMethod", method)
+        upscaled.save(str(upscaled_path), format="PNG", pnginfo=info)
+    except Exception:
+        pass
+
+    return str(upscaled_path)
+
+
+# ──────────────────────────────────────────────────────────────
 # 生图核心（异步队列 + 并发控制 + 实时进度）
 # ──────────────────────────────────────────────────────────────
 @app.post("/api/generate")
@@ -577,6 +633,9 @@ async def generate(req: GenerateRequest):
         "continuous_id": req.continuous_id,
         "system_prompt": req.system_prompt,
         "original_prompt": req.prompt,
+        # ── 尺寸自适应 ──
+        "upscale_to": req.upscale_to,
+        "upscale_method": req.upscale_method,
     }
 
     # 后台处理
@@ -621,6 +680,17 @@ async def _process_image_gen(gen_id: str):
             res.elapsed_seconds = round(t1 - t0, 1)
             res.started_at = t0
             res.finished_at = t1
+
+            # ── 尺寸自适应：生成后本地放大 ──
+            if res.success and res.local_path and task.get("upscale_to"):
+                try:
+                    state["log"].append(f"[{time.strftime('%H:%M:%S')}] ⤢ 正在本地放大到 {task['upscale_to']}...")
+                    _upscaled = _do_local_upscale(res.local_path, task["upscale_to"], task.get("upscale_method", "lanczos3"))
+                    if _upscaled:
+                        res.local_path = _upscaled
+                        state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✔ 放大完成")
+                except Exception as ue:
+                    state["log"].append(f"[{time.strftime('%H:%M:%S')}] ⚠ 放大失败(保留原图): {str(ue)[:80]}")
 
             if res.success:
                 state["status"] = "completed"
@@ -783,6 +853,163 @@ async def get_generate_status(gen_id: str):
         "results": task["results"] if status == "completed" else {},
         "group_timings": {pid: {"total": round(sum(img["elapsed"] for img in imgs), 1), "images": imgs}
                           for pid, imgs in _calc_group_timings(task["results"]).items()} if status == "completed" else {},
+    }
+
+
+class LLMOptimizeRequest(BaseModel):
+    prompt: str
+    llm_provider_id: Optional[str] = None
+
+
+# ──────────────────────────────────────────────────────────────
+# 图片变形 (Variations) — 移植自 4K Image API
+# ──────────────────────────────────────────────────────────────
+class VariationRequest(BaseModel):
+    image_data: str                  # base64 data URL
+    provider_id: str = ""            # 空=第一个支持的 provider
+    model: str = ""                  # 可选：指定模型
+    size: str = "1024x1024"          # 256x256 | 512x512 | 1024x1024
+    n: int = 1                       # 生成数量 1-4
+
+
+@app.post("/api/images/variations")
+async def image_variations(req: VariationRequest):
+    """图片变形：基于输入图片生成变体（OpenAI /images/variations 协议）"""
+    import base64 as _b64
+    import httpx as _httpx
+
+    # 解析图片
+    if "," in req.image_data:
+        img_b64 = req.image_data.split(",")[1]
+    else:
+        img_b64 = req.image_data
+    try:
+        img_bytes = _b64.b64decode(img_b64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="图片数据无效")
+
+    # 找到可用 provider
+    provider = None
+    if req.provider_id:
+        for p in cfg_mgr.config.providers:
+            if p.id == req.provider_id and p.type == "image":
+                provider = p
+                break
+    else:
+        for p in cfg_mgr.get_image_providers():
+            provider = p
+            break
+    if not provider:
+        raise HTTPException(status_code=400, detail="无可用的生图 Provider")
+
+    model_id = req.model or provider.model or "gpt-image-2"
+
+    # 支持多端点 failover
+    endpoints = provider.get_active_endpoints()
+    last_error = None
+
+    for ep in endpoints:
+        url = f"{ep.url.rstrip('/')}/images/variations"
+        headers = {"Authorization": f"Bearer {ep.key}"}
+        files = {"image": ("image.png", img_bytes, "image/png")}
+        data = {"model": model_id, "n": min(req.n, 4), "size": req.size, "response_format": "b64_json"}
+
+        try:
+            async with _httpx.AsyncClient(timeout=180.0, verify=False) as client:
+                resp = await client.post(url, headers=headers, files=files, data=data)
+                if resp.status_code >= 400:
+                    last_error = f"端点 {ep.url[:40]}... HTTP {resp.status_code}"
+                    continue  # 尝试下一个端点
+                result = resp.json()
+                break  # 成功
+        except Exception as e:
+            last_error = f"端点 {ep.url[:40]}... {str(e)[:60]}"
+            continue  # 尝试下一个端点
+    else:
+        raise HTTPException(status_code=502, detail=f"所有端点均失败: {last_error}")
+
+    # 解析结果
+    images_out = []
+    for item in result.get("data", []):
+        b64_data = item.get("b64_json")
+        if b64_data:
+            raw = _b64.b64decode(b64_data)
+            local_path = _save_image(raw, provider.id, "variation", "")
+            images_out.append({"b64_json": b64_data, "local_path": local_path, "provider_id": provider.id})
+
+    return {"success": True, "images": images_out, "model": model_id, "provider_id": provider.id}
+
+
+# ──────────────────────────────────────────────────────────────
+# 图片缩放/超分 — 移植自 4K Image API Lanczos3 Processor
+# ──────────────────────────────────────────────────────────────
+class UpscaleRequest(BaseModel):
+    image_data: str                  # base64 data URL
+    target_width: int = 2048         # 目标宽度
+    target_height: int = 2048        # 目标高度
+    method: str = "lanczos3"         # lanczos3 | bicubic | nearest
+
+
+@app.post("/api/images/upscale")
+async def image_upscale(req: UpscaleRequest):
+    """本地图片缩放（Lanczos3 / Bicubic / Nearest），无需外部 API"""
+    import base64 as _b64
+    from PIL import Image as _PILImage
+    import io
+
+    # 解析图片
+    if "," in req.image_data:
+        img_b64 = req.image_data.split(",")[1]
+    else:
+        img_b64 = req.image_data
+    try:
+        img_bytes = _b64.b64decode(img_b64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="图片数据无效")
+
+    try:
+        img = _PILImage.open(io.BytesIO(img_bytes))
+    except Exception:
+        raise HTTPException(status_code=400, detail="无法解析图片格式")
+
+    orig_w, orig_h = img.size
+
+    # 如果目标尺寸比原图小，不缩放（只放大不缩小）
+    if req.target_width <= orig_w and req.target_height <= orig_h:
+        return {"success": True, "width": orig_w, "height": orig_h, "message": "原图已满足目标尺寸"}
+
+    # 等比缩放到目标尺寸内
+    scale = min(req.target_width / orig_w, req.target_height / orig_h)
+    new_w = int(orig_w * scale)
+    new_h = int(orig_h * scale)
+
+    # 选择插值方法
+    resample_map = {
+        "lanczos3": _PILImage.LANCZOS,
+        "bicubic": _PILImage.BICUBIC,
+        "nearest": _PILImage.NEAREST,
+    }
+    resample = resample_map.get(req.method, _PILImage.LANCZOS)
+
+    try:
+        upscaled = img.resize((new_w, new_h), resample)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"缩放失败: {str(e)[:100]}")
+
+    # 保存为 PNG
+    buf = io.BytesIO()
+    upscaled.save(buf, format="PNG", quality=95)
+    out_bytes = buf.getvalue()
+    out_b64 = _b64.b64encode(out_bytes).decode()
+
+    return {
+        "success": True,
+        "width": new_w,
+        "height": new_h,
+        "original_width": orig_w,
+        "original_height": orig_h,
+        "b64_json": out_b64,
+        "message": f"已从 {orig_w}x{orig_h} 放大到 {new_w}x{new_h} ({req.method})",
     }
 
 

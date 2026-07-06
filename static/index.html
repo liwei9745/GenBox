@@ -1440,6 +1440,42 @@
                 </select>
               </div>
 
+              <!-- 尺寸自适应：生成后本地放大 -->
+              <div class="param-group" style="margin-top:10px;padding:10px;background:rgba(234,179,8,0.06);border:1px solid rgba(234,179,8,0.15);border-radius:8px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-primary);cursor:pointer;font-weight:500;">
+                    <input type="checkbox" id="chkUpscale" style="width:14px;height:14px;accent-color:#eab308;">
+                    ⤢ 生成后本地放大
+                  </label>
+                  <span style="font-size:10px;color:var(--text-muted);">省钱省时</span>
+                </div>
+                <div id="upscaleOpts" style="display:none;">
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:100px;">
+                      <div class="param-label" style="font-size:10px;margin-bottom:4px;">目标尺寸</div>
+                      <select id="upscaleSize" class="param-select" style="width:100%;padding:6px 8px;font-size:11px;">
+                        <option value="1024x1024">1024×1024</option>
+                        <option value="1536x1536">1536×1536</option>
+                        <option value="2048x2048" selected>2048×2048</option>
+                        <option value="3072x3072">3072×3072</option>
+                        <option value="4096x4096">4096×4096</option>
+                      </select>
+                    </div>
+                    <div style="flex:1;min-width:100px;">
+                      <div class="param-label" style="font-size:10px;margin-bottom:4px;">算法</div>
+                      <select id="upscaleMethod" class="param-select" style="width:100%;padding:6px 8px;font-size:11px;">
+                        <option value="lanczos3" selected>Lanczos3 (高质量)</option>
+                        <option value="bicubic">Bicubic (快速)</option>
+                        <option value="nearest">Nearest (像素风)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">
+                    💡 先用 API 生成小图，再用本地算法放大。可节省 50-80% API 费用和时间。
+                  </div>
+                </div>
+              </div>
+
               <div class="param-group" id="strengthGroup" style="display:none;">
                 <div class="param-label" style="font-size:10px;">变换强度 <span id="strengthVal" style="color:var(--accent);float:right;">0.55</span></div>
                 <input type="range" id="selStrength" min="0.1" max="0.95" step="0.05" value="0.55"
@@ -1459,6 +1495,7 @@
                 <div class="sub-tabs">
                   <button class="sub-tab active" id="subTabT2I" onclick="switchSubTab('t2i')">📝 文生图</button>
                   <button class="sub-tab" id="subTabI2I" onclick="switchSubTab('i2i')">🖼 图生图</button>
+                  <button class="sub-tab" id="subTabVAR" onclick="switchSubTab('variation')">🔄 变形</button>
                 </div>
                 <button class="btn-primary" id="btnGen" onclick="doGenerate()" style="padding:9px 24px;font-size:13px;">
                   ✨ 生成图片
@@ -1545,6 +1582,40 @@
               <div style="margin-top:12px;">
                 <div class="param-label" style="margin-bottom:8px;">修改提示词 (可选)</div>
                 <textarea id="txtPromptI2I" rows="3" placeholder="描述你希望如何修改这张图片...&#10;例如：将背景改为赛博朋克风格，添加霓虹灯光"></textarea>
+              </div>
+            </div>
+
+            <!-- 变形模式面板 -->
+            <div class="glass-card hidden" id="panelVAR" style="padding:16px;">
+              <div class="param-label" style="margin-bottom:8px;">源图片 (生成变体的基础)</div>
+              <div class="upload-zone" id="uploadZoneVar" onclick="document.getElementById('fileInputVar').click()">
+                <div style="font-size:28px;margin-bottom:6px;">🔄</div>
+                <div style="font-size:12px;color:var(--text-muted);">点击或拖拽上传源图片</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">系统将基于此图生成多个变体</div>
+                <img id="uploadPreviewVar" class="upload-preview-img hidden" src="">
+              </div>
+              <input type="file" id="fileInputVar" accept="image/*" style="display:none;" onchange="handleFileSelectVar(event)">
+
+              <div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:120px;">
+                  <div class="param-label" style="margin-bottom:6px;">输出尺寸</div>
+                  <select id="varSize" class="param-select" style="width:100%;">
+                    <option value="1024x1024" selected>1024×1024</option>
+                    <option value="512x512">512×512</option>
+                    <option value="256x256">256×256</option>
+                  </select>
+                </div>
+                <div style="flex:1;min-width:120px;">
+                  <div class="param-label" style="margin-bottom:6px;">生成数量</div>
+                  <select id="varCount" class="param-select" style="width:100%;">
+                    <option value="1" selected>1 张</option>
+                    <option value="2">2 张</option>
+                    <option value="4">4 张</option>
+                  </select>
+                </div>
+              </div>
+              <div style="margin-top:10px;padding:8px 10px;border-radius:6px;background:rgba(91,141,239,0.06);border:1px solid rgba(91,141,239,0.15);font-size:11px;color:var(--text-muted);">
+                💡 变形模式会基于源图片生成风格相似的变体，无需提示词。建议使用 1024×1024 尺寸。
               </div>
             </div>
 
@@ -2041,7 +2112,7 @@ document.addEventListener('DOMContentLoaded', function() {
   renderQuickPrompts();
   loadDashboard();
 
-  // 拖拽上传
+  // 拖拽上传 (i2i)
   var zone = document.getElementById('uploadZone');
   if (zone) {
     zone.addEventListener('dragover', function(e){ e.preventDefault(); zone.classList.add('dragover'); });
@@ -2051,6 +2122,19 @@ document.addEventListener('DOMContentLoaded', function() {
       zone.classList.remove('dragover');
       var f = e.dataTransfer.files[0];
       if (f) handleFile(f);
+    });
+  }
+
+  // 拖拽上传 (变形模式)
+  var zoneVar = document.getElementById('uploadZoneVar');
+  if (zoneVar) {
+    zoneVar.addEventListener('dragover', function(e){ e.preventDefault(); zoneVar.classList.add('dragover'); });
+    zoneVar.addEventListener('dragleave', function(){ zoneVar.classList.remove('dragover'); });
+    zoneVar.addEventListener('drop', function(e){
+      e.preventDefault();
+      zoneVar.classList.remove('dragover');
+      var f = e.dataTransfer.files[0];
+      if (f) handleFileVar(f);
     });
   }
 
@@ -2103,8 +2187,10 @@ function switchSubTab(mode) {
   currentMode = mode;
   document.getElementById('panelT2I').classList.toggle('hidden', mode !== 't2i');
   document.getElementById('panelI2I').classList.toggle('hidden', mode !== 'i2i');
+  document.getElementById('panelVAR').classList.toggle('hidden', mode !== 'variation');
   document.getElementById('subTabT2I').classList.toggle('active', mode === 't2i');
   document.getElementById('subTabI2I').classList.toggle('active', mode === 'i2i');
+  document.getElementById('subTabVAR').classList.toggle('active', mode === 'variation');
   document.getElementById('strengthGroup').style.display = mode === 'i2i' ? '' : 'none';
   document.getElementById('quickCard').style.display = mode === 't2i' ? '' : 'none';
   hideEnhance();
@@ -2381,6 +2467,30 @@ function handleFile(f) {
   reader.readAsDataURL(f);
 }
 
+// ── 变形模式文件上传 ──
+var variationImageData = null;
+function handleFileSelectVar(e) { var f = e.target.files[0]; if(f) handleFileVar(f); }
+function handleFileVar(f) {
+  if (!f.type.startsWith('image/')) { alert('请选择图片文件'); return; }
+  if (f.size > 10*1024*1024) { alert('图片不能超过 10MB'); return; }
+  var reader = new FileReader();
+  reader.onload = function(e2) {
+    variationImageData = e2.target.result;
+    var p = document.getElementById('uploadPreviewVar');
+    p.src = variationImageData;
+    p.classList.remove('hidden');
+  };
+  reader.readAsDataURL(f);
+}
+
+// ── 放大选项开关 ──
+document.addEventListener('DOMContentLoaded', function() {
+  var chk = document.getElementById('chkUpscale');
+  if (chk) chk.addEventListener('change', function() {
+    document.getElementById('upscaleOpts').style.display = this.checked ? '' : 'none';
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // 尺寸推断
 // ═══════════════════════════════════════════════════════════════════
@@ -2610,6 +2720,12 @@ function stopGenPolling() {
 }
 
 function doGenerate() {
+  // ── 变形模式：直接调用 /api/images/variations ──
+  if (currentMode === 'variation') {
+    doVariation();
+    return;
+  }
+
   var prompt = '';
   var systemPrompt = null;
   if (currentMode === 't2i') {
@@ -2674,6 +2790,11 @@ function doGenerate() {
     payload.image_data = uploadedImageData;
     payload.strength = parseFloat(document.getElementById('selStrength').value);
   }
+  // 尺寸自适应参数
+  if (document.getElementById('chkUpscale').checked) {
+    payload.upscale_to = document.getElementById('upscaleSize').value;
+    payload.upscale_method = document.getElementById('upscaleMethod').value;
+  }
 
   _authFetch('/api/generate', {
     method: 'POST',
@@ -2696,6 +2817,77 @@ function doGenerate() {
     pbox.classList.add('hidden');
     alert('提交失败: ' + e.message);
     setStatus('提交失败: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = '✨ 生成图片';
+  });
+}
+
+// ── 变形模式提交 ──
+function doVariation() {
+  if (!variationImageData) { alert('请先上传源图片'); return; }
+  if (!selectedProviders.length) { alert('请至少选择一个生图模型'); return; }
+
+  var btn = document.getElementById('btnGen');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin" style="display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;vertical-align:middle;margin-right:4px;"></span>提交中...';
+
+  var pbox = document.getElementById('progressBox');
+  var ptxt = document.getElementById('progressText');
+  var pfill = document.getElementById('progressFill');
+  var elapsedEl = document.getElementById('elapsedSeconds');
+  pbox.classList.remove('hidden');
+  ptxt.textContent = '正在生成变形...';
+  pfill.style.width = '10%';
+  elapsedEl.textContent = '0.0';
+
+  genStartTs = Date.now();
+  var timerInterval = setInterval(function() {
+    var elapsed = ((Date.now() - genStartTs) / 1000).toFixed(1);
+    elapsedEl.textContent = elapsed;
+  }, 200);
+
+  var payload = {
+    image_data: variationImageData,
+    provider_id: selectedProviders[0] || '',
+    size: document.getElementById('varSize').value,
+    n: parseInt(document.getElementById('varCount').value) || 1,
+  };
+
+  _authFetch('/api/images/variations', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }).then(function(r) {
+    clearInterval(timerInterval);
+    if (!r.ok) return r.json().then(function(d){ throw new Error(d.detail || 'HTTP ' + r.status); });
+    return r.json();
+  }).then(function(data) {
+    clearInterval(timerInterval);
+    pfill.style.width = '100%';
+    ptxt.textContent = '变形完成！共 ' + (data.images || []).length + ' 张';
+    elapsedEl.textContent = ((Date.now() - genStartTs) / 1000).toFixed(1);
+    btn.disabled = false;
+    btn.innerHTML = '✨ 生成图片';
+    // 将结果追加到预览区（使用 local_path）
+    var provId = data.provider_id || selectedProviders[0] || 'variation';
+    if (data.images && data.images.length) {
+      data.images.forEach(function(img, idx) {
+        var localPath = img.local_path || '';
+        if (localPath) {
+          addResultToPreview(provId + '_' + idx, {
+            local_path: localPath,
+            model: provId,
+            prompt: '变形变体',
+            seq: idx,
+          });
+        }
+      });
+    }
+    setStatus('变形完成');
+  }).catch(function(e) {
+    clearInterval(timerInterval);
+    pbox.classList.add('hidden');
+    alert('变形失败: ' + e.message);
+    setStatus('变形失败: ' + e.message);
     btn.disabled = false;
     btn.innerHTML = '✨ 生成图片';
   });
