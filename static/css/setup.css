@@ -1,0 +1,49 @@
+/* ══════════════════════════════════════════════════════════════
+   Setup Wizard Styles
+   ══════════════════════════════════════════════════════════════ */
+
+.sw-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+}
+
+.sw-input {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  margin-bottom: 6px;
+  box-sizing: border-box;
+}
+
+.sw-input:last-child {
+  margin-bottom: 0;
+}
+
+.sw-input::placeholder {
+  color: var(--text-muted);
+}
+
+.sw-type-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+  text-align: left;
+}
+
+.sw-type-btn:hover {
+  background: var(--bg-card);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}

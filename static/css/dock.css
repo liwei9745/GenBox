@@ -1,0 +1,209 @@
+/* ══════════════════════════════════════════════════════════════
+   Mac Dock Navigation — Bottom Dock with Magnification
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── App Shell ── */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Content Area ── */
+.app-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* ── Dock Container ── */
+.dock-wrapper {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-dock);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.dock {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 6px 12px;
+  background: var(--dock-bg);
+  backdrop-filter: var(--dock-blur);
+  -webkit-backdrop-filter: var(--dock-blur);
+  border: 1px solid var(--dock-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--dock-shadow);
+  pointer-events: all;
+  transition: all var(--duration-normal) var(--ease-default);
+}
+
+/* ── Dock Item ── */
+.dock-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Dock Icon ── */
+.dock-icon {
+  width: var(--dock-icon-size);
+  height: var(--dock-icon-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  transition: all var(--duration-normal) var(--ease-spring);
+  position: relative;
+  box-shadow: var(--shadow-sm);
+}
+
+.dock-item:hover .dock-icon {
+  transform: translateY(-8px) scale(1.15);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Magnification effect: neighbors get slightly scaled */
+.dock-item:hover + .dock-item .dock-icon,
+.dock-item:has(+ .dock-item:hover) .dock-icon {
+  transform: translateY(-4px) scale(1.05);
+}
+
+.dock-item:hover + .dock-item + .dock-item .dock-icon,
+.dock-item:has(+ .dock-item + .dock-item:hover) .dock-icon {
+  transform: translateY(-2px) scale(1.02);
+}
+
+/* ── Active State ── */
+.dock-item.active .dock-icon {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+}
+
+.dock-item.active .dock-icon .dock-emoji {
+  filter: brightness(1.1);
+}
+
+/* ── Active Dot Indicator ── */
+.dock-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: scaleIn var(--duration-fast) var(--ease-spring);
+}
+
+/* ── Dock Label (Tooltip) ── */
+.dock-label {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  padding: 4px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: all var(--duration-fast) var(--ease-default);
+  box-shadow: var(--shadow-md);
+}
+
+.dock-item:hover .dock-label {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── Dock Badge ── */
+.dock-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: var(--accent-red);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--dock-bg);
+  animation: scaleIn var(--duration-fast) var(--ease-spring);
+}
+
+/* ── Dock Divider ── */
+.dock-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink:  0;
+  align-self: center;
+}
+
+/* ── Dock Settings Group ── */
+.dock-settings-group {
+  display: flex;
+  gap: 2px;
+  margin-left: 4px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+
+/* ── Drag to Reorder ── */
+.dock-item.dragging {
+  opacity: 0.5;
+  transform: scale(0.9);
+}
+
+.dock-item.drag-over {
+  transform: translateX(4px);
+}
+
+/* ── Responsive: Smaller screens ── */
+@media (max-width: 768px) {
+  .dock {
+    padding: 4px 8px;
+    gap: 2px;
+  }
+
+  .dock-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+
+  .dock-item:hover .dock-icon {
+    transform: translateY(-4px) scale(1.1);
+  }
+}

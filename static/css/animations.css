@@ -1,0 +1,190 @@
+/* ══════════════════════════════════════════════════════════════
+   GenBox Animations — Spring Elastic, Fade-In-Up, Cascade Stagger
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Spring Elastic Entrance ── */
+@keyframes springElastic {
+  0% { transform: scale(0.95); opacity: 0; }
+  60% { transform: scale(1.02); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes springElasticIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ── Fade-In-Up ── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Dock Hover Magnification ── */
+@keyframes dockPulse {
+  0% { transform: scale(1.25); }
+  40% { transform: scale(1.30); }
+  100% { transform: scale(1.25); }
+}
+
+/* ── Card Cascade Delay Entrance ── */
+@keyframes cardCascade {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Stagger Utility Classes ── */
+.animate-spring {
+  animation: springElastic 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease-out both;
+}
+
+.animate-cascade {
+  animation: cardCascade 0.4s ease-out both;
+}
+
+/* Stagger delays — use on nth-child or apply manually */
+.stagger-1 { animation-delay: 50ms; }
+.stagger-2 { animation-delay: 100ms; }
+.stagger-3 { animation-delay: 150ms; }
+.stagger-4 { animation-delay: 200ms; }
+.stagger-5 { animation-delay: 250ms; }
+.stagger-6 { animation-delay: 300ms; }
+.stagger-7 { animation-delay: 350ms; }
+.stagger-8 { animation-delay: 400ms; }
+
+/* ── Dock Item Hover ── */
+.dock-item {
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dock-item:hover {
+  transform: scale(1.25) translateY(-4px);
+}
+
+.dock-item:active {
+  transform: scale(1.30) translateY(-6px);
+}
+
+/* ── Page Content Entrance ── */
+.page-section {
+  animation: fadeInUp 0.35s ease-out both;
+}
+
+/* ── Modal Entrance ── */
+.modal-enter {
+  animation: springElastic 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ── Card Hover Lift ── */
+.glass-card {
+  transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+}
+
+.glass-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* ── Bubble Entrance ── */
+.bubble {
+  animation: fadeInUp 0.3s ease-out both;
+}
+
+/* ── Image Hover Scale ── */
+.gallery-img {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.gallery-img:hover {
+  transform: scale(1.02);
+  box-shadow: var(--shadow-md);
+}
+
+/* ── Video Preview Pulse ── */
+@keyframes videoPulse {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; }
+  100% { opacity: 0.7; }
+}
+
+.video-pulse {
+  animation: videoPulse 1.5s ease-in-out infinite;
+}
+
+/* ── Button Press ── */
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-primary:active {
+  transform: scale(0.97);
+}
+
+/* ── Toast Notification ── */
+@keyframes toastSlideIn {
+  from {
+    transform: translateY(16px) translateX(-50%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) translateX(-50%);
+    opacity: 1;
+  }
+}
+
+.toast {
+  animation: toastSlideIn 0.3s ease-out both;
+}
+
+/* ── Spinner ── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  animation: spin 0.8s linear infinite;
+}
+
+/* ── Lightbox Backdrop ── */
+@keyframes backdropFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.lightbox-backdrop {
+  animation: backdropFadeIn 0.2s ease-out both;
+}
+
+/* ── Theme Transition ── */
+html {
+  transition: background-color 0.3s ease;
+}
+
+body {
+  transition: background-color 0.3s ease, color 0.2s ease;
+}
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,199 @@
+/* ══════════════════════════════════════════════════════════════
+   Glassmorphism Effects — Apple-style Glass UI
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Base Glass ── */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* ── Glass Card ── */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  box-shadow: var(--glass-shadow);
+  transition: box-shadow var(--duration-normal) var(--ease-default),
+              border-color var(--duration-normal) var(--ease-default);
+}
+
+.glass-card:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--border-strong);
+}
+
+/* ── Glass Card Variants ── */
+.glass-card--light {
+  background: var(--glass-bg-heavy);
+  box-shadow: var(--shadow-sm);
+}
+
+.glass-card--elevated {
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-xl);
+  border-color: var(--glass-border);
+}
+
+.glass-card--flat {
+  background: var(--bg-card);
+  box-shadow: none;
+  border-color: var(--border);
+}
+
+/* ── Glass Panel (for modal-like content) ── */
+.glass-panel {
+  background: var(--glass-bg-heavy);
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2xl);
+}
+
+/* ── Glass Inset (for nested areas) ── */
+.glass-inset {
+  background: var(--bg-inset);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+}
+
+/* ── Glass Overlay (for modals/backdrops) ── */
+.glass-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  z-index: var(--z-overlay);
+}
+
+/* ── Glass Divider ── */
+.glass-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+  margin: var(--space-4) 0;
+}
+
+/* ── Gradient Background — Page Base ── */
+.page-bg {
+  min-height: 100vh;
+  background: var(--bg-gradient);
+  position: relative;
+}
+
+/* Mesh gradient orbs for ambient background */
+.page-bg::before,
+.page-bg::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.3;
+  filter: blur(80px);
+}
+
+.page-bg::before {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(0, 122, 255, 0.15), transparent 70%);
+  top: -200px;
+  right: -100px;
+}
+
+.page-bg::after {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(175, 82, 222, 0.1), transparent 70%);
+  bottom: -150px;
+  left: -100px;
+}
+
+[data-theme="dark"] .page-bg::before {
+  background: radial-gradient(circle, rgba(0, 122, 255, 0.08), transparent 70%);
+}
+
+[data-theme="dark"] .page-bg::after {
+  background: radial-gradient(circle, rgba(175, 82, 222, 0.05), transparent 70%);
+}
+
+/* ── Status Bar Glass ── */
+.status-bar {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-top: 1px solid var(--glass-border);
+}
+
+/* ── Content Area Glass ── */
+.main-content {
+  background: transparent;
+}
+
+/* ── Results Card Glass ── */
+.result-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.result-card:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+/* ── Upload Zone Glass ── */
+.upload-zone {
+  background: var(--bg-inset);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-md);
+  transition: all var(--duration-normal) var(--ease-default);
+}
+
+.upload-zone:hover,
+.upload-zone.dragover {
+  border-color: var(--accent);
+  background: var(--accent-light);
+  box-shadow: 0 0 0 4px var(--accent-glow);
+}
+
+/* ── Enhance Result Glass ── */
+.enhance-result {
+  background: var(--accent-light);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+}
+
+/* ── Sub Tabs Glass ── */
+.sub-tabs {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 3px;
+}
+
+.sub-tab.active {
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── Quick Tags Glass ── */
+.quick-tag {
+  background: var(--glass-bg);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.quick-tag:hover {
+  background: var(--accent-light);
+  border-color: var(--accent);
+}

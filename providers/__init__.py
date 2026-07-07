@@ -68,33 +68,41 @@ def _detect_protocol(cfg: ProviderConfig) -> str:
     - "gemini": Google Gemini 原生 API
     - "qwen": Qwen2API (兼容 OpenAI 但路径不同)
     - "agnes": Agnes AI (兼容 OpenAI 但 image/response_format 放在 extra_body)
-    """
-    # 优先根据 Provider ID 判断（最可靠）
-    if cfg.id == "gemini":
-        return "gemini"
-    if cfg.id == "qwen":
-        return "qwen"
-    if cfg.id == "agnes-image" or cfg.id.startswith("agnes"):
-        return "agnes"
     
-    # 其次根据 URL 判断
+    优先级: URL > Provider ID > Model 名称
+    （URL 最可靠：第三方代理 + /v1 → 必定 OpenAI 兼容）
+    """
     url_lower = cfg.base_url.lower()
+
+    # ── 1. URL 最优先 ──
+    # Google 原生 API → Gemini 协议
+    is_google_native = ("googleapis" in url_lower or "gemini.google.com" in url_lower)
+    if is_google_native:
+        return "gemini"
+    # 特定关键字优先于通用 /v1 检测
     if "agnes" in url_lower:
         return "agnes"
-    if "gemini" in url_lower or "googleapis" in url_lower:
-        return "gemini"
     if "qwen" in url_lower or "wanx" in url_lower:
         return "qwen"
-    
-    # 最后根据模型名称判断
+    # URL 包含 /v1 且不是 googleapis → 第三方 OpenAI 兼容代理
+    if url_lower.rstrip('/').endswith('/v1'):
+        return "openai"
+
+    # ── 2. Provider ID 次之 ──
+    pid = cfg.id.lower()
+    if "agnes" in pid:
+        return "agnes"
+    if "qwen" in pid or "wanx" in pid:
+        return "qwen"
+    # id == "gemini" 但 URL 不是 googleapis → 不走原生协议，走默认 OpenAI
+
+    # ── 3. Model 名称最后（仅限明确的非通用场景）──
     model_lower = cfg.model.lower()
     if "agnes" in model_lower:
         return "agnes"
-    if "gemini" in model_lower or "imagen" in model_lower:
-        return "gemini"
     if "wanx" in model_lower or "qwen" in model_lower:
         return "qwen"
-    
+
     # 默认走 OpenAI 兼容协议（覆盖绝大多数第三方服务）
     return "openai"
 
@@ -267,6 +275,19 @@ async def _http_post_with_retry(url, headers, payload, *, timeout=120.0, max_ret
     raise last_exc or Exception("Max retries exceeded")
 
 
+def _ensure_v1(base_url: str) -> str:
+    """Ensure base_url ends with /v1 for OpenAI-compatible APIs."""
+    b = base_url.rstrip("/")
+    # Already has /v1 or /v1beta or other subpath — leave as-is
+    if b.endswith("/v1") or b.endswith("/v1beta"):
+        return b
+    # Already contains /v1/ as a subpath (e.g. /openai/v1) — leave as-is
+    if "/v1/" in b or "/v1beta/" in b:
+        return b
+    # Bare host — append /v1
+    return b + "/v1"
+
+
 async def _gen_openai(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult:
     """OpenAI 兼容协议: POST /images/generations"""
     size = kwargs.get("size") or cfg.size or "1024x1024"
@@ -288,8 +309,9 @@ async def _gen_openai(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult
     if quality and quality != "default":
         payload["quality"] = quality
 
+    base = _ensure_v1(cfg.base_url)
     resp, client = await _http_post_with_retry(
-        f"{cfg.base_url.rstrip('/')}/images/generations",
+        f"{base}/images/generations",
         headers=headers, payload=payload,
     )
     data = resp.json()
@@ -370,7 +392,7 @@ async def _gen_qwen(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult:
     }
 
     resp, client = await _http_post_with_retry(
-        f"{cfg.base_url.rstrip('/')}/images/generations",
+        f"{_ensure_v1(cfg.base_url)}/images/generations",
         headers=headers, payload=payload,
     )
     data = resp.json()
@@ -434,7 +456,7 @@ async def _gen_agnes(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult:
         payload["return_base64"] = True
 
     resp, client = await _http_post_with_retry(
-        f"{cfg.base_url.rstrip('/')}/images/generations",
+        f"{_ensure_v1(cfg.base_url)}/images/generations",
         headers=headers, payload=payload,
     )
     data = resp.json()
@@ -491,12 +513,13 @@ async def _gen_openai_edit(cfg: ProviderConfig, prompt: str, image_data: str, st
 
     async with httpx.AsyncClient(timeout=180.0) as client:
         # 尝试标准 /images/edits 端点
-        url = f"{cfg.base_url.rstrip('/')}/images/edits"
+        base = _ensure_v1(cfg.base_url)
+        url = f"{base}/images/edits"
         resp = await client.post(url, headers=headers, files=files, data=data_dict)
         
         if resp.status_code == 404:
             # edits 端点不存在，尝试 /images/edit（无 s）
-            url_alt = f"{cfg.base_url.rstrip('/')}/images/edit"
+            url_alt = f"{base}/images/edit"
             resp = await client.post(url_alt, headers=headers, files=files, data=data_dict)
             if resp.status_code == 404:
                 # 两个端点都不支持，fallback 到文生图
@@ -697,7 +720,7 @@ async def enhance_prompt_with_llm(prompt: str, llm_provider_id: str = None) -> s
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
-                f"{llm_cfg.base_url.rstrip('/')}/chat/completions",
+                f"{_ensure_v1(llm_cfg.base_url)}/chat/completions",
                 headers=headers,
                 json=payload,
             )
@@ -745,7 +768,7 @@ async def enhance_prompt_with_llm_detailed(prompt: str, llm_provider_id: str = N
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
-                f"{llm_cfg.base_url.rstrip('/')}/chat/completions",
+                f"{_ensure_v1(llm_cfg.base_url)}/chat/completions",
                 headers=headers,
                 json=payload,
             )

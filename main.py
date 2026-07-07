@@ -123,7 +123,7 @@ continuous_sessions: dict = {}  # {session_id: {"images": [...], "prompts": [...
 # ──────────────────────────────────────────────────────────────
 image_tasks: dict = {}        # {gen_id: {status, progress, providers: {pid: {status, log, result}}, ...}}
 image_gen_semaphore = None    # 延迟初始化（FastAPI lifespan）
-MAX_CONCURRENT_GENERATIONS = 2  # 最大并发生图数，可调
+MAX_CONCURRENT_GENERATIONS = 16  # 最大并发生图数，可调
 
 
 def _load_history():
@@ -745,27 +745,24 @@ async def _process_image_gen(gen_id: str):
             except asyncio.CancelledError:
                 pass
 
-    # 逐个执行（受信号量限制整体并发）
-    async with image_gen_semaphore:
-        # 按 provider 分组，同一 provider 内串行（避免 429），不同 provider 并行
-        provider_tasks = {}
-        for pid, seq, qty in task["task_list"]:
-            if pid not in provider_tasks:
-                provider_tasks[pid] = []
-            provider_tasks[pid].append((pid, seq, qty))
+    # 按 provider 分组，不同 provider 并行执行
+    provider_tasks = {}
+    for pid, seq, qty in task["task_list"]:
+        if pid not in provider_tasks:
+            provider_tasks[pid] = []
+        provider_tasks[pid].append((pid, seq, qty))
 
-        async def _run_provider_group(pid, items):
-            for i, (p, s, q) in enumerate(items):
-                if i > 0:
-                    await asyncio.sleep(1.5)
-                key = f"{p}_{s}" if q > 1 else p
-                p_cfg = task["all_providers"].get(p)
-                if p_cfg:
-                    # 使用 per-provider kwargs（如果存在），否则 fallback 到全局 kwargs
-                    p_kwargs = task.get("provider_kwargs_map", {}).get(p, task["kwargs"])
-                    await _run_one(key, p, s, p_cfg, task["enhanced_prompt"] or task["prompt"], p_kwargs)
+    async def _run_provider_group(pid, items):
+        for i, (p, s, q) in enumerate(items):
+            if i > 0:
+                await asyncio.sleep(1.5)
+            key = f"{p}_{s}" if q > 1 else p
+            p_cfg = task["all_providers"].get(p)
+            if p_cfg:
+                p_kwargs = task.get("provider_kwargs_map", {}).get(p, task["kwargs"])
+                await _run_one(key, p, s, p_cfg, task["enhanced_prompt"] or task["prompt"], p_kwargs)
 
-        await asyncio.gather(*[_run_provider_group(pid, items) for pid, items in provider_tasks.items()])
+    await asyncio.gather(*[_run_provider_group(pid, items) for pid, items in provider_tasks.items()])
 
     # 全部完成
     elapsed = round(time.time() - task["start_time"], 1)
@@ -833,9 +830,11 @@ async def get_generate_status(gen_id: str):
     status = task["status"]
     if status == "completed":
         pass
-    elif done == total and total > 0:
-        status = "completed"
-        task["status"] = "completed"
+    else:
+        done = sum(1 for s in states.values() if s.get("status") in ("completed", "failed"))
+        if done >= total and total > 0:
+            status = "completed"
+            task["status"] = "completed"
 
     elapsed = round(time.time() - task["start_time"], 1) if task.get("start_time") else 0
 
@@ -2334,6 +2333,113 @@ async def check_network_status():
     return {"results": results, "proxy": {"host": proxy_host, "port": proxy_port}}
 
 
+@app.get("/api/dashboard/ip-info")
+async def get_ip_info():
+    """获取本机 IP 深度质检报告（来自 testisp.info）"""
+    import httpx as _httpx
+    try:
+        async with _httpx.AsyncClient(timeout=15.0, verify=False, follow_redirects=True) as client:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
+                "Referer": "https://testisp.info/",
+                "Origin": "https://testisp.info",
+            }
+            r = await client.get("https://testisp.info/api/check", headers=headers)
+            data = r.json()
+            geo = data.get("geo", {})
+            isp = data.get("isp", {})
+            risk = data.get("risk", {})
+            return {
+                "ip": data.get("ip", ""),
+                "is_local": data.get("is_local", False),
+                "data_source": data.get("data_source", ""),
+                "country": geo.get("country", ""),
+                "country_code": geo.get("country_code", ""),
+                "city": geo.get("city", ""),
+                "timezone": geo.get("timezone", ""),
+                "is_native": geo.get("is_native", False),
+                "native_type": geo.get("native_type", ""),
+                "native_flag": geo.get("native_flag", ""),
+                "drift_km": geo.get("drift_km", 0),
+                "has_drift": geo.get("has_drift", False),
+                "asn": isp.get("asn", ""),
+                "org": isp.get("org", ""),
+                "rdns": isp.get("rdns", ""),
+                "isp_type": isp.get("type", ""),
+                "isp_flag": isp.get("flag", ""),
+                "isp_warning": isp.get("warning", ""),
+                "tcp_rtt": risk.get("tcp_rtt"),
+                "rtt_type": risk.get("rtt_type", ""),
+                "threat_listed": risk.get("threat_listed", False),
+            }
+    except Exception as e:
+        return {"error": str(e)[:100]}
+    except Exception as e:
+        return {"error": str(e)[:100]}
+
+
+@app.get("/api/dashboard/resources")
+async def get_host_resources():
+    """获取宿主机资源占用信息"""
+    import psutil as _psutil
+    import platform as _platform
+    try:
+        cpu_pct = _psutil.cpu_percent(interval=0.5)
+        cpu_freq = _psutil.cpu_freq()
+        mem = _psutil.virtual_memory()
+        swap = _psutil.swap_memory()
+        net = _psutil.net_io_counters()
+        disk = _shutil.disk_usage("/")
+        boot_time = _psutil.boot_time()
+        uptime_sec = time.time() - boot_time
+
+        # Top processes by CPU
+        top_procs = []
+        try:
+            for proc in _psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+                info = proc.info
+                if info['cpu_percent'] and info['cpu_percent'] > 0:
+                    top_procs.append({
+                        'pid': info['pid'],
+                        'name': (info['name'] or '')[:20],
+                        'cpu': round(info['cpu_percent'], 1),
+                        'mem': round(info['memory_percent'] or 0, 1),
+                    })
+            top_procs.sort(key=lambda x: x['cpu'], reverse=True)
+            top_procs = top_procs[:5]
+        except Exception:
+            pass
+
+        return {
+            "cpu_percent": cpu_pct,
+            "cpu_count": _psutil.cpu_count(),
+            "cpu_count_physical": _psutil.cpu_count(logical=False),
+            "cpu_freq_mhz": round(cpu_freq.current, 0) if cpu_freq else 0,
+            "mem_total_gb": round(mem.total / (1024**3), 1),
+            "mem_used_gb": round(mem.used / (1024**3), 1),
+            "mem_available_gb": round(mem.available / (1024**3), 1),
+            "mem_percent": mem.percent,
+            "swap_total_gb": round(swap.total / (1024**3), 1) if swap.total else 0,
+            "swap_used_gb": round(swap.used / (1024**3), 1) if swap.total else 0,
+            "swap_percent": swap.percent if swap.total else 0,
+            "disk_total_gb": round(disk.total / (1024**3), 1),
+            "disk_used_gb": round(disk.used / (1024**3), 1),
+            "disk_free_gb": round(disk.free / (1024**3), 1),
+            "disk_percent": round(disk.used / disk.total * 100, 1),
+            "net_sent_mb": round(net.bytes_sent / (1024**2), 1),
+            "net_recv_mb": round(net.bytes_recv / (1024**2), 1),
+            "net_packets_sent": net.packets_sent,
+            "net_packets_recv": net.packets_recv,
+            "uptime_seconds": int(uptime_sec),
+            "platform": _platform.system(),
+            "platform_release": _platform.release(),
+            "top_processes": top_procs,
+        }
+    except Exception as e:
+        return {"error": str(e)[:100]}
+
+
 def _detect_proxy():
     """检测代理设置（优先使用用户配置，其次系统代理）"""
     # 优先使用用户在界面保存的代理配置
@@ -2366,10 +2472,10 @@ async def server_control(action: str = "status"):
     if action == "status":
         try:
             import urllib.request
-            urllib.request.urlopen("http://127.0.0.1:8890/", timeout=2)
-            return {"status": "running", "port": 8890}
+            urllib.request.urlopen("http://127.0.0.1:8891/", timeout=2)
+            return {"status": "running", "port": 8891}
         except Exception:
-            return {"status": "stopped", "port": 8890}
+            return {"status": "stopped", "port": 8891}
     elif action == "restart":
         subprocess.Popen(["python", "main.py"], cwd=str(STORAGE_DIR.parent))
         return {"status": "restarting"}
@@ -2468,10 +2574,10 @@ if __name__ == "__main__":
     mode_str = "PRODUCTION" if is_prod_mode() else "DEVELOPMENT"
     print(f"""
 ==============================================
-   GenBox v2 - Ready
+   GenBox v2 - Ready (experiment/open-design)
    Mode:       {mode_str}
-   Local UI:   http://localhost:8890
-   Port:       8890
+   Local UI:   http://localhost:8891
+   Port:       8891
    Gallery:    {GALLERY_DIR}
    Config:     {STORAGE_DIR / 'providers.json'}
 ==============================================
@@ -2480,12 +2586,12 @@ if __name__ == "__main__":
     # 自动打开浏览器
     def _open_browser():
         time.sleep(1.5)
-        webbrowser.open("http://localhost:8890")
+        webbrowser.open("http://localhost:8891")
     threading.Thread(target=_open_browser, daemon=True).start()
 
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8890,
+        port=8891,
         reload=False,
     )

@@ -1,0 +1,391 @@
+/* ══════════════════════════════════════════════════════════════
+   Bubble Components — Apple-style Rounded UI Elements
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Base Bubble ── */
+.bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+/* ── Bubble Variants ── */
+.bubble--accent {
+  background: var(--accent-light);
+  color: var(--accent);
+  border: 1px solid rgba(0, 122, 255, 0.15);
+}
+
+.bubble--green {
+  background: var(--accent-green-light);
+  color: var(--accent-green);
+  border: 1px solid rgba(52, 199, 89, 0.15);
+}
+
+.bubble--purple {
+  background: var(--accent-purple-light);
+  color: var(--accent-purple);
+  border: 1px solid rgba(175, 82, 222, 0.15);
+}
+
+.bubble--orange {
+  background: var(--accent-orange-light);
+  color: var(--accent-orange);
+  border: 1px solid rgba(255, 159, 10, 0.15);
+}
+
+.bubble--red {
+  background: var(--accent-red-light);
+  color: var(--accent-red);
+  border: 1px solid rgba(255, 59, 48, 0.15);
+}
+
+.bubble--gray {
+  background: var(--accent-gray-light);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+/* ── Bubble Sizes ── */
+.bubble--sm {
+  padding: 2px var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.bubble--lg {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-md);
+}
+
+/* ── Bubble Pill (rounder) ── */
+.bubble--pill {
+  border-radius: var(--radius-pill);
+  padding: var(--space-1) var(--space-3);
+}
+
+/* ── Bubble Dot ── */
+.bubble-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.bubble-dot--accent { background: var(--accent); }
+.bubble-dot--green { background: var(--accent-green); }
+.bubble-dot--purple { background: var(--accent-purple); }
+.bubble-dot--orange { background: var(--accent-orange); }
+.bubble-dot--red { background: var(--accent-red); }
+.bubble-dot--gray { background: var(--accent-gray); }
+
+/* ── Provider Bubble (for cards) ── */
+.provider-bubble {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--glass-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+  user-select: none;
+}
+
+.provider-bubble:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-card-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.provider-bubble.selected {
+  border-color: var(--accent);
+  background: var(--accent-light);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.provider-bubble.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.provider-bubble .provider-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.provider-bubble .provider-name {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.provider-bubble .provider-model {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.provider-bubble .provider-check {
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-xs);
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.provider-bubble.selected .provider-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.provider-bubble.selected .provider-check::after {
+  content: '';
+  width: 5px;
+  height: 9px;
+  border: 2px solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translateY(-1px);
+}
+
+/* ── Gallery Bubble ── */
+.gallery-bubble {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  transition: all var(--duration-normal) var(--ease-default);
+  background: var(--bg-surface);
+}
+
+.gallery-bubble:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.gallery-bubble.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow), var(--shadow-lg);
+}
+
+.gallery-bubble.selected::after {
+  content: '\2713';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  z-index: 5;
+  animation: scaleIn var(--duration-fast) var(--ease-spring);
+}
+
+.gallery-bubble img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--duration-slow) var(--ease-smooth);
+}
+
+.gallery-bubble:hover img {
+  transform: scale(1.04);
+}
+
+/* ── History Bubble ── */
+.history-bubble {
+  background: var(--glass-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  transition: all var(--duration-normal) var(--ease-default);
+  box-shadow: var(--shadow-xs);
+}
+
+.history-bubble:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+}
+
+.history-bubble .history-meta {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-bottom: var(--space-2);
+  display: flex;
+  gap: var(--space-3);
+}
+
+.history-bubble .history-prompt {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+}
+
+.history-bubble .history-tags {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+/* ── Log Bubble ── */
+.log-bubble {
+  background: var(--glass-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  transition: box-shadow var(--duration-fast) var(--ease-default);
+  box-shadow: var(--shadow-xs);
+}
+
+.log-bubble:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.log-bubble .log-ts {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+}
+
+.log-bubble .log-cat {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.log-bubble .log-cat-generate { background: var(--accent-green-light); color: var(--accent-green); }
+.log-bubble .log-cat-delete { background: var(--accent-red-light); color: var(--accent-red); }
+.log-bubble .log-cat-provider { background: var(--accent-light); color: var(--accent); }
+.log-bubble .log-cat-system { background: var(--accent-orange-light); color: var(--accent-orange); }
+.log-bubble .log-cat-error { background: var(--accent-red-light); color: var(--accent-red); }
+
+.log-bubble .log-msg { color: var(--text-secondary); }
+
+.log-bubble .log-detail {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--border);
+}
+
+/* ── Theme Bubble ── */
+.theme-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--duration-normal) var(--ease-default);
+  margin-bottom: var(--space-3);
+}
+
+.theme-bubble:hover {
+  border-color: var(--border-strong);
+}
+
+.theme-bubble.active {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+
+.theme-bubble .theme-preview {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.theme-bubble .theme-preview-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-xs);
+}
+
+/* ── Result Info Bubble ── */
+.result-info-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.result-info-bubble--accent {
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
+.result-info-bubble--success {
+  color: var(--accent-green);
+}
+
+.result-info-bubble--error {
+  color: var(--accent-red);
+}
+
+/* ── Drag Sort Bubbles ── */
+.dragging { opacity: 0.4; }
+.drag-over {
+  border-color: var(--accent) !important;
+  background: var(--accent-light) !important;
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* ── Action Button Bubble (for overlays) ── */
+.action-bubble {
+  padding: var(--space-2) var(--space-3);
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--duration-fast) var(--ease-default);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  font-family: inherit;
+}
+
+.action-bubble:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
