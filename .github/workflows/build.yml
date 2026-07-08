@@ -157,8 +157,7 @@ jobs:
             - macOS 首次运行需要在「系统设置 > 隐私与安全性」中允许
             - Linux 需要安装 ffmpeg: `sudo apt install ffmpeg`
           files: |
-            artifacts/${{ env.APP_NAME }}-Windows-x64/${{ env.APP_NAME }}.exe
-            artifacts/${{ env.APP_NAME }}-macOS/${{ env.APP_NAME }}
-            artifacts/${{ env.APP_NAME }}-Linux-x64/${{ env.APP_NAME }}
+            artifacts/**/*.exe
+            artifacts/**/GenBox
           draft: false
           prerelease: false
