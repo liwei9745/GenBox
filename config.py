@@ -427,18 +427,25 @@ def get_admin_key() -> str:
     """获取当前 ADMIN_KEY（从 .env）"""
     return os.getenv("ADMIN_KEY", "")
 
+def get_admin_key_hash() -> str:
+    """获取当前 ADMIN_KEY 的哈希值"""
+    key = get_admin_key()
+    if not key:
+        return ""
+    return _hash_admin_key(key)
+
 def is_prod_mode() -> bool:
     """是否生产模式（启用认证）"""
     return os.getenv("APP_MODE", "dev") == "prod"
 
 def verify_admin_key(key: str) -> bool:
-    """校验管理密钥"""
+    """校验管理密钥（使用哈希比对）"""
     if not is_prod_mode():
         return True  # 开发模式免认证
-    stored = get_admin_key()
-    if not stored:
+    stored_hash = get_admin_key_hash()
+    if not stored_hash:
         return False
-    return secrets.compare_digest(key, stored)
+    return secrets.compare_digest(_hash_admin_key(key), stored_hash)
 
 def generate_admin_key() -> str:
     """生成随机管理密钥并写入 .env"""

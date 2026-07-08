@@ -100,13 +100,47 @@ class ProviderCreateReq(BaseModel):
 app = FastAPI(title="GenBox", version="2.0.0")
 app_start_time = time.time()
 
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:8891,http://127.0.0.1:8891").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
+
+# ──────────────────────────────────────────────────────────────
+# 安全 Headers 中间件
+# ──────────────────────────────────────────────────────────────
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if is_prod_mode():
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+# ──────────────────────────────────────────────────────────────
+# 速率限制（简单内存实现）
+# ──────────────────────────────────────────────────────────────
+from collections import defaultdict
+_rate_limit_store: dict = defaultdict(list)
+RATE_LIMIT_GENERATE = int(os.getenv("RATE_LIMIT_GENERATE", "10"))  # 每分钟最多10次生图
+RATE_LIMIT_API = int(os.getenv("RATE_LIMIT_API", "60"))  # 每分钟最多60次API调用
+
+def _check_rate_limit(client_ip: str, endpoint_type: str = "api") -> bool:
+    """检查速率限制，返回 True 表示允许"""
+    now = time.time()
+    limit = RATE_LIMIT_GENERATE if endpoint_type == "generate" else RATE_LIMIT_API
+    key = f"{client_ip}:{endpoint_type}"
+    _rate_limit_store[key] = [t for t in _rate_limit_store[key] if now - t < 60]
+    if len(_rate_limit_store[key]) >= limit:
+        return False
+    _rate_limit_store[key].append(now)
+    return True
 
 # ──────────────────────────────────────────────────────────────
 # 内存存储
@@ -415,7 +449,8 @@ async def test_provider(provider_id: str):
                 ep_start = _time.time()
                 try:
                     # 轻量连通性检查：GET /models 或简单请求
-                    async with _httpx.AsyncClient(timeout=15.0, verify=False) as client:
+                    _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
+                    async with _httpx.AsyncClient(timeout=15.0, verify=_verify_ssl) as client:
                         headers = {"Authorization": f"Bearer {ep.key}"}
                         # 尝试 models 端点
                         r = await client.get(f"{ep.url.rstrip('/')}/models", headers=headers)
@@ -553,10 +588,15 @@ def _do_local_upscale(local_path: str, target_size: str, method: str = "lanczos3
 # 生图核心（异步队列 + 并发控制 + 实时进度）
 # ──────────────────────────────────────────────────────────────
 @app.post("/api/generate")
-async def generate(req: GenerateRequest):
+async def generate(req: GenerateRequest, request: Request):
     global generation_counter, image_gen_semaphore
     if image_gen_semaphore is None:
         image_gen_semaphore = asyncio.Semaphore(MAX_CONCURRENT_GENERATIONS)
+
+    # 速率限制
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(client_ip, "generate"):
+        raise HTTPException(status_code=429, detail="请求过于频繁，请稍后再试")
 
     generation_counter += 1
     gen_id = f"gen_{generation_counter:04d}_{uuid.uuid4().hex[:6]}"
@@ -927,7 +967,8 @@ async def image_variations(req: VariationRequest):
         data = {"model": model_id, "n": min(req.n, 4), "size": req.size, "response_format": "b64_json"}
 
         try:
-            async with _httpx.AsyncClient(timeout=180.0, verify=False) as client:
+            _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
+            async with _httpx.AsyncClient(timeout=180.0, verify=_verify_ssl) as client:
                 resp = await client.post(url, headers=headers, files=files, data=data)
                 if resp.status_code >= 400:
                     last_error = f"端点 {ep.url[:40]}... HTTP {resp.status_code}"
@@ -2295,9 +2336,10 @@ async def check_network_status():
     async def _test_one(name, url, need_proxy):
         try:
             start = time.time()
+            _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
             async with _httpx.AsyncClient(
                 timeout=_httpx.Timeout(5.0),
-                verify=False,
+                verify=_verify_ssl,
                 proxy=proxy_url if (need_proxy and proxy_url) else None,
                 follow_redirects=True,
             ) as client:
@@ -2313,7 +2355,8 @@ async def check_network_status():
             if need_proxy and proxy_url:
                 try:
                     start = time.time()
-                    async with _httpx.AsyncClient(timeout=_httpx.Timeout(5.0), verify=False, follow_redirects=True) as client:
+                    _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
+                    async with _httpx.AsyncClient(timeout=_httpx.Timeout(5.0), verify=_verify_ssl, follow_redirects=True) as client:
                         r = await client.head(url)
                         elapsed = round((time.time() - start) * 1000)
                         if r.status_code < 500:
@@ -2338,7 +2381,8 @@ async def get_ip_info():
     """获取本机 IP 深度质检报告（来自 testisp.info）"""
     import httpx as _httpx
     try:
-        async with _httpx.AsyncClient(timeout=15.0, verify=False, follow_redirects=True) as client:
+        _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
+        async with _httpx.AsyncClient(timeout=15.0, verify=_verify_ssl, follow_redirects=True) as client:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
                 "Accept": "application/json, text/plain, */*",
