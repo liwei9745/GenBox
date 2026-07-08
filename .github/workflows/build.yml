@@ -162,12 +162,12 @@ jobs:
             --draft=false \
             --prerelease=false
           
+          # Rename files to avoid name conflicts
+          mv artifacts/macos/${{ env.APP_NAME }} artifacts/macos/${{ env.APP_NAME }}-macOS
+          mv artifacts/linux/${{ env.APP_NAME }} artifacts/linux/${{ env.APP_NAME }}-Linux
+          
           # Upload assets
           gh release upload "${{ github.ref_name }}" \
-            "artifacts/windows/${{ env.APP_NAME }}.exe#GenBox-Windows-x64.exe"
-          
-          gh release upload "${{ github.ref_name }}" \
-            "artifacts/macos/${{ env.APP_NAME }}#GenBox-macOS"
-          
-          gh release upload "${{ github.ref_name }}" \
-            "artifacts/linux/${{ env.APP_NAME }}#GenBox-Linux-x64"
+            "artifacts/windows/${{ env.APP_NAME }}.exe" \
+            "artifacts/macos/${{ env.APP_NAME }}-macOS" \
+            "artifacts/linux/${{ env.APP_NAME }}-Linux"
