@@ -127,10 +127,23 @@ jobs:
       contents: write
 
     steps:
-      - name: Download all artifacts
+      - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: ${{ env.APP_NAME }}-Windows-x64
+          path: artifacts/windows
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-macOS
+          path: artifacts/macos
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-Linux-x64
+          path: artifacts/linux
 
       - name: List artifacts
         run: find artifacts -type f
@@ -157,7 +170,8 @@ jobs:
             - macOS 首次运行需要在「系统设置 > 隐私与安全性」中允许
             - Linux 需要安装 ffmpeg: `sudo apt install ffmpeg`
           files: |
-            artifacts/**/*.exe
-            artifacts/**/GenBox
+            artifacts/windows/${{ env.APP_NAME }}.exe
+            artifacts/macos/${{ env.APP_NAME }}
+            artifacts/linux/${{ env.APP_NAME }}
           draft: false
           prerelease: false
