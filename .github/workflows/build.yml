@@ -155,13 +155,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Create release
-          RELEASE_ID=$(gh release create "${{ github.ref_name }}" \
+          # Create release first
+          gh release create "${{ github.ref_name }}" \
             --title "${{ env.APP_NAME }} ${{ github.ref_name }}" \
             --notes "${{ env.APP_NAME }} ${{ github.ref_name }} - Cross-platform desktop client" \
             --draft=false \
-            --prerelease=false \
-            artifacts/windows/${{ env.APP_NAME }}.exe#"${{ env.APP_NAME }}-Windows-x64.exe" \
-            artifacts/macos/${{ env.APP_NAME }}#"${{ env.APP_NAME }}-macOS" \
-            artifacts/linux/${{ env.APP_NAME }}#"${{ env.APP_NAME }}-Linux-x64")
-          echo "Release created: $RELEASE_ID"
+            --prerelease=false
+          
+          # Upload assets
+          gh release upload "${{ github.ref_name }}" \
+            "artifacts/windows/${{ env.APP_NAME }}.exe#GenBox-Windows-x64.exe"
+          
+          gh release upload "${{ github.ref_name }}" \
+            "artifacts/macos/${{ env.APP_NAME }}#GenBox-macOS"
+          
+          gh release upload "${{ github.ref_name }}" \
+            "artifacts/linux/${{ env.APP_NAME }}#GenBox-Linux-x64"
