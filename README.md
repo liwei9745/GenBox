@@ -27,6 +27,17 @@
 
 ---
 
+## 🌿 分支说明 | Branches
+
+| 分支 | 定位 | 端口 | 说明 |
+|------|------|------|------|
+| [`master`](https://github.com/liwei9745/GenBox) | 稳定版 | 8890 | 日常使用、生产环境 |
+| [`feat/glass-ui-redesign`](https://github.com/liwei9745/GenBox/tree/feat/glass-ui-redesign) | 前瞻版 | 8891 | 毛玻璃 UI + 16路并发 + IP体检 |
+
+📖 **详细对比请查看 [分支指南](docs/branches-guide.md)**
+
+---
+
 ## 📖 项目简介 | About
 
 GenBox 是一个本地部署的 **一站式 AI 创作工具箱**，将多个 AI 生图/生视频模型聚合在一个界面中，解决以下核心痛点：
