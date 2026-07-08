@@ -44,3 +44,13 @@ logs/
 *.temp
 # 实验分支配置
 config/
+
+# ══ AI 开发工具（不需要入库）══
+.hermes/
+.opencode/
+skills/
+AGENTS.md
+SPEC.md
+FUNCTIONALITY.md
+opencode-prompt.md
+strix_runs/
