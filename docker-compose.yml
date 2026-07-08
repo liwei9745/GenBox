@@ -1,0 +1,12 @@
+version: "3.8"
+
+services:
+  genbox:
+    build: .
+    container_name: genbox
+    ports:
+      - "8891:8891"
+    volumes:
+      - ./storage:/app/storage
+      - ./.env:/app/.env
+    restart: unless-stopped

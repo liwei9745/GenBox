@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+env
+
+# IDE
+.vscode
+.idea
+
+# 临时文件
+*.log
+*.tmp
+*.temp
+
+# 项目文档（不需要打包到镜像）
+screenshots/
+skills/
+docs/
+*.md
+
+# 存储数据（运行时挂载）
+storage/
+
+# 环境变量（ secrets，运行时挂载）
+.env
+.env.*
+!.env.example
+
+# 操作系统
+.DS_Store
+Thumbs.db
