@@ -10,6 +10,7 @@ var continuousSessionId = null;
 var currentResults = {};   // 当前生成结果，用于灯箱/对比
 var currentGroupTimings = {}; // 当前分组耗时 {pid: {total, images: []}}
 var quickPrompts = {};
+var lastGenContext = null; // 上次生图上下文，用于单模型重试
 
 // 生图数量: {provider_id: int}
 var providerQuantities = {};
@@ -38,6 +39,10 @@ var previewIndex = 0;
 var previewGroups = {};
 // 失败分组: { realPid: [{pid, error, seq}, ...] }
 var failedGroups = {};
+// 占位符状态: { key: { cardEl, imgEl, state } }
+var previewPlaceholders = {};
+// 持久化分组预览: { realPid: { images: [...], activeIdx: 0, name, color } }
+var groupedPreviews = {};
 
 // 灯箱缩放
 var lightboxZoom = 1;
@@ -540,14 +545,14 @@ function onProviderSizeChange(pid) {
 }
 
 // ── per-provider 设置持久化 ──
-function loadProviderSettings() {
+function loadPerProviderSettings() {
   try {
     return JSON.parse(localStorage.getItem('genbox_provider_settings') || '{}');
   } catch(e) { return {}; }
 }
 
 function saveProviderSetting(pid, key, val) {
-  var all = loadProviderSettings();
+  var all = loadPerProviderSettings();
   if (!all[pid]) all[pid] = {};
   all[pid][key] = val;
   try { localStorage.setItem('genbox_provider_settings', JSON.stringify(all)); } catch(e) {}
@@ -555,7 +560,7 @@ function saveProviderSetting(pid, key, val) {
 
 function saveAllProviderSettings() {
   var imageProviders = allProviders.filter(function(p){ return p.type === 'image'; });
-  var all = loadProviderSettings();
+  var all = loadPerProviderSettings();
   for (var i = 0; i < imageProviders.length; i++) {
     var p = imageProviders[i];
     if (!all[p.id]) all[p.id] = {};
@@ -831,7 +836,8 @@ function startResize(e, direction) {
   e.preventDefault();
   e.stopPropagation();
 
-  var layout = document.querySelector('.generate-layout:not(#pageVideo .generate-layout)') || document.querySelector('.generate-layout');
+  var layout = e.target.closest('.generate-layout');
+  if (!layout) return;
   var left = layout.querySelector('.generate-left');
   var center = layout.querySelector('.generate-center');
   var preview = center.querySelector('.generate-preview');
@@ -1139,11 +1145,437 @@ function genLogProvider(key, msg, type) {
     area.appendChild(line2);
     _smartScroll(area);
   }
+  // Preview per-provider log
+  var prevLog = document.getElementById('prev_log_' + key);
+  if (prevLog) {
+    var prefix2 = type === 'ok' ? '✔' : type === 'error' ? '✗' : type === 'warn' ? '⚠' : '▸';
+    var logLine = document.createElement('div');
+    logLine.className = 'log-line';
+    logLine.style.color = color;
+    logLine.textContent = '[' + ts + '] ' + prefix2 + ' ' + msg;
+    prevLog.appendChild(logLine);
+    prevLog.scrollTop = prevLog.scrollHeight;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Preview: Placeholder creation & streaming fill
+// ═══════════════════════════════════════════════════════════════════
+
+function createPreviewPlaceholders(providerStates) {
+  var container = document.getElementById('previewResults');
+  var emptyEl = document.getElementById('previewEmpty');
+  var mainContent = document.getElementById('previewMainContent');
+  if (!container) return;
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (mainContent) mainContent.style.display = 'flex';
+
+  // Remove old placeholder cards only (preserve grouped previews)
+  Object.keys(previewPlaceholders).forEach(function(k) {
+    var ph = previewPlaceholders[k];
+    if (ph && ph.cardEl && ph.cardEl.parentNode) ph.cardEl.remove();
+  });
+  previewPlaceholders = {};
+
+  // Render existing grouped previews first
+  renderGroupedPreviews();
+
+  // Create placeholder cards for pending tasks
+  var keys = Object.keys(providerStates);
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    var s = providerStates[key];
+    if (s.status === 'completed' || s.status === 'failed') continue;
+    var realPid = key.replace(/_\d+$/, '');
+    var pInfo = findProvider(realPid) || findProvider(key) || { name: s.name || key, color: '#5b8def' };
+    var seq = s.seq !== undefined ? s.seq : (parseInt(key.split('_').pop()) || 0);
+    var displayName = pInfo.name + (seq >= 1 ? ' #' + (seq + 1) : '');
+
+    var card = document.createElement('div');
+    card.className = 'prev-card generating';
+    card.id = 'prev_ph_' + key;
+
+    var border = document.createElement('div');
+    border.className = 'prev-card-border';
+    card.appendChild(border);
+
+    var ph = document.createElement('div');
+    ph.className = 'prev-placeholder';
+    ph.innerHTML = '<div class="spinner"></div><div class="ph-text">' + escHtml(displayName) + '</div>';
+    card.appendChild(ph);
+
+    var footer = document.createElement('div');
+    footer.className = 'prev-footer';
+    footer.innerHTML =
+      '<div style="display:flex;align-items:center;gap:5px;">' +
+        '<span class="provider-dot" style="background:' + pInfo.color + ';"></span>' +
+        '<span class="provider-name">' + escHtml(displayName) + '</span>' +
+      '</div>' +
+      '<span class="elapsed-badge" id="prev_elapsed_' + key + '">排队中</span>';
+    card.appendChild(footer);
+
+    container.appendChild(card);
+
+    previewPlaceholders[key] = {
+      cardEl: card,
+      realPid: realPid,
+      color: pInfo.color,
+      displayName: displayName,
+      state: 'queued'
+    };
+  }
+}
+
+function fillPreviewPlaceholder(key, result) {
+  var ph = previewPlaceholders[key];
+  var fname = result.local_path.split(/[\\/]/).pop();
+  var src = '/api/gallery/image/' + fname;
+  var elapsed = result.elapsed_seconds ? result.elapsed_seconds.toFixed(1) + 's' : '';
+  var realPid = ph ? ph.realPid : key.replace(/_\d+$/, '');
+  var pInfo = ph || {};
+  var displayName = pInfo.displayName || (findProvider(realPid) || { name: realPid }).name;
+
+  var imgEntry = { pid: key, realPid: realPid, src: src, name: displayName, color: pInfo.color || '#5b8def', fname: fname };
+
+  // Add to grouped preview (persistent)
+  addImageToGroupedPreview(realPid, imgEntry);
+
+  // Remove placeholder card
+  if (ph && ph.cardEl && ph.cardEl.parentNode) {
+    ph.cardEl.remove();
+    delete previewPlaceholders[key];
+  }
+
+  // Update count
+  var totalCount = 0;
+  Object.keys(groupedPreviews).forEach(function(k) { totalCount += groupedPreviews[k].images.length; });
+  var cnt = document.getElementById('resultCount');
+  if (cnt) cnt.textContent = totalCount + ' 张成功';
+
+  if (ph) ph.state = 'completed';
+}
+
+function markPreviewPlaceholderFailed(key, error) {
+  var ph = previewPlaceholders[key];
+  if (!ph) return;
+  var card = ph.cardEl;
+  card.className = 'prev-card failed';
+  card.style.borderColor = '#ef444444';
+
+  var oldPh = card.querySelector('.prev-placeholder');
+  if (oldPh) {
+    oldPh.innerHTML = '<div style="font-size:20px;">⚠</div><div class="ph-text" style="color:#ef4444;">失败</div>';
+    oldPh.style.animation = 'none';
+  }
+
+  var elapsedBadge = card.querySelector('.elapsed-badge');
+  if (elapsedBadge) { elapsedBadge.textContent = '✗ 失败'; elapsedBadge.style.color = '#ef4444'; }
+
+  // 添加重试按钮
+  var retryBtn = document.createElement('button');
+  retryBtn.className = 'prev-retry-btn';
+  retryBtn.innerHTML = '🔄 重试';
+  retryBtn.title = '仅重试此模型';
+  retryBtn.onclick = function(e) {
+    e.stopPropagation();
+    retryProvider(key, ph.realPid);
+  };
+  card.appendChild(retryBtn);
+
+  ph.state = 'failed';
+}
+
+function retryProvider(key, realPid) {
+  if (!lastGenContext) { alert('没有可重试的上下文，请重新生成'); return; }
+
+  var pid = realPid || key.replace(/_\d+$/, '');
+  var pInfo = findProvider(pid) || { name: pid };
+  if (!confirm('仅重试「' + pInfo.name + '」？')) return;
+
+  // 找到上一次这个 provider 的 seq（如果有多个）
+  var seq = 0;
+  if (key.indexOf('_') !== -1) {
+    var parts = key.split('_');
+    seq = parseInt(parts[parts.length - 1]) || 0;
+  }
+
+  var btn = document.getElementById('btnGen');
+  if (btn) { btn.disabled = true; btn.innerHTML = '🔄 重试中...'; }
+
+  var payload = {
+    prompt: lastGenContext.prompt,
+    providers: [pid],
+    quantities: {},
+    mode: lastGenContext.mode,
+    size: lastGenContext.size,
+    quality: lastGenContext.quality || undefined,
+    enhance_prompt: false,
+    continuous: false,
+  };
+  if (lastGenContext.system_prompt) payload.system_prompt = lastGenContext.system_prompt;
+  if (lastGenContext.mode === 'i2i' && lastGenContext.image_data) {
+    payload.image_data = lastGenContext.image_data;
+    payload.strength = lastGenContext.strength;
+  }
+
+  _authFetch('/api/generate', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(data) {
+    if (data.generation_id) {
+      setStatus('重试已提交: ' + pInfo.name);
+      startGenPolling(data.generation_id);
+    }
+  }).catch(function(e) {
+    alert('重试失败: ' + e.message);
+    if (btn) { btn.disabled = false; btn.innerHTML = '✨ 生成图片'; }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Preview: Grouped Preview (persistent, per-model)
+// ═══════════════════════════════════════════════════════════════════
+
+function renderGroupedPreviews() {
+  var container = document.getElementById('previewResults');
+  if (!container) return;
+  // Only remove grouped cards, preserve placeholder cards
+  container.querySelectorAll('.grouped-card').forEach(function(el) { el.remove(); });
+  var rPids = Object.keys(groupedPreviews);
+  if (rPids.length === 0 && Object.keys(previewPlaceholders).length === 0) {
+    var emptyEl = document.getElementById('previewEmpty');
+    if (emptyEl) emptyEl.style.display = '';
+    var mainContent = document.getElementById('previewMainContent');
+    if (mainContent) mainContent.style.display = 'none';
+    return;
+  }
+  var emptyEl = document.getElementById('previewEmpty');
+  if (emptyEl) emptyEl.style.display = 'none';
+  var mainContent = document.getElementById('previewMainContent');
+  if (mainContent) mainContent.style.display = 'flex';
+  for (var i = 0; i < rPids.length; i++) {
+    container.appendChild(buildGroupCard(rPids[i]));
+  }
+}
+
+function buildGroupCard(realPid) {
+  var group = groupedPreviews[realPid];
+  if (!group || !group.images.length) return document.createElement('div');
+  var img = group.images[group.activeIdx];
+  var total = group.images.length;
+
+  var card = document.createElement('div');
+  card.className = 'prev-card completed grouped-card';
+  card.id = 'grouped_' + realPid;
+
+  var border = document.createElement('div');
+  border.className = 'prev-card-border';
+  card.appendChild(border);
+
+  var imgEl = document.createElement('img');
+  imgEl.className = 'prev-img';
+  imgEl.src = img.src;
+  imgEl.alt = img.name;
+  card.appendChild(imgEl);
+
+  card.onclick = function() { openLightbox(img.src, img.name); };
+
+  if (total > 1) {
+    var idx = { value: group.activeIdx };
+    var btnL = document.createElement('button');
+    btnL.className = 'prev-arrow prev-arrow-left';
+    btnL.innerHTML = '‹';
+    btnL.onclick = function(e) {
+      e.stopPropagation();
+      idx.value = (idx.value - 1 + total) % total;
+      group.activeIdx = idx.value;
+      var newImg = group.images[idx.value];
+      imgEl.src = newImg.src;
+      imgEl.alt = newImg.name;
+      card.onclick = function() { openLightbox(newImg.src, newImg.name); };
+      var nameEl = card.querySelector('.prev-group-label');
+      if (nameEl) nameEl.textContent = newImg.name;
+      var cntEl = card.querySelector('.prev-group-count');
+      if (cntEl) cntEl.textContent = (idx.value + 1) + '/' + total;
+    };
+    card.appendChild(btnL);
+    var btnR = document.createElement('button');
+    btnR.className = 'prev-arrow prev-arrow-right';
+    btnR.innerHTML = '›';
+    btnR.onclick = function(e) {
+      e.stopPropagation();
+      idx.value = (idx.value + 1) % total;
+      group.activeIdx = idx.value;
+      var newImg = group.images[idx.value];
+      imgEl.src = newImg.src;
+      imgEl.alt = newImg.name;
+      card.onclick = function() { openLightbox(newImg.src, newImg.name); };
+      var nameEl = card.querySelector('.prev-group-label');
+      if (nameEl) nameEl.textContent = newImg.name;
+      var cntEl = card.querySelector('.prev-group-count');
+      if (cntEl) cntEl.textContent = (idx.value + 1) + '/' + total;
+    };
+    card.appendChild(btnR);
+  }
+
+  var countBadge = document.createElement('div');
+  countBadge.className = 'prev-group-count';
+  countBadge.textContent = total > 1 ? '1/' + total : '1/1';
+  card.appendChild(countBadge);
+
+  var footer = document.createElement('div');
+  footer.className = 'prev-footer';
+  footer.innerHTML =
+    '<div style="display:flex;align-items:center;gap:5px;">' +
+      '<span class="provider-dot" style="background:' + (group.color || '#5b8def') + ';"></span>' +
+      '<span class="provider-name">' + escHtml(group.name || realPid) + '</span>' +
+    '</div>';
+  card.appendChild(footer);
+
+  var label = document.createElement('div');
+  label.className = 'prev-group-label';
+  label.textContent = img.name;
+  card.appendChild(label);
+
+  return card;
+}
+
+function addImageToGroupedPreview(realPid, imgData) {
+  if (!groupedPreviews[realPid]) {
+    groupedPreviews[realPid] = {
+      images: [],
+      activeIdx: 0,
+      name: imgData.name || realPid,
+      color: imgData.color || '#5b8def'
+    };
+  }
+  groupedPreviews[realPid].images.push(imgData);
+  renderGroupedPreviews();
+}
+
+function clearGroupedPreviews() {
+  groupedPreviews = {};
+  previewImages = [];
+  previewGroups = {};
+  failedGroups = {};
+  renderGroupedPreviews();
+  var cnt = document.getElementById('resultCount');
+  if (cnt) cnt.textContent = '';
+}
+
+function _updateGroupArrows(realPid, groupImgs) {
+  if (groupImgs.length <= 1) return;
+  // Find first card for this group and add arrows if not already present
+  var firstEntry = groupImgs[0];
+  var firstKey = null;
+  var keys = Object.keys(previewPlaceholders);
+  for (var i = 0; i < keys.length; i++) {
+    if (previewPlaceholders[keys[i]].realPid === realPid) { firstKey = keys[i]; break; }
+  }
+  if (!firstKey) return;
+
+  var card = previewPlaceholders[firstKey].cardEl;
+  if (card.querySelector('.prev-arrow')) return; // already has arrows
+
+  var idx = { value: 0 };
+
+  var btnL = document.createElement('button');
+  btnL.className = 'prev-arrow prev-arrow-left';
+  btnL.innerHTML = '‹';
+  btnL.onclick = function(e) {
+    e.stopPropagation();
+    idx.value = (idx.value - 1 + groupImgs.length) % groupImgs.length;
+    _refreshGroupCard(card, groupImgs, idx.value, realPid);
+  };
+  card.appendChild(btnL);
+
+  var btnR = document.createElement('button');
+  btnR.className = 'prev-arrow prev-arrow-right';
+  btnR.innerHTML = '›';
+  btnR.onclick = function(e) {
+    e.stopPropagation();
+    idx.value = (idx.value + 1) % groupImgs.length;
+    _refreshGroupCard(card, groupImgs, idx.value, realPid);
+  };
+  card.appendChild(btnR);
+
+  // Store nav state
+  card._groupIdx = idx;
+  card._groupImgs = groupImgs;
+}
+
+function _refreshGroupCard(card, groupImgs, newIdx, realPid) {
+  var imgEl = card.querySelector('.prev-img');
+  if (imgEl) {
+    imgEl.src = groupImgs[newIdx].src;
+    imgEl.alt = groupImgs[newIdx].name;
+  }
+  // Update card click handler
+  (function(s, n) {
+    card.onclick = function() { openLightbox(s, n); };
+  })(groupImgs[newIdx].src, groupImgs[newIdx].name);
+  var nameEl = card.querySelector('.provider-name');
+  if (nameEl) nameEl.textContent = groupImgs[newIdx].name;
+}
+
+function updatePreviewLogSections(providerStates) {
+  var section = document.getElementById('previewLogSection');
+  var grid = document.getElementById('previewLogGrid');
+  if (!section || !grid) return;
+
+  var keys = Object.keys(providerStates);
+  var hasLogs = false;
+
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    var s = providerStates[key];
+    var logs = s.log || [];
+    if (logs.length > 0) hasLogs = true;
+  }
+
+  if (!hasLogs) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  section.classList.remove('hidden');
+  var html = '';
+
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    var s = providerStates[key];
+    var logs = s.log || [];
+    if (logs.length === 0) continue;
+
+    var realPid = key.replace(/_\d+$/, '');
+    var pInfo = findProvider(realPid) || findProvider(key) || { name: s.name || key, color: '#5b8def' };
+    var status = s.status || 'queued';
+    var dotColor = status === 'completed' ? '#22c55e' : status === 'failed' ? '#ef4444' : status === 'generating' ? 'var(--accent)' : 'var(--text-muted)';
+
+    html += '<div class="prev-log-card" id="prev_log_' + key + '">';
+    html += '<div class="log-header"><span class="log-dot" style="background:' + dotColor + ';"></span><span>' + escHtml(pInfo.name) + '</span></div>';
+    for (var j = 0; j < logs.length; j++) {
+      html += '<div class="log-line">' + escHtml(logs[j]) + '</div>';
+    }
+    html += '</div>';
+  }
+
+  grid.innerHTML = html;
+
+  // Auto-scroll latest log cards
+  var cards = grid.querySelectorAll('.prev-log-card');
+  for (var c = 0; c < cards.length; c++) {
+    cards[c].scrollTop = cards[c].scrollHeight;
+  }
 }
 
 function startGenPolling(genId) {
   genCurrentGenId = genId;
   genDisplayedResults = {};
+  window._placeholdersCreated = false;
   // 继续使用 genStartTs（提交阶段已设置），不停表
   var elapsedEl = document.getElementById('elapsedSeconds');
   if (genTimerInterval) clearInterval(genTimerInterval);
@@ -1174,8 +1606,13 @@ function startGenPolling(genId) {
 
       if (data.provider_states) {
         window._lastProviderStates = data.provider_states;
+        // 第一次收到 provider_states 时创建占位符
+        if (!window._placeholdersCreated) {
+          window._placeholdersCreated = true;
+          createPreviewPlaceholders(data.provider_states);
+        }
         renderGenPerProviderBars(data.provider_states);
-        // 更新实时日志
+        // 更新实时日志（旧的全局日志区域，保留兼容）
         var logEl = document.getElementById('genLogArea');
         if (logEl) {
           var allLogs = [];
@@ -1185,12 +1622,18 @@ function startGenPolling(genId) {
           });
           if (allLogs.length > 0) logEl.textContent = allLogs.join('\n');
         }
+        // 更新预览区 per-provider 日志
+        updatePreviewLogSections(data.provider_states);
         Object.keys(data.provider_states).forEach(function(key) {
           var s = data.provider_states[key];
-          // Fix 3: 增量显示已完成结果到预览区
+          // 增量：占位符填图
           if (s.status === 'completed' && s.result && s.result.success && s.result.local_path && !genDisplayedResults[key]) {
             genDisplayedResults[key] = s.result;
-            addResultToPreview(key, s.result);
+            fillPreviewPlaceholder(key, s.result);
+          }
+          // 增量：标记失败
+          if ((s.status === 'failed' || (s.result && !s.result.success)) && previewPlaceholders[key] && previewPlaceholders[key].state === 'queued') {
+            markPreviewPlaceholderFailed(key, s.error || (s.result && s.result.error) || '失败');
           }
         });
       }
@@ -1274,6 +1717,9 @@ function doGenerate() {
   if (logWrap) logWrap.style.display = 'block';
   if (logArea) logArea.innerHTML = '';
   if (logCount) logCount.textContent = '';
+  // Hide preview log section for new generation
+  var previewLogSection = document.getElementById('previewLogSection');
+  if (previewLogSection) previewLogSection.classList.add('hidden');
 
   genStartTs = Date.now();
   var timerInterval = setInterval(function() {
@@ -1342,6 +1788,20 @@ function doGenerate() {
     payload.upscale_method = document.getElementById('upscaleMethod').value;
   }
 
+  // 保存生图上下文，用于单模型重试
+  lastGenContext = {
+    prompt: prompt,
+    system_prompt: systemPrompt,
+    mode: currentMode,
+    size: genSize,
+    quality: genQuality,
+    image_data: uploadedImageData,
+    strength: parseFloat(document.getElementById('selStrength').value || '0.55'),
+    enhance_prompt: document.getElementById('chkEnhance').checked,
+    llm_provider_id: localStorage.getItem('igs_llm_provider') || undefined,
+    continuous: false,
+  };
+
   _authFetch('/api/generate', {
     method: 'POST',
     body: JSON.stringify(payload)
@@ -1353,7 +1813,7 @@ function doGenerate() {
     clearInterval(timerInterval);
     pfill.style.width = '15%';
     ptxt.textContent = '任务已提交，队列处理中...';
-    // 初始化 per-provider bars
+    // 占位符将在第一次 poll 时创建（因为 /api/generate 不返回 provider_states）
     if (data.generation_id) {
       startGenPolling(data.generation_id);
     }
@@ -1476,20 +1936,17 @@ function copyEnhance() {
 function showResults(results, prompt, timings) {
   try {
   currentGroupTimings = timings || currentGroupTimings || {};
-  var emptyEl = document.getElementById('previewEmpty');
   var container = document.getElementById('previewResults');
+  var mainContent = document.getElementById('previewMainContent');
   var cnt = document.getElementById('resultCount');
-  if (!container) { console.error('previewResults not found'); return; }
+  if (!container) return;
   var keys = Object.keys(results);
 
-  console.log('[showResults] keys:', keys, 'results count:', keys.length);
+  if (mainContent) mainContent.style.display = 'flex';
 
-  container.innerHTML = '';
-
-  // 收集成功的图片 & 失败的记录
-  previewImages = [];
-  previewGroups = {};   // {realPid: [{pid, realPid, src, name, color, fname}]}
-  failedGroups = {};     // {realPid: [{pid, error, seq}]}  ← 新增
+  // Merge successful results into grouped state
+  var addedCount = 0;
+  var failedCount = 0;
   for (var i = 0; i < keys.length; i++) {
     var pid = keys[i];
     var r = results[pid];
@@ -1499,146 +1956,81 @@ function showResults(results, prompt, timings) {
       var fname = r.local_path.split(/[\\/]/).pop();
       var pInfo = findProvider(pid) || {name: pid, color: '#5b8def'};
       var displayName = pInfo.name + (seq >= 1 ? ' #' + (seq+1) : '');
-      previewImages.push({ pid: pid, realPid: realPid, src: '/api/gallery/image/' + fname, name: displayName, color: pInfo.color, fname: fname });
-      if (!previewGroups[realPid]) previewGroups[realPid] = [];
-      previewGroups[realPid].push(previewImages[previewImages.length - 1]);
+      var imgEntry = { pid: pid, realPid: realPid, src: '/api/gallery/image/' + fname, name: displayName, color: pInfo.color, fname: fname };
+
+      // Check if already in grouped state (from fillPreviewPlaceholder)
+      var alreadyExists = false;
+      if (groupedPreviews[realPid]) {
+        for (var j = 0; j < groupedPreviews[realPid].images.length; j++) {
+          if (groupedPreviews[realPid].images[j].pid === pid) { alreadyExists = true; break; }
+        }
+      }
+      if (!alreadyExists) {
+        addImageToGroupedPreview(realPid, imgEntry);
+        addedCount++;
+      }
     } else {
-      // 失败记录也按 realPid 归组
-      if (!failedGroups[realPid]) failedGroups[realPid] = [];
-      failedGroups[realPid].push({ pid: pid, error: r.error || '未知错误', seq: seq });
+      failedCount++;
     }
   }
 
-  var totalSuccess = previewImages.length;
-  var totalFailed = Object.values(failedGroups).reduce(function(s, g){ return s + g.length; }, 0);
-  var totalModels = keys.length;
-  cnt.textContent = totalSuccess + ' 张成功' + (totalFailed > 0 ? ' · ' + totalFailed + ' 张失败' : '');
+  // Clean up remaining placeholders
+  Object.keys(previewPlaceholders).forEach(function(k) {
+    var ph = previewPlaceholders[k];
+    if (ph && ph.cardEl && ph.cardEl.parentNode) ph.cardEl.remove();
+  });
+  previewPlaceholders = {};
 
-  // 隐藏空状态
-  emptyEl.style.display = 'none';
+  // Render final grouped state
+  renderGroupedPreviews();
 
-  // 全部失败时，显示错误卡片（旧行为）
-  if (previewImages.length === 0) {
-    for (var i = 0; i < keys.length; i++) {
-      (function(pid){
-        var r = results[pid];
-        var pInfo = findProvider(pid) || {name: pid, color: '#5b8def'};
-        var card = document.createElement('div');
-        card.className = 'result-card fade-in';
-        card.innerHTML =
-          '<div class="result-error-box">' +
-            '<div class="err-icon">⚠</div>' +
-            '<div class="err-msg">' + escHtml(r.error || '未知错误') + '</div>' +
-          '</div>' +
-          '<div class="result-info">' +
-            '<span class="result-provider-tag" style="background:' + pInfo.color + '20;color:' + pInfo.color + ';">' +
-              '<span style="width:6px;height:6px;border-radius:50%;background:' + pInfo.color + ';display:inline-block;"></span>' +
-              ' ' + escHtml(pInfo.name) +
-            '</span>' +
-            '<span class="result-status-err">✗</span>' +
-          '</div>';
-        container.appendChild(card);
-      })(keys[i]);
-    }
-    return;
+  // Update count
+  var totalCount = 0;
+  Object.keys(groupedPreviews).forEach(function(k) { totalCount += groupedPreviews[k].images.length; });
+  var emptyEl = document.getElementById('previewEmpty');
+  if (totalCount === 0 && failedCount === 0) {
+    if (emptyEl) emptyEl.style.display = '';
+    if (mainContent) mainContent.style.display = 'none';
+  } else {
+    if (emptyEl) emptyEl.style.display = 'none';
   }
+  if (cnt) cnt.textContent = totalCount + ' 张成功' + (failedCount > 0 ? ' · ' + failedCount + ' 张失败' : '');
 
-  // 有图片: 按模型分组渲染（包含成功和失败分组）
-  previewIndex = 0;
-  renderGroupedPreview(container);
-  } catch(e) { console.error('[showResults] error:', e); alert('showResults error: ' + e.message); }
+  } catch(e) { console.error('[showResults] error:', e); }
 }
 
-function renderPreviewViewer(container) {
-  container.innerHTML = '';
-  if (!previewImages.length) return;
+function _addCardArrows(card, groupImgs, realPid) {
+  var idx = { value: 0 };
 
-  var cur = previewImages[previewIndex];
+  var btnL = document.createElement('button');
+  btnL.className = 'prev-arrow prev-arrow-left';
+  btnL.innerHTML = '‹';
+  btnL.onclick = function(e) {
+    e.stopPropagation();
+    idx.value = (idx.value - 1 + groupImgs.length) % groupImgs.length;
+    _refreshGroupCard(card, groupImgs, idx.value, realPid);
+  };
+  card.appendChild(btnL);
 
-  // 大图区域
-  var viewerWrap = document.createElement('div');
-  viewerWrap.style.cssText = 'position:relative;flex:1;display:flex;align-items:center;justify-content:center;min-height:200px;overflow:hidden;border-radius:10px;background:var(--bg-surface);';
-
-  // 左箭头
-  if (previewImages.length > 1) {
-    var btnPrev = document.createElement('button');
-    btnPrev.className = 'preview-nav-btn';
-    btnPrev.innerHTML = '‹';
-    btnPrev.style.cssText = 'position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:5;width:36px;height:36px;border-radius:50%;border:none;background:rgba(0,0,0,0.6);color:#fff;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;';
-    btnPrev.onmouseover = function(){ this.style.background='rgba(91,141,239,0.8)'; };
-    btnPrev.onmouseout = function(){ this.style.background='rgba(0,0,0,0.6)'; };
-    btnPrev.onclick = function(e){ e.stopPropagation(); previewPrev(); };
-    viewerWrap.appendChild(btnPrev);
-
-    var btnNext = document.createElement('button');
-    btnNext.className = 'preview-nav-btn';
-    btnNext.innerHTML = '›';
-    btnNext.style.cssText = 'position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:5;width:36px;height:36px;border-radius:50%;border:none;background:rgba(0,0,0,0.6);color:#fff;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;';
-    btnNext.onmouseover = function(){ this.style.background='rgba(91,141,239,0.8)'; };
-    btnNext.onmouseout = function(){ this.style.background='rgba(0,0,0,0.6)'; };
-    btnNext.onclick = function(e){ e.stopPropagation(); previewNext(); };
-    viewerWrap.appendChild(btnNext);
-  }
-
-  // 主图
-  var mainImg = document.createElement('img');
-  mainImg.id = 'previewMainImg';
-  mainImg.src = cur.src;
-  mainImg.alt = cur.name;
-  mainImg.style.cssText = 'max-width:100%;max-height:60vh;object-fit:contain;border-radius:8px;cursor:pointer;';
-  mainImg.onclick = function(){ openLightbox(cur.src, cur.name); };
-  viewerWrap.appendChild(mainImg);
-
-  // 序号数字
-  var counter = document.createElement('div');
-  counter.className = 'preview-counter';
-  counter.id = 'previewCounter';
-  counter.textContent = (previewIndex + 1) + ' / ' + previewImages.length;
-  counter.style.cssText = 'position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;font-size:12px;font-weight:600;padding:3px 12px;border-radius:20px;backdrop-filter:blur(4px);z-index:5;';
-  viewerWrap.appendChild(counter);
-
-  container.appendChild(viewerWrap);
-
-  // 模型标签
-  var infoRow = document.createElement('div');
-  infoRow.id = 'previewInfoRow';
-  infoRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 2px;';
-  infoRow.innerHTML =
-    '<span class="result-provider-tag" style="background:' + cur.color + '20;color:' + cur.color + ';">' +
-      '<span style="width:6px;height:6px;border-radius:50%;background:' + cur.color + ';display:inline-block;"></span>' +
-      ' ' + escHtml(cur.name) +
-    '</span>' +
-    '<div style="display:flex;gap:6px;">' +
-      '<a class="btn-ghost" href="' + cur.src + '" download style="font-size:10px;padding:4px 8px;">⬇ 下载</a>' +
-      '<button class="btn-ghost" onclick="openCompare()" style="font-size:10px;padding:4px 8px;">⚖ 对比</button>' +
-    '</div>';
-  container.appendChild(infoRow);
-
-  // 缩略图条
-  if (previewImages.length > 1) {
-    var thumbStrip = document.createElement('div');
-    thumbStrip.className = 'thumb-strip';
-    thumbStrip.id = 'thumbStrip';
-    for (var i = 0; i < previewImages.length; i++) {
-      (function(idx){
-        var img = document.createElement('img');
-        img.src = previewImages[idx].src;
-        img.className = idx === previewIndex ? 'active' : '';
-        img.style.cssText = 'width:56px;height:56px;object-fit:cover;border-radius:8px;cursor:pointer;opacity:' + (idx === previewIndex ? '1' : '0.5') + ';border:2px solid ' + (idx === previewIndex ? 'var(--accent)' : 'transparent') + ';transition:all 0.15s;flex-shrink:0;';
-        img.onclick = function(){ previewIndex = idx; renderPreviewViewer(document.getElementById('previewResults')); };
-        thumbStrip.appendChild(img);
-      })(i);
-    }
-    container.appendChild(thumbStrip);
-  }
+  var btnR = document.createElement('button');
+  btnR.className = 'prev-arrow prev-arrow-right';
+  btnR.innerHTML = '›';
+  btnR.onclick = function(e) {
+    e.stopPropagation();
+    idx.value = (idx.value + 1) % groupImgs.length;
+    _refreshGroupCard(card, groupImgs, idx.value, realPid);
+  };
+  card.appendChild(btnR);
 }
+
+// Old renderPreviewViewer removed — grid layout handles preview directly
+function renderPreviewViewer(container) { /* no-op: grid layout */ }
 
 function addResultToPreview(key, result) {
   var container = document.getElementById('previewResults');
   var emptyEl = document.getElementById('previewEmpty');
-  var cnt = document.getElementById('resultCount');
+  var mainContent = document.getElementById('previewMainContent');
   if (!container) return;
-  if (emptyEl) emptyEl.style.display = 'none';
 
   var pid = result.model || key;
   var realPid = key.replace(/_\d+$/, '');
@@ -1647,275 +2039,20 @@ function addResultToPreview(key, result) {
   var pInfo = findProvider(pid) || { name: pid, color: '#5b8def' };
   var displayName = pInfo.name + (seq >= 1 ? ' #' + (seq + 1) : '');
 
-  // 更新全局数据
   var imgEntry = { pid: pid, realPid: realPid, src: '/api/gallery/image/' + fname, name: displayName, color: pInfo.color, fname: fname };
-  previewImages.push(imgEntry);
-  if (!previewGroups[realPid]) previewGroups[realPid] = [];
-  previewGroups[realPid].push(imgEntry);
+  addImageToGroupedPreview(realPid, imgEntry);
 
-  // 查找或创建该模型的分组卡片
-  var groupCard = document.getElementById('prev_group_' + realPid);
-  if (!groupCard) {
-    groupCard = document.createElement('div');
-    groupCard.id = 'prev_group_' + realPid;
-    groupCard.className = 'fade-in';
-    groupCard.style.cssText = 'padding:14px;background:var(--bg-surface);border-radius:12px;border:1px solid var(--border);';
-    var header = document.createElement('div');
-    header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;';
-    header.innerHTML =
-      '<div style="display:flex;align-items:center;gap:8px;">' +
-        '<span style="width:8px;height:8px;border-radius:50%;background:' + pInfo.color + ';display:inline-block;"></span>' +
-        '<span style="font-weight:700;font-size:13px;color:var(--text-primary);">' + escHtml(getProviderDisplayName(realPid)) + '</span>' +
-      '</div>' +
-      '<span id="prev_grp_cnt_' + realPid + '" style="font-size:11px;color:var(--text-muted);"></span>';
-    groupCard.appendChild(header);
-    var viewerArea = document.createElement('div');
-    viewerArea.id = 'prev_grp_viewer_' + realPid;
-    viewerArea.style.cssText = 'position:relative;display:flex;align-items:center;justify-content:center;min-height:180px;overflow:hidden;border-radius:10px;background:var(--bg-card);';
-    groupCard.appendChild(viewerArea);
-    var thumbRow = document.createElement('div');
-    thumbRow.id = 'prev_grp_thumbs_' + realPid;
-    thumbRow.style.cssText = 'display:flex;gap:6px;margin-top:8px;overflow-x:auto;';
-    groupCard.appendChild(thumbRow);
-    container.appendChild(groupCard);
-  }
-
-  // 更新大图
-  var viewerArea = document.getElementById('prev_grp_viewer_' + realPid);
-  if (viewerArea) {
-    viewerArea.innerHTML = '<img src="' + imgEntry.src + '" style="max-width:100%;max-height:300px;border-radius:8px;object-fit:contain;cursor:pointer;" onclick="openLightbox(\'' + imgEntry.src + '\', \'' + displayName.replace(/'/g, "\\'") + '\')">';
-  }
-
-  // 添加缩略图
-  var thumbRow = document.getElementById('prev_grp_thumbs_' + realPid);
-  if (thumbRow) {
-    var thumb = document.createElement('img');
-    thumb.src = imgEntry.src;
-    thumb.style.cssText = 'width:56px;height:56px;object-fit:cover;border-radius:6px;border:2px solid ' + pInfo.color + ';cursor:pointer;flex-shrink:0;';
-    thumb.onclick = function() {
-      openLightbox(imgEntry.src, displayName);
-    };
-    thumbRow.appendChild(thumb);
-  }
-
-  // 更新计数
-  var totalSuccess = previewImages.length;
-  if (cnt) cnt.textContent = totalSuccess + ' 张成功';
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (mainContent) mainContent.style.display = 'flex';
+  renderGroupedPreviews();
 }
 
-function renderGroupedPreview(container) {
-  try {
-  if (!container) { console.error('container is null'); return; }
-  container.innerHTML = '';
-  if (!previewImages || !previewImages.length) { return; }
-
-  var scrollWrap = document.createElement('div');
-  scrollWrap.style.cssText = 'flex:1;overflow-y:auto;padding:8px 0;display:flex;flex-direction:column;gap:16px;';
-
-  var groupKeys = Object.keys(previewGroups);
-
-  for (var g = 0; g < groupKeys.length; g++) {
-    (function(rp, groupImgs) {
-      var pInfo = findProvider(rp) || {name: rp, color: '#5b8def'};
-      var groupIdx = 0; // 当前组内索引
-
-      // ── 分组外壳 ──
-      var groupCard = document.createElement('div');
-      groupCard.className = 'fade-in';
-      groupCard.style.cssText = 'padding:14px;background:var(--bg-surface);border-radius:12px;border:1px solid var(--border);';
-
-      // ── 标题栏 ──
-      var header = document.createElement('div');
-      header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;';
-      header.innerHTML =
-        '<div style="display:flex;align-items:center;gap:8px;">' +
-          '<span style="width:8px;height:8px;border-radius:50%;background:' + pInfo.color + ';display:inline-block;flex-shrink:0;"></span>' +
-          '<span style="font-weight:700;font-size:13px;color:var(--text-primary);">' + escHtml(getProviderDisplayName(rp)) + '</span>' +
-        '</div>' +
-        '<div style="display:flex;align-items:center;gap:6px;">' +
-          '<span id="grp_cnt_' + rp + '" style="font-size:11px;color:var(--text-muted);">' + (groupIdx+1) + ' / ' + groupImgs.length + '</span>' +
-          '<div style="display:flex;gap:4px;">' +
-            '<button id="grp_prev_' + rp + '" onclick="groupNav(\'' + rp + '\',-1)" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;line-height:1;">‹</button>' +
-            '<button id="grp_next_' + rp + '" onclick="groupNav(\'' + rp + '\',1)" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;line-height:1;">›</button>' +
-          '</div>' +
-        '</div>';
-      groupCard.appendChild(header);
-
-      // ── 大图区域 ──
-      var viewerWrap = document.createElement('div');
-      viewerWrap.id = 'grp_viewer_' + rp;
-      viewerWrap.style.cssText = 'position:relative;display:flex;align-items:center;justify-content:center;min-height:220px;overflow:hidden;border-radius:10px;background:var(--bg-card);';
-
-      function renderGroupImg() {
-        viewerWrap.innerHTML = '';
-        var cur = groupImgs[groupIdx];
-        var cntEl = document.getElementById('grp_cnt_' + rp);
-        if (cntEl) cntEl.textContent = (groupIdx+1) + ' / ' + groupImgs.length;
-
-        if (groupImgs.length > 1) {
-          var btnP = document.createElement('button');
-          btnP.style.cssText = 'position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:5;width:34px;height:34px;border-radius:50%;border:none;background:rgba(0,0,0,0.6);color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
-          btnP.innerHTML = '‹';
-          btnP.onclick = function(e){ e.stopPropagation(); groupNav(rp,-1); };
-          viewerWrap.appendChild(btnP);
-
-          var btnN = document.createElement('button');
-          btnN.style.cssText = 'position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:5;width:34px;height:34px;border-radius:50%;border:none;background:rgba(0,0,0,0.6);color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
-          btnN.innerHTML = '›';
-          btnN.onclick = function(e){ e.stopPropagation(); groupNav(rp,1); };
-          viewerWrap.appendChild(btnN);
-        }
-
-        var imgEl = document.createElement('img');
-        imgEl.id = 'grp_img_' + rp;
-        imgEl.src = cur.src;
-        imgEl.alt = cur.name;
-        imgEl.style.cssText = 'max-width:100%;max-height:55vh;object-fit:contain;border-radius:8px;cursor:pointer;';
-        imgEl.onclick = function(){ openLightbox(cur.src, cur.name); };
-        viewerWrap.appendChild(imgEl);
-      }
-      renderGroupImg();
-      groupCard.appendChild(viewerWrap);
-
-      // ── 缩略图条 ──
-      if (groupImgs.length > 1) {
-        var thumbRow = document.createElement('div');
-        thumbRow.id = 'grp_thumbs_' + rp;
-        thumbRow.style.cssText = 'display:flex;gap:8px;margin-top:10px;overflow-x:auto;padding-bottom:2px;';
-        for (var ti = 0; ti < groupImgs.length; ti++) {
-          (function(ti) {
-            var t = document.createElement('img');
-            t.src = groupImgs[ti].src;
-            t.alt = groupImgs[ti].name;
-            var isActive = ti === groupIdx;
-            t.style.cssText = 'width:54px;height:54px;object-fit:cover;border-radius:8px;cursor:pointer;opacity:' + (isActive ? '1' : '0.45') + ';border:2px solid ' + (isActive ? pInfo.color : 'transparent') + ';transition:all 0.15s;flex-shrink:0;';
-            t.onclick = function() {
-              groupIdx = ti;
-              renderGroupImg();
-              renderGroupThumbs(rp, groupImgs, groupIdx, pInfo.color);
-            };
-            thumbRow.appendChild(t);
-          })(ti);
-        }
-        groupCard.appendChild(thumbRow);
-      }
-
-      // ── 全局导航函数 ──
-      window['groupNav'] = window['groupNav'] || {};
-      window['groupNav_' + rp] = function(dir) {
-        groupIdx = (groupIdx + dir + groupImgs.length) % groupImgs.length;
-        renderGroupImg();
-        var thumbRow = document.getElementById('grp_thumbs_' + rp);
-        if (thumbRow) renderGroupThumbs(rp, groupImgs, groupIdx, pInfo.color);
-      };
-
-      // ── 分段进度条 ──
-      var gtimings = currentGroupTimings[rp];
-      if (gtimings && gtimings.images && gtimings.images.length > 0) {
-        var tTotal = gtimings.total;
-        var timingBar = document.createElement('div');
-        timingBar.style.cssText = 'margin-top:10px;padding:6px 0 2px;';
-        var timingLabel = document.createElement('div');
-        timingLabel.style.cssText = 'display:flex;justify-content:space-between;font-size:10px;color:var(--text-secondary);margin-bottom:4px;';
-        timingLabel.innerHTML = '<span>⏱ 耗时分布</span><span style="font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums;">' + tTotal.toFixed(1) + 's</span>';
-        timingBar.appendChild(timingLabel);
-        var segWrap = document.createElement('div');
-        segWrap.style.cssText = 'display:flex;height:6px;border-radius:3px;overflow:hidden;gap:2px;';
-        var segColors = ['#5b8def','#22d3a5','#a78bfa','#fbbf24','#f87171','#5eead4','#fb923c','#818cf8'];
-        for (var si = 0; si < gtimings.images.length; si++) {
-          var seg = gtimings.images[si];
-          var pct = tTotal > 0 ? (seg.elapsed / tTotal * 100) : (100 / gtimings.images.length);
-          var segEl = document.createElement('div');
-          var sc = gtimings.images.length === 1 ? pInfo.color : segColors[si % segColors.length];
-          segEl.style.cssText = 'flex:' + pct.toFixed(1) + ';border-radius:3px;background:' + sc + ';transition:flex 0.4s ease;position:relative;cursor:default;';
-          segEl.title = (gtimings.images.length > 1 ? '图片 #' + (si+1) + ': ' : '') + seg.elapsed.toFixed(1) + 's (' + Math.round(pct) + '%)';
-          segWrap.appendChild(segEl);
-        }
-        timingBar.appendChild(segWrap);
-        if (gtimings.images.length > 1) {
-          var legend = document.createElement('div');
-          legend.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;';
-          for (var li = 0; li < gtimings.images.length; li++) {
-            var lc = segColors[li % segColors.length];
-            var lt = document.createElement('span');
-            lt.style.cssText = 'font-size:9px;color:var(--text-muted);display:inline-flex;align-items:center;gap:3px;';
-            lt.innerHTML = '<span style="width:6px;height:6px;border-radius:2px;background:' + lc + ';display:inline-block;"></span>#' + (li+1) + ' ' + gtimings.images[li].elapsed.toFixed(1) + 's';
-            legend.appendChild(lt);
-          }
-          timingBar.appendChild(legend);
-        }
-        groupCard.appendChild(timingBar);
-      }
-
-      scrollWrap.appendChild(groupCard);
-    })(groupKeys[g], previewGroups[groupKeys[g]]);
-  }
-
-  // ── 渲染失败分组 ──
-  if (failedGroups && Object.keys(failedGroups).length > 0) {
-    var failKeys = Object.keys(failedGroups);
-    for (var fg = 0; fg < failKeys.length; fg++) {
-      (function(rp, failItems) {
-        var pInfo = findProvider(rp) || {name: rp, color: '#5b8def'};
-        var failCard = document.createElement('div');
-        failCard.className = 'fade-in';
-        failCard.style.cssText = 'padding:14px;background:var(--bg-surface);border-radius:12px;border:1px solid rgba(239,68,68,0.3);';
-
-        // 标题栏
-        var failHeader = document.createElement('div');
-        failHeader.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px;';
-        failHeader.innerHTML =
-          '<span style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block;"></span>' +
-          '<span style="font-weight:700;font-size:13px;color:#f87171;">' + escHtml(getProviderDisplayName(rp)) + '</span>' +
-          '<span style="font-size:10px;color:#ef4444;background:rgba(239,68,68,0.15);padding:1px 6px;border-radius:10px;margin-left:4px;">✗ ' + failItems.length + ' 张失败</span>';
-        failCard.appendChild(failHeader);
-
-        // 错误详情
-        for (var fi = 0; fi < failItems.length; fi++) {
-          var item = failItems[fi];
-          var seqLabel = item.seq >= 0 ? ' #' + (item.seq + 1) : '';
-          var errRow = document.createElement('div');
-          errRow.style.cssText = 'font-size:11px;color:#ef4444;background:rgba(239,68,68,0.08);padding:6px 10px;border-radius:6px;margin-bottom:4px;display:flex;align-items:flex-start;gap:6px;';
-          errRow.innerHTML = '<span style="color:#f87171;flex-shrink:0;">⚠</span><span>' + (getProviderDisplayName(rp) + seqLabel) + ': ' + escHtml(item.error || '未知错误') + '</span>';
-          failCard.appendChild(errRow);
-        }
-
-        scrollWrap.appendChild(failCard);
-      })(failKeys[fg], failedGroups[failKeys[fg]]);
-    }
-  }
-
-  container.appendChild(scrollWrap);
-  } catch(e) { console.error('[renderGroupedPreview] error:', e); alert('renderGroupedPreview error: ' + e.message); }
-}
-
-// 全局 groupNav 派发到各组
-function groupNav(rp, dir) {
-  var fn = window['groupNav_' + rp];
-  if (fn) fn(dir);
-}
-
-function renderGroupThumbs(rp, groupImgs, activeIdx, color) {
-  var row = document.getElementById('grp_thumbs_' + rp);
-  if (!row) return;
-  var thumbs = row.querySelectorAll('img');
-  for (var t = 0; t < thumbs.length; t++) {
-    var isActive = t === activeIdx;
-    thumbs[t].style.opacity = isActive ? '1' : '0.45';
-    thumbs[t].style.borderColor = isActive ? color : 'transparent';
-  }
-}
-
-function previewPrev() {
-  if (!previewImages.length) return;
-  previewIndex = (previewIndex - 1 + previewImages.length) % previewImages.length;
-  renderPreviewViewer(document.getElementById('previewResults'));
-}
-function previewNext() {
-  if (!previewImages.length) return;
-  previewIndex = (previewIndex + 1) % previewImages.length;
-  renderPreviewViewer(document.getElementById('previewResults'));
-}
+// Old renderGroupedPreview, groupNav, renderGroupThumbs, previewPrev, previewNext removed
+function renderGroupedPreview(container) { /* no-op: grid layout */ }
+function groupNav(rp, dir) { /* no-op */ }
+function renderGroupThumbs(rp, groupImgs, activeIdx, color) { /* no-op */ }
+function previewPrev() { /* no-op: grid layout */ }
+function previewNext() { /* no-op: grid layout */ }
 
 function findProvider(pid) {
   // 精确匹配
@@ -1965,6 +2102,8 @@ function openLightbox(src, label, prompt) {
     lightboxCurrentPrompt = prompt || '';
     if (promptEl) promptEl.textContent = prompt || '';
     if (promptBox) promptBox.style.display = prompt ? 'block' : 'none';
+    var lbLabel = promptBox ? promptBox.querySelector('.lb-prompt-label') : null;
+    if (lbLabel) lbLabel.textContent = '📝 生图提示词';
     lb.classList.add('show');
     document.body.style.overflow = 'hidden';
   }
@@ -2246,8 +2385,12 @@ function playVideoFromGallery(itemId) {
     lbDl.textContent = '⬇ 下载视频';
     lbDl.classList.remove('hidden');
   }
-  if (lbInfo) lbInfo.textContent = item.prompt || '';
-  if (lbPromptBox) lbPromptBox.style.display = 'none';
+  if (lbInfo) lbInfo.textContent = item.model || '';
+  lightboxCurrentPrompt = item.prompt || '';
+  if (lbPrompt) lbPrompt.textContent = item.prompt || '';
+  if (lbPromptBox) lbPromptBox.style.display = item.prompt ? 'block' : 'none';
+  var lbLabel = lbPromptBox ? lbPromptBox.querySelector('.lb-prompt-label') : null;
+  if (lbLabel) lbLabel.textContent = '📝 生视频提示词';
   lb.classList.add('show');
   document.body.style.overflow = 'hidden';
 }
@@ -4070,21 +4213,21 @@ function galleryStartRename() {
     return r.json();
   }).then(function(d){
     setStatus('已重命名: ' + oldId + ' → ' + d.new_id);
-    // 更新选中项
     var idx = selectedGalleryItems.indexOf(oldId);
     if (idx !== -1) selectedGalleryItems[idx] = d.new_id;
-    // 更新预览区（如果有）
-    for (var i = 0; i < previewImages.length; i++) {
-      if (previewImages[i].fname && previewImages[i].fname.indexOf(oldId) === 0) {
-        // 需要更新 src
-        var newFname = d.new_id + previewImages[i].fname.substring(oldId.length);
-        previewImages[i].fname = newFname;
-        previewImages[i].src = '/api/gallery/image/' + newFname;
+    // Update grouped preview image paths
+    Object.keys(groupedPreviews).forEach(function(rp) {
+      var group = groupedPreviews[rp];
+      for (var i = 0; i < group.images.length; i++) {
+        var img = group.images[i];
+        if (img.fname && img.fname.indexOf(oldId) === 0) {
+          var newFname = d.new_id + img.fname.substring(oldId.length);
+          img.fname = newFname;
+          img.src = '/api/gallery/image/' + newFname;
+        }
       }
-    }
-    // 如果预览区有显示，重新渲染
-    if (previewImages.length) renderPreviewViewer(document.getElementById('previewResults'));
-    // 刷新图库
+    });
+    renderGroupedPreviews();
     loadGallery();
   }).catch(function(e){ alert('重命名失败: ' + e.message); });
 }

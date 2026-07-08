@@ -68,13 +68,277 @@
   flex-direction: column;
   gap: var(--space-3);
   overflow-y: auto;
-  flex: 1 1 0;
+  flex: 2 1 0;
   min-width: 260px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: var(--space-4);
   box-shadow: var(--shadow-xs);
+}
+
+.generate-bottom-row {
+  display: flex;
+  gap: var(--space-3);
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+
+/* ── Preview Grid ── */
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+/* ── Preview Card (image frame) ── */
+.prev-card {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 2px solid transparent;
+  transition: border-color 0.3s, box-shadow 0.3s;
+  cursor: pointer;
+}
+.prev-card:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+}
+
+/* ── Border Progress Animation ── */
+.prev-card-border {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  pointer-events: none;
+  z-index: 2;
+}
+.prev-card-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  padding: 2px;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    var(--accent) 15%,
+    var(--accent) 30%,
+    transparent 45%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: border-spin 1.2s linear infinite;
+  opacity: 0;
+}
+.prev-card.generating .prev-card-border::before {
+  opacity: 0;
+}
+.prev-card.completed .prev-card-border::before {
+  opacity: 0;
+  background: #22c55e;
+}
+.prev-card.completed {
+  border-color: #22c55e44;
+}
+
+@keyframes border-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Placeholder (generating) ── */
+.prev-placeholder {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--bg-card);
+  animation: placeholder-pulse 1.8s ease-in-out;
+}
+.prev-placeholder .spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.prev-placeholder .ph-text {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+@keyframes placeholder-pulse {
+  0%, 100% { background: var(--bg-card); }
+  50% { background: var(--bg-base); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Completed Image ── */
+.prev-img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+  position: relative;
+  z-index: 1;
+  transition: transform 0.2s;
+}
+.prev-img:hover {
+  transform: scale(1.03);
+}
+
+/* ── Card Footer ── */
+.prev-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 6px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.75));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.prev-footer .provider-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.prev-footer .provider-name {
+  font-size: 9px;
+  color: #fff;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prev-footer .elapsed-badge {
+  font-size: 8px;
+  color: rgba(255,255,255,0.8);
+  background: rgba(0,0,0,0.4);
+  padding: 1px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+/* ── Retry Button (on failed cards) ── */
+.prev-retry-btn {
+  position: absolute;
+  bottom: 30px;
+  right: 6px;
+  z-index: 10;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(239,68,68,0.85);
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: all 0.2s;
+  opacity: 0;
+}
+.prev-card.failed:hover .prev-retry-btn {
+  opacity: 1;
+}
+.prev-retry-btn:hover {
+  background: rgba(239,68,68,1);
+  transform: scale(1.05);
+}
+
+/* ── Arrow Nav ── */
+.prev-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.prev-card:hover .prev-arrow {
+  opacity: 1;
+}
+.prev-arrow-left { left: 6px; }
+.prev-arrow-right { right: 6px; }
+
+/* ── Thumbnail Row ── */
+.prev-thumbs {
+  display: flex;
+  gap: 4px;
+  padding: 4px 6px;
+  overflow-x: auto;
+}
+.prev-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  object-fit: cover;
+  cursor: pointer;
+  opacity: 0.5;
+  border: 2px solid transparent;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.prev-thumb.active {
+  opacity: 1;
+  border-color: var(--accent);
+}
+
+/* ── Preview Log Grid (vertical card) ── */
+.prev-log-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  max-height: 140px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.prev-log-card .log-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+}
+.prev-log-card .log-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.prev-log-card .log-line {
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 9px;
 }
 
 /* ── Divider Drag ── */
@@ -606,7 +870,7 @@ body.dragging-divider {
   background: rgba(0, 0, 0, 0.88);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  z-index: var(--z-lightbox);
+  z-index: 99999;
   display: none;
   align-items: center;
   justify-content: center;
@@ -624,6 +888,15 @@ body.dragging-divider {
   box-shadow: 0 8px 60px rgba(0, 0, 0, 0.6);
   object-fit: contain;
   cursor: zoom-in;
+}
+
+#lightbox-video {
+  max-width: 90vw;
+  max-height: 80vh;
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 60px rgba(0, 0, 0, 0.6);
+  object-fit: contain;
+  outline: none;
 }
 
 #lightbox-img.zoomed {
@@ -644,24 +917,7 @@ body.dragging-divider {
   color: var(--text-muted);
 }
 
-/* ── Compare Modal ── */
-#compareModal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.88);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  z-index: calc(var(--z-lightbox) - 1);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  padding: var(--space-5);
-}
-
-#compareModal.show {
-  display: flex;
-}
+/* ── Compare Modal (base in app.css) ── */
 
 .compare-header {
   display: flex;
@@ -709,22 +965,7 @@ body.dragging-divider {
   justify-content: space-between;
 }
 
-/* ── Provider Modal ── */
-#providerModal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  z-index: calc(var(--z-lightbox) - 2);
-  display: none;
-  align-items: center;
-  justify-content: center;
-}
-
-#providerModal.show {
-  display: flex;
-}
+/* ── Provider Modal (base in app.css) ── */
 
 .provider-modal-box {
   width: min(1440px, 95vw);
@@ -837,22 +1078,7 @@ body.dragging-divider {
   color: var(--text-muted);
 }
 
-/* ── Theme Modal ── */
-#themeModal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  z-index: calc(var(--z-lightbox) - 2);
-  display: none;
-  align-items: center;
-  justify-content: center;
-}
-
-#themeModal.show {
-  display: flex;
-}
+/* ── Theme Modal (base in app.css) ── */
 
 .theme-box {
   width: 480px;
@@ -887,22 +1113,7 @@ body.dragging-divider {
   flex-shrink: 0;
 }
 
-/* ── Log Modal ── */
-#logModal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  z-index: calc(var(--z-lightbox) - 2);
-  display: none;
-  align-items: center;
-  justify-content: center;
-}
-
-#logModal.show {
-  display: flex;
-}
+/* ── Log Modal (base in app.css) ── */
 
 .log-box {
   width: 720px;
@@ -955,22 +1166,7 @@ body.dragging-divider {
   background: var(--accent-light);
 }
 
-/* ── LLM Modal ── */
-#llmModal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  z-index: calc(var(--z-lightbox) - 2);
-  display: none;
-  align-items: center;
-  justify-content: center;
-}
-
-#llmModal.show {
-  display: flex;
-}
+/* ── LLM Modal (base in app.css) ── */
 
 .llm-provider-card {
   padding: var(--space-3) var(--space-4);
@@ -1015,4 +1211,60 @@ body.dragging-divider {
 .thumb-strip img.active {
   opacity: 1;
   border-color: var(--accent);
+}
+
+/* ── Grouped Preview Card ── */
+.grouped-card {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-card);
+}
+
+.grouped-card .prev-img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+}
+
+.prev-group-label {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 5px;
+  z-index: 2;
+  pointer-events: none;
+  max-width: calc(100% - 36px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prev-group-count {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(0,122,255,0.85);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: none;
 }

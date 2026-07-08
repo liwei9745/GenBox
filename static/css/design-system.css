@@ -110,7 +110,7 @@
   --z-sticky: 200;
   --z-overlay: 900;
   --z-modal: 1000;
-  --z-lightbox: 2000;
+  --z-lightbox: 99999;
   --z-dock: 500;
 
   /* Glass */
