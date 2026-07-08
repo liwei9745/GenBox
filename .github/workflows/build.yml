@@ -1,0 +1,164 @@
+name: Build Desktop Clients
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      build_all:
+        description: 'Build all platforms'
+        required: false
+        default: 'true'
+        type: boolean
+
+env:
+  APP_NAME: GenBox
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # Windows Build
+  # ──────────────────────────────────────────────────────────────
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller psutil requests
+
+      - name: Build with PyInstaller
+        run: python build.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-Windows-x64
+          path: dist/${{ env.APP_NAME }}.exe
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────
+  # macOS Build
+  # ──────────────────────────────────────────────────────────────
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller psutil requests
+
+      - name: Build with PyInstaller
+        run: python build.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-macOS
+          path: dist/${{ env.APP_NAME }}
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────
+  # Linux Build
+  # ──────────────────────────────────────────────────────────────
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller psutil requests
+
+      - name: Build with PyInstaller
+        run: python build.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-Linux-x64
+          path: dist/${{ env.APP_NAME }}
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────
+  # Create Release
+  # ──────────────────────────────────────────────────────────────
+  release:
+    name: Create Release
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ env.APP_NAME }} ${{ github.ref_name }}
+          body: |
+            ## ${{ env.APP_NAME }} ${{ github.ref_name }}
+            
+            ### 下载说明
+            - **Windows**: 下载 `GenBox-Windows-x64.exe`，双击运行
+            - **macOS**: 下载 `GenBox-macOS`，终端运行 `chmod +x GenBox-macOS && ./GenBox-macOS`
+            - **Linux**: 下载 `GenBox-Linux-x64`，终端运行 `chmod +x GenBox-Linux-x64 && ./GenBox-Linux-x64`
+            
+            ### 首次运行
+            1. 运行程序后自动打开浏览器
+            2. 点击底部 Dock 的「Provider 管理」添加 API Key
+            3. 选择模型开始创作
+            
+            ### 注意事项
+            - Windows 需要允许防火墙访问
+            - macOS 首次运行需要在「系统设置 > 隐私与安全性」中允许
+            - Linux 需要安装 ffmpeg: `sudo apt install ffmpeg`
+          files: |
+            artifacts/${{ env.APP_NAME }}-Windows-x64/${{ env.APP_NAME }}.exe
+            artifacts/${{ env.APP_NAME }}-macOS/${{ env.APP_NAME }}
+            artifacts/${{ env.APP_NAME }}-Linux-x64/${{ env.APP_NAME }}
+          draft: false
+          prerelease: false

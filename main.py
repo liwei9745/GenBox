@@ -14,6 +14,24 @@ import webbrowser
 from pathlib import Path
 from typing import List, Optional
 
+# ──────────────────────────────────────────────────────────────
+# PyInstaller 路径兼容
+# ──────────────────────────────────────────────────────────────
+def get_base_path() -> Path:
+    """获取基础路径（兼容 PyInstaller 打包）"""
+    if getattr(sys, 'frozen', False):
+        # PyInstaller 打包后
+        return Path(sys._MEIPASS)
+    else:
+        # 源码运行
+        return Path(__file__).parent
+
+BASE_PATH = get_base_path()
+
+# 确保工作目录正确
+if getattr(sys, 'frozen', False):
+    os.chdir(Path(sys.executable).parent)
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -305,7 +323,7 @@ def _scan_gallery(limit: int = 100) -> List[dict]:
 
 @app.get("/")
 async def root():
-    return FileResponse("static/index.html")
+    return FileResponse(str(BASE_PATH / "static" / "index.html"))
 
 
 @app.get("/api/status")
@@ -2588,7 +2606,7 @@ async def setup_confirm():
 # ──────────────────────────────────────────────────────────────
 # 静态文件（必须在所有 API 路由之后挂载）
 # ──────────────────────────────────────────────────────────────
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=str(BASE_PATH / "static")), name="static")
 
 
 # ──────────────────────────────────────────────────────────────

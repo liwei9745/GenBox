@@ -45,6 +45,11 @@ logs/
 # 实验分支配置
 config/
 
+# ══ PyInstaller 构建产物 ══
+build/
+dist/
+*.spec
+
 # ══ AI 开发工具（不需要入库）══
 .hermes/
 .opencode/

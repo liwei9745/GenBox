@@ -5,15 +5,37 @@
 """
 import json
 import os
+import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent / ".env")
+# ──────────────────────────────────────────────────────────────
+# PyInstaller 路径兼容
+# ──────────────────────────────────────────────────────────────
+def get_base_dir() -> Path:
+    """获取基础目录（兼容 PyInstaller 打包）"""
+    if getattr(sys, 'frozen', False):
+        # PyInstaller 打包后，配置文件放在可执行文件同目录
+        return Path(sys.executable).parent
+    else:
+        # 源码运行
+        return Path(__file__).parent
 
-BASE_DIR = Path(__file__).parent
+BASE_DIR = get_base_dir()
+
+# 加载 .env（优先从可执行文件目录加载）
+env_path = BASE_DIR / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+else:
+    # 尝试从 _MEIPASS 加载（打包后的临时目录）
+    if getattr(sys, 'frozen', False):
+        load_dotenv(Path(sys._MEIPASS) / ".env", override=False)
+
+# 运行时数据目录（始终放在可执行文件同目录）
 STORAGE_DIR = BASE_DIR / "storage"
 STORAGE_DIR.mkdir(exist_ok=True)
 GALLERY_DIR = STORAGE_DIR / "gallery"
