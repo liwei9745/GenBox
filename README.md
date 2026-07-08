@@ -45,11 +45,12 @@ GenBox 是一个本地部署的 **一站式 AI 创作工具箱**，将多个 AI 
 |------|------|------|
 | 🎨 生图 | GPT Image 2 | [chatgpt2api](https://github.com/yukkcat/chatgpt2api) |
 | 🎨 生图 | Gemini 3.1 Flash | [flow2api](https://github.com/TheSmallHanCat/flow2api) |
-| 🎨 生图 | Qwen2API | [qwen2API](https://github.com/YuJunZhiXue/qwen2API) |
-| 🎨 生图 | Agnes Image | [AIClient2API](https://github.com/justlovemaki/AIClient2API) |
-| 🎬 生视频 | Agnes Video | [AIClient2API](https://github.com/justlovemaki/AIClient2API) |
+| 🎨 生图 | Gemini Pro | [gemini2api](https://github.com/xwteam/gemini2api) |
+| 🎨 生图 | Agnes Image | [Agnes AI](https://platform.agnes-ai.com) |
+| 🎨 生图 | Qwen2API ⚠️ | [qwen2API](https://github.com/YuJunZhiXue/qwen2API) *(暂不可用，等待作者更新)* |
+| 🎬 生视频 | Agnes Video | [Agnes AI](https://platform.agnes-ai.com) |
 | 🎬 生视频 | Gemini Video | [flow2api](https://github.com/TheSmallHanCat/flow2api) |
-| 🎬 生视频 | Qwen Video | [qwen2API](https://github.com/YuJunZhiXue/qwen2API) |
+| 🎬 生视频 | Qwen Video ⚠️ | [qwen2API](https://github.com/YuJunZhiXue/qwen2API) *(暂不可用，等待作者更新)* |
 | 🤖 LLM | 提示词优化 | 任意 OpenAI 兼容接口 |
 
 ---
@@ -217,8 +218,9 @@ LLM_BASE_URL=https://api.openai.com/v1
 | [chatgpt2api](https://github.com/basketikun/chatgpt2api) | [basketikun](https://github.com/basketikun) | GPT Image 生图接口支持 |
 | [4k-image-api](https://github.com/jianjianai/4k-image-api) | [简简aw](https://github.com/jianjianai) | 图片变形 + Lanczos3 超分辨率 |
 | [flow2api](https://github.com/TheSmallHanCat/flow2api) | [TheSmallHanCat](https://github.com/TheSmallHanCat) | Gemini 生图/生视频接口支持 |
-| [AIClient2API](https://github.com/justlovemaki/AIClient2API) | [justlovemaki](https://github.com/justlovemaki) | Agnes 生图/生视频接口支持 |
-| [qwen2API](https://github.com/YuJunZhiXue/qwen2API) | [YuJunZhiXue](https://github.com/YuJunZhiXue) | Qwen 生图/生视频接口支持 |
+| [gemini2api](https://github.com/xwteam/gemini2api) | [xwteam](https://github.com/xwteam) | Gemini Pro 生图接口支持 |
+| [AIClient2API](https://github.com/justlovemaki/AIClient2API) | [justlovemaki](https://github.com/justlovemaki) | 多协议 AI API 代理 |
+| [Agnes AI](https://platform.agnes-ai.com) | [Sapiens AI](https://agnes-ai.com) | Agnes 生图/生视频 API |
 
 ### 原版项目贡献者
 
