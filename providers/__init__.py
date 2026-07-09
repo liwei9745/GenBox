@@ -19,14 +19,29 @@ from io import BytesIO
 from config import cfg_mgr, GALLERY_DIR, ProviderConfig
 
 
+# 国内模型厂商（始终直连，不走代理）
+CHINESE_PROVIDERS = {
+    "qwen",        # 阿里通义千问
+    "zhipu",       # 智谱 GLM
+    "deepseek",    # DeepSeek
+    "volcengine",  # 火山引擎
+    "siliconflow", # SiliconFlow
+}
+
+
 def _get_proxy_url(cfg: ProviderConfig = None) -> str | None:
     """获取代理 URL（支持 Provider 级别跳过代理）
     
     逻辑：
-    1. 全局代理未启用 → 返回 None（直连）
-    2. Provider 设置 skip_proxy=True → 返回 None（直连）
-    3. 其他情况 → 返回代理 URL
+    1. 国内厂商（CHINESE_PROVIDERS）→ 始终直连
+    2. 全局代理未启用 → 返回 None（直连）
+    3. Provider 设置 skip_proxy=True → 返回 None（直连）
+    4. 其他情况 → 返回代理 URL
     """
+    # 国内厂商始终直连
+    if cfg and cfg.id in CHINESE_PROVIDERS:
+        return None
+    
     proxy = cfg_mgr.config.proxy
     if not proxy.enabled or not proxy.host:
         return None
