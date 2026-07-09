@@ -10,24 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Cross-platform desktop builds (Windows, macOS, Linux)
-- GitHub Actions CI/CD workflow
-- PyInstaller build configuration
-- Release notes template
+- Provider capabilities system for explicit i2i/i2v support declaration
+- Capabilities UI in provider settings (image: t2i/i2i, video: t2v/i2v)
+- Dynamic capabilities section updates when changing provider type
+- Quick action buttons in lightbox (图生图/生视频)
+- Quick action buttons in gallery overlay
+- Video model fallback list for better UX
 
 ### Changed
-- **BREAKING**: Default APP_MODE changed from `dev` to `prod` (authentication enabled by default)
-- Updated main.py for PyInstaller path compatibility
-- Updated config.py for PyInstaller path compatibility
-- Improved headless Linux server support
-- Enhanced first-run admin key display with clear instructions
+- Capabilities checkboxes now show only relevant options per provider type
+- Improved error messages for model fetching
 
 ### Fixed
-- CORS security configuration
-- SSL verification options
-- Admin key hashing
-- Rate limiting for API endpoints
-- Security headers
+- Dock alignment and visual consistency
+- Hover effects for dock action items
 
 ---
 
