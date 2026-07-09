@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.0] - 2026-07-09
+
+### Added
+- i2i layout: reference image (20%) + prompt (80%) side-by-side
+- Video preview placeholder cards with spinner animation (4:3 ratio)
+- Video page gallery picker with model filter dropdown
+- Gallery picker shows source model name for each image
+- Close button in provider modal (red background, more visible)
+- Video model dropdown filters out image-only models
+- Failed generations write detailed errors to logs.jsonl
+
+### Changed
+- `/api/generate` now returns `provider_states` in initial response for immediate placeholder creation
+- `/api/preview/images` returns 40 items (up from 20) with model info
+- Video preview placeholders use same style as image placeholders (`.prev-card.generating`)
+
+### Fixed
+- i2i generation not showing placeholder spinner (`.hidden` class with `!important` overrode inline styles)
+- Lightbox "send to i2i" sending URL instead of base64 (backend decode failure)
+- Lightbox "send to video" sending URL instead of base64
+- Video page gallery picker only showing current model's images
+- Video generation failing immediately when using images from lightbox
+
+---
+
 ## [Unreleased]
 
 ### Added
