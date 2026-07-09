@@ -2833,8 +2833,9 @@ if __name__ == "__main__":
 
     # 首次启动：交互式选择模式
     def _first_run_setup():
-        """首次启动时让用户选择运行模式"""
+        """首次启动时引导用户完成配置"""
         from config import _read_env, _write_env, BASE_DIR
+        import secrets
         
         env = _read_env()
         # 检查是否已配置过
@@ -2846,34 +2847,89 @@ if __name__ == "__main__":
 ║                   🎉 欢迎使用 GenBox!                       ║
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                              ║
-║  首次启动，请选择运行模式：                                   ║
+║  首次启动，请选择部署方式：                                   ║
 ║                                                              ║
-║  [1] 正式使用 (推荐)                                         ║
-║      - 需要管理员密钥认证                                    ║
-║      - 适合 VPS 部署、公网访问                               ║
+║  [1] 本地使用（推荐新手）                                     ║
+║      - 无需认证，打开即用                                    ║
+║      - 仅本机可访问                                          ║
+║      - 适合个人电脑调试                                      ║
+║                                                              ║
+║  [2] VPS/云服务器部署                                         ║
+║      - 需要管理员密钥登录                                    ║
+║      - 可通过公网访问                                        ║
 ║      - 安全性高                                              ║
 ║                                                              ║
-║  [2] 本地开发                                                ║
-║      - 无需认证，直接访问                                    ║
-║      - 适合本地调试                                          ║
-║      - 仅限本机使用                                          ║
+║  [3] Docker 部署                                             ║
+║      - 使用 docker-compose 一键部署                          ║
+║      - 参考 .env.example 配置                                ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
         """)
         
         while True:
             try:
-                choice = input("请选择 (1 或 2): ").strip()
+                choice = input("请选择 (1/2/3): ").strip()
                 if choice == "1":
-                    _write_env({"APP_MODE": "prod"})
-                    print("\n✅ 已启用生产模式（需要认证）\n")
+                    # 本地开发模式
+                    _write_env({"APP_MODE": "dev"})
+                    print("\n✅ 已启用本地模式（无需认证，仅限本机访问）\n")
                     break
                 elif choice == "2":
-                    _write_env({"APP_MODE": "dev"})
-                    print("\n⚠️  已启用开发模式（无需认证，仅限本机使用）\n")
+                    # VPS 模式
+                    _write_env({"APP_MODE": "prod"})
+                    print("\n✅ 已启用生产模式（需要认证）\n")
+                    
+                    # 询问 CORS 配置
+                    print("─" * 50)
+                    print("📡 网络配置")
+                    print("─" * 50)
+                    print("为了让浏览器能访问 API，需要配置允许的源。")
+                    print("如果有域名请输入域名，否则输入服务器 IP。")
+                    print("多个地址用逗号分隔，直接回车跳过（默认仅本机）。")
+                    print()
+                    
+                    origins_input = input("允许的源 (如 http://your-ip:8891): ").strip()
+                    if origins_input:
+                        _write_env({"ALLOWED_ORIGINS": origins_input})
+                        print(f"✅ 已设置 CORS: {origins_input}\n")
+                    else:
+                        print("⏭️  跳过，使用默认配置（仅本机）\n")
+                    
+                    # 自动生成并显示管理密钥
+                    admin_key = secrets.token_urlsafe(16)
+                    _write_env({"ADMIN_KEY": admin_key})
+                    print("─" * 50)
+                    print("🔐 管理员密钥已自动生成")
+                    print("─" * 50)
+                    print(f"\n   {admin_key}\n")
+                    print("⚠️  请立即保存此密钥！关闭后无法再次查看！")
+                    print("   建议保存到密码管理器。\n")
+                    break
+                elif choice == "3":
+                    # Docker 模式
+                    print("\n🐳 Docker 部署指引：")
+                    print("─" * 50)
+                    print("1. 复制环境配置文件：")
+                    print("   cp .env.example .env")
+                    print()
+                    print("2. 编辑 .env 文件，填入你的 API Key：")
+                    print("   nano .env")
+                    print()
+                    print("3. 启动容器：")
+                    print("   docker-compose up -d")
+                    print()
+                    print("4. 查看日志：")
+                    print("   docker-compose logs -f")
+                    print()
+                    print("详细说明请参考 README.md 的 Docker 部署章节。")
+                    print("─" * 50)
+                    
+                    # Docker 默认使用 prod 模式
+                    _write_env({"APP_MODE": "prod"})
+                    print("\n✅ Docker 部署默认启用生产模式\n")
                     break
                 else:
-                    print("❌ 请输入 1 或 2")
+                    print("❌ 请输入 1、2 或 3")
             except (EOFError, KeyboardInterrupt):
                 # 无交互环境（如 Docker），默认使用 prod 模式
                 _write_env({"APP_MODE": "prod"})

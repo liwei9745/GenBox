@@ -109,7 +109,7 @@
 **第一步：克隆项目**
 
 ```bash
-git clone -b feat/glass-ui-redesign https://github.com/liwei9745/GenBox.git
+git clone -b feat/quick-action-buttons https://github.com/liwei9745/GenBox.git
 cd GenBox
 ```
 
@@ -119,26 +119,24 @@ cd GenBox
 pip install -r requirements.txt
 ```
 
-**第三步：配置 API**
-
-方式一：Web 界面配置（推荐）
-
-启动后在浏览器中打开 Provider 管理，直接填写 API 地址和密钥
-
-方式二：环境变量配置
-
-```bash
-cp .env.example .env
-# 编辑 .env 填入你的 API Key
-```
-
-两种方式会自动同步，任选其一即可
-
-**第四步：启动**
+**第三步：启动（首次运行会引导配置）**
 
 ```bash
 python main.py
 ```
+
+首次启动时会显示配置向导：
+
+```
+请选择部署方式：
+  [1] 本地使用    - 无需认证，打开即用
+  [2] VPS 部署    - 需要密钥认证，可远程访问
+  [3] Docker 部署 - 使用 .env.example 配置
+```
+
+- 选择 **1**（本地）：直接使用，无需任何配置
+- 选择 **2**（VPS）：会自动生成管理密钥，并引导配置网络
+- 选择 **3**（Docker）：显示 Docker 部署指引
 
 浏览器自动打开 `http://localhost:8891`
 
@@ -148,19 +146,33 @@ python main.py
 
 无需安装 Python 和依赖，一键启动：
 
-**方式一：docker-compose（推荐）**
+**步骤 1：配置环境**
 
 ```bash
-git clone -b feat/glass-ui-redesign https://github.com/liwei9745/GenBox.git
+git clone -b feat/quick-action-buttons https://github.com/liwei9745/GenBox.git
 cd GenBox
 cp .env.example .env
-# 编辑 .env 填入 API Key
-docker-compose up -d
 ```
 
-**方式二：直接运行**
+**步骤 2：编辑 `.env` 文件**
+
+> ⚠️ **必填项**：`ALLOWED_ORIGINS` 必须设置为你的服务器 IP 或域名，否则浏览器无法访问 API
 
 ```bash
+# 最小配置示例（VPS 部署）
+APP_MODE=prod
+ALLOWED_ORIGINS=http://你的服务器IP:8891
+GPT_IMAGE_API_KEY=sk-xxx
+GPT_IMAGE_BASE_URL=https://api.openai.com/v1
+```
+
+**步骤 3：启动容器**
+
+```bash
+# 方式一：docker-compose（推荐）
+docker-compose up -d
+
+# 方式二：直接运行
 docker build -t genbox .
 docker run -d -p 8891:8891 \
   -v ./storage:/app/storage \
@@ -168,7 +180,12 @@ docker run -d -p 8891:8891 \
   genbox
 ```
 
-访问 `http://localhost:8891`
+**步骤 4：访问**
+
+- 本机：`http://localhost:8891`
+- VPS：`http://你的服务器IP:8891`
+
+首次访问会显示管理密钥，请立即保存！
 
 ---
 
