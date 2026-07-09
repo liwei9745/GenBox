@@ -156,6 +156,15 @@ jobs:
           mv "artifacts/macos/${{ env.APP_NAME }}" "artifacts/macos/${{ env.APP_NAME }}-macOS"
           mv "artifacts/linux/${{ env.APP_NAME }}" "artifacts/linux/${{ env.APP_NAME }}-Linux-x64"
 
+      - name: Package helper scripts
+        run: |
+          mkdir -p artifacts/scripts
+          cp check_env.py artifacts/scripts/
+          cp start.bat artifacts/scripts/
+          cp start.ps1 artifacts/scripts/
+          cp .env.example artifacts/scripts/
+          cd artifacts/scripts && zip -r ../${{ env.APP_NAME }}-scripts.zip .
+
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -171,4 +180,5 @@ jobs:
           gh release upload "${{ github.ref_name }}" \
             "artifacts/windows/${{ env.APP_NAME }}.exe" \
             "artifacts/macos/${{ env.APP_NAME }}-macOS" \
-            "artifacts/linux/${{ env.APP_NAME }}-Linux-x64"
+            "artifacts/linux/${{ env.APP_NAME }}-Linux-x64" \
+            "artifacts/${{ env.APP_NAME }}-scripts.zip"
