@@ -5,7 +5,7 @@
 
 > 💡 觉得不错？点个 [Star](https://github.com/liwei9745/GenBox/stargazer) 鼓励一下吧！
 
-> 📢 **QQ 交流群**：[点击加入 gemini/gpt-2api 交流群](http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=cAD_FiBuEpMzJJCoPTCjK_S9JITQgRw4&authKey=4x7%2Bkfemg5zoik3%2Bna3Biag6CBTkQ88VqDP0gmQTswH9o1OsWL6B%2BguJpfYKzASS&noverify=0&group_code=1005859624)（问题反馈 / 模型交流 / 部署答疑）
+> 📢 **QQ 交流群**：[点击加入 gemini/gpt-2api 交流群](http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=cAD_FiBuEpMzJJCoPTCjK_S9JITQgRw4&authKey=4x7%2Bkfemg5zoik3%2Bna3Biag6CBTkQ88VqDP0gmQTswH9o1OsWL6B%2BguJpfYKzASS&noverify=0&group_code=1005859624)（入群回答：来自猴哥电话GenBox仓库）
 
 ![系统看板](screenshots/sanitized/01-dashboard.png)
 

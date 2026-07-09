@@ -2,9 +2,10 @@ name: Build Docker Image
 
 on:
   push:
-    branches: [ "feat/glass-ui-redesign" ]
+    branches: [ "master", "dev" ]
+    tags: [ "v*" ]
   pull_request:
-    branches: [ "feat/glass-ui-redesign" ]
+    branches: [ "master" ]
 
 env:
   REGISTRY: ghcr.io
@@ -35,6 +36,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=ref,event=branch
             type=sha,prefix=
 
