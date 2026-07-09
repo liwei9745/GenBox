@@ -17,11 +17,11 @@
 
 前往 [Releases 页面](https://github.com/liwei9745/GenBox/releases/latest) 下载：
 
-| 平台 | 文件 | 运行方式 |
-|------|------|----------|
-| **Windows** | `GenBox.exe` | 双击运行 |
-| **macOS** | `GenBox-macOS` | 终端运行 `chmod +x GenBox-macOS && ./GenBox-macOS` |
-| **Linux** | `GenBox-Linux` | 终端运行 `chmod +x GenBox-Linux && ./GenBox-Linux` |
+| 平台 | 文件 | 用途 | 运行方式 |
+|------|------|------|----------|
+| **Windows** | `GenBox.exe` | 本地使用 | 双击运行 |
+| **macOS** | `GenBox-macOS` | 本地使用 | 终端运行 `chmod +x GenBox-macOS && ./GenBox-macOS` |
+| **Linux** | `GenBox-Linux` | VPS 部署 | 终端运行 `chmod +x GenBox-Linux && ./GenBox-Linux` |
 
 #### Windows 详细步骤
 
@@ -37,12 +37,31 @@
 1. 打开 **系统设置 → 隐私与安全性**
 2. 在「安全性」部分点击 **仍要打开**
 
-#### Linux 注意事项
+#### Linux (VPS) 注意事项
 
 ```bash
 chmod +x GenBox-Linux
 ./GenBox-Linux
 ```
+
+首次运行会引导你选择部署模式并自动生成管理员密钥。
+
+---
+
+### 📦 首次启动向导
+
+无论使用哪个平台，首次启动都会显示配置向导：
+
+```
+请选择部署方式：
+  [1] 本地使用    - 无需认证，打开即用（适合个人电脑）
+  [2] VPS 部署    - 需要密钥认证，可远程访问（适合服务器）
+  [3] Docker 部署 - 使用 .env.example 配置（适合生产环境）
+```
+
+- 选择 **1**（本地）：直接使用，无需任何配置
+- 选择 **2**（VPS）：会自动生成管理密钥，并引导配置网络
+- 选择 **3**（Docker）：显示 Docker 部署指引
 
 ---
 
