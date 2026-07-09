@@ -522,32 +522,54 @@ window.showVideoImagePickerModal = function(items) {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
   var box = document.createElement('div');
   box.style.cssText = 'background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:600px;width:90%;max-height:70vh;overflow-y:auto;';
-  box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="font-size:14px;font-weight:700;">\u{1F3AF} \u9009\u62E9\u56FE\u7247</h3><button onclick="document.getElementById(\'videoPickerOverlay\').remove()" style="background:none;border:none;color:var(--text-secondary);font-size:18px;cursor:pointer;">\u2715</button></div>' +
+  box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="font-size:14px;font-weight:700;">\u{1F3AF} \u9009\u62E9\u56FE\u7243</h3><button onclick="document.getElementById(\'videoPickerOverlay\').remove()" style="background:none;border:none;color:var(--text-secondary);font-size:18px;cursor:pointer;">\u2715</button></div>' +
+    '<div style="margin-bottom:10px;"><select id="videoPickerFilter" onchange="window._filterVideoPicker()" style="width:100%;font-size:11px;padding:5px 8px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);"><option value="">\u6240\u6709\u6A21\u578B</option></select></div>' +
     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;" id="videoPickerGrid"></div>';
   overlay.appendChild(box);
   document.body.appendChild(overlay);
 
-  var grid = document.getElementById('videoPickerGrid');
-  items.forEach(function(item) {
-    var card = document.createElement('div');
-    card.style.cssText = 'border-radius:8px;overflow:hidden;border:2px solid var(--border);cursor:pointer;transition:border-color 0.15s;';
-    card.innerHTML = '<img src="' + item.data + '" style="width:100%;height:90px;object-fit:cover;">' +
-      '<div style="font-size:9px;color:var(--text-muted);padding:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (item.prompt || item.filename).substring(0, 30) + '</div>';
-    card.onmouseover = function() { card.style.borderColor = 'var(--accent)'; };
-    card.onmouseout = function() { card.style.borderColor = 'var(--border)'; };
-    card.onclick = function() {
-      if (window.currentVideoMode === 'keyframes') {
-        window.kfImages.push(item.data);
-        window.renderKfImagePreview();
-      } else {
-        window.videoImages.push(item.data);
-        window.renderVideoImagePreview();
-      }
-      document.getElementById('videoPickerOverlay').remove();
-      window.setStatus('\u5DF2\u6DFB\u52A0\u56FE\u7247');
-    };
-    grid.appendChild(card);
+  // 填充模型过滤器
+  var modelSet = {};
+  items.forEach(function(it) { if (it.model) modelSet[it.model] = true; });
+  var filterSel = document.getElementById('videoPickerFilter');
+  Object.keys(modelSet).sort().forEach(function(m) {
+    var opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m;
+    filterSel.appendChild(opt);
   });
+
+  window._filterVideoPicker = function() {
+    var val = filterSel.value;
+    var filtered = val ? items.filter(function(it) { return it.model === val; }) : items;
+    window._renderVideoPickerItems(filtered);
+  };
+  window._renderVideoPickerItems = function(renderItems) {
+    var grid = document.getElementById('videoPickerGrid');
+    grid.innerHTML = '';
+    renderItems.forEach(function(item) {
+      var card = document.createElement('div');
+      card.style.cssText = 'border-radius:8px;overflow:hidden;border:2px solid var(--border);cursor:pointer;transition:border-color 0.15s;';
+      card.innerHTML = '<img src="' + item.data + '" style="width:100%;height:90px;object-fit:cover;">' +
+        '<div style="font-size:9px;color:var(--accent);padding:4px 4px 0;font-weight:600;">' + (item.model || '') + '</div>' +
+        '<div style="font-size:9px;color:var(--text-muted);padding:2px 4px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (item.prompt || item.filename).substring(0, 30) + '</div>';
+      card.onmouseover = function() { card.style.borderColor = 'var(--accent)'; };
+      card.onmouseout = function() { card.style.borderColor = 'var(--border)'; };
+      card.onclick = function() {
+        if (window.currentVideoMode === 'keyframes') {
+          window.kfImages.push(item.data);
+          window.renderKfImagePreview();
+        } else {
+          window.videoImages.push(item.data);
+          window.renderVideoImagePreview();
+        }
+        document.getElementById('videoPickerOverlay').remove();
+        window.setStatus('\u5DF2\u6DFB\u52A0\u56FE\u7243');
+      };
+      grid.appendChild(card);
+    });
+  };
+  window._renderVideoPickerItems(items);
 };
 
 /* ═══════════════════════════════════════════════════════════════════

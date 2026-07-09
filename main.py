@@ -717,7 +717,17 @@ async def generate(req: GenerateRequest, request: Request):
 
     _write_log("generate", f"生图任务已创建: {gen_id}, {len(task_list)} 个子任务", {"gen_id": gen_id, "providers": provider_ids})
 
-    return {"generation_id": gen_id, "status": "queued"}
+    # 返回 provider_states 让前端立即创建占位卡片
+    provider_states_out = {}
+    for key, st in provider_states.items():
+        provider_states_out[key] = {
+            "status": st["status"],
+            "progress": st["progress"],
+            "name": st.get("name", key),
+            "log": st["log"][-3:] if st["log"] else [],
+        }
+
+    return {"generation_id": gen_id, "status": "queued", "provider_states": provider_states_out}
 
 
 async def _process_image_gen(gen_id: str):
@@ -774,6 +784,14 @@ async def _process_image_gen(gen_id: str):
                 state["status"] = "failed"
                 state["progress"] = 100
                 state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✗ 失败: {res.error[:120]}")
+                # 写入详细错误日志到 logs.jsonl
+                _write_log("generation_error", f"{pid} 失败: {res.error[:200]}", {
+                    "provider_id": pid,
+                    "model": cfg.model if cfg else pid,
+                    "error": res.error[:500],
+                    "mode": task.get("mode", "t2i"),
+                    "elapsed_seconds": res.elapsed_seconds,
+                })
 
             state["result"] = {
                 "success": res.success,
@@ -1632,6 +1650,16 @@ def _build_gemini_payload(req, effective_model):
                 content.append({"type": "image_url", "image_url": {"url": img_data}})
             elif img_data.startswith("http"):
                 content.append({"type": "image_url", "image_url": {"url": img_data}})
+            elif img_data.startswith("/"):
+                # 相对路径：读取本地文件并转为 base64
+                try:
+                    import base64 as _b64
+                    file_path = STORAGE_DIR / "gallery" / img_data.split("/")[-1]
+                    if file_path.exists():
+                        file_data = _b64.b64encode(file_path.read_bytes()).decode()
+                        content.append({"type": "image_url", "image_url": {"url": "data:image/png;base64," + file_data}})
+                except Exception:
+                    pass
             else:
                 content.append({"type": "image_url", "image_url": {"url": "data:image/png;base64," + img_data}})
     return {
@@ -1960,10 +1988,11 @@ async def preview_images():
     """返回图库中最近的图片base64列表（供视频页取图用）"""
     import base64 as _b64
     items = []
-    for f in sorted(GALLERY_DIR.glob("*.png"), reverse=True)[:20]:
+    for f in sorted(GALLERY_DIR.glob("*.png"), reverse=True)[:40]:
         try:
             data = _b64.b64encode(f.read_bytes()).decode()
             prompt_text = ""
+            model_name = f.stem.split("_")[0] if f.stem else "unknown"
             try:
                 from PIL import Image
                 with Image.open(f) as img:
@@ -1975,6 +2004,7 @@ async def preview_images():
                 "filename": f.name,
                 "data": f"data:image/png;base64,{data}",
                 "prompt": prompt_text,
+                "model": model_name,
                 "created_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(f.stat().st_mtime)),
             })
         except Exception:

@@ -304,6 +304,29 @@ textarea {
   color: var(--text-primary);
 }
 
+/* ── 关闭按钮（更醒目） ── */
+.btn-close-modal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: #ef4444;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s var(--ease);
+  flex-shrink: 0;
+}
+.btn-close-modal:hover {
+  background: #dc2626;
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(239,68,68,0.3);
+}
+
 /* ── 5. App Shell ── */
 .app-shell {
   display: flex;

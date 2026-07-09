@@ -1001,6 +1001,8 @@ function handleFile(f) {
     var p = document.getElementById('uploadPreview');
     p.src = uploadedImageData;
     p.classList.remove('hidden');
+    var ph = document.getElementById('uploadPlaceholder');
+    if (ph) ph.style.display = 'none';
   };
   reader.readAsDataURL(f);
 }
@@ -1179,7 +1181,10 @@ function createPreviewPlaceholders(providerStates) {
   var mainContent = document.getElementById('previewMainContent');
   if (!container) return;
   if (emptyEl) emptyEl.style.display = 'none';
-  if (mainContent) mainContent.style.display = 'flex';
+  if (mainContent) {
+    mainContent.classList.remove('hidden');
+    mainContent.style.display = 'flex';
+  }
 
   // Remove old placeholder cards only (preserve grouped previews)
   Object.keys(previewPlaceholders).forEach(function(k) {
@@ -1357,16 +1362,22 @@ function renderGroupedPreviews() {
   container.querySelectorAll('.grouped-card').forEach(function(el) { el.remove(); });
   var rPids = Object.keys(groupedPreviews);
   if (rPids.length === 0 && Object.keys(previewPlaceholders).length === 0) {
-    var emptyEl = document.getElementById('previewEmpty');
-    if (emptyEl) emptyEl.style.display = '';
-    var mainContent = document.getElementById('previewMainContent');
-    if (mainContent) mainContent.style.display = 'none';
-    return;
-  }
   var emptyEl = document.getElementById('previewEmpty');
-  if (emptyEl) emptyEl.style.display = 'none';
+  if (emptyEl) emptyEl.style.display = '';
   var mainContent = document.getElementById('previewMainContent');
-  if (mainContent) mainContent.style.display = 'flex';
+  if (mainContent) {
+    mainContent.classList.add('hidden');
+    mainContent.style.display = 'none';
+  }
+  return;
+}
+var emptyEl = document.getElementById('previewEmpty');
+if (emptyEl) emptyEl.style.display = 'none';
+var mainContent = document.getElementById('previewMainContent');
+if (mainContent) {
+  mainContent.classList.remove('hidden');
+  mainContent.style.display = 'flex';
+}
   for (var i = 0; i < rPids.length; i++) {
     container.appendChild(buildGroupCard(rPids[i]));
   }
@@ -1824,7 +1835,11 @@ function doGenerate() {
     clearInterval(timerInterval);
     pfill.style.width = '15%';
     ptxt.textContent = '任务已提交，队列处理中...';
-    // 占位符将在第一次 poll 时创建（因为 /api/generate 不返回 provider_states）
+    // 立即创建占位卡片（从初始响应的 provider_states）
+    if (data.provider_states && Object.keys(data.provider_states).length > 0) {
+      window._placeholdersCreated = true;
+      createPreviewPlaceholders(data.provider_states);
+    }
     if (data.generation_id) {
       startGenPolling(data.generation_id);
     }
@@ -1953,7 +1968,10 @@ function showResults(results, prompt, timings) {
   if (!container) return;
   var keys = Object.keys(results);
 
-  if (mainContent) mainContent.style.display = 'flex';
+  if (mainContent) {
+    mainContent.classList.remove('hidden');
+    mainContent.style.display = 'flex';
+  }
 
   // Merge successful results into grouped state
   var addedCount = 0;
@@ -2054,7 +2072,10 @@ function addResultToPreview(key, result) {
   addImageToGroupedPreview(realPid, imgEntry);
 
   if (emptyEl) emptyEl.style.display = 'none';
-  if (mainContent) mainContent.style.display = 'flex';
+  if (mainContent) {
+    mainContent.classList.remove('hidden');
+    mainContent.style.display = 'flex';
+  }
   renderGroupedPreviews();
 }
 
@@ -2139,58 +2160,96 @@ var lightboxCurrentSrc = '';
 function sendToImageToImage(e) {
   e.stopPropagation();
   if (!lightboxCurrentSrc) { alert('无法获取图片'); return; }
-  window._pendingI2IImage = lightboxCurrentSrc;
+  var imgUrl = lightboxCurrentSrc;
   window._pendingI2IPrompt = lightboxCurrentPrompt || '';
   closeLightbox(e);
   if (window.dockNav) { window.dockNav.switchPage('generate'); }
-  setTimeout(function() {
-    if (typeof switchSubTab === 'function') {
-      switchSubTab('i2i');
-    }
-    if (window._pendingI2IImage) {
-      loadImageFromUrl(window._pendingI2IImage);
-    }
-    if (window._pendingI2IPrompt) {
-      var ta = document.getElementById('txtPromptI2I');
-      if (ta) ta.value = window._pendingI2IPrompt;
-    }
-    setStatus('已发送到图生图模式');
-  }, 300);
+
+  // 从 URL 获取 base64 数据
+  var fname = imgUrl.split('/').pop();
+  _authFetch('/api/gallery/image/' + fname + '/base64')
+    .then(function(r) {
+      if (!r.ok) throw new Error('获取图片数据失败');
+      return r.json();
+    })
+    .then(function(d) {
+      window.uploadedImageData = d.data;
+      setTimeout(function() {
+        if (typeof switchSubTab === 'function') {
+          switchSubTab('i2i');
+        }
+        var p = document.getElementById('uploadPreview');
+        if (p) { p.src = d.data; p.classList.remove('hidden'); }
+        if (window._pendingI2IPrompt) {
+          var ta = document.getElementById('txtPromptI2I');
+          if (ta) ta.value = window._pendingI2IPrompt;
+        }
+        setStatus('已发送到图生图模式');
+      }, 300);
+    })
+    .catch(function(e) {
+      alert('加载图片失败: ' + e.message);
+    });
 }
 
 function sendToVideo(e) {
   e.stopPropagation();
   if (!lightboxCurrentSrc) { alert('无法获取图片'); return; }
-  window._pendingI2VImage = lightboxCurrentSrc;
+  var imgUrl = lightboxCurrentSrc;
   window._pendingI2VPrompt = lightboxCurrentPrompt || '';
   closeLightbox(e);
   if (window.dockNav) { window.dockNav.switchPage('video'); }
-  setTimeout(function() {
-    if (typeof switchVideoSubTab === 'function') {
-      switchVideoSubTab('i2vid');
-    }
-    if (window._pendingI2VImage) {
-      loadVideoImageFromUrl(window._pendingI2VImage);
-    }
-    if (window._pendingI2VPrompt) {
-      var ta = document.getElementById('txtVideoPrompt');
-      if (ta) ta.value = window._pendingI2VPrompt;
-    }
-    setStatus('已发送到图生视频模式');
-  }, 300);
+
+  // 从 URL 获取 base64 数据
+  var fname = imgUrl.split('/').pop();
+  _authFetch('/api/gallery/image/' + fname + '/base64')
+    .then(function(r) {
+      if (!r.ok) throw new Error('获取图片数据失败');
+      return r.json();
+    })
+    .then(function(d) {
+      setTimeout(function() {
+        if (typeof switchVideoSubTab === 'function') {
+          switchVideoSubTab('i2vid');
+        }
+        if (!window.videoImages) window.videoImages = [];
+        window.videoImages.push(d.data);
+        if (typeof renderVideoImagePreview === 'function') renderVideoImagePreview();
+        if (window._pendingI2VPrompt) {
+          var ta = document.getElementById('txtVideoPrompt');
+          if (ta) ta.value = window._pendingI2VPrompt;
+        }
+        setStatus('已发送到图生视频模式');
+      }, 300);
+    })
+    .catch(function(e) {
+      alert('加载图片失败: ' + e.message);
+    });
 }
 
 function loadImageFromUrl(url) {
   window.uploadedImageData = url;
   var p = document.getElementById('uploadPreview');
   if (p) { p.src = url; p.classList.remove('hidden'); }
+  var ph = document.getElementById('uploadPlaceholder');
+  if (ph) ph.style.display = 'none';
 }
 
 function loadVideoImageFromUrl(url) {
   if (!window.videoImages) window.videoImages = [];
-  window.videoImages.push(url);
-  if (typeof renderVideoImagePreview === 'function') {
-    renderVideoImagePreview();
+  // 如果是 URL（非 base64），先获取 base64 数据
+  if (url && !url.startsWith('data:')) {
+    var fname = url.split('/').pop();
+    _authFetch('/api/gallery/image/' + fname + '/base64')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        window.videoImages.push(d.data);
+        if (typeof renderVideoImagePreview === 'function') renderVideoImagePreview();
+      })
+      .catch(function(e) { console.error('加载图片失败:', e); });
+  } else {
+    window.videoImages.push(url);
+    if (typeof renderVideoImagePreview === 'function') renderVideoImagePreview();
   }
 }
 
@@ -4440,6 +4499,7 @@ var selectedVideoProviderIds = [];  // multi-provider selection
 var videoPreviewGroups = {};  // { provider_id: [ {task_id, video_url, video_url_local, prompt, provider_id, ...} ] }
 var videoGroupNavIdx = {};    // { provider_id: current index }
 var videoActivePollTasks = {}; // { task_id: {provider_id, ...} } 跟踪活跃轮询任务
+var videoPreviewPlaceholders = {}; // { provider_id: { cardEl, ... } } 视频生成中的占位卡片
 
 // ═══════════════════════════════════════════════════════════════════
 // 视频实时日志
@@ -4681,10 +4741,14 @@ function buildModelOptsGrouped(models, selectedModel, groupFn) {
 
 function isModelMatchMode(modelName, mode) {
   var ml = (modelName || '').toLowerCase();
+  // 排除纯图片模型（含 image 但不含 video）
+  if (ml.indexOf('image') !== -1 && ml.indexOf('video') === -1) return false;
   if (mode === 'ti2vid') {
     // T2V or universal models (no disambiguation needed)
     if (ml.indexOf('t2v') !== -1 && ml.indexOf('i2v') === -1 && ml.indexOf('interpolation') === -1) return true;
     if (ml.indexOf('r2v') !== -1) return true;
+    // 含 video 关键词的通用模型（如 agnes-video-v2.0）也匹配
+    if (ml.indexOf('video') !== -1) return true;
     return false;
   }
   if (mode === 'i2vid') {
@@ -5160,6 +5224,9 @@ function startVideoGenerate() {
   videoLog('\u63D0\u793A\u8BCD: ' + prompt.substring(0, 80) + (prompt.length > 80 ? '...' : ''), 'info');
   videoLog('\u53C2\u6570: ' + dims.width + 'x' + dims.height + ', ' + frames + '\u5E27, ' + fps + 'fps', 'info');
 
+  // 创建视频预览占位卡片
+  createVideoPreviewPlaceholders(tasksToGenerate);
+
   var submittedCount = 0;
   var totalTasks = tasksToGenerate.length;
   var startTime = Date.now();
@@ -5219,6 +5286,8 @@ function startVideoGenerate() {
       if (labelEl2) labelEl2.textContent = '\u7B49\u5F85\u4E2D (\u5DF2\u521B\u5EFA)';
       // Gemini 可能立即返回 completed + video_url，直接渲染预览
       if (data.status === 'completed' && data.video_url) {
+        // 移除占位卡片
+        removeVideoPreviewPlaceholder(task.provider_id);
         if (!videoPreviewGroups[task.provider_id]) videoPreviewGroups[task.provider_id] = [];
         videoPreviewGroups[task.provider_id].push({
           task_id: data.task_id,
@@ -5345,6 +5414,9 @@ function startVideoPolling(allTaskData, startTime) {
         taskProgressMap[tid] = progress;
         updateGlobalProgress();
 
+        // 更新视频占位卡片状态
+        updateVideoPreviewPlaceholderStatus(provId, '[' + (data.stage || 'processing') + '] ' + Math.round(progress) + '%', progress);
+
         var progFillEl = document.getElementById('vprog_fill_' + provId);
         if (progFillEl) {
           progFillEl.style.width = progress + '%';
@@ -5381,6 +5453,9 @@ function startVideoPolling(allTaskData, startTime) {
           if (labelCompleted) labelCompleted.textContent = '\u2714 \u5B8C\u6210 ' + Math.round(elapsed) + 's';
           videoLogProvider(provId, '\u751F\u6210\u5B8C\u6210! \u8017\u65F6 ' + Math.round(elapsed) + 's', 'ok');
 
+          // 移除占位卡片
+          removeVideoPreviewPlaceholder(provId);
+
           if (!videoPreviewGroups[provId]) videoPreviewGroups[provId] = [];
           videoPreviewGroups[provId].push({
             task_id: tid,
@@ -5410,6 +5485,9 @@ function startVideoPolling(allTaskData, startTime) {
           var labelFailed = document.getElementById('vprog_label_' + provId);
           if (labelFailed) labelFailed.textContent = '\u2718 \u5931\u8D25: ' + errMsg.substring(0, 30);
           videoLogProvider(provId, '\u2718 \u751F\u6210\u5931\u8D25: ' + errMsg + ' (\u8017\u65F6 ' + Math.round(elapsed) + 's)', 'error');
+
+          // 移除占位卡片
+          removeVideoPreviewPlaceholder(provId);
 
           if (!videoPreviewGroups[provId]) videoPreviewGroups[provId] = [];
           videoPreviewGroups[provId].push({
@@ -5775,4 +5853,69 @@ function pushVideoToGallery() {
   });
   if (!src) { alert('没有视频'); return; }
   pushVideoToGalleryFromSrc(src);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 视频生成占位卡片（loading 动效）
+// ═══════════════════════════════════════════════════════════════════
+function createVideoPreviewPlaceholders(tasks) {
+  var container = document.getElementById('videoPreviewResults');
+  var emptyEl = document.getElementById('videoPreviewEmpty');
+  if (!container) return;
+  if (emptyEl) emptyEl.style.display = 'none';
+  container.style.display = 'flex';
+  container.innerHTML = '';
+
+  // 清理旧占位符
+  videoPreviewPlaceholders = {};
+
+  for (var i = 0; i < tasks.length; i++) {
+    var task = tasks[i];
+    var prov = videoProviders.find(function(p){ return p.id === task.provider_id; });
+    var provColor = prov ? prov.color : '#5b8def';
+    var provName = prov ? (prov.display_name || prov.name || task.provider_id) : task.provider_id;
+
+    var card = document.createElement('div');
+    card.className = 'fade-in prev-card generating';
+    card.id = 'vprev_ph_' + task.provider_id;
+
+    // 占位区：转圈动效（和图片预览一样的 4:3 比例）
+    var ph = document.createElement('div');
+    ph.className = 'prev-placeholder';
+    ph.innerHTML = '<div class="spinner"></div><div class="ph-text">' + escHtml(provName) + '</div>';
+    card.appendChild(ph);
+
+    // 底部信息
+    var footer = document.createElement('div');
+    footer.className = 'prev-footer';
+    footer.innerHTML =
+      '<div style="display:flex;align-items:center;gap:5px;">' +
+        '<span class="provider-dot" style="background:' + provColor + ';"></span>' +
+        '<span class="provider-name">' + escHtml(provName) + '</span>' +
+        '<span style="font-size:9px;color:var(--text-muted);">' + escHtml(task.model) + '</span>' +
+      '</div>' +
+      '<span class="elapsed-badge" id="vph_elapsed_' + task.provider_id + '">排队中</span>';
+    card.appendChild(footer);
+
+    container.appendChild(card);
+
+    videoPreviewPlaceholders[task.provider_id] = {
+      cardEl: card,
+      provColor: provColor,
+      provName: provName,
+    };
+  }
+}
+
+function removeVideoPreviewPlaceholder(provId) {
+  var ph = videoPreviewPlaceholders[provId];
+  if (ph && ph.cardEl && ph.cardEl.parentNode) {
+    ph.cardEl.remove();
+  }
+  delete videoPreviewPlaceholders[provId];
+}
+
+function updateVideoPreviewPlaceholderStatus(provId, text, progress) {
+  var statusEl = document.getElementById('vph_elapsed_' + provId);
+  if (statusEl) statusEl.textContent = text;
 }
