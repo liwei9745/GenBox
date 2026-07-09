@@ -9,6 +9,144 @@
 
 ---
 
+## 快速开始
+
+### 🎯 下载客户端（推荐）
+
+> ✅ **无需安装 Python、无需配置环境，下载即用**
+
+前往 [Releases 页面](https://github.com/liwei9745/GenBox/releases/latest) 下载：
+
+| 平台 | 文件 | 运行方式 |
+|------|------|----------|
+| **Windows** | `GenBox.exe` | 双击运行 |
+| **macOS** | `GenBox-macOS` | 终端运行 `chmod +x GenBox-macOS && ./GenBox-macOS` |
+| **Linux** | `GenBox-Linux` | 终端运行 `chmod +x GenBox-Linux && ./GenBox-Linux` |
+
+#### Windows 详细步骤
+
+1. 点击上方链接，下载 `GenBox.exe`
+2. 双击运行（首次可能需要在 Windows Defender 中点击"仍要运行"）
+3. 浏览器自动打开 `http://localhost:8891`
+4. 按照界面引导选择部署模式即可
+
+#### macOS 注意事项
+
+首次运行可能提示"无法验证开发者"：
+
+1. 打开 **系统设置 → 隐私与安全性**
+2. 在「安全性」部分点击 **仍要打开**
+
+#### Linux 注意事项
+
+```bash
+chmod +x GenBox-Linux
+./GenBox-Linux
+```
+
+---
+
+### 💻 源码部署
+
+<details>
+<summary>点击展开源码部署步骤</summary>
+
+#### 环境要求
+
+| 依赖 | 说明 |
+|------|------|
+| Python 3.10+ | 必需 |
+| pip | Python 包管理器 |
+| ffmpeg | 视频生成必需（`sudo apt install ffmpeg` 或 `brew install ffmpeg`） |
+| 现代浏览器 | Chrome / Firefox / Safari / Edge |
+
+#### 安装步骤
+
+**第一步：克隆项目**
+
+```bash
+git clone -b feat/quick-action-buttons https://github.com/liwei9745/GenBox.git
+cd GenBox
+```
+
+**第二步：安装依赖**
+
+```bash
+pip install -r requirements.txt
+```
+
+**第三步：启动（首次运行会引导配置）**
+
+```bash
+python main.py
+```
+
+首次启动时会显示配置向导：
+
+```
+请选择部署方式：
+  [1] 本地使用    - 无需认证，打开即用
+  [2] VPS 部署    - 需要密钥认证，可远程访问
+  [3] Docker 部署 - 使用 .env.example 配置
+```
+
+浏览器自动打开 `http://localhost:8891`
+
+</details>
+
+---
+
+### 🐳 Docker 部署
+
+<details>
+<summary>点击展开 Docker 部署步骤</summary>
+
+**步骤 1：配置环境**
+
+```bash
+git clone -b feat/quick-action-buttons https://github.com/liwei9745/GenBox.git
+cd GenBox
+cp .env.example .env
+```
+
+**步骤 2：编辑 `.env` 文件**
+
+> ⚠️ **必填项**：`ALLOWED_ORIGINS` 必须设置为你的服务器 IP 或域名
+
+```bash
+# 最小配置示例（VPS 部署）
+APP_MODE=prod
+ALLOWED_ORIGINS=http://你的服务器IP:8891
+GPT_IMAGE_API_KEY=sk-xxx
+GPT_IMAGE_BASE_URL=https://api.openai.com/v1
+```
+
+**步骤 3：启动容器**
+
+```bash
+docker-compose up -d
+```
+
+**步骤 4：访问**
+
+- 本机：`http://localhost:8891`
+- VPS：`http://你的服务器IP:8891`
+
+首次访问会显示管理密钥，请立即保存！
+
+</details>
+
+---
+
+## 使用说明
+
+1. 首次使用会自动生成管理员密钥
+2. 在底部 Dock 栏点击「Provider 管理」添加你的 AI 模型
+3. 选择模型 → 输入提示词 → 点击「生成图片」
+4. 生成的图片在媒体库中管理
+
+---
+
 ## 主要特性
 
 ### 多模型聚合
@@ -80,121 +218,6 @@
 | Provider 管理 | 主题切换 | 日志查看 |
 |---------------|----------|----------|
 | ![Provider](screenshots/sanitized/12-modal-provider.png) | ![主题](screenshots/sanitized/13-modal-theme.png) | ![日志](screenshots/sanitized/14-modal-log.png) |
-
----
-
-## 快速开始
-
-### 环境要求
-
-#### 本地部署
-| 依赖 | 说明 |
-|------|------|
-| Python 3.10+ | 必需 |
-| pip | Python 包管理器 |
-| ffmpeg | 视频生成必需（`sudo apt install ffmpeg` 或 `brew install ffmpeg`） |
-| 现代浏览器 | Chrome / Firefox / Safari / Edge |
-
-#### 或使用桌面客户端
-无需安装任何依赖，下载对应平台的可执行文件即可运行：
-- **Windows**: `GenBox.exe` - 双击运行
-- **macOS**: `GenBox-macOS` - 需要 `chmod +x` 后运行
-- **Linux**: `GenBox-Linux` - 需要 `chmod +x` 后运行
-
-#### 或使用 Docker
-无需安装 Python 和依赖，一键启动
-
-### 安装步骤
-
-**第一步：克隆项目**
-
-```bash
-git clone -b feat/quick-action-buttons https://github.com/liwei9745/GenBox.git
-cd GenBox
-```
-
-**第二步：安装依赖**
-
-```bash
-pip install -r requirements.txt
-```
-
-**第三步：启动（首次运行会引导配置）**
-
-```bash
-python main.py
-```
-
-首次启动时会显示配置向导：
-
-```
-请选择部署方式：
-  [1] 本地使用    - 无需认证，打开即用
-  [2] VPS 部署    - 需要密钥认证，可远程访问
-  [3] Docker 部署 - 使用 .env.example 配置
-```
-
-- 选择 **1**（本地）：直接使用，无需任何配置
-- 选择 **2**（VPS）：会自动生成管理密钥，并引导配置网络
-- 选择 **3**（Docker）：显示 Docker 部署指引
-
-浏览器自动打开 `http://localhost:8891`
-
----
-
-### Docker 部署
-
-无需安装 Python 和依赖，一键启动：
-
-**步骤 1：配置环境**
-
-```bash
-git clone -b feat/quick-action-buttons https://github.com/liwei9745/GenBox.git
-cd GenBox
-cp .env.example .env
-```
-
-**步骤 2：编辑 `.env` 文件**
-
-> ⚠️ **必填项**：`ALLOWED_ORIGINS` 必须设置为你的服务器 IP 或域名，否则浏览器无法访问 API
-
-```bash
-# 最小配置示例（VPS 部署）
-APP_MODE=prod
-ALLOWED_ORIGINS=http://你的服务器IP:8891
-GPT_IMAGE_API_KEY=sk-xxx
-GPT_IMAGE_BASE_URL=https://api.openai.com/v1
-```
-
-**步骤 3：启动容器**
-
-```bash
-# 方式一：docker-compose（推荐）
-docker-compose up -d
-
-# 方式二：直接运行
-docker build -t genbox .
-docker run -d -p 8891:8891 \
-  -v ./storage:/app/storage \
-  -v ./.env:/app/.env \
-  genbox
-```
-
-**步骤 4：访问**
-
-- 本机：`http://localhost:8891`
-- VPS：`http://你的服务器IP:8891`
-
-首次访问会显示管理密钥，请立即保存！
-
----
-
-## 使用说明
-
-1. 首次使用会自动生成管理员密钥
-2. 在底部 Dock 栏点击「Provider 管理」添加你的 AI 模型
-3. 选择模型 → 输入提示词 → 点击「生成图片」
-4. 生成的图片在媒体库中管理
 
 ---
 
