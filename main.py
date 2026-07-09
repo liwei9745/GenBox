@@ -566,18 +566,6 @@ async def test_provider(provider_id: str):
             ep_results = []
             for ep in endpoints:
                 ep_start = _time.time()
-                # SSRF 防护：检查 URL 安全性
-                safe, err = _is_url_safe(ep.url)
-                if not safe:
-                    ep_results.append({
-                        "url": ep.url,
-                        "name": ep.name or ep.display_name,
-                        "success": False,
-                        "latency_ms": 0,
-                        "status_code": 0,
-                        "error": f"SSRF 阻断: {err}"
-                    })
-                    continue
                 try:
                     # 轻量连通性检查：GET /models 或简单请求
                     _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"

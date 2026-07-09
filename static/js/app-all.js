@@ -3920,6 +3920,13 @@ function renderProviderEdit() {
                 '<div style="font-size:9px;color:var(--text-muted);margin-top:3px;">留空则自动根据模型名称和协议推断</div>'
               ) +
             '</div>' +
+            // 跳过代理
+            '<div style="margin-bottom:8px;">' +
+              '<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+                '<input type="checkbox" id="skip_proxy_' + idx + '" ' + (p.skip_proxy ? 'checked' : '') + ' style="accent-color:var(--accent);width:14px;height:14px;"> 🌐 跳过全局代理（直连，不走代理服务器）' +
+              '</label>' +
+              '<div style="font-size:9px;color:var(--text-muted);margin-top:2px;">适用于可直连的 API（如国内服务商），不受全局代理影响</div>' +
+            '</div>' +
             // 启用 + 按钮
             '<div style="display:flex;align-items:center;justify-content:space-between;">' +
               '<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
@@ -3986,6 +3993,7 @@ function saveProvider(idx) {
     models: currentModels,
     display_name: (document.getElementById('display_name_' + idx) || {value:''}).value,
     capabilities: capabilities,
+    skip_proxy: document.getElementById('skip_proxy_' + idx) ? document.getElementById('skip_proxy_' + idx).checked : false,
     quality: '', extra: {}
   };
   _authFetch('/api/providers', {
