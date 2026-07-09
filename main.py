@@ -12,7 +12,7 @@ import time
 import uuid
 import webbrowser
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 # ──────────────────────────────────────────────────────────────
 # PyInstaller 路径兼容

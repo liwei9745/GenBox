@@ -8,6 +8,9 @@ echo   GenBox Launcher
 echo ========================================
 echo.
 
+:: Clear PYTHONPATH to avoid pollution
+set PYTHONPATH=
+
 :: Check Python
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
