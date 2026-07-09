@@ -2623,6 +2623,62 @@ if __name__ == "__main__":
         print(f"[Admin Reset] 请重启服务")
         sys.exit(0)
 
+    # 首次启动：交互式选择模式
+    def _first_run_setup():
+        """首次启动时让用户选择运行模式"""
+        from config import _read_env, _write_env, BASE_DIR
+        
+        env = _read_env()
+        # 检查是否已配置过
+        if "APP_MODE" in env:
+            return  # 已配置，跳过
+        
+        print("""
+╔══════════════════════════════════════════════════════════════╗
+║                   🎉 欢迎使用 GenBox!                       ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  首次启动，请选择运行模式：                                   ║
+║                                                              ║
+║  [1] 正式使用 (推荐)                                         ║
+║      - 需要管理员密钥认证                                    ║
+║      - 适合 VPS 部署、公网访问                               ║
+║      - 安全性高                                              ║
+║                                                              ║
+║  [2] 本地开发                                                ║
+║      - 无需认证，直接访问                                    ║
+║      - 适合本地调试                                          ║
+║      - 仅限本机使用                                          ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+        """)
+        
+        while True:
+            try:
+                choice = input("请选择 (1 或 2): ").strip()
+                if choice == "1":
+                    _write_env({"APP_MODE": "prod"})
+                    print("\n✅ 已启用生产模式（需要认证）\n")
+                    break
+                elif choice == "2":
+                    _write_env({"APP_MODE": "dev"})
+                    print("\n⚠️  已启用开发模式（无需认证，仅限本机使用）\n")
+                    break
+                else:
+                    print("❌ 请输入 1 或 2")
+            except (EOFError, KeyboardInterrupt):
+                # 无交互环境（如 Docker），默认使用 prod 模式
+                _write_env({"APP_MODE": "prod"})
+                print("\n✅ 无交互环境，默认启用生产模式\n")
+                break
+
+    # 执行首次启动设置
+    _first_run_setup()
+
+    # 重新加载环境变量
+    from dotenv import load_dotenv
+    load_dotenv(BASE_PATH / ".env", override=True)
+
     # 生产模式：检查 ADMINKEY
     if is_prod_mode():
         admin_key = get_admin_key()
