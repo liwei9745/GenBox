@@ -72,11 +72,14 @@ jobs:
       - name: Build with PyInstaller
         run: python build.py
 
+      - name: Rename artifact
+        run: mv dist/${{ env.APP_NAME }} dist/${{ env.APP_NAME }}-macOS
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-macOS
-          path: dist/${{ env.APP_NAME }}
+          path: dist/${{ env.APP_NAME }}-macOS
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────
@@ -108,11 +111,14 @@ jobs:
       - name: Build with PyInstaller
         run: python build.py
 
+      - name: Rename artifact
+        run: mv dist/${{ env.APP_NAME }} dist/${{ env.APP_NAME }}-Linux
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-Linux-x64
-          path: dist/${{ env.APP_NAME }}
+          path: dist/${{ env.APP_NAME }}-Linux
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────
@@ -161,10 +167,6 @@ jobs:
             --notes "${{ env.APP_NAME }} ${{ github.ref_name }} - Cross-platform desktop client" \
             --draft=false \
             --prerelease=false
-          
-          # Rename files to avoid name conflicts
-          mv artifacts/macos/${{ env.APP_NAME }} artifacts/macos/${{ env.APP_NAME }}-macOS
-          mv artifacts/linux/${{ env.APP_NAME }} artifacts/linux/${{ env.APP_NAME }}-Linux
           
           # Upload assets
           gh release upload "${{ github.ref_name }}" \
