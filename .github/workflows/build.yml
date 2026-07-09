@@ -72,14 +72,11 @@ jobs:
       - name: Build with PyInstaller
         run: python build.py
 
-      - name: Rename artifact
-        run: mv dist/${{ env.APP_NAME }} dist/${{ env.APP_NAME }}-macOS
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-macOS
-          path: dist/${{ env.APP_NAME }}-macOS
+          path: dist/${{ env.APP_NAME }}
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────
@@ -111,14 +108,11 @@ jobs:
       - name: Build with PyInstaller
         run: python build.py
 
-      - name: Rename artifact
-        run: mv dist/${{ env.APP_NAME }} dist/${{ env.APP_NAME }}-Linux
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-Linux-x64
-          path: dist/${{ env.APP_NAME }}-Linux
+          path: dist/${{ env.APP_NAME }}
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────
@@ -171,5 +165,5 @@ jobs:
           # Upload assets
           gh release upload "${{ github.ref_name }}" \
             "artifacts/windows/${{ env.APP_NAME }}.exe" \
-            "artifacts/macos/${{ env.APP_NAME }}-macOS" \
-            "artifacts/linux/${{ env.APP_NAME }}-Linux"
+            "artifacts/macos/${{ env.APP_NAME }}" \
+            "artifacts/linux/${{ env.APP_NAME }}"
