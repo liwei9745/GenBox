@@ -40,11 +40,53 @@
 #### Linux (VPS) 注意事项
 
 ```bash
-chmod +x GenBox-Linux
-./GenBox-Linux
+chmod +x GenBox-Linux-x64
+./GenBox-Linux-x64
 ```
 
 首次运行会引导你选择部署模式并自动生成管理员密钥。
+
+---
+
+### 🔧 故障排除
+
+#### Windows 双击闪退
+
+如果双击 `GenBox.exe` 后窗口一闪而过，请按以下步骤排查：
+
+**方法一：使用启动脚本**
+
+双击 `start.bat` 或右键 `start.ps1` → 使用 PowerShell 运行，会自动检查环境并显示错误信息。
+
+**方法二：手动排查**
+
+1. **以管理员身份运行 CMD**，然后执行：
+   ```cmd
+   cd GenBox所在目录
+   GenBox.exe
+   ```
+
+2. **检查常见问题**：
+   - 端口被占用：修改 `.env` 中的 `PORT` 环境变量
+   - 缺少 VC++ 运行时：下载安装 [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+   - 防火墙拦截：允许程序通过防火墙
+
+3. **运行环境检查脚本**：
+   ```cmd
+   python check_env.py
+   ```
+
+#### macOS 无法打开
+
+1. 打开 **系统设置 → 隐私与安全性**
+2. 在「安全性」部分点击 **仍要打开**
+
+#### Linux 权限不足
+
+```bash
+chmod +x GenBox-Linux-x64
+./GenBox-Linux-x64
+```
 
 ---
 
