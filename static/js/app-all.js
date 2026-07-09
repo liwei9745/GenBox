@@ -3408,6 +3408,117 @@ function testProxyConfig() {
     });
 }
 
+// ── 自动更新系统 ──
+
+function _loadUpdateInfo() {
+  _authFetch('/api/update/info')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var platformEl = document.getElementById('updatePlatformInfo');
+      if (platformEl) {
+        var typeLabel = { source: '源码', exe: '可执行文件', docker: 'Docker', pip: 'pip' };
+        platformEl.textContent = '当前: v' + d.current_version + ' | ' + (typeLabel[d.update_type] || d.update_type);
+      }
+      // 检查更新
+      _checkForUpdates();
+    })
+    .catch(function() {
+      var el = document.getElementById('updateContent');
+      if (el) el.innerHTML = '<span style="color:var(--text-muted);">无法获取更新信息</span>';
+    });
+}
+
+function _checkForUpdates() {
+  var badge = document.getElementById('updateStatusBadge');
+  var content = document.getElementById('updateContent');
+  if (badge) { badge.textContent = '检测中...'; badge.style.background = '#6b728022'; badge.style.color = '#6b7280'; }
+  if (content) content.innerHTML = '<span style="color:var(--text-muted);">正在检查更新...</span>';
+
+  _authFetch('/api/update/check')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d.available) {
+        if (badge) { badge.textContent = '有新版本'; badge.style.background = '#f59e0b22'; badge.style.color = '#f59e0b'; }
+        var notes = d.release_notes ? '<div style="margin:6px 0;padding:8px;border-radius:6px;background:var(--bg-card);max-height:120px;overflow-y:auto;white-space:pre-wrap;font-size:10px;color:var(--text-secondary);">' + escHtml(d.release_notes) + '</div>' : '';
+        if (content) {
+          content.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
+            '<span style="color:#f59e0b;font-weight:600;">⬆ v' + d.latest_version + ' 可用</span>' +
+            '<button onclick="_testMirrors()" style="padding:3px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;">🔍 测速</button>' +
+            '<button onclick="_applyUpdate()" style="padding:3px 8px;font-size:10px;border-radius:5px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;">立即更新</button>' +
+            '</div>' + notes;
+        }
+      } else {
+        if (badge) { badge.textContent = '已是最新'; badge.style.background = '#22c55e22'; badge.style.color = '#22c55e'; }
+        if (content) content.innerHTML = '<span style="color:#22c55e;">✓ 已是最新版本</span> <button onclick="_checkForUpdates()" style="margin-left:8px;padding:3px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;">重新检测</button>';
+      }
+    })
+    .catch(function(e) {
+      if (badge) { badge.textContent = '检测失败'; badge.style.background = '#ef444422'; badge.style.color = '#ef4444'; }
+      if (content) content.innerHTML = '<span style="color:#ef4444;">✗ 检测失败: ' + escHtml(e.message) + '</span>';
+    });
+}
+
+function _testMirrors() {
+  var content = document.getElementById('updateContent');
+  if (content) content.innerHTML = '<span style="color:var(--text-muted);">正在测试 GitHub 代理线路...</span>';
+
+  _authFetch('/api/update/mirrors')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var html = '<div style="margin-bottom:6px;font-weight:600;color:var(--text-primary);">GitHub 代理线路测速</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:4px;">';
+      for (var i = 0; i < d.mirrors.length; i++) {
+        var m = d.mirrors[i];
+        var color = m.available ? (m.latency_ms < 1000 ? '#22c55e' : '#f59e0b') : '#ef4444';
+        var status = m.available ? m.latency_ms + 'ms' : '不可用';
+        html += '<div style="display:flex;align-items:center;gap:6px;font-size:10px;">';
+        html += '<span style="width:12px;height:12px;border-radius:50%;background:' + color + ';flex-shrink:0;"></span>';
+        html += '<span style="flex:1;color:var(--text-secondary);">' + escHtml(m.name) + '</span>';
+        html += '<span style="color:' + color + ';">' + status + '</span>';
+        if (m.available) {
+          html += '<button onclick="_applyUpdate(\'' + escHtml(m.url) + '\')" style="padding:2px 6px;font-size:9px;border-radius:4px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;">使用此线路更新</button>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+      html += '<button onclick="_checkForUpdates()" style="margin-top:8px;padding:3px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;">返回</button>';
+      if (content) content.innerHTML = html;
+    })
+    .catch(function(e) {
+      if (content) content.innerHTML = '<span style="color:#ef4444;">✗ 测速失败: ' + escHtml(e.message) + '</span>';
+    });
+}
+
+function _applyUpdate(downloadUrl) {
+  var badge = document.getElementById('updateStatusBadge');
+  var content = document.getElementById('updateContent');
+  if (badge) { badge.textContent = '更新中...'; badge.style.background = '#3b82f622'; badge.style.color = '#3b82f6'; }
+  if (content) content.innerHTML = '<span style="color:#3b82f6;">⏳ 正在更新，请勿关闭页面...</span>';
+
+  var url = '/api/update/apply';
+  if (downloadUrl) url += '?download_url=' + encodeURIComponent(downloadUrl);
+
+  _authFetch(url, { method: 'POST' })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        if (badge) { badge.textContent = '更新成功'; badge.style.background = '#22c55e22'; badge.style.color = '#22c55e'; }
+        if (content) content.innerHTML = '<span style="color:#22c55e;">✓ ' + escHtml(d.message || '更新成功') + '</span>';
+        if (d.restart) {
+          if (content) content.innerHTML += '<br><span style="color:var(--text-muted);font-size:10px;">服务将在 3 秒后重启...</span>';
+          setTimeout(function(){ location.reload(); }, 3000);
+        }
+      } else {
+        if (badge) { badge.textContent = '更新失败'; badge.style.background = '#ef444422'; badge.style.color = '#ef4444'; }
+        if (content) content.innerHTML = '<span style="color:#ef4444;">✗ ' + escHtml(d.error || '更新失败') + '</span>';
+      }
+    })
+    .catch(function(e) {
+      if (badge) { badge.textContent = '更新失败'; badge.style.background = '#ef444422'; badge.style.color = '#ef4444'; }
+      if (content) content.innerHTML = '<span style="color:#ef4444;">✗ 更新失败: ' + escHtml(e.message) + '</span>';
+    });
+}
+
 function openProviderModal() {
   document.getElementById('providerModal').classList.add('show');
   renderProviderEdit();
@@ -3614,6 +3725,22 @@ function renderProviderEdit() {
   // 加载代理配置
   _loadProxyConfig();
 
+  // ── 系统更新区 ──
+  html += '<div id="updateSection" style="margin-bottom:14px;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-surface);">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">';
+  html += '<div style="display:flex;align-items:center;gap:6px;">';
+  html += '<span style="font-size:13px;">📦</span>';
+  html += '<span style="font-size:12px;font-weight:700;color:var(--text-primary);">系统更新</span>';
+  html += '<span id="updateStatusBadge" style="font-size:9px;padding:2px 6px;border-radius:8px;background:#6b728022;color:#6b7280;font-weight:600;">检测中...</span>';
+  html += '</div>';
+  html += '<span id="updatePlatformInfo" style="font-size:10px;color:var(--text-muted);"></span>';
+  html += '</div>';
+  html += '<div id="updateContent" style="font-size:11px;color:var(--text-muted);">正在检查更新...</div>';
+  html += '</div>';
+
+  // 加载更新信息
+  _loadUpdateInfo();
+
   var groups = [
     { type: 'image', icon: '🎨', title: '生图模型', hint: '用于生成图片的模型，如 Stable Diffusion、Midjourney、Flux 等', accent: '#22c55e' },
     { type: 'video', icon: '🎬', title: '生视频模型', hint: '用于生成视频的模型，如 Gemini Veo、Sora 等', accent: '#3b82f6' },
@@ -3664,8 +3791,8 @@ function renderProviderEdit() {
         modelOpts = '<option value="" disabled>请先拉取模型</option>';
         if (p.model) modelOpts = '<option value="' + escAttr(p.model) + '" selected>' + escHtml(p.model) + ' (手动)</option>' + modelOpts;
       }
-      var keyVal = p.api_key || '';
-      var keyPlaceholder = p.has_key ? '•••••••••• (已配置)' : '留空使用 .env 或手动输入';
+      var keyVal = p.api_key_masked || '';
+      var keyPlaceholder = p.has_key ? (keyVal || '•••••••••• (已配置)') : '留空使用 .env 或手动输入';
       var statusColor = p.enabled ? '#22c55e' : '#6b7280';
       var statusTitle = p.enabled ? '已启用' : '已禁用';
 

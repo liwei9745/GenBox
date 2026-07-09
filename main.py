@@ -46,6 +46,45 @@ from providers import generate_multi, enhance_prompt_with_llm, enhance_prompt_wi
 
 
 # ──────────────────────────────────────────────────────────────
+# SSRF 防护：私有 IP 黑名单
+# ──────────────────────────────────────────────────────────────
+import ipaddress
+import socket as _socket
+
+_BLOCKED_IP_RANGES = [
+    ipaddress.ip_network("127.0.0.0/8"),      # localhost
+    ipaddress.ip_network("10.0.0.0/8"),       # 私有 A 类
+    ipaddress.ip_network("172.16.0.0/12"),    # 私有 B 类
+    ipaddress.ip_network("192.168.0.0/16"),   # 私有 C 类
+    ipaddress.ip_network("169.254.0.0/16"),   # 链路本地
+    ipaddress.ip_network("::1/128"),          # IPv6 localhost
+    ipaddress.ip_network("fc00::/7"),         # IPv6 私有
+    ipaddress.ip_network("fe80::/10"),        # IPv6 链路本地
+]
+
+def _is_url_safe(url: str) -> tuple:
+    """检查 URL 是否指向私有/内网 IP。返回 (safe, error_msg)"""
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False, "无效的 URL"
+        # 解析域名到 IP
+        try:
+            ip_str = _socket.gethostbyname(hostname)
+            ip = ipaddress.ip_address(ip_str)
+            for net in _BLOCKED_IP_RANGES:
+                if ip in net:
+                    return False, f"目标 IP {ip_str} 属于保留地址范围"
+        except _socket.gaierror:
+            return False, f"无法解析域名: {hostname}"
+        return True, None
+    except Exception as e:
+        return False, f"URL 解析失败: {str(e)[:50]}"
+
+
+# ──────────────────────────────────────────────────────────────
 # Pydantic 模型
 # ──────────────────────────────────────────────────────────────
 class GenerateRequest(BaseModel):
@@ -138,9 +177,51 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Content Security Policy：限制脚本来源，防止 XSS
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self'; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
+    )
     if is_prod_mode():
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
+
+
+@app.middleware("http")
+async def csrf_protection(request: Request, call_next):
+    """CSRF 防护：校验 Origin/Referer 头"""
+    if request.method in ("POST", "PUT", "DELETE"):
+        origin = request.headers.get("origin", "")
+        referer = request.headers.get("referer", "")
+        # 获取允许的源
+        allowed_origins = set(ALLOWED_ORIGINS)
+        # 本地地址也允许
+        local_origins = {"http://localhost:8891", "http://127.0.0.1:8891", "http://localhost:8890", "http://127.0.0.1:8890"}
+        allowed_origins.update(local_origins)
+        # 检查 Origin
+        if origin:
+            origin_host = origin.split("://")[1].split("/")[0] if "://" in origin else origin
+            allowed_hosts = set()
+            for o in allowed_origins:
+                if "://" in o:
+                    allowed_hosts.add(o.split("://")[1].split("/")[0])
+            if origin_host not in allowed_hosts:
+                return JSONResponse(status_code=403, content={"error": "CSRF 验证失败", "code": "CSRF_REJECTED"})
+        # 检查 Referer
+        elif referer:
+            referer_host = referer.split("://")[1].split("/")[0] if "://" in referer else referer
+            allowed_hosts = set()
+            for o in allowed_origins:
+                if "://" in o:
+                    allowed_hosts.add(o.split("://")[1].split("/")[0])
+            if referer_host not in allowed_hosts:
+                return JSONResponse(status_code=403, content={"error": "CSRF 验证失败", "code": "CSRF_REJECTED"})
+    return await call_next(request)
 
 # ──────────────────────────────────────────────────────────────
 # 速率限制（简单内存实现）
@@ -344,33 +425,52 @@ async def status():
 
 @app.get("/api/providers")
 async def list_providers():
-    """获取所有 Provider 配置（含 API Key，用于设置界面回填）"""
+    """获取所有 Provider 配置（API Key 脱敏）"""
     from providers.key_pool import key_pool_manager
     providers_data = []
     for p in cfg_mgr.config.providers:
-        d = p.model_dump()  # 返回完整数据，包括 api_key
-        d["has_key"] = bool(p.api_key)
+        d = p.model_dump(exclude={"api_key", "api_keys", "endpoints"})
+        d["has_key"] = bool(p.api_key or p.api_keys)
         d["has_keys"] = len(p.get_effective_keys()) > 1
         d["key_count"] = len(p.get_effective_keys())
-        # 附加 key pool 状态
+        # API Key 脱敏
         keys = p.get_effective_keys()
         if keys:
+            d["api_key_masked"] = keys[0][:4] + "****" + keys[0][-4:] if len(keys[0]) > 8 else "****"
             pool = key_pool_manager.get_or_create(p.id, keys)
             d["keypool"] = {
                 "total_keys": pool.size,
                 "available_keys": pool.available_count,
                 "keys": pool.get_status(),
             }
+        # 端点脱敏
+        d["endpoints"] = []
+        for ep in (p.endpoints or []):
+            ep_dict = {"url": ep.url, "model": ep.model, "enabled": ep.enabled}
+            if ep.key:
+                ep_dict["key_masked"] = ep.key[:4] + "****" + ep.key[-4:] if len(ep.key) > 8 else "****"
+            d["endpoints"].append(ep_dict)
         providers_data.append(d)
     return {"providers": providers_data}
 
 
 @app.get("/api/providers/{provider_id}")
 async def get_provider(provider_id: str):
-    """获取单个 Provider 详细配置（含 API Key）"""
+    """获取单个 Provider 详细配置（API Key 脱敏）"""
     for p in cfg_mgr.config.providers:
         if p.id == provider_id:
-            return p.model_dump()
+            d = p.model_dump(exclude={"api_key", "api_keys"})
+            d["has_key"] = bool(p.api_key or p.api_keys)
+            keys = p.get_effective_keys()
+            if keys:
+                d["api_key_masked"] = keys[0][:4] + "****" + keys[0][-4:] if len(keys[0]) > 8 else "****"
+            d["endpoints"] = []
+            for ep in (p.endpoints or []):
+                ep_dict = {"url": ep.url, "model": ep.model, "enabled": ep.enabled}
+                if ep.key:
+                    ep_dict["key_masked"] = ep.key[:4] + "****" + ep.key[-4:] if len(ep.key) > 8 else "****"
+                d["endpoints"].append(ep_dict)
+            return d
     raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' 不存在")
 
 
@@ -466,6 +566,18 @@ async def test_provider(provider_id: str):
             ep_results = []
             for ep in endpoints:
                 ep_start = _time.time()
+                # SSRF 防护：检查 URL 安全性
+                safe, err = _is_url_safe(ep.url)
+                if not safe:
+                    ep_results.append({
+                        "url": ep.url,
+                        "name": ep.name or ep.display_name,
+                        "success": False,
+                        "latency_ms": 0,
+                        "status_code": 0,
+                        "error": f"SSRF 阻断: {err}"
+                    })
+                    continue
                 try:
                     # 轻量连通性检查：GET /models 或简单请求
                     _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
@@ -2583,6 +2695,67 @@ async def server_control(action: str = "status"):
 
 
 # ──────────────────────────────────────────────────────────────
+# 自动更新系统
+# ──────────────────────────────────────────────────────────────
+@app.get("/api/update/check")
+async def check_for_updates(mirror: str = ""):
+    """检查是否有可用更新"""
+    from updater import check_update
+    info = await check_update(mirror)
+    return {
+        "available": info.available,
+        "current_version": info.current_version,
+        "latest_version": info.latest_version,
+        "release_notes": info.release_notes,
+        "download_url": info.download_url,
+        "update_type": info.update_type,
+    }
+
+
+@app.get("/api/update/mirrors")
+async def test_update_mirrors():
+    """测试所有 GitHub 代理线路的连通性和延迟"""
+    from updater import test_all_mirrors
+    results = await test_all_mirrors()
+    return {
+        "mirrors": [
+            {
+                "name": r.name,
+                "url": r.url,
+                "latency_ms": r.latency_ms,
+                "available": r.available,
+                "error": r.error,
+            }
+            for r in results
+        ],
+        "recommended": results[0].name if results and results[0].available else None,
+    }
+
+
+@app.post("/api/update/apply")
+async def apply_update(mirror: str = "", download_url: str = ""):
+    """执行更新"""
+    from updater import apply_update
+    result = await apply_update(mirror, download_url)
+    return result
+
+
+@app.get("/api/update/info")
+async def get_update_info():
+    """获取当前更新环境信息"""
+    from updater import detect_update_type, CURRENT_VERSION, get_app_dir
+    update_type = detect_update_type()
+    app_dir = get_app_dir()
+    return {
+        "current_version": CURRENT_VERSION,
+        "update_type": update_type.value,
+        "app_dir": str(app_dir),
+        "platform": sys.platform,
+        "is_frozen": getattr(sys, 'frozen', False),
+    }
+
+
+# ──────────────────────────────────────────────────────────────
 # 安全策略：ADMINKEY 认证中间件
 # ──────────────────────────────────────────────────────────────
 AUTH_EXEMPT_PATHS = {
@@ -2600,7 +2773,7 @@ async def admin_auth_middleware(request: Request, call_next):
     # 静态文件免认证
     if not path.startswith("/api/"):
         return await call_next(request)
-    # 白名单免认证
+    # 白名单免认证（首次设置流程）
     if path in AUTH_EXEMPT_PATHS:
         return await call_next(request)
 

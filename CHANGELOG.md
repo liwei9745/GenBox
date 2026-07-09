@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.0] - 2026-07-09
+
+### Added
+- **Auto-update system**: version detection, GitHub CDN mirror testing, source/exe/docker update support
+- **Security hardening** (Strix audit):
+  - API Key masking: `/api/providers` no longer returns raw keys, shows `api_key_masked` instead
+  - SSRF protection: private IP blackhole (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, etc.)
+  - CSP header: `script-src 'self' 'unsafe-inline'`, `frame-ancestors 'none'`
+  - CSRF protection: Origin/Referer header validation for POST/PUT/DELETE
+- Provider modal "系统更新" section with mirror speed test
+
+### Changed
+- Authentication mode: dev mode no auth, prod mode requires ADMINKEY (unchanged, by design)
+
+---
+
 ## [2.2.0] - 2026-07-09
 
 ### Added
