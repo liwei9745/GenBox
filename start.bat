@@ -1,40 +1,40 @@
 @echo off
 chcp 65001 >nul 2>&1
-title GenBox 启动器
+title GenBox Launcher
 
 echo.
 echo ========================================
-echo   GenBox 启动器
+echo   GenBox Launcher
 echo ========================================
 echo.
 
-:: 检查 Python
+:: Check Python
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [错误] 未找到 Python，请先安装 Python 3.10+
-    echo 下载地址: https://www.python.org/downloads/
+    echo [ERROR] Python not found, please install Python 3.10+
+    echo Download: https://www.python.org/downloads/
     pause
     exit /b 1
 )
 
-:: 检查依赖
-echo 正在检查依赖...
+:: Check dependencies
+echo Checking dependencies...
 pip show fastapi >nul 2>&1
 if %errorlevel% neq 0 (
-    echo 正在安装依赖...
+    echo Installing dependencies...
     pip install -r requirements.txt
 )
 
-:: 运行环境检查
+:: Run environment check
 echo.
-echo 正在运行环境检查...
+echo Running environment check...
 python check_env.py
 
-:: 启动服务
+:: Start service
 echo.
-echo 正在启动 GenBox...
-echo 启动后请访问: http://localhost:8891
-echo 按 Ctrl+C 停止服务
+echo Starting GenBox...
+echo Access: http://localhost:8891
+echo Press Ctrl+C to stop
 echo.
 python main.py
 
