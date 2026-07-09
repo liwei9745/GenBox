@@ -109,6 +109,7 @@ class ProviderCreateReq(BaseModel):
     enabled: bool = True
     color: str = "#0ea5e9"
     display_name: str = ""
+    capabilities: Dict[str, bool] = {}  # 能力声明: {"t2i": True, "i2i": True}
     extra: dict = {}
 
 
@@ -521,12 +522,11 @@ async def fetch_models(provider_id: str):
                 # 检查是否是 fallback（通过对比已知 fallback 列表）
                 fallback_signatures = {
                     "gemini": ["gemini-2.0-flash-exp-image-generation", "gemini-1.5-pro", "gemini-1.5-flash"],
-                    "qwen": ["qwen3.6-plus", "wanx-v1", "wanx2.1-t2i-turbo"],  # 短名称格式=fallback
+                    "qwen": ["qwen3.6-plus", "wanx-v1", "wanx2.1-t2i-turbo"],
                     "openai": ["gpt-image-2", "dall-e-3", "flux-dev", "sd-xl"],
                 }
                 protocol = "gemini" if "gemini" in p.base_url.lower() or "google" in p.base_url.lower() else ("qwen" if "qwen" in p.id else "openai")
                 sig_models = fallback_signatures.get(protocol, [])
-                # qwen 协议: 如果模型名包含 (xxx-image) 后缀说明是真实拉取的，否则可能是 fallback
                 if protocol == "qwen":
                     is_fallback = len(models) <= 8 and any(m in models for m in sig_models)
                 elif len(models) <= 8 and any(m in models for m in sig_models):
@@ -535,7 +535,7 @@ async def fetch_models(provider_id: str):
                 # 自动保存到配置中
                 p.models = models
                 if models and not p.model:
-                    p.model = models[0]  # 自动选第一个
+                    p.model = models[0]
                 cfg_mgr.save(cfg_mgr.config)
                 return {
                     "success": True,
@@ -544,9 +544,14 @@ async def fetch_models(provider_id: str):
                     "auto_selected": p.model,
                     "is_fallback": is_fallback,
                     "message": "(使用推荐列表，上游 API 未响应)" if is_fallback else "",
+                    "provider_type": p.type,
                 }
             except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+                return {
+                    "success": False,
+                    "detail": f"拉取失败: {str(e)}。请确认 URL 支持 GET /v1/models 接口，或手动输入模型名称。",
+                    "provider_type": p.type,
+                }
     raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' 不存在")
 
 

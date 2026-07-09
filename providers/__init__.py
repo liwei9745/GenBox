@@ -949,6 +949,21 @@ def _get_fallback_models(cfg: ProviderConfig, protocol: str) -> List[str]:
     当上游 API 拉取失败时，返回该协议的常用模型列表
     这样用户至少能看到一些选项
     """
+    if cfg.type == "video":
+        return [
+            "veo-3-1-generate-preview",
+            "veo-3-1-fast-generate-preview",
+            "veo-3-0-generate-001",
+            "veo-2-0-generate-001",
+            "wanx2.1-t2v-turbo",
+            "wanx2.1-t2v-plus",
+            "hailuoai-video",
+            "kling-v2",
+            "kling-v1",
+            "gen-3a-turbo",
+            "gen-3a-turbo-video",
+            "sora",
+        ]
     if protocol == "gemini":
         return [
             "gemini-2.0-flash-exp-image-generation",
@@ -976,7 +991,6 @@ def _get_fallback_models(cfg: ProviderConfig, protocol: str) -> List[str]:
         ]
     else:  # openai or agnes
         if cfg.type == "llm":
-            # LLM 类型：推荐对话模型
             return [
                 "gpt-4o-mini", "gpt-4o", "gpt-4-turbo",
                 "deepseek-chat", "deepseek-reasoner",

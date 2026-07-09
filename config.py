@@ -80,6 +80,7 @@ class ProviderConfig(BaseModel):
     enabled: bool = True
     color: str = "#0ea5e9"     # UI 卡片颜色
     display_name: str = ""     # 看板分组显示名称（空=使用 name）
+    capabilities: Dict[str, bool] = {}  # 能力声明: {"t2i": True, "i2i": True, "i2v": False}
     extra: Dict[str, Any] = {} # 扩展参数
 
     def get_effective_keys(self) -> List[str]:
@@ -133,6 +134,7 @@ DEFAULT_PROVIDERS: List[Dict[str, Any]] = [
         "quality": "high",
         "color": "#22c55e",
         "enabled": False,
+        "capabilities": {"t2i": True, "i2i": True},
     },
     {
         "id": "gemini",
@@ -146,6 +148,7 @@ DEFAULT_PROVIDERS: List[Dict[str, Any]] = [
         "quality": "",
         "color": "#3b82f6",
         "enabled": False,
+        "capabilities": {"t2i": True, "i2i": True},
     },
     {
         "id": "qwen",
@@ -159,6 +162,7 @@ DEFAULT_PROVIDERS: List[Dict[str, Any]] = [
         "quality": "",
         "color": "#f97316",
         "enabled": False,
+        "capabilities": {"t2i": True, "i2i": False},
     },
     {
         "id": "llm-default",
@@ -172,6 +176,7 @@ DEFAULT_PROVIDERS: List[Dict[str, Any]] = [
         "quality": "",
         "color": "#a855f7",
         "enabled": False,
+        "capabilities": {},
     },
 ]
 

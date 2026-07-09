@@ -190,6 +190,17 @@ function switchNav(name, el) {
   if (name === 'dashboard') loadDashboard();
 }
 
+window.dockNav = {
+  switchPage: function(pageId) {
+    var dockItem = document.querySelector('.dock-item[data-page="' + pageId + '"]');
+    switchNav(pageId, dockItem);
+  },
+  currentPage: function() {
+    var active = document.querySelector('.dock-item.active[data-page]');
+    return active ? active.getAttribute('data-page') : 'dashboard';
+  }
+};
+
 // ═══════════════════════════════════════════════════════════════════
 // 图像设置：宽高比 / 质量 / 数量 / 尺寸联动
 // ═══════════════════════════════════════════════════════════════════
@@ -2079,6 +2090,7 @@ function getProviderDisplayName(pid) {
 // 灯箱
 // ═══════════════════════════════════════════════════════════════════
 var lightboxCurrentPrompt = '';
+var lightboxCurrentSrc = '';
 
 function openLightbox(src, label, prompt) {
   var lb = document.getElementById('lightbox');
@@ -2098,6 +2110,8 @@ function openLightbox(src, label, prompt) {
     img.style.transform = 'scale(1)';
     if (dl) dl.href = src;
     if (info) info.textContent = label || '';
+    // 保存当前图片源
+    lightboxCurrentSrc = src;
     // 显示提示词
     lightboxCurrentPrompt = prompt || '';
     if (promptEl) promptEl.textContent = prompt || '';
@@ -2114,6 +2128,69 @@ function copyLightboxPrompt() {
     navigator.clipboard.writeText(lightboxCurrentPrompt).then(function(){
       setStatus('已复制提示词到剪贴板');
     });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 快捷操作：发送到图生图/生视频
+// ═══════════════════════════════════════════════════════════════════
+var lightboxCurrentSrc = '';
+
+function sendToImageToImage(e) {
+  e.stopPropagation();
+  if (!lightboxCurrentSrc) { alert('无法获取图片'); return; }
+  window._pendingI2IImage = lightboxCurrentSrc;
+  window._pendingI2IPrompt = lightboxCurrentPrompt || '';
+  closeLightbox(e);
+  if (window.dockNav) { window.dockNav.switchPage('generate'); }
+  setTimeout(function() {
+    if (typeof switchSubTab === 'function') {
+      switchSubTab('i2i');
+    }
+    if (window._pendingI2IImage) {
+      loadImageFromUrl(window._pendingI2IImage);
+    }
+    if (window._pendingI2IPrompt) {
+      var ta = document.getElementById('txtPromptI2I');
+      if (ta) ta.value = window._pendingI2IPrompt;
+    }
+    setStatus('已发送到图生图模式');
+  }, 300);
+}
+
+function sendToVideo(e) {
+  e.stopPropagation();
+  if (!lightboxCurrentSrc) { alert('无法获取图片'); return; }
+  window._pendingI2VImage = lightboxCurrentSrc;
+  window._pendingI2VPrompt = lightboxCurrentPrompt || '';
+  closeLightbox(e);
+  if (window.dockNav) { window.dockNav.switchPage('video'); }
+  setTimeout(function() {
+    if (typeof switchVideoSubTab === 'function') {
+      switchVideoSubTab('i2vid');
+    }
+    if (window._pendingI2VImage) {
+      loadVideoImageFromUrl(window._pendingI2VImage);
+    }
+    if (window._pendingI2VPrompt) {
+      var ta = document.getElementById('txtVideoPrompt');
+      if (ta) ta.value = window._pendingI2VPrompt;
+    }
+    setStatus('已发送到图生视频模式');
+  }, 300);
+}
+
+function loadImageFromUrl(url) {
+  window.uploadedImageData = url;
+  var p = document.getElementById('uploadPreview');
+  if (p) { p.src = url; p.classList.remove('hidden'); }
+}
+
+function loadVideoImageFromUrl(url) {
+  if (!window.videoImages) window.videoImages = [];
+  window.videoImages.push(url);
+  if (typeof renderVideoImagePreview === 'function') {
+    renderVideoImagePreview();
   }
 }
 
@@ -2591,7 +2668,7 @@ function loadDashboard() {
 }
 
 function _renderProviderGroups(providers) {
-  // 两级分类 - 根据 models 列表中的关键字判断能力
+  // 两级分类 - 根据 capabilities 字段或关键字推断能力
   var cats = {
     '🎨 生图模型': { '文生图': [], '图生图': [] },
     '🎬 生视频模型': { '文生视频': [], '图生视频': [] },
@@ -2601,16 +2678,28 @@ function _renderProviderGroups(providers) {
   for (var i = 0; i < providers.length; i++) {
     var p = providers[i];
     var ptype = p.type || 'image';
+    var caps = p.capabilities || {};
     var modelStr = ((p.model || '') + ' ' + (p.models || []).join(' ')).toLowerCase();
     var providerId = (p.id || '').toLowerCase();
     var providerName = (p.name || '').toLowerCase();
 
-    // 检测 i2i 能力：关键字 或 所有 image 类型都支持图生图
-    var hasI2I = ptype === 'image' || modelStr.indexOf('i2i') !== -1 || modelStr.indexOf('edit') !== -1;
-    // 检测 i2v 能力：模型列表中有 veo_*_i2v_* 或 i2v 关键字；或已知支持 i2v 的 provider
-    var hasI2V = modelStr.indexOf('i2v') !== -1
-      || modelStr.indexOf('veo_3_1_i2v') !== -1
-      || providerId === 'agnes' || providerName.indexOf('agnes') !== -1;  // Agnes Video V2.0 支持 i2v
+    // i2i 能力：优先用 capabilities 显式声明，否则用关键字推断
+    var hasI2I;
+    if (caps.i2i !== undefined) {
+      hasI2I = caps.i2i;
+    } else {
+      hasI2I = ptype === 'image' || modelStr.indexOf('i2i') !== -1 || modelStr.indexOf('edit') !== -1;
+    }
+
+    // i2v 能力：优先用 capabilities 显式声明，否则用关键字推断
+    var hasI2V;
+    if (caps.i2v !== undefined) {
+      hasI2V = caps.i2v;
+    } else {
+      hasI2V = modelStr.indexOf('i2v') !== -1
+        || modelStr.indexOf('veo_3_1_i2v') !== -1
+        || providerId === 'agnes' || providerName.indexOf('agnes') !== -1;
+    }
 
     if (ptype === 'llm') {
       cats['🤖 LLM模型']['_flat'].push(p);
@@ -3550,7 +3639,7 @@ function renderProviderEdit() {
             // 名称 + 类型
             '<div style="display:flex;gap:6px;margin-bottom:8px;">' +
               '<input type="text" class="modal-input" style="flex:1;padding:6px 10px;font-size:11px;" placeholder="显示名称" value="' + escHtml(p.name) + '" id="name_' + idx + '">' +
-              '<select class="modal-input" style="width:88px;padding:6px 8px;font-size:11px;" id="type_' + idx + '">' +
+              '<select class="modal-input" style="width:88px;padding:6px 8px;font-size:11px;" id="type_' + idx + '" onchange="updateCapsSection(' + idx + ')">' +
                 '<option value="image" ' + (p.type==='image'?'selected':'') + '>🎨 生图</option>' +
                 '<option value="video" ' + (p.type==='video'?'selected':'') + '>🎬 生视频</option>' +
                 '<option value="llm" ' + (p.type==='llm'?'selected':'') + '>🤖 LLM</option>' +
@@ -3621,6 +3710,30 @@ function renderProviderEdit() {
               '</div>' +
               '<div id="fetchStatus_' + idx + '" style="font-size:10px;color:var(--text-muted);margin-top:2px;"></div>' +
             '</div>' +
+            // 能力声明（根据类型显示不同选项）
+            '<div id="capsSection_' + idx + '" style="margin-bottom:8px;">' +
+              (p.type === 'llm' ? '' :
+                '<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">🎯 模型能力（勾选此项支持的功能）</div>' +
+                '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                  (p.type === 'image' ?
+                    '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+                      '<input type="checkbox" class="cap-check" data-cap="t2i" ' + ((p.capabilities && p.capabilities.t2i !== false) ? 'checked' : '') + ' style="accent-color:var(--accent);width:13px;height:13px;"> 文生图' +
+                    '</label>' +
+                    '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+                      '<input type="checkbox" class="cap-check" data-cap="i2i" ' + ((p.capabilities && p.capabilities.i2i) ? 'checked' : '') + ' style="accent-color:var(--accent);width:13px;height:13px;"> 图生图' +
+                    '</label>'
+                  :
+                    '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+                      '<input type="checkbox" class="cap-check" data-cap="t2v" ' + ((p.capabilities && p.capabilities.t2v) ? 'checked' : '') + ' style="accent-color:var(--accent);width:13px;height:13px;"> 文生视频' +
+                    '</label>' +
+                    '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+                      '<input type="checkbox" class="cap-check" data-cap="i2v" ' + ((p.capabilities && p.capabilities.i2v) ? 'checked' : '') + ' style="accent-color:var(--accent);width:13px;height:13px;"> 图生视频' +
+                    '</label>'
+                  ) +
+                '</div>' +
+                '<div style="font-size:9px;color:var(--text-muted);margin-top:3px;">留空则自动根据模型名称和协议推断</div>'
+              ) +
+            '</div>' +
             // 启用 + 按钮
             '<div style="display:flex;align-items:center;justify-content:space-between;">' +
               '<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
@@ -3666,6 +3779,13 @@ function saveProvider(idx) {
     }
   }
 
+  // 收集能力声明
+  var capabilities = {};
+  var capChecks = document.querySelectorAll('.cap-check');
+  capChecks.forEach(function(cb) {
+    capabilities[cb.dataset.cap] = cb.checked;
+  });
+
   var p = {
     id: document.getElementById('id_' + idx).value.trim() || 'p_' + Date.now(),
     name: document.getElementById('name_' + idx).value,
@@ -3679,6 +3799,7 @@ function saveProvider(idx) {
     enabled: document.getElementById('en_' + idx).checked,
     models: currentModels,
     display_name: (document.getElementById('display_name_' + idx) || {value:''}).value,
+    capabilities: capabilities,
     quality: '', extra: {}
   };
   _authFetch('/api/providers', {
@@ -3691,6 +3812,40 @@ function saveProvider(idx) {
       renderProviderEdit();
     });
   }).catch(function(e){ if (e.message !== 'AUTH_REQUIRED') setStatus('保存失败: ' + e.message); });
+}
+
+function updateCapsSection(idx) {
+  var type = document.getElementById('type_' + idx).value;
+  var section = document.getElementById('capsSection_' + idx);
+  if (!section) return;
+
+  if (type === 'llm') {
+    section.innerHTML = '';
+  } else if (type === 'image') {
+    section.innerHTML =
+      '<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">🎯 模型能力（勾选此项支持的功能）</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+        '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+          '<input type="checkbox" class="cap-check" data-cap="t2i" checked style="accent-color:var(--accent);width:13px;height:13px;"> 文生图' +
+        '</label>' +
+        '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+          '<input type="checkbox" class="cap-check" data-cap="i2i" style="accent-color:var(--accent);width:13px;height:13px;"> 图生图' +
+        '</label>' +
+      '</div>' +
+      '<div style="font-size:9px;color:var(--text-muted);margin-top:3px;">留空则自动根据模型名称和协议推断</div>';
+  } else if (type === 'video') {
+    section.innerHTML =
+      '<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">🎯 模型能力（勾选此项支持的功能）</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+        '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+          '<input type="checkbox" class="cap-check" data-cap="t2v" checked style="accent-color:var(--accent);width:13px;height:13px;"> 文生视频' +
+        '</label>' +
+        '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+          '<input type="checkbox" class="cap-check" data-cap="i2v" style="accent-color:var(--accent);width:13px;height:13px;"> 图生视频' +
+        '</label>' +
+      '</div>' +
+      '<div style="font-size:9px;color:var(--text-muted);margin-top:3px;">留空则自动根据模型名称和协议推断</div>';
+  }
 }
 
 function deleteProvider(id) {
@@ -3813,11 +3968,14 @@ function fetchModels(idx) {
       if (data.success) {
         st.textContent = '✅ 拉取成功 ' + data.count + ' 个模型' + (data.is_fallback ? ' (推荐列表)' : '');
         st.style.color = '#22c3a5';
-        // 缓存模型列表到 localStorage，防止保存时丢失
         try { localStorage.setItem('igs_models_' + pid, JSON.stringify(data.models)); } catch(e){}
         loadProviders().then(function(){ renderProviderEdit(); });
       } else {
-        st.textContent = '❌ ' + (data.detail || '失败');
+        var msg = data.detail || '拉取失败';
+        if (data.provider_type === 'video') {
+          msg += '\n💡 提示：视频模型通常需要手动输入模型名称';
+        }
+        st.textContent = '❌ ' + msg;
         st.style.color = '#f87171';
       }
     }).catch(function(e){

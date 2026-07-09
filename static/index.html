@@ -23,6 +23,8 @@
     <button class="btn-secondary" onclick="zoomReset(event)">重置</button>
     <a id="lightbox-dl" href="" download class="btn-secondary">⬇ 下载原图</a>
     <button class="btn-secondary" onclick="openCompareFromLightbox(event)">🔀 对比</button>
+    <button class="btn-secondary btn-action-i2i" onclick="sendToImageToImage(event)">🎯 图生图</button>
+    <button class="btn-secondary btn-action-i2v" onclick="sendToVideo(event)">🎬 生视频</button>
     <button class="btn-secondary" onclick="closeLightbox(event)">✕ 关闭</button>
   </div>
   <div id="lightbox-info"></div>
@@ -718,15 +720,19 @@
   <div class="dock-sep"></div>
   <div class="dock-item dock-action" onclick="openProviderModal()" title="模型设置">
     <div class="dock-icon">⚙️</div>
+    <div class="dock-dot"></div>
   </div>
   <div class="dock-item dock-action" onclick="openThemeModal()" title="主题设置">
     <div class="dock-icon">🎨</div>
+    <div class="dock-dot"></div>
   </div>
   <div class="dock-item dock-action" onclick="openLogModal()" title="查看日志">
     <div class="dock-icon">📋</div>
+    <div class="dock-dot"></div>
   </div>
   <div class="dock-item dock-action" onclick="location.reload()" title="刷新页面">
     <div class="dock-icon">🔄</div>
+    <div class="dock-dot"></div>
   </div>
 </nav>
 
