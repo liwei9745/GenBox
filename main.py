@@ -2648,7 +2648,10 @@ if __name__ == "__main__":
     # 自动打开浏览器
     def _open_browser():
         time.sleep(1.5)
-        webbrowser.open("http://localhost:8891")
+        try:
+            webbrowser.open("http://localhost:8891")
+        except Exception:
+            pass  # 无头环境忽略
     threading.Thread(target=_open_browser, daemon=True).start()
 
     uvicorn.run(
