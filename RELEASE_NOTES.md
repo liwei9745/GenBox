@@ -218,6 +218,37 @@ LLM_API_KEY=your-key
 
 ---
 
+## 系统要求
+
+### 本地部署
+| 依赖 | 说明 |
+|------|------|
+| Python 3.10+ | 必需 |
+| pip | Python 包管理器 |
+| ffmpeg | 视频生成必需（`sudo apt install ffmpeg` 或 `brew install ffmpeg`） |
+| 现代浏览器 | Chrome / Firefox / Safari / Edge |
+
+### 桌面客户端（推荐）
+无需安装任何依赖，下载对应平台的可执行文件即可运行：
+- **Windows**: `GenBox.exe` - 双击运行，自动打开浏览器
+- **macOS**: `GenBox-macOS` - 需要 `chmod +x` 后运行
+- **Linux**: `GenBox-Linux` - 需要 `chmod +x` 后运行
+
+### Docker 部署
+无需安装 Python 和依赖，一键启动：
+```bash
+docker-compose up -d
+```
+
+### API Key
+需要至少一个 AI 模型的 API Key 才能使用生成功能：
+- OpenAI / GPT Image
+- Google Gemini
+- 阿里云通义千问
+- Agnes AI
+
+---
+
 ## 更新日志
 
 ### v2.1.0 (2026-07-09)

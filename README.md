@@ -87,9 +87,22 @@
 
 ### 环境要求
 
-- Python 3.10+（本地部署）
-- 或 Docker（容器部署）
-- Windows / macOS / Linux
+#### 本地部署
+| 依赖 | 说明 |
+|------|------|
+| Python 3.10+ | 必需 |
+| pip | Python 包管理器 |
+| ffmpeg | 视频生成必需（`sudo apt install ffmpeg` 或 `brew install ffmpeg`） |
+| 现代浏览器 | Chrome / Firefox / Safari / Edge |
+
+#### 或使用桌面客户端
+无需安装任何依赖，下载对应平台的可执行文件即可运行：
+- **Windows**: `GenBox.exe` - 双击运行
+- **macOS**: `GenBox-macOS` - 需要 `chmod +x` 后运行
+- **Linux**: `GenBox-Linux` - 需要 `chmod +x` 后运行
+
+#### 或使用 Docker
+无需安装 Python 和依赖，一键启动
 
 ### 安装步骤
 
