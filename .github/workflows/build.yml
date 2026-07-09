@@ -151,6 +151,11 @@ jobs:
       - name: List artifacts
         run: find artifacts -type f
 
+      - name: Rename artifacts for upload
+        run: |
+          mv "artifacts/macos/${{ env.APP_NAME }}" "artifacts/macos/${{ env.APP_NAME }}-macOS"
+          mv "artifacts/linux/${{ env.APP_NAME }}" "artifacts/linux/${{ env.APP_NAME }}-Linux-x64"
+
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -165,5 +170,5 @@ jobs:
           # Upload assets
           gh release upload "${{ github.ref_name }}" \
             "artifacts/windows/${{ env.APP_NAME }}.exe" \
-            "artifacts/macos/${{ env.APP_NAME }}" \
-            "artifacts/linux/${{ env.APP_NAME }}"
+            "artifacts/macos/${{ env.APP_NAME }}-macOS" \
+            "artifacts/linux/${{ env.APP_NAME }}-Linux-x64"
