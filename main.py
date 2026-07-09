@@ -12,7 +12,7 @@ import time
 import uuid
 import webbrowser
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 # ──────────────────────────────────────────────────────────────
 # PyInstaller 路径兼容
@@ -43,6 +43,45 @@ from config import (
     is_prod_mode, get_admin_key, verify_admin_key, generate_admin_key, reset_admin_key,
 )
 from providers import generate_multi, enhance_prompt_with_llm, enhance_prompt_with_llm_detailed, ImageResult, fetch_models_from_upstream, _save_image
+
+
+# ──────────────────────────────────────────────────────────────
+# SSRF 防护：私有 IP 黑名单
+# ──────────────────────────────────────────────────────────────
+import ipaddress
+import socket as _socket
+
+_BLOCKED_IP_RANGES = [
+    ipaddress.ip_network("127.0.0.0/8"),      # localhost
+    ipaddress.ip_network("10.0.0.0/8"),       # 私有 A 类
+    ipaddress.ip_network("172.16.0.0/12"),    # 私有 B 类
+    ipaddress.ip_network("192.168.0.0/16"),   # 私有 C 类
+    ipaddress.ip_network("169.254.0.0/16"),   # 链路本地
+    ipaddress.ip_network("::1/128"),          # IPv6 localhost
+    ipaddress.ip_network("fc00::/7"),         # IPv6 私有
+    ipaddress.ip_network("fe80::/10"),        # IPv6 链路本地
+]
+
+def _is_url_safe(url: str) -> tuple:
+    """检查 URL 是否指向私有/内网 IP。返回 (safe, error_msg)"""
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False, "无效的 URL"
+        # 解析域名到 IP
+        try:
+            ip_str = _socket.gethostbyname(hostname)
+            ip = ipaddress.ip_address(ip_str)
+            for net in _BLOCKED_IP_RANGES:
+                if ip in net:
+                    return False, f"目标 IP {ip_str} 属于保留地址范围"
+        except _socket.gaierror:
+            return False, f"无法解析域名: {hostname}"
+        return True, None
+    except Exception as e:
+        return False, f"URL 解析失败: {str(e)[:50]}"
 
 
 # ──────────────────────────────────────────────────────────────
@@ -109,6 +148,7 @@ class ProviderCreateReq(BaseModel):
     enabled: bool = True
     color: str = "#0ea5e9"
     display_name: str = ""
+    capabilities: Dict[str, bool] = {}  # 能力声明: {"t2i": True, "i2i": True}
     extra: dict = {}
 
 
@@ -137,9 +177,51 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Content Security Policy：限制脚本来源，防止 XSS
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self'; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
+    )
     if is_prod_mode():
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
+
+
+@app.middleware("http")
+async def csrf_protection(request: Request, call_next):
+    """CSRF 防护：校验 Origin/Referer 头"""
+    if request.method in ("POST", "PUT", "DELETE"):
+        origin = request.headers.get("origin", "")
+        referer = request.headers.get("referer", "")
+        # 获取允许的源
+        allowed_origins = set(ALLOWED_ORIGINS)
+        # 本地地址也允许
+        local_origins = {"http://localhost:8891", "http://127.0.0.1:8891", "http://localhost:8890", "http://127.0.0.1:8890"}
+        allowed_origins.update(local_origins)
+        # 检查 Origin
+        if origin:
+            origin_host = origin.split("://")[1].split("/")[0] if "://" in origin else origin
+            allowed_hosts = set()
+            for o in allowed_origins:
+                if "://" in o:
+                    allowed_hosts.add(o.split("://")[1].split("/")[0])
+            if origin_host not in allowed_hosts:
+                return JSONResponse(status_code=403, content={"error": "CSRF 验证失败", "code": "CSRF_REJECTED"})
+        # 检查 Referer
+        elif referer:
+            referer_host = referer.split("://")[1].split("/")[0] if "://" in referer else referer
+            allowed_hosts = set()
+            for o in allowed_origins:
+                if "://" in o:
+                    allowed_hosts.add(o.split("://")[1].split("/")[0])
+            if referer_host not in allowed_hosts:
+                return JSONResponse(status_code=403, content={"error": "CSRF 验证失败", "code": "CSRF_REJECTED"})
+    return await call_next(request)
 
 # ──────────────────────────────────────────────────────────────
 # 速率限制（简单内存实现）
@@ -343,33 +425,52 @@ async def status():
 
 @app.get("/api/providers")
 async def list_providers():
-    """获取所有 Provider 配置（含 API Key，用于设置界面回填）"""
+    """获取所有 Provider 配置（API Key 脱敏）"""
     from providers.key_pool import key_pool_manager
     providers_data = []
     for p in cfg_mgr.config.providers:
-        d = p.model_dump()  # 返回完整数据，包括 api_key
-        d["has_key"] = bool(p.api_key)
+        d = p.model_dump(exclude={"api_key", "api_keys", "endpoints"})
+        d["has_key"] = bool(p.api_key or p.api_keys)
         d["has_keys"] = len(p.get_effective_keys()) > 1
         d["key_count"] = len(p.get_effective_keys())
-        # 附加 key pool 状态
+        # API Key 脱敏
         keys = p.get_effective_keys()
         if keys:
+            d["api_key_masked"] = keys[0][:4] + "****" + keys[0][-4:] if len(keys[0]) > 8 else "****"
             pool = key_pool_manager.get_or_create(p.id, keys)
             d["keypool"] = {
                 "total_keys": pool.size,
                 "available_keys": pool.available_count,
                 "keys": pool.get_status(),
             }
+        # 端点脱敏
+        d["endpoints"] = []
+        for ep in (p.endpoints or []):
+            ep_dict = {"url": ep.url, "model": ep.model, "enabled": ep.enabled}
+            if ep.key:
+                ep_dict["key_masked"] = ep.key[:4] + "****" + ep.key[-4:] if len(ep.key) > 8 else "****"
+            d["endpoints"].append(ep_dict)
         providers_data.append(d)
     return {"providers": providers_data}
 
 
 @app.get("/api/providers/{provider_id}")
 async def get_provider(provider_id: str):
-    """获取单个 Provider 详细配置（含 API Key）"""
+    """获取单个 Provider 详细配置（API Key 脱敏）"""
     for p in cfg_mgr.config.providers:
         if p.id == provider_id:
-            return p.model_dump()
+            d = p.model_dump(exclude={"api_key", "api_keys"})
+            d["has_key"] = bool(p.api_key or p.api_keys)
+            keys = p.get_effective_keys()
+            if keys:
+                d["api_key_masked"] = keys[0][:4] + "****" + keys[0][-4:] if len(keys[0]) > 8 else "****"
+            d["endpoints"] = []
+            for ep in (p.endpoints or []):
+                ep_dict = {"url": ep.url, "model": ep.model, "enabled": ep.enabled}
+                if ep.key:
+                    ep_dict["key_masked"] = ep.key[:4] + "****" + ep.key[-4:] if len(ep.key) > 8 else "****"
+                d["endpoints"].append(ep_dict)
+            return d
     raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' 不存在")
 
 
@@ -521,12 +622,11 @@ async def fetch_models(provider_id: str):
                 # 检查是否是 fallback（通过对比已知 fallback 列表）
                 fallback_signatures = {
                     "gemini": ["gemini-2.0-flash-exp-image-generation", "gemini-1.5-pro", "gemini-1.5-flash"],
-                    "qwen": ["qwen3.6-plus", "wanx-v1", "wanx2.1-t2i-turbo"],  # 短名称格式=fallback
+                    "qwen": ["qwen3.6-plus", "wanx-v1", "wanx2.1-t2i-turbo"],
                     "openai": ["gpt-image-2", "dall-e-3", "flux-dev", "sd-xl"],
                 }
                 protocol = "gemini" if "gemini" in p.base_url.lower() or "google" in p.base_url.lower() else ("qwen" if "qwen" in p.id else "openai")
                 sig_models = fallback_signatures.get(protocol, [])
-                # qwen 协议: 如果模型名包含 (xxx-image) 后缀说明是真实拉取的，否则可能是 fallback
                 if protocol == "qwen":
                     is_fallback = len(models) <= 8 and any(m in models for m in sig_models)
                 elif len(models) <= 8 and any(m in models for m in sig_models):
@@ -535,7 +635,7 @@ async def fetch_models(provider_id: str):
                 # 自动保存到配置中
                 p.models = models
                 if models and not p.model:
-                    p.model = models[0]  # 自动选第一个
+                    p.model = models[0]
                 cfg_mgr.save(cfg_mgr.config)
                 return {
                     "success": True,
@@ -544,9 +644,14 @@ async def fetch_models(provider_id: str):
                     "auto_selected": p.model,
                     "is_fallback": is_fallback,
                     "message": "(使用推荐列表，上游 API 未响应)" if is_fallback else "",
+                    "provider_type": p.type,
                 }
             except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+                return {
+                    "success": False,
+                    "detail": f"拉取失败: {str(e)}。请确认 URL 支持 GET /v1/models 接口，或手动输入模型名称。",
+                    "provider_type": p.type,
+                }
     raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' 不存在")
 
 
@@ -712,7 +817,17 @@ async def generate(req: GenerateRequest, request: Request):
 
     _write_log("generate", f"生图任务已创建: {gen_id}, {len(task_list)} 个子任务", {"gen_id": gen_id, "providers": provider_ids})
 
-    return {"generation_id": gen_id, "status": "queued"}
+    # 返回 provider_states 让前端立即创建占位卡片
+    provider_states_out = {}
+    for key, st in provider_states.items():
+        provider_states_out[key] = {
+            "status": st["status"],
+            "progress": st["progress"],
+            "name": st.get("name", key),
+            "log": st["log"][-3:] if st["log"] else [],
+        }
+
+    return {"generation_id": gen_id, "status": "queued", "provider_states": provider_states_out}
 
 
 async def _process_image_gen(gen_id: str):
@@ -769,6 +884,14 @@ async def _process_image_gen(gen_id: str):
                 state["status"] = "failed"
                 state["progress"] = 100
                 state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✗ 失败: {res.error[:120]}")
+                # 写入详细错误日志到 logs.jsonl
+                _write_log("generation_error", f"{pid} 失败: {res.error[:200]}", {
+                    "provider_id": pid,
+                    "model": cfg.model if cfg else pid,
+                    "error": res.error[:500],
+                    "mode": task.get("mode", "t2i"),
+                    "elapsed_seconds": res.elapsed_seconds,
+                })
 
             state["result"] = {
                 "success": res.success,
@@ -1627,6 +1750,16 @@ def _build_gemini_payload(req, effective_model):
                 content.append({"type": "image_url", "image_url": {"url": img_data}})
             elif img_data.startswith("http"):
                 content.append({"type": "image_url", "image_url": {"url": img_data}})
+            elif img_data.startswith("/"):
+                # 相对路径：读取本地文件并转为 base64
+                try:
+                    import base64 as _b64
+                    file_path = STORAGE_DIR / "gallery" / img_data.split("/")[-1]
+                    if file_path.exists():
+                        file_data = _b64.b64encode(file_path.read_bytes()).decode()
+                        content.append({"type": "image_url", "image_url": {"url": "data:image/png;base64," + file_data}})
+                except Exception:
+                    pass
             else:
                 content.append({"type": "image_url", "image_url": {"url": "data:image/png;base64," + img_data}})
     return {
@@ -1955,10 +2088,11 @@ async def preview_images():
     """返回图库中最近的图片base64列表（供视频页取图用）"""
     import base64 as _b64
     items = []
-    for f in sorted(GALLERY_DIR.glob("*.png"), reverse=True)[:20]:
+    for f in sorted(GALLERY_DIR.glob("*.png"), reverse=True)[:40]:
         try:
             data = _b64.b64encode(f.read_bytes()).decode()
             prompt_text = ""
+            model_name = f.stem.split("_")[0] if f.stem else "unknown"
             try:
                 from PIL import Image
                 with Image.open(f) as img:
@@ -1970,6 +2104,7 @@ async def preview_images():
                 "filename": f.name,
                 "data": f"data:image/png;base64,{data}",
                 "prompt": prompt_text,
+                "model": model_name,
                 "created_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(f.stat().st_mtime)),
             })
         except Exception:
@@ -2548,6 +2683,67 @@ async def server_control(action: str = "status"):
 
 
 # ──────────────────────────────────────────────────────────────
+# 自动更新系统
+# ──────────────────────────────────────────────────────────────
+@app.get("/api/update/check")
+async def check_for_updates(mirror: str = ""):
+    """检查是否有可用更新"""
+    from updater import check_update
+    info = await check_update(mirror)
+    return {
+        "available": info.available,
+        "current_version": info.current_version,
+        "latest_version": info.latest_version,
+        "release_notes": info.release_notes,
+        "download_url": info.download_url,
+        "update_type": info.update_type,
+    }
+
+
+@app.get("/api/update/mirrors")
+async def test_update_mirrors():
+    """测试所有 GitHub 代理线路的连通性和延迟"""
+    from updater import test_all_mirrors
+    results = await test_all_mirrors()
+    return {
+        "mirrors": [
+            {
+                "name": r.name,
+                "url": r.url,
+                "latency_ms": r.latency_ms,
+                "available": r.available,
+                "error": r.error,
+            }
+            for r in results
+        ],
+        "recommended": results[0].name if results and results[0].available else None,
+    }
+
+
+@app.post("/api/update/apply")
+async def apply_update(mirror: str = "", download_url: str = ""):
+    """执行更新"""
+    from updater import apply_update
+    result = await apply_update(mirror, download_url)
+    return result
+
+
+@app.get("/api/update/info")
+async def get_update_info():
+    """获取当前更新环境信息"""
+    from updater import detect_update_type, CURRENT_VERSION, get_app_dir
+    update_type = detect_update_type()
+    app_dir = get_app_dir()
+    return {
+        "current_version": CURRENT_VERSION,
+        "update_type": update_type.value,
+        "app_dir": str(app_dir),
+        "platform": sys.platform,
+        "is_frozen": getattr(sys, 'frozen', False),
+    }
+
+
+# ──────────────────────────────────────────────────────────────
 # 安全策略：ADMINKEY 认证中间件
 # ──────────────────────────────────────────────────────────────
 AUTH_EXEMPT_PATHS = {
@@ -2565,7 +2761,7 @@ async def admin_auth_middleware(request: Request, call_next):
     # 静态文件免认证
     if not path.startswith("/api/"):
         return await call_next(request)
-    # 白名单免认证
+    # 白名单免认证（首次设置流程）
     if path in AUTH_EXEMPT_PATHS:
         return await call_next(request)
 
@@ -2625,8 +2821,9 @@ if __name__ == "__main__":
 
     # 首次启动：交互式选择模式
     def _first_run_setup():
-        """首次启动时让用户选择运行模式"""
+        """首次启动时引导用户完成配置"""
         from config import _read_env, _write_env, BASE_DIR
+        import secrets
         
         env = _read_env()
         # 检查是否已配置过
@@ -2638,34 +2835,89 @@ if __name__ == "__main__":
 ║                   🎉 欢迎使用 GenBox!                       ║
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                              ║
-║  首次启动，请选择运行模式：                                   ║
+║  首次启动，请选择部署方式：                                   ║
 ║                                                              ║
-║  [1] 正式使用 (推荐)                                         ║
-║      - 需要管理员密钥认证                                    ║
-║      - 适合 VPS 部署、公网访问                               ║
+║  [1] 本地使用（推荐新手）                                     ║
+║      - 无需认证，打开即用                                    ║
+║      - 仅本机可访问                                          ║
+║      - 适合个人电脑调试                                      ║
+║                                                              ║
+║  [2] VPS/云服务器部署                                         ║
+║      - 需要管理员密钥登录                                    ║
+║      - 可通过公网访问                                        ║
 ║      - 安全性高                                              ║
 ║                                                              ║
-║  [2] 本地开发                                                ║
-║      - 无需认证，直接访问                                    ║
-║      - 适合本地调试                                          ║
-║      - 仅限本机使用                                          ║
+║  [3] Docker 部署                                             ║
+║      - 使用 docker-compose 一键部署                          ║
+║      - 参考 .env.example 配置                                ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
         """)
         
         while True:
             try:
-                choice = input("请选择 (1 或 2): ").strip()
+                choice = input("请选择 (1/2/3): ").strip()
                 if choice == "1":
-                    _write_env({"APP_MODE": "prod"})
-                    print("\n✅ 已启用生产模式（需要认证）\n")
+                    # 本地开发模式
+                    _write_env({"APP_MODE": "dev"})
+                    print("\n✅ 已启用本地模式（无需认证，仅限本机访问）\n")
                     break
                 elif choice == "2":
-                    _write_env({"APP_MODE": "dev"})
-                    print("\n⚠️  已启用开发模式（无需认证，仅限本机使用）\n")
+                    # VPS 模式
+                    _write_env({"APP_MODE": "prod"})
+                    print("\n✅ 已启用生产模式（需要认证）\n")
+                    
+                    # 询问 CORS 配置
+                    print("─" * 50)
+                    print("📡 网络配置")
+                    print("─" * 50)
+                    print("为了让浏览器能访问 API，需要配置允许的源。")
+                    print("如果有域名请输入域名，否则输入服务器 IP。")
+                    print("多个地址用逗号分隔，直接回车跳过（默认仅本机）。")
+                    print()
+                    
+                    origins_input = input("允许的源 (如 http://your-ip:8891): ").strip()
+                    if origins_input:
+                        _write_env({"ALLOWED_ORIGINS": origins_input})
+                        print(f"✅ 已设置 CORS: {origins_input}\n")
+                    else:
+                        print("⏭️  跳过，使用默认配置（仅本机）\n")
+                    
+                    # 自动生成并显示管理密钥
+                    admin_key = secrets.token_urlsafe(16)
+                    _write_env({"ADMIN_KEY": admin_key})
+                    print("─" * 50)
+                    print("🔐 管理员密钥已自动生成")
+                    print("─" * 50)
+                    print(f"\n   {admin_key}\n")
+                    print("⚠️  请立即保存此密钥！关闭后无法再次查看！")
+                    print("   建议保存到密码管理器。\n")
+                    break
+                elif choice == "3":
+                    # Docker 模式
+                    print("\n🐳 Docker 部署指引：")
+                    print("─" * 50)
+                    print("1. 复制环境配置文件：")
+                    print("   cp .env.example .env")
+                    print()
+                    print("2. 编辑 .env 文件，填入你的 API Key：")
+                    print("   nano .env")
+                    print()
+                    print("3. 启动容器：")
+                    print("   docker-compose up -d")
+                    print()
+                    print("4. 查看日志：")
+                    print("   docker-compose logs -f")
+                    print()
+                    print("详细说明请参考 README.md 的 Docker 部署章节。")
+                    print("─" * 50)
+                    
+                    # Docker 默认使用 prod 模式
+                    _write_env({"APP_MODE": "prod"})
+                    print("\n✅ Docker 部署默认启用生产模式\n")
                     break
                 else:
-                    print("❌ 请输入 1 或 2")
+                    print("❌ 请输入 1、2 或 3")
             except (EOFError, KeyboardInterrupt):
                 # 无交互环境（如 Docker），默认使用 prod 模式
                 _write_env({"APP_MODE": "prod"})

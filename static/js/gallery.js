@@ -119,7 +119,7 @@ window.renderGalleryItems = function(items) {
 
       var thumbHtml = '<img src="' + item.thumbnail + '" loading="lazy" style="' + (isVideo ? 'object-fit:cover;' : '') + '">';
 
-      h += '<div class="gallery-item' + (isSelected ? ' selected' : '') + (isVideo ? ' gallery-item-video' : '') + '" data-id="' + _ea(item.id) + '" data-fname="' + _ea(f) + '" data-type="' + (isVideo ? 'video' : 'image') + '" ' + clickHandler + '>' +
+      h += '<div class="gallery-item' + (isSelected ? ' selected' : '') + (isVideo ? ' gallery-item-video' : '') + '" data-id="' + _ea(item.id) + '" data-fname="' + _ea(f) + '" data-type="' + (isVideo ? 'video' : 'image') + '" data-src="' + _ea(item.thumbnail || '') + '" data-prompt="' + _ea(item.prompt || '') + '" ' + clickHandler + '>' +
         thumbHtml +
         typeIcon +
         badgesHtml +
@@ -127,6 +127,10 @@ window.renderGalleryItems = function(items) {
         (inSelectMode ? '' : (isVideo ? '' : '<div class="gallery-zoom-hint">\u{1F50D}</div>')) +
         (isVideo ? '' : '<div class="gallery-item-overlay">' +
           '<div class="gallery-item-label">' + _eh(pInfo.name) + '</div>' +
+          '<div class="gallery-item-actions">' +
+            '<button class="gallery-action-btn" onclick="event.stopPropagation(); sendGalleryToI2I(\'' + _ea(item.id) + '\')" title="图生图">🎯</button>' +
+            '<button class="gallery-action-btn" onclick="event.stopPropagation(); sendGalleryToVideo(\'' + _ea(item.id) + '\')" title="生视频">🎬</button>' +
+          '</div>' +
         '</div>') +
       '</div>';
     })(sorted[i]);
@@ -385,6 +389,53 @@ window.pushGalleryToReference = function() {
       window.setStatus('\u5DF2\u63A8\u9001\u5230\u53C2\u8003\u56FE\u7247\u533A\u57DF\uFF0C\u53EF\u4EE5\u8F93\u5165\u4FEE\u6539\u63D0\u793A\u8BCD\u540E\u751F\u56FE');
     })
     .catch(function(e){ alert('\u63A8\u9001\u5931\u8D25: ' + e.message); });
+};
+
+/* ═══════════════════════════════════════════════════════════════════
+   Quick Actions: send gallery image to i2i or video
+   ═══════════════════════════════════════════════════════════════════ */
+window.sendGalleryToI2I = function(itemId) {
+  var el = document.querySelector('.gallery-item[data-id="' + itemId + '"]');
+  var fname = el ? el.getAttribute('data-fname') : '';
+  if (!fname) { alert('\u65E0\u6CD5\u83B7\u53D6\u56FE\u7247\u6587\u4EF6\u540D'); return; }
+
+  window.setStatus('\u6B63\u5728\u52A0\u8F7D\u56FE\u7247...');
+  _af('/api/gallery/image/' + fname + '/base64')
+    .then(function(r){
+      if (!r.ok) throw new Error('\u83B7\u53D6\u56FE\u7247\u6570\u636E\u5931\u8D25');
+      return r.json();
+    })
+    .then(function(d){
+      window.uploadedImageData = d.data;
+      if (typeof switchSubTab === 'function') switchSubTab('i2i');
+      if (window.dockNav) window.dockNav.switchPage('generate');
+      var p = document.getElementById('uploadPreview');
+      if (p) { p.src = d.data; p.classList.remove('hidden'); }
+      window.setStatus('\u5DF2\u53D1\u9001\u5230\u56FE\u751F\u56FE\u6A21\u5F0F');
+    })
+    .catch(function(e){ alert('\u53D1\u9001\u5931\u8D25: ' + e.message); });
+};
+
+window.sendGalleryToVideo = function(itemId) {
+  var el = document.querySelector('.gallery-item[data-id="' + itemId + '"]');
+  var fname = el ? el.getAttribute('data-fname') : '';
+  if (!fname) { alert('\u65E0\u6CD5\u83B7\u53D6\u56FE\u7247\u6587\u4EF6\u540D'); return; }
+
+  window.setStatus('\u6B63\u5728\u52A0\u8F7D\u56FE\u7247...');
+  _af('/api/gallery/image/' + fname + '/base64')
+    .then(function(r){
+      if (!r.ok) throw new Error('\u83B7\u53D6\u56FE\u7247\u6570\u636E\u5931\u8D25');
+      return r.json();
+    })
+    .then(function(d){
+      if (!window.videoImages) window.videoImages = [];
+      window.videoImages.push(d.data);
+      if (typeof switchVideoSubTab === 'function') switchVideoSubTab('i2vid');
+      if (window.dockNav) window.dockNav.switchPage('video');
+      if (typeof renderVideoImagePreview === 'function') renderVideoImagePreview();
+      window.setStatus('\u5DF2\u53D1\u9001\u5230\u56FE\u751F\u89C6\u9891\u6A21\u5F0F');
+    })
+    .catch(function(e){ alert('\u53D1\u9001\u5931\u8D25: ' + e.message); });
 };
 
 /* ═══════════════════════════════════════════════════════════════════

@@ -1,25 +1,44 @@
 @echo off
-chcp 65001 >nul
-set PYTHONIOENCODING=utf-8
-title Image Gen Studio v2
-color 0B
-cd /d "%~dp0"
+chcp 65001 >nul 2>&1
+title GenBox Launcher
 
-if "%1"=="--reset-admin" (
-    echo.
-    echo  [Admin Reset] 正在重置管理密钥...
-    python main.py --reset-admin
-    echo.
+echo.
+echo ========================================
+echo   GenBox Launcher
+echo ========================================
+echo.
+
+:: Clear PYTHONPATH to avoid pollution
+set PYTHONPATH=
+
+:: Check Python
+python --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] Python not found, please install Python 3.10+
+    echo Download: https://www.python.org/downloads/
     pause
-    exit /b
+    exit /b 1
 )
 
+:: Check dependencies
+echo Checking dependencies...
+pip show fastapi >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Installing dependencies...
+    pip install -r requirements.txt
+)
+
+:: Run environment check
 echo.
-echo  ============================================
-echo    Image Gen Studio v2 - Starting...
-echo    Port: 8890
-echo    URL:  http://localhost:8890
-echo  ============================================
+echo Running environment check...
+python check_env.py
+
+:: Start service
+echo.
+echo Starting GenBox...
+echo Access: http://localhost:8891
+echo Press Ctrl+C to stop
 echo.
 python main.py
+
 pause

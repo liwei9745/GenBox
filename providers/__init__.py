@@ -19,6 +19,38 @@ from io import BytesIO
 from config import cfg_mgr, GALLERY_DIR, ProviderConfig
 
 
+# 国内模型厂商（始终直连，不走代理）
+CHINESE_PROVIDERS = {
+    "qwen",        # 阿里通义千问
+    "zhipu",       # 智谱 GLM
+    "deepseek",    # DeepSeek
+    "volcengine",  # 火山引擎
+    "siliconflow", # SiliconFlow
+}
+
+
+def _get_proxy_url(cfg: ProviderConfig = None) -> str | None:
+    """获取代理 URL（支持 Provider 级别跳过代理）
+    
+    逻辑：
+    1. 国内厂商（CHINESE_PROVIDERS）→ 始终直连
+    2. 全局代理未启用 → 返回 None（直连）
+    3. Provider 设置 skip_proxy=True → 返回 None（直连）
+    4. 其他情况 → 返回代理 URL
+    """
+    # 国内厂商始终直连
+    if cfg and cfg.id in CHINESE_PROVIDERS:
+        return None
+    
+    proxy = cfg_mgr.config.proxy
+    if not proxy.enabled or not proxy.host:
+        return None
+    # Provider 级别跳过代理
+    if cfg and cfg.skip_proxy:
+        return None
+    return f"{proxy.type}://{proxy.host}:{proxy.port}"
+
+
 @dataclass
 class ImageResult:
     """统一返回格式"""
@@ -225,12 +257,12 @@ async def _dispatch_generate(cfg, prompt, protocol, **kwargs):
         return await _gen_openai(cfg, prompt, **kwargs)
 
 
-async def _http_post_with_retry(url, headers, payload, *, timeout=120.0, max_retries=3, retry_delay=2.0):
+async def _http_post_with_retry(url, headers, payload, *, timeout=120.0, max_retries=3, retry_delay=2.0, proxy: str = None):
     """带重试的 HTTP POST，返回 (resp, client) 或抛异常（附带响应体）。
     注意：返回的 client 可能已关闭，调用方需自行管理后续请求。"""
     last_exc = None
     for attempt in range(max_retries):
-        client = httpx.AsyncClient(timeout=timeout)
+        client = httpx.AsyncClient(timeout=timeout, proxy=proxy)
         try:
             resp = await client.post(url, headers=headers, json=payload)
             # 429 Too Many Requests 或 5xx 服务器错误 → 重试
@@ -313,6 +345,7 @@ async def _gen_openai(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult
     resp, client = await _http_post_with_retry(
         f"{base}/images/generations",
         headers=headers, payload=payload,
+        proxy=_get_proxy_url(cfg),
     )
     data = resp.json()
 
@@ -339,7 +372,7 @@ async def _gen_gemini(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult
     """Google Gemini 原生协议"""
     model_id = kwargs.get("model") or cfg.model
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=120.0, proxy=_get_proxy_url(cfg)) as client:
         # 处理 base_url：移除末尾的 /v1 或 /v1beta（如果存在）
         base = cfg.base_url.rstrip('/')
         if base.endswith('/v1') or base.endswith('/v1beta'):
@@ -394,6 +427,7 @@ async def _gen_qwen(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult:
     resp, client = await _http_post_with_retry(
         f"{_ensure_v1(cfg.base_url)}/images/generations",
         headers=headers, payload=payload,
+        proxy=_get_proxy_url(cfg),
     )
     data = resp.json()
 
@@ -458,6 +492,7 @@ async def _gen_agnes(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult:
     resp, client = await _http_post_with_retry(
         f"{_ensure_v1(cfg.base_url)}/images/generations",
         headers=headers, payload=payload,
+        proxy=_get_proxy_url(cfg),
     )
     data = resp.json()
 
@@ -511,7 +546,7 @@ async def _gen_openai_edit(cfg: ProviderConfig, prompt: str, image_data: str, st
         "size": size,
     }
 
-    async with httpx.AsyncClient(timeout=180.0) as client:
+    async with httpx.AsyncClient(timeout=180.0, proxy=_get_proxy_url(cfg)) as client:
         # 尝试标准 /images/edits 端点
         base = _ensure_v1(cfg.base_url)
         url = f"{base}/images/edits"
@@ -595,7 +630,7 @@ async def _gen_gemini_edit(cfg: ProviderConfig, prompt: str, image_data: str, st
 
     model_id = kwargs.get("model") or cfg.model
 
-    async with httpx.AsyncClient(timeout=180.0) as client:
+    async with httpx.AsyncClient(timeout=180.0, proxy=_get_proxy_url(cfg)) as client:
         # 处理 base_url：移除末尾的 /v1 或 /v1beta
         base = cfg.base_url.rstrip('/')
         if base.endswith('/v1') or base.endswith('/v1beta'):
@@ -718,7 +753,7 @@ async def enhance_prompt_with_llm(prompt: str, llm_provider_id: str = None) -> s
     }
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, proxy=_get_proxy_url(llm_cfg)) as client:
             resp = await client.post(
                 f"{_ensure_v1(llm_cfg.base_url)}/chat/completions",
                 headers=headers,
@@ -766,7 +801,7 @@ async def enhance_prompt_with_llm_detailed(prompt: str, llm_provider_id: str = N
     }
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, proxy=_get_proxy_url(llm_cfg)) as client:
             resp = await client.post(
                 f"{_ensure_v1(llm_cfg.base_url)}/chat/completions",
                 headers=headers,
@@ -815,7 +850,7 @@ async def _fetch_openai_models(cfg: ProviderConfig) -> List[str]:
     base = cfg.base_url.rstrip('/')
 
     # 尝试 /v1/models
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, proxy=_get_proxy_url(cfg)) as client:
         resp = await client.get(f"{base}/models", headers=headers)
         resp.raise_for_status()
         data = resp.json()
@@ -851,7 +886,7 @@ async def _fetch_gemini_models(cfg: ProviderConfig) -> List[str]:
     
     # 先尝试原生 Gemini API
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, proxy=_get_proxy_url(cfg)) as client:
             url = f"{base}/v1beta/models?key={cfg.api_key}"
             resp = await client.get(url)
             if resp.status_code == 200:
@@ -879,7 +914,7 @@ async def _fetch_qwen_models(cfg: ProviderConfig) -> List[str]:
     headers = {"Authorization": f"Bearer {cfg.api_key}"}
     base = cfg.base_url.rstrip('/')
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, proxy=_get_proxy_url(cfg)) as client:
         # 尝试多种可能的端点
         endpoints_to_try = [
             f"{base}/v1/models",
@@ -949,6 +984,21 @@ def _get_fallback_models(cfg: ProviderConfig, protocol: str) -> List[str]:
     当上游 API 拉取失败时，返回该协议的常用模型列表
     这样用户至少能看到一些选项
     """
+    if cfg.type == "video":
+        return [
+            "veo-3-1-generate-preview",
+            "veo-3-1-fast-generate-preview",
+            "veo-3-0-generate-001",
+            "veo-2-0-generate-001",
+            "wanx2.1-t2v-turbo",
+            "wanx2.1-t2v-plus",
+            "hailuoai-video",
+            "kling-v2",
+            "kling-v1",
+            "gen-3a-turbo",
+            "gen-3a-turbo-video",
+            "sora",
+        ]
     if protocol == "gemini":
         return [
             "gemini-2.0-flash-exp-image-generation",
@@ -976,7 +1026,6 @@ def _get_fallback_models(cfg: ProviderConfig, protocol: str) -> List[str]:
         ]
     else:  # openai or agnes
         if cfg.type == "llm":
-            # LLM 类型：推荐对话模型
             return [
                 "gpt-4o-mini", "gpt-4o", "gpt-4-turbo",
                 "deepseek-chat", "deepseek-reasoner",

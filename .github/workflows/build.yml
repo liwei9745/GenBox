@@ -72,14 +72,11 @@ jobs:
       - name: Build with PyInstaller
         run: python build.py
 
-      - name: Rename artifact
-        run: mv dist/${{ env.APP_NAME }} dist/${{ env.APP_NAME }}-macOS
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-macOS
-          path: dist/${{ env.APP_NAME }}-macOS
+          path: dist/${{ env.APP_NAME }}
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────
@@ -111,14 +108,11 @@ jobs:
       - name: Build with PyInstaller
         run: python build.py
 
-      - name: Rename artifact
-        run: mv dist/${{ env.APP_NAME }} dist/${{ env.APP_NAME }}-Linux
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-Linux-x64
-          path: dist/${{ env.APP_NAME }}-Linux
+          path: dist/${{ env.APP_NAME }}
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────
@@ -157,6 +151,42 @@ jobs:
       - name: List artifacts
         run: find artifacts -type f
 
+      - name: Rename artifacts for upload
+        run: |
+          mv "artifacts/macos/${{ env.APP_NAME }}" "artifacts/macos/${{ env.APP_NAME }}-macOS"
+          mv "artifacts/linux/${{ env.APP_NAME }}" "artifacts/linux/${{ env.APP_NAME }}-Linux-x64"
+
+      - name: Package Windows release
+        run: |
+          mkdir -p artifacts/release-windows
+          cp "artifacts/windows/${{ env.APP_NAME }}.exe" artifacts/release-windows/
+          cp .env.example artifacts/release-windows/
+          cp requirements.txt artifacts/release-windows/
+          cp check_env.py artifacts/release-windows/
+          cp start.bat artifacts/release-windows/
+          cp README.md artifacts/release-windows/
+          cd artifacts/release-windows && zip -r ../${{ env.APP_NAME }}-Windows.zip .
+
+      - name: Package macOS release
+        run: |
+          mkdir -p artifacts/release-macos
+          cp "artifacts/macos/${{ env.APP_NAME }}-macOS" artifacts/release-macos/
+          cp .env.example artifacts/release-macos/
+          cp requirements.txt artifacts/release-macos/
+          cp check_env.py artifacts/release-macos/
+          cp README.md artifacts/release-macos/
+          cd artifacts/release-macos && zip -r ../${{ env.APP_NAME }}-macOS.zip .
+
+      - name: Package Linux release
+        run: |
+          mkdir -p artifacts/release-linux
+          cp "artifacts/linux/${{ env.APP_NAME }}-Linux-x64" artifacts/release-linux/
+          cp .env.example artifacts/release-linux/
+          cp requirements.txt artifacts/release-linux/
+          cp check_env.py artifacts/release-linux/
+          cp README.md artifacts/release-linux/
+          cd artifacts/release-linux && zip -r ../${{ env.APP_NAME }}-Linux-x64.zip .
+
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -168,8 +198,14 @@ jobs:
             --draft=false \
             --prerelease=false
           
-          # Upload assets
+          # Upload zip packages (recommended for first-time users)
+          gh release upload "${{ github.ref_name }}" \
+            "artifacts/${{ env.APP_NAME }}-Windows.zip" \
+            "artifacts/${{ env.APP_NAME }}-macOS.zip" \
+            "artifacts/${{ env.APP_NAME }}-Linux-x64.zip"
+          
+          # Upload standalone executables (for advanced users)
           gh release upload "${{ github.ref_name }}" \
             "artifacts/windows/${{ env.APP_NAME }}.exe" \
             "artifacts/macos/${{ env.APP_NAME }}-macOS" \
-            "artifacts/linux/${{ env.APP_NAME }}-Linux"
+            "artifacts/linux/${{ env.APP_NAME }}-Linux-x64"

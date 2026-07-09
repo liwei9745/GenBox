@@ -190,6 +190,17 @@ function switchNav(name, el) {
   if (name === 'dashboard') loadDashboard();
 }
 
+window.dockNav = {
+  switchPage: function(pageId) {
+    var dockItem = document.querySelector('.dock-item[data-page="' + pageId + '"]');
+    switchNav(pageId, dockItem);
+  },
+  currentPage: function() {
+    var active = document.querySelector('.dock-item.active[data-page]');
+    return active ? active.getAttribute('data-page') : 'dashboard';
+  }
+};
+
 // ═══════════════════════════════════════════════════════════════════
 // 图像设置：宽高比 / 质量 / 数量 / 尺寸联动
 // ═══════════════════════════════════════════════════════════════════
@@ -990,6 +1001,8 @@ function handleFile(f) {
     var p = document.getElementById('uploadPreview');
     p.src = uploadedImageData;
     p.classList.remove('hidden');
+    var ph = document.getElementById('uploadPlaceholder');
+    if (ph) ph.style.display = 'none';
   };
   reader.readAsDataURL(f);
 }
@@ -1168,7 +1181,10 @@ function createPreviewPlaceholders(providerStates) {
   var mainContent = document.getElementById('previewMainContent');
   if (!container) return;
   if (emptyEl) emptyEl.style.display = 'none';
-  if (mainContent) mainContent.style.display = 'flex';
+  if (mainContent) {
+    mainContent.classList.remove('hidden');
+    mainContent.style.display = 'flex';
+  }
 
   // Remove old placeholder cards only (preserve grouped previews)
   Object.keys(previewPlaceholders).forEach(function(k) {
@@ -1346,16 +1362,22 @@ function renderGroupedPreviews() {
   container.querySelectorAll('.grouped-card').forEach(function(el) { el.remove(); });
   var rPids = Object.keys(groupedPreviews);
   if (rPids.length === 0 && Object.keys(previewPlaceholders).length === 0) {
-    var emptyEl = document.getElementById('previewEmpty');
-    if (emptyEl) emptyEl.style.display = '';
-    var mainContent = document.getElementById('previewMainContent');
-    if (mainContent) mainContent.style.display = 'none';
-    return;
-  }
   var emptyEl = document.getElementById('previewEmpty');
-  if (emptyEl) emptyEl.style.display = 'none';
+  if (emptyEl) emptyEl.style.display = '';
   var mainContent = document.getElementById('previewMainContent');
-  if (mainContent) mainContent.style.display = 'flex';
+  if (mainContent) {
+    mainContent.classList.add('hidden');
+    mainContent.style.display = 'none';
+  }
+  return;
+}
+var emptyEl = document.getElementById('previewEmpty');
+if (emptyEl) emptyEl.style.display = 'none';
+var mainContent = document.getElementById('previewMainContent');
+if (mainContent) {
+  mainContent.classList.remove('hidden');
+  mainContent.style.display = 'flex';
+}
   for (var i = 0; i < rPids.length; i++) {
     container.appendChild(buildGroupCard(rPids[i]));
   }
@@ -1813,7 +1835,11 @@ function doGenerate() {
     clearInterval(timerInterval);
     pfill.style.width = '15%';
     ptxt.textContent = '任务已提交，队列处理中...';
-    // 占位符将在第一次 poll 时创建（因为 /api/generate 不返回 provider_states）
+    // 立即创建占位卡片（从初始响应的 provider_states）
+    if (data.provider_states && Object.keys(data.provider_states).length > 0) {
+      window._placeholdersCreated = true;
+      createPreviewPlaceholders(data.provider_states);
+    }
     if (data.generation_id) {
       startGenPolling(data.generation_id);
     }
@@ -1942,7 +1968,10 @@ function showResults(results, prompt, timings) {
   if (!container) return;
   var keys = Object.keys(results);
 
-  if (mainContent) mainContent.style.display = 'flex';
+  if (mainContent) {
+    mainContent.classList.remove('hidden');
+    mainContent.style.display = 'flex';
+  }
 
   // Merge successful results into grouped state
   var addedCount = 0;
@@ -2043,7 +2072,10 @@ function addResultToPreview(key, result) {
   addImageToGroupedPreview(realPid, imgEntry);
 
   if (emptyEl) emptyEl.style.display = 'none';
-  if (mainContent) mainContent.style.display = 'flex';
+  if (mainContent) {
+    mainContent.classList.remove('hidden');
+    mainContent.style.display = 'flex';
+  }
   renderGroupedPreviews();
 }
 
@@ -2079,6 +2111,7 @@ function getProviderDisplayName(pid) {
 // 灯箱
 // ═══════════════════════════════════════════════════════════════════
 var lightboxCurrentPrompt = '';
+var lightboxCurrentSrc = '';
 
 function openLightbox(src, label, prompt) {
   var lb = document.getElementById('lightbox');
@@ -2098,6 +2131,8 @@ function openLightbox(src, label, prompt) {
     img.style.transform = 'scale(1)';
     if (dl) dl.href = src;
     if (info) info.textContent = label || '';
+    // 保存当前图片源
+    lightboxCurrentSrc = src;
     // 显示提示词
     lightboxCurrentPrompt = prompt || '';
     if (promptEl) promptEl.textContent = prompt || '';
@@ -2114,6 +2149,107 @@ function copyLightboxPrompt() {
     navigator.clipboard.writeText(lightboxCurrentPrompt).then(function(){
       setStatus('已复制提示词到剪贴板');
     });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 快捷操作：发送到图生图/生视频
+// ═══════════════════════════════════════════════════════════════════
+var lightboxCurrentSrc = '';
+
+function sendToImageToImage(e) {
+  e.stopPropagation();
+  if (!lightboxCurrentSrc) { alert('无法获取图片'); return; }
+  var imgUrl = lightboxCurrentSrc;
+  window._pendingI2IPrompt = lightboxCurrentPrompt || '';
+  closeLightbox(e);
+  if (window.dockNav) { window.dockNav.switchPage('generate'); }
+
+  // 从 URL 获取 base64 数据
+  var fname = imgUrl.split('/').pop();
+  _authFetch('/api/gallery/image/' + fname + '/base64')
+    .then(function(r) {
+      if (!r.ok) throw new Error('获取图片数据失败');
+      return r.json();
+    })
+    .then(function(d) {
+      window.uploadedImageData = d.data;
+      setTimeout(function() {
+        if (typeof switchSubTab === 'function') {
+          switchSubTab('i2i');
+        }
+        var p = document.getElementById('uploadPreview');
+        if (p) { p.src = d.data; p.classList.remove('hidden'); }
+        if (window._pendingI2IPrompt) {
+          var ta = document.getElementById('txtPromptI2I');
+          if (ta) ta.value = window._pendingI2IPrompt;
+        }
+        setStatus('已发送到图生图模式');
+      }, 300);
+    })
+    .catch(function(e) {
+      alert('加载图片失败: ' + e.message);
+    });
+}
+
+function sendToVideo(e) {
+  e.stopPropagation();
+  if (!lightboxCurrentSrc) { alert('无法获取图片'); return; }
+  var imgUrl = lightboxCurrentSrc;
+  window._pendingI2VPrompt = lightboxCurrentPrompt || '';
+  closeLightbox(e);
+  if (window.dockNav) { window.dockNav.switchPage('video'); }
+
+  // 从 URL 获取 base64 数据
+  var fname = imgUrl.split('/').pop();
+  _authFetch('/api/gallery/image/' + fname + '/base64')
+    .then(function(r) {
+      if (!r.ok) throw new Error('获取图片数据失败');
+      return r.json();
+    })
+    .then(function(d) {
+      setTimeout(function() {
+        if (typeof switchVideoSubTab === 'function') {
+          switchVideoSubTab('i2vid');
+        }
+        if (!window.videoImages) window.videoImages = [];
+        window.videoImages.push(d.data);
+        if (typeof renderVideoImagePreview === 'function') renderVideoImagePreview();
+        if (window._pendingI2VPrompt) {
+          var ta = document.getElementById('txtVideoPrompt');
+          if (ta) ta.value = window._pendingI2VPrompt;
+        }
+        setStatus('已发送到图生视频模式');
+      }, 300);
+    })
+    .catch(function(e) {
+      alert('加载图片失败: ' + e.message);
+    });
+}
+
+function loadImageFromUrl(url) {
+  window.uploadedImageData = url;
+  var p = document.getElementById('uploadPreview');
+  if (p) { p.src = url; p.classList.remove('hidden'); }
+  var ph = document.getElementById('uploadPlaceholder');
+  if (ph) ph.style.display = 'none';
+}
+
+function loadVideoImageFromUrl(url) {
+  if (!window.videoImages) window.videoImages = [];
+  // 如果是 URL（非 base64），先获取 base64 数据
+  if (url && !url.startsWith('data:')) {
+    var fname = url.split('/').pop();
+    _authFetch('/api/gallery/image/' + fname + '/base64')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        window.videoImages.push(d.data);
+        if (typeof renderVideoImagePreview === 'function') renderVideoImagePreview();
+      })
+      .catch(function(e) { console.error('加载图片失败:', e); });
+  } else {
+    window.videoImages.push(url);
+    if (typeof renderVideoImagePreview === 'function') renderVideoImagePreview();
   }
 }
 
@@ -2591,7 +2727,7 @@ function loadDashboard() {
 }
 
 function _renderProviderGroups(providers) {
-  // 两级分类 - 根据 models 列表中的关键字判断能力
+  // 两级分类 - 根据 capabilities 字段或关键字推断能力
   var cats = {
     '🎨 生图模型': { '文生图': [], '图生图': [] },
     '🎬 生视频模型': { '文生视频': [], '图生视频': [] },
@@ -2601,16 +2737,28 @@ function _renderProviderGroups(providers) {
   for (var i = 0; i < providers.length; i++) {
     var p = providers[i];
     var ptype = p.type || 'image';
+    var caps = p.capabilities || {};
     var modelStr = ((p.model || '') + ' ' + (p.models || []).join(' ')).toLowerCase();
     var providerId = (p.id || '').toLowerCase();
     var providerName = (p.name || '').toLowerCase();
 
-    // 检测 i2i 能力：关键字 或 所有 image 类型都支持图生图
-    var hasI2I = ptype === 'image' || modelStr.indexOf('i2i') !== -1 || modelStr.indexOf('edit') !== -1;
-    // 检测 i2v 能力：模型列表中有 veo_*_i2v_* 或 i2v 关键字；或已知支持 i2v 的 provider
-    var hasI2V = modelStr.indexOf('i2v') !== -1
-      || modelStr.indexOf('veo_3_1_i2v') !== -1
-      || providerId === 'agnes' || providerName.indexOf('agnes') !== -1;  // Agnes Video V2.0 支持 i2v
+    // i2i 能力：优先用 capabilities 显式声明，否则用关键字推断
+    var hasI2I;
+    if (caps.i2i !== undefined) {
+      hasI2I = caps.i2i;
+    } else {
+      hasI2I = ptype === 'image' || modelStr.indexOf('i2i') !== -1 || modelStr.indexOf('edit') !== -1;
+    }
+
+    // i2v 能力：优先用 capabilities 显式声明，否则用关键字推断
+    var hasI2V;
+    if (caps.i2v !== undefined) {
+      hasI2V = caps.i2v;
+    } else {
+      hasI2V = modelStr.indexOf('i2v') !== -1
+        || modelStr.indexOf('veo_3_1_i2v') !== -1
+        || providerId === 'agnes' || providerName.indexOf('agnes') !== -1;
+    }
 
     if (ptype === 'llm') {
       cats['🤖 LLM模型']['_flat'].push(p);
@@ -3260,6 +3408,117 @@ function testProxyConfig() {
     });
 }
 
+// ── 自动更新系统 ──
+
+function _loadUpdateInfo() {
+  _authFetch('/api/update/info')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var platformEl = document.getElementById('updatePlatformInfo');
+      if (platformEl) {
+        var typeLabel = { source: '源码', exe: '可执行文件', docker: 'Docker', pip: 'pip' };
+        platformEl.textContent = '当前: v' + d.current_version + ' | ' + (typeLabel[d.update_type] || d.update_type);
+      }
+      // 检查更新
+      _checkForUpdates();
+    })
+    .catch(function() {
+      var el = document.getElementById('updateContent');
+      if (el) el.innerHTML = '<span style="color:var(--text-muted);">无法获取更新信息</span>';
+    });
+}
+
+function _checkForUpdates() {
+  var badge = document.getElementById('updateStatusBadge');
+  var content = document.getElementById('updateContent');
+  if (badge) { badge.textContent = '检测中...'; badge.style.background = '#6b728022'; badge.style.color = '#6b7280'; }
+  if (content) content.innerHTML = '<span style="color:var(--text-muted);">正在检查更新...</span>';
+
+  _authFetch('/api/update/check')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d.available) {
+        if (badge) { badge.textContent = '有新版本'; badge.style.background = '#f59e0b22'; badge.style.color = '#f59e0b'; }
+        var notes = d.release_notes ? '<div style="margin:6px 0;padding:8px;border-radius:6px;background:var(--bg-card);max-height:120px;overflow-y:auto;white-space:pre-wrap;font-size:10px;color:var(--text-secondary);">' + escHtml(d.release_notes) + '</div>' : '';
+        if (content) {
+          content.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
+            '<span style="color:#f59e0b;font-weight:600;">⬆ v' + d.latest_version + ' 可用</span>' +
+            '<button onclick="_testMirrors()" style="padding:3px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;">🔍 测速</button>' +
+            '<button onclick="_applyUpdate()" style="padding:3px 8px;font-size:10px;border-radius:5px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;">立即更新</button>' +
+            '</div>' + notes;
+        }
+      } else {
+        if (badge) { badge.textContent = '已是最新'; badge.style.background = '#22c55e22'; badge.style.color = '#22c55e'; }
+        if (content) content.innerHTML = '<span style="color:#22c55e;">✓ 已是最新版本</span> <button onclick="_checkForUpdates()" style="margin-left:8px;padding:3px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;">重新检测</button>';
+      }
+    })
+    .catch(function(e) {
+      if (badge) { badge.textContent = '检测失败'; badge.style.background = '#ef444422'; badge.style.color = '#ef4444'; }
+      if (content) content.innerHTML = '<span style="color:#ef4444;">✗ 检测失败: ' + escHtml(e.message) + '</span>';
+    });
+}
+
+function _testMirrors() {
+  var content = document.getElementById('updateContent');
+  if (content) content.innerHTML = '<span style="color:var(--text-muted);">正在测试 GitHub 代理线路...</span>';
+
+  _authFetch('/api/update/mirrors')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var html = '<div style="margin-bottom:6px;font-weight:600;color:var(--text-primary);">GitHub 代理线路测速</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:4px;">';
+      for (var i = 0; i < d.mirrors.length; i++) {
+        var m = d.mirrors[i];
+        var color = m.available ? (m.latency_ms < 1000 ? '#22c55e' : '#f59e0b') : '#ef4444';
+        var status = m.available ? m.latency_ms + 'ms' : '不可用';
+        html += '<div style="display:flex;align-items:center;gap:6px;font-size:10px;">';
+        html += '<span style="width:12px;height:12px;border-radius:50%;background:' + color + ';flex-shrink:0;"></span>';
+        html += '<span style="flex:1;color:var(--text-secondary);">' + escHtml(m.name) + '</span>';
+        html += '<span style="color:' + color + ';">' + status + '</span>';
+        if (m.available) {
+          html += '<button onclick="_applyUpdate(\'' + escHtml(m.url) + '\')" style="padding:2px 6px;font-size:9px;border-radius:4px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;">使用此线路更新</button>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+      html += '<button onclick="_checkForUpdates()" style="margin-top:8px;padding:3px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;">返回</button>';
+      if (content) content.innerHTML = html;
+    })
+    .catch(function(e) {
+      if (content) content.innerHTML = '<span style="color:#ef4444;">✗ 测速失败: ' + escHtml(e.message) + '</span>';
+    });
+}
+
+function _applyUpdate(downloadUrl) {
+  var badge = document.getElementById('updateStatusBadge');
+  var content = document.getElementById('updateContent');
+  if (badge) { badge.textContent = '更新中...'; badge.style.background = '#3b82f622'; badge.style.color = '#3b82f6'; }
+  if (content) content.innerHTML = '<span style="color:#3b82f6;">⏳ 正在更新，请勿关闭页面...</span>';
+
+  var url = '/api/update/apply';
+  if (downloadUrl) url += '?download_url=' + encodeURIComponent(downloadUrl);
+
+  _authFetch(url, { method: 'POST' })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        if (badge) { badge.textContent = '更新成功'; badge.style.background = '#22c55e22'; badge.style.color = '#22c55e'; }
+        if (content) content.innerHTML = '<span style="color:#22c55e;">✓ ' + escHtml(d.message || '更新成功') + '</span>';
+        if (d.restart) {
+          if (content) content.innerHTML += '<br><span style="color:var(--text-muted);font-size:10px;">服务将在 3 秒后重启...</span>';
+          setTimeout(function(){ location.reload(); }, 3000);
+        }
+      } else {
+        if (badge) { badge.textContent = '更新失败'; badge.style.background = '#ef444422'; badge.style.color = '#ef4444'; }
+        if (content) content.innerHTML = '<span style="color:#ef4444;">✗ ' + escHtml(d.error || '更新失败') + '</span>';
+      }
+    })
+    .catch(function(e) {
+      if (badge) { badge.textContent = '更新失败'; badge.style.background = '#ef444422'; badge.style.color = '#ef4444'; }
+      if (content) content.innerHTML = '<span style="color:#ef4444;">✗ 更新失败: ' + escHtml(e.message) + '</span>';
+    });
+}
+
 function openProviderModal() {
   document.getElementById('providerModal').classList.add('show');
   renderProviderEdit();
@@ -3466,6 +3725,22 @@ function renderProviderEdit() {
   // 加载代理配置
   _loadProxyConfig();
 
+  // ── 系统更新区 ──
+  html += '<div id="updateSection" style="margin-bottom:14px;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-surface);">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">';
+  html += '<div style="display:flex;align-items:center;gap:6px;">';
+  html += '<span style="font-size:13px;">📦</span>';
+  html += '<span style="font-size:12px;font-weight:700;color:var(--text-primary);">系统更新</span>';
+  html += '<span id="updateStatusBadge" style="font-size:9px;padding:2px 6px;border-radius:8px;background:#6b728022;color:#6b7280;font-weight:600;">检测中...</span>';
+  html += '</div>';
+  html += '<span id="updatePlatformInfo" style="font-size:10px;color:var(--text-muted);"></span>';
+  html += '</div>';
+  html += '<div id="updateContent" style="font-size:11px;color:var(--text-muted);">正在检查更新...</div>';
+  html += '</div>';
+
+  // 加载更新信息
+  _loadUpdateInfo();
+
   var groups = [
     { type: 'image', icon: '🎨', title: '生图模型', hint: '用于生成图片的模型，如 Stable Diffusion、Midjourney、Flux 等', accent: '#22c55e' },
     { type: 'video', icon: '🎬', title: '生视频模型', hint: '用于生成视频的模型，如 Gemini Veo、Sora 等', accent: '#3b82f6' },
@@ -3516,8 +3791,8 @@ function renderProviderEdit() {
         modelOpts = '<option value="" disabled>请先拉取模型</option>';
         if (p.model) modelOpts = '<option value="' + escAttr(p.model) + '" selected>' + escHtml(p.model) + ' (手动)</option>' + modelOpts;
       }
-      var keyVal = p.api_key || '';
-      var keyPlaceholder = p.has_key ? '•••••••••• (已配置)' : '留空使用 .env 或手动输入';
+      var keyVal = p.api_key_masked || '';
+      var keyPlaceholder = p.has_key ? (keyVal || '•••••••••• (已配置)') : '留空使用 .env 或手动输入';
       var statusColor = p.enabled ? '#22c55e' : '#6b7280';
       var statusTitle = p.enabled ? '已启用' : '已禁用';
 
@@ -3550,7 +3825,7 @@ function renderProviderEdit() {
             // 名称 + 类型
             '<div style="display:flex;gap:6px;margin-bottom:8px;">' +
               '<input type="text" class="modal-input" style="flex:1;padding:6px 10px;font-size:11px;" placeholder="显示名称" value="' + escHtml(p.name) + '" id="name_' + idx + '">' +
-              '<select class="modal-input" style="width:88px;padding:6px 8px;font-size:11px;" id="type_' + idx + '">' +
+              '<select class="modal-input" style="width:88px;padding:6px 8px;font-size:11px;" id="type_' + idx + '" onchange="updateCapsSection(' + idx + ')">' +
                 '<option value="image" ' + (p.type==='image'?'selected':'') + '>🎨 生图</option>' +
                 '<option value="video" ' + (p.type==='video'?'selected':'') + '>🎬 生视频</option>' +
                 '<option value="llm" ' + (p.type==='llm'?'selected':'') + '>🤖 LLM</option>' +
@@ -3621,6 +3896,37 @@ function renderProviderEdit() {
               '</div>' +
               '<div id="fetchStatus_' + idx + '" style="font-size:10px;color:var(--text-muted);margin-top:2px;"></div>' +
             '</div>' +
+            // 能力声明（根据类型显示不同选项）
+            '<div id="capsSection_' + idx + '" style="margin-bottom:8px;">' +
+              (p.type === 'llm' ? '' :
+                '<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">🎯 模型能力（勾选此项支持的功能）</div>' +
+                '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                  (p.type === 'image' ?
+                    '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+                      '<input type="checkbox" class="cap-check" data-cap="t2i" ' + ((p.capabilities && p.capabilities.t2i !== false) ? 'checked' : '') + ' style="accent-color:var(--accent);width:13px;height:13px;"> 文生图' +
+                    '</label>' +
+                    '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+                      '<input type="checkbox" class="cap-check" data-cap="i2i" ' + ((p.capabilities && p.capabilities.i2i) ? 'checked' : '') + ' style="accent-color:var(--accent);width:13px;height:13px;"> 图生图' +
+                    '</label>'
+                  :
+                    '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+                      '<input type="checkbox" class="cap-check" data-cap="t2v" ' + ((p.capabilities && p.capabilities.t2v) ? 'checked' : '') + ' style="accent-color:var(--accent);width:13px;height:13px;"> 文生视频' +
+                    '</label>' +
+                    '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+                      '<input type="checkbox" class="cap-check" data-cap="i2v" ' + ((p.capabilities && p.capabilities.i2v) ? 'checked' : '') + ' style="accent-color:var(--accent);width:13px;height:13px;"> 图生视频' +
+                    '</label>'
+                  ) +
+                '</div>' +
+                '<div style="font-size:9px;color:var(--text-muted);margin-top:3px;">留空则自动根据模型名称和协议推断</div>'
+              ) +
+            '</div>' +
+            // 跳过代理
+            '<div style="margin-bottom:8px;">' +
+              '<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+                '<input type="checkbox" id="skip_proxy_' + idx + '" ' + (p.skip_proxy ? 'checked' : '') + ' style="accent-color:var(--accent);width:14px;height:14px;"> 🌐 跳过全局代理（直连，不走代理服务器）' +
+              '</label>' +
+              '<div style="font-size:9px;color:var(--text-muted);margin-top:2px;">适用于可直连的 API（如国内服务商），不受全局代理影响</div>' +
+            '</div>' +
             // 启用 + 按钮
             '<div style="display:flex;align-items:center;justify-content:space-between;">' +
               '<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
@@ -3666,6 +3972,13 @@ function saveProvider(idx) {
     }
   }
 
+  // 收集能力声明
+  var capabilities = {};
+  var capChecks = document.querySelectorAll('.cap-check');
+  capChecks.forEach(function(cb) {
+    capabilities[cb.dataset.cap] = cb.checked;
+  });
+
   var p = {
     id: document.getElementById('id_' + idx).value.trim() || 'p_' + Date.now(),
     name: document.getElementById('name_' + idx).value,
@@ -3679,6 +3992,8 @@ function saveProvider(idx) {
     enabled: document.getElementById('en_' + idx).checked,
     models: currentModels,
     display_name: (document.getElementById('display_name_' + idx) || {value:''}).value,
+    capabilities: capabilities,
+    skip_proxy: document.getElementById('skip_proxy_' + idx) ? document.getElementById('skip_proxy_' + idx).checked : false,
     quality: '', extra: {}
   };
   _authFetch('/api/providers', {
@@ -3691,6 +4006,40 @@ function saveProvider(idx) {
       renderProviderEdit();
     });
   }).catch(function(e){ if (e.message !== 'AUTH_REQUIRED') setStatus('保存失败: ' + e.message); });
+}
+
+function updateCapsSection(idx) {
+  var type = document.getElementById('type_' + idx).value;
+  var section = document.getElementById('capsSection_' + idx);
+  if (!section) return;
+
+  if (type === 'llm') {
+    section.innerHTML = '';
+  } else if (type === 'image') {
+    section.innerHTML =
+      '<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">🎯 模型能力（勾选此项支持的功能）</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+        '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+          '<input type="checkbox" class="cap-check" data-cap="t2i" checked style="accent-color:var(--accent);width:13px;height:13px;"> 文生图' +
+        '</label>' +
+        '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+          '<input type="checkbox" class="cap-check" data-cap="i2i" style="accent-color:var(--accent);width:13px;height:13px;"> 图生图' +
+        '</label>' +
+      '</div>' +
+      '<div style="font-size:9px;color:var(--text-muted);margin-top:3px;">留空则自动根据模型名称和协议推断</div>';
+  } else if (type === 'video') {
+    section.innerHTML =
+      '<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">🎯 模型能力（勾选此项支持的功能）</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+        '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+          '<input type="checkbox" class="cap-check" data-cap="t2v" checked style="accent-color:var(--accent);width:13px;height:13px;"> 文生视频' +
+        '</label>' +
+        '<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+          '<input type="checkbox" class="cap-check" data-cap="i2v" style="accent-color:var(--accent);width:13px;height:13px;"> 图生视频' +
+        '</label>' +
+      '</div>' +
+      '<div style="font-size:9px;color:var(--text-muted);margin-top:3px;">留空则自动根据模型名称和协议推断</div>';
+  }
 }
 
 function deleteProvider(id) {
@@ -3813,11 +4162,14 @@ function fetchModels(idx) {
       if (data.success) {
         st.textContent = '✅ 拉取成功 ' + data.count + ' 个模型' + (data.is_fallback ? ' (推荐列表)' : '');
         st.style.color = '#22c3a5';
-        // 缓存模型列表到 localStorage，防止保存时丢失
         try { localStorage.setItem('igs_models_' + pid, JSON.stringify(data.models)); } catch(e){}
         loadProviders().then(function(){ renderProviderEdit(); });
       } else {
-        st.textContent = '❌ ' + (data.detail || '失败');
+        var msg = data.detail || '拉取失败';
+        if (data.provider_type === 'video') {
+          msg += '\n💡 提示：视频模型通常需要手动输入模型名称';
+        }
+        st.textContent = '❌ ' + msg;
         st.style.color = '#f87171';
       }
     }).catch(function(e){
@@ -4282,6 +4634,7 @@ var selectedVideoProviderIds = [];  // multi-provider selection
 var videoPreviewGroups = {};  // { provider_id: [ {task_id, video_url, video_url_local, prompt, provider_id, ...} ] }
 var videoGroupNavIdx = {};    // { provider_id: current index }
 var videoActivePollTasks = {}; // { task_id: {provider_id, ...} } 跟踪活跃轮询任务
+var videoPreviewPlaceholders = {}; // { provider_id: { cardEl, ... } } 视频生成中的占位卡片
 
 // ═══════════════════════════════════════════════════════════════════
 // 视频实时日志
@@ -4523,10 +4876,14 @@ function buildModelOptsGrouped(models, selectedModel, groupFn) {
 
 function isModelMatchMode(modelName, mode) {
   var ml = (modelName || '').toLowerCase();
+  // 排除纯图片模型（含 image 但不含 video）
+  if (ml.indexOf('image') !== -1 && ml.indexOf('video') === -1) return false;
   if (mode === 'ti2vid') {
     // T2V or universal models (no disambiguation needed)
     if (ml.indexOf('t2v') !== -1 && ml.indexOf('i2v') === -1 && ml.indexOf('interpolation') === -1) return true;
     if (ml.indexOf('r2v') !== -1) return true;
+    // 含 video 关键词的通用模型（如 agnes-video-v2.0）也匹配
+    if (ml.indexOf('video') !== -1) return true;
     return false;
   }
   if (mode === 'i2vid') {
@@ -5002,6 +5359,9 @@ function startVideoGenerate() {
   videoLog('\u63D0\u793A\u8BCD: ' + prompt.substring(0, 80) + (prompt.length > 80 ? '...' : ''), 'info');
   videoLog('\u53C2\u6570: ' + dims.width + 'x' + dims.height + ', ' + frames + '\u5E27, ' + fps + 'fps', 'info');
 
+  // 创建视频预览占位卡片
+  createVideoPreviewPlaceholders(tasksToGenerate);
+
   var submittedCount = 0;
   var totalTasks = tasksToGenerate.length;
   var startTime = Date.now();
@@ -5061,6 +5421,8 @@ function startVideoGenerate() {
       if (labelEl2) labelEl2.textContent = '\u7B49\u5F85\u4E2D (\u5DF2\u521B\u5EFA)';
       // Gemini 可能立即返回 completed + video_url，直接渲染预览
       if (data.status === 'completed' && data.video_url) {
+        // 移除占位卡片
+        removeVideoPreviewPlaceholder(task.provider_id);
         if (!videoPreviewGroups[task.provider_id]) videoPreviewGroups[task.provider_id] = [];
         videoPreviewGroups[task.provider_id].push({
           task_id: data.task_id,
@@ -5187,6 +5549,9 @@ function startVideoPolling(allTaskData, startTime) {
         taskProgressMap[tid] = progress;
         updateGlobalProgress();
 
+        // 更新视频占位卡片状态
+        updateVideoPreviewPlaceholderStatus(provId, '[' + (data.stage || 'processing') + '] ' + Math.round(progress) + '%', progress);
+
         var progFillEl = document.getElementById('vprog_fill_' + provId);
         if (progFillEl) {
           progFillEl.style.width = progress + '%';
@@ -5223,6 +5588,9 @@ function startVideoPolling(allTaskData, startTime) {
           if (labelCompleted) labelCompleted.textContent = '\u2714 \u5B8C\u6210 ' + Math.round(elapsed) + 's';
           videoLogProvider(provId, '\u751F\u6210\u5B8C\u6210! \u8017\u65F6 ' + Math.round(elapsed) + 's', 'ok');
 
+          // 移除占位卡片
+          removeVideoPreviewPlaceholder(provId);
+
           if (!videoPreviewGroups[provId]) videoPreviewGroups[provId] = [];
           videoPreviewGroups[provId].push({
             task_id: tid,
@@ -5252,6 +5620,9 @@ function startVideoPolling(allTaskData, startTime) {
           var labelFailed = document.getElementById('vprog_label_' + provId);
           if (labelFailed) labelFailed.textContent = '\u2718 \u5931\u8D25: ' + errMsg.substring(0, 30);
           videoLogProvider(provId, '\u2718 \u751F\u6210\u5931\u8D25: ' + errMsg + ' (\u8017\u65F6 ' + Math.round(elapsed) + 's)', 'error');
+
+          // 移除占位卡片
+          removeVideoPreviewPlaceholder(provId);
 
           if (!videoPreviewGroups[provId]) videoPreviewGroups[provId] = [];
           videoPreviewGroups[provId].push({
@@ -5617,4 +5988,69 @@ function pushVideoToGallery() {
   });
   if (!src) { alert('没有视频'); return; }
   pushVideoToGalleryFromSrc(src);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 视频生成占位卡片（loading 动效）
+// ═══════════════════════════════════════════════════════════════════
+function createVideoPreviewPlaceholders(tasks) {
+  var container = document.getElementById('videoPreviewResults');
+  var emptyEl = document.getElementById('videoPreviewEmpty');
+  if (!container) return;
+  if (emptyEl) emptyEl.style.display = 'none';
+  container.style.display = 'flex';
+  container.innerHTML = '';
+
+  // 清理旧占位符
+  videoPreviewPlaceholders = {};
+
+  for (var i = 0; i < tasks.length; i++) {
+    var task = tasks[i];
+    var prov = videoProviders.find(function(p){ return p.id === task.provider_id; });
+    var provColor = prov ? prov.color : '#5b8def';
+    var provName = prov ? (prov.display_name || prov.name || task.provider_id) : task.provider_id;
+
+    var card = document.createElement('div');
+    card.className = 'fade-in prev-card generating';
+    card.id = 'vprev_ph_' + task.provider_id;
+
+    // 占位区：转圈动效（和图片预览一样的 4:3 比例）
+    var ph = document.createElement('div');
+    ph.className = 'prev-placeholder';
+    ph.innerHTML = '<div class="spinner"></div><div class="ph-text">' + escHtml(provName) + '</div>';
+    card.appendChild(ph);
+
+    // 底部信息
+    var footer = document.createElement('div');
+    footer.className = 'prev-footer';
+    footer.innerHTML =
+      '<div style="display:flex;align-items:center;gap:5px;">' +
+        '<span class="provider-dot" style="background:' + provColor + ';"></span>' +
+        '<span class="provider-name">' + escHtml(provName) + '</span>' +
+        '<span style="font-size:9px;color:var(--text-muted);">' + escHtml(task.model) + '</span>' +
+      '</div>' +
+      '<span class="elapsed-badge" id="vph_elapsed_' + task.provider_id + '">排队中</span>';
+    card.appendChild(footer);
+
+    container.appendChild(card);
+
+    videoPreviewPlaceholders[task.provider_id] = {
+      cardEl: card,
+      provColor: provColor,
+      provName: provName,
+    };
+  }
+}
+
+function removeVideoPreviewPlaceholder(provId) {
+  var ph = videoPreviewPlaceholders[provId];
+  if (ph && ph.cardEl && ph.cardEl.parentNode) {
+    ph.cardEl.remove();
+  }
+  delete videoPreviewPlaceholders[provId];
+}
+
+function updateVideoPreviewPlaceholderStatus(provId, text, progress) {
+  var statusEl = document.getElementById('vph_elapsed_' + provId);
+  if (statusEl) statusEl.textContent = text;
 }

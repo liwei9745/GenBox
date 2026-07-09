@@ -21,6 +21,10 @@ DATA_FILES = [
     ("static", "static"),
     ("providers", "providers"),
     (".env.example", "."),
+    ("requirements.txt", "."),
+    ("check_env.py", "."),
+    ("start.bat", "."),
+    ("README.md", "."),
 ]
 
 # 隐藏导入（PyInstaller 可能检测不到的模块）

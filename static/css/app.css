@@ -276,9 +276,55 @@ textarea {
   transition: all 0.15s var(--ease);
 }
 
+/* 快捷操作按钮样式 */
+.btn-action-i2i {
+  background: rgba(0, 122, 255, 0.1) !important;
+  border-color: rgba(0, 122, 255, 0.3) !important;
+  color: #007AFF !important;
+}
+
+.btn-action-i2i:hover {
+  background: rgba(0, 122, 255, 0.2) !important;
+  border-color: rgba(0, 122, 255, 0.5) !important;
+}
+
+.btn-action-i2v {
+  background: rgba(88, 86, 214, 0.1) !important;
+  border-color: rgba(88, 86, 214, 0.3) !important;
+  color: #5856D6 !important;
+}
+
+.btn-action-i2v:hover {
+  background: rgba(88, 86, 214, 0.2) !important;
+  border-color: rgba(88, 86, 214, 0.5) !important;
+}
+
 .btn-ghost:hover {
   background: rgba(0,0,0,0.04);
   color: var(--text-primary);
+}
+
+/* ── 关闭按钮（更醒目） ── */
+.btn-close-modal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: #ef4444;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s var(--ease);
+  flex-shrink: 0;
+}
+.btn-close-modal:hover {
+  background: #dc2626;
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(239,68,68,0.3);
 }
 
 /* ── 5. App Shell ── */
@@ -509,7 +555,7 @@ textarea {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
   padding: 8px 16px;
   background: var(--glass-bg);
@@ -586,16 +632,18 @@ textarea {
   align-self: center;
 }
 
-/* Dock action items (settings, logs, refresh) - slightly smaller, muted */
-.dock-action .dock-icon {
-  font-size: 18px;
-  opacity: 0.7;
-  transition: all 0.2s var(--ease);
+/* Dock action items (settings, logs, refresh) - identical to nav items */
+.dock-item.dock-action .dock-icon {
+  font-size: 22px;
+  transition: background 0.2s;
+}
+
+.dock-item.dock-action:hover {
+  transform: scale(1.3) translateY(-6px);
 }
 
 .dock-item.dock-action:hover .dock-icon {
-  opacity: 1;
-  transform: scale(1.2) translateY(-3px);
+  background: rgba(255,255,255,0.8);
 }
 
 /* ── 10. Generate Layout (2-panel: sidebar + main content) ── */

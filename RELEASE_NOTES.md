@@ -1,6 +1,16 @@
-## GenBox v2.0.0-test.6
+## GenBox v2.0.0
 
-> 一站式 AI 创作平台 - 桌面客户端测试版
+> 一站式 AI 创作平台 - 桌面客户端正式版
+
+---
+
+## 🔐 安全更新
+
+**本次更新启用了默认认证，修复了安全隐患！**
+
+- 首次启动会提示选择运行模式
+- 生产模式（推荐）：需要管理员密钥认证
+- 开发模式：无需认证，仅限本地调试
 
 ---
 
@@ -14,8 +24,10 @@
 **使用方法：**
 1. 下载 `GenBox.exe`
 2. 双击运行
-3. 浏览器自动打开 `http://localhost:8891`
-4. 首次运行会自动生成管理员密钥
+3. 首次启动选择运行模式（选 1 正式使用）
+4. 保存生成的管理员密钥
+5. 浏览器自动打开 `http://localhost:8891`
+6. 输入密钥登录
 
 **注意事项：**
 - 首次运行需要允许防火墙访问
@@ -36,7 +48,9 @@ chmod +x GenBox-macOS
 # 2. 运行
 ./GenBox-macOS
 
-# 3. 浏览器自动打开 http://localhost:8891
+# 3. 首次启动选择运行模式（选 1 正式使用）
+# 4. 保存生成的管理员密钥
+# 5. 浏览器自动打开 http://localhost:8891
 ```
 
 **注意事项：**
@@ -58,7 +72,9 @@ chmod +x GenBox-Linux
 # 2. 运行
 ./GenBox-Linux
 
-# 3. 浏览器自动打开 http://localhost:8891
+# 3. 首次启动选择运行模式（选 1 正式使用）
+# 4. 保存生成的管理员密钥
+# 5. 浏览器自动打开 http://localhost:8891
 ```
 
 ---
@@ -79,10 +95,15 @@ ssh user@server
 # 3. 赋予执行权限
 chmod +x GenBox-Linux
 
-# 4. 后台运行
+# 4. 运行（首次会提示选择模式，选 1）
+./GenBox-Linux
+
+# 5. 记录生成的管理员密钥
+
+# 6. 后台运行
 nohup ./GenBox-Linux > genbox.log 2>&1 &
 
-# 5. 从其他设备浏览器访问
+# 7. 从其他设备浏览器访问
 http://服务器IP:8891
 ```
 
@@ -93,39 +114,159 @@ http://服务器IP:8891
 
 ---
 
-## 环境变量配置
+## 首次启动流程
 
-在可执行文件同目录创建 `.env` 文件：
+```
+╔══════════════════════════════════════════════════════════════╗
+║                   🎉 欢迎使用 GenBox!                       ║
+╠══════════════════════════════════════════════════════════════╣
+║  首次启动，请选择运行模式：                                   ║
+║                                                              ║
+║  [1] 正式使用 (推荐)                                         ║
+║      - 需要管理员密钥认证                                    ║
+║      - 适合 VPS 部署、公网访问                               ║
+║                                                              ║
+║  [2] 本地开发                                                ║
+║      - 无需认证，直接访问                                    ║
+║      - 仅限本机使用                                          ║
+╚══════════════════════════════════════════════════════════════╝
 
-```bash
-# 运行模式
-APP_MODE=dev          # dev=免认证, prod=需要管理员密钥
+请选择 (1 或 2): 1
 
-# API 配置
-GPT_IMAGE_API_KEY=your-key
-GEMINI_API_KEY=your-key
+✅ 已启用生产模式（需要认证）
+
+╔══════════════════════════════════════════════════════════════╗
+║                    🔐 首次启动 - 安全密钥                    ║
+╠══════════════════════════════════════════════════════════════╣
+║  管理密钥已生成，请立即保存：                                 ║
+║                                                              ║
+║  abc123xyz789                                                 ║
+║                                                              ║
+║  ⚠️  此密钥仅显示一次，关闭后无法再次查看！                    ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
 
-## 已知问题
+## 🔑 重置管理员密钥
 
-- Linux 服务器版需要手动安装 ffmpeg
-- macOS 首次运行需要手动允许安全权限
-- Windows 可能触发 Defender 警告
+如果忘记密钥，可通过命令行重置：
+
+### Windows
+```cmd
+GenBox.exe --reset-admin
+```
+
+### macOS / Linux
+```bash
+./GenBox-macOS --reset-admin
+# 或
+./GenBox-Linux --reset-admin
+```
+
+### VPS 服务器（推荐）
+```bash
+# 1. SSH 登录服务器（需要 root 权限）
+ssh root@your-server-ip
+
+# 2. 进入 GenBox 目录
+cd /path/to/GenBox
+
+# 3. 停止正在运行的 GenBox
+pkill -f GenBox-Linux
+
+# 4. 重置密钥
+./GenBox-Linux --reset-admin
+
+# 输出示例：
+# [Admin Reset] 新密钥已生成: abc123xyz789
+# [Admin Reset] 已写入 .env
+# [Admin Reset] 请重启服务
+
+# 5. 记录新密钥，然后重启服务
+nohup ./GenBox-Linux > genbox.log 2>&1 &
+
+# 6. 使用新密钥登录
+```
+
+### 或者直接编辑 .env 文件
+```bash
+# 查看当前密钥
+cat .env | grep ADMIN_KEY
+
+# 手动修改密钥
+nano .env
+# 找到 ADMIN_KEY=xxx，修改为新的值
+```
+
+---
+
+## 环境变量配置
+
+在可执行文件同目录创建 `.env` 文件（可选）：
+
+```bash
+# 运行模式（首次启动已选择，通常无需修改）
+# APP_MODE=prod    # 正式使用（默认）
+# APP_MODE=dev     # 本地开发
+
+# API 配置（按需填写）
+GPT_IMAGE_API_KEY=your-key
+GEMINI_API_KEY=your-key
+LLM_API_KEY=your-key
+```
+
+---
+
+## 系统要求
+
+### 本地部署
+| 依赖 | 说明 |
+|------|------|
+| Python 3.10+ | 必需 |
+| pip | Python 包管理器 |
+| ffmpeg | 视频生成必需（`sudo apt install ffmpeg` 或 `brew install ffmpeg`） |
+| 现代浏览器 | Chrome / Firefox / Safari / Edge |
+
+### 桌面客户端（推荐）
+无需安装任何依赖，下载对应平台的可执行文件即可运行：
+- **Windows**: `GenBox.exe` - 双击运行，自动打开浏览器
+- **macOS**: `GenBox-macOS` - 需要 `chmod +x` 后运行
+- **Linux**: `GenBox-Linux` - 需要 `chmod +x` 后运行
+
+### Docker 部署
+无需安装 Python 和依赖，一键启动：
+```bash
+docker-compose up -d
+```
+
+### API Key
+需要至少一个 AI 模型的 API Key 才能使用生成功能：
+- OpenAI / GPT Image
+- Google Gemini
+- 阿里云通义千问
+- Agnes AI
 
 ---
 
 ## 更新日志
 
+### v2.1.0 (2026-07-09)
+- 🎯 **Provider 能力系统**：支持显式声明模型能力（文生图/图生图/文生视频/图生视频）
+- ⚡ **快捷操作按钮**：大图预览和图库支持一键发送到图生图/生视频模式
+- 🎨 **Dock 栏优化**：统一视觉规范，修复对齐和大小不一致问题
+- 📹 **视频模型支持**：新增视频模型推荐列表，拉取失败时提供备选
+
+### v2.0.0 (2026-07-09)
+- 🔐 **安全更新**：默认启用认证，VPS 部署更安全
+- 🎉 首次启动交互式选择运行模式
+- 🖥️ 支持 Windows / macOS / Linux 三平台
+- 🔧 修复无头 Linux 服务器兼容性
+
 ### v2.0.0-test.6 (2026-07-09)
 - 修复 macOS 和 Linux 文件名冲突
 - 修复无头 Linux 服务器兼容性
 
-### v2.0.0-test.1 (2026-07-09)
-- 初始测试版发布
-- 支持 Windows / macOS / Linux 三平台
-
 ---
 
-**测试反馈：** 请在 Issues 中报告问题
+**问题反馈：** 请在 [Issues](https://github.com/liwei9745/GenBox/issues) 中报告

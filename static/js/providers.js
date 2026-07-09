@@ -357,8 +357,8 @@ window.renderProviderEdit = function() {
         modelOpts = '<option value="" disabled>\u8BF7\u5148\u62C9\u53D6\u6A21\u578B</option>';
         if (p.model) modelOpts = '<option value="' + _ea(p.model) + '" selected>' + _eh(p.model) + ' (\u624B\u52A8)</option>' + modelOpts;
       }
-      var keyVal = p.api_key || '';
-      var keyPlaceholder = p.has_key ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (\u5DF2\u914D\u7F6E)' : '\u7559\u7A7A\u4F7F\u7528 .env \u6216\u624B\u52A8\u8F93\u5165';
+      var keyVal = p.api_key_masked || '';
+      var keyPlaceholder = p.has_key ? (keyVal || '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (\u5DF2\u914D\u7F6E)') : '\u7559\u7A7A\u4F7F\u7528 .env \u6216\u624B\u52A8\u8F93\u5165';
       var statusColor = p.enabled ? '#22c55e' : '#6b7280';
       var statusTitle = p.enabled ? '\u5DF2\u542F\u7528' : '\u5DF2\u7981\u7528';
 

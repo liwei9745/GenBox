@@ -23,6 +23,8 @@
     <button class="btn-secondary" onclick="zoomReset(event)">重置</button>
     <a id="lightbox-dl" href="" download class="btn-secondary">⬇ 下载原图</a>
     <button class="btn-secondary" onclick="openCompareFromLightbox(event)">🔀 对比</button>
+    <button class="btn-secondary btn-action-i2i" onclick="sendToImageToImage(event)">🎯 图生图</button>
+    <button class="btn-secondary btn-action-i2v" onclick="sendToVideo(event)">🎬 生视频</button>
     <button class="btn-secondary" onclick="closeLightbox(event)">✕ 关闭</button>
   </div>
   <div id="lightbox-info"></div>
@@ -55,7 +57,7 @@
       <div class="flex gap-8">
         <button class="btn-secondary" onclick="reloadProviders()">🔄 重载</button>
         <button class="btn-primary" onclick="openAddProviderTypeModal()">+ 添加</button>
-        <button class="btn-ghost" onclick="closeProviderModal()">✕</button>
+        <button class="btn-close-modal" onclick="closeProviderModal()">✕</button>
       </div>
     </div>
     <div class="provider-modal-body" id="providerEditBody"></div>
@@ -229,6 +231,10 @@
         </div>
         <div class="flex items-center gap-8">
           <div id="netStatusBar"></div>
+          <a href="https://github.com/liwei9745/GenBox" target="_blank" title="GitHub 项目地址" style="display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:8px;border:1px solid #6e7681;background:transparent;color:#8b949e;cursor:pointer;text-decoration:none;font-size:12px;transition:all 0.2s;" onmouseover="this.style.borderColor='#8b949e';this.style.color='#f0f6fc';" onmouseout="this.style.borderColor='#6e7681';this.style.color='#8b949e';">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            GitHub
+          </a>
           <button class="btn-primary" onclick="loadDashboard()" style="font-size:12px;padding:6px 14px;">🔄 刷新</button>
           <button onclick="serverControl('restart')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🔄 重启</button>
           <button onclick="serverControl('stop')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #ef4444;background:transparent;color:#ef4444;cursor:pointer;">⏹ 停止</button>
@@ -444,16 +450,24 @@
 
               <!-- I2I Panel -->
               <div class="glass-card hidden" id="panelI2I">
-                <div class="param-label mb-8">参考图片</div>
-                <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
-                  <div class="text-lg mb-6">🖼</div>
-                  <div class="text-sm text-muted">点击或拖拽上传参考图片</div>
-                  <img id="uploadPreview" class="upload-preview-img hidden" src="">
-                </div>
-                <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
-                <div class="mt-12">
-                  <div class="param-label mb-8">修改提示词 (可选)</div>
-                  <textarea id="txtPromptI2I" rows="3" placeholder="描述你希望如何修改这张图片..."></textarea>
+                <div style="display:flex;gap:12px;align-items:stretch;">
+                  <!-- 左侧：参考图片 (20%) -->
+                  <div style="flex:0 0 20%;min-width:120px;">
+                    <div class="param-label mb-8">参考图片</div>
+                    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()" style="height:100%;min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;">
+                      <img id="uploadPreview" class="upload-preview-img hidden" src="" style="max-height:60px;object-fit:contain;">
+                      <div id="uploadPlaceholder" style="text-align:center;">
+                        <div class="text-base mb-4">🖼</div>
+                        <div class="text-xs text-muted">点击或拖拽上传</div>
+                      </div>
+                    </div>
+                    <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
+                  </div>
+                  <!-- 右侧：修改提示词 (80%) -->
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div class="param-label mb-8">修改提示词 (可选)</div>
+                    <textarea id="txtPromptI2I" rows="3" placeholder="描述你希望如何修改这张图片..." style="flex:1;resize:none;"></textarea>
+                  </div>
                 </div>
               </div>
 
@@ -718,15 +732,19 @@
   <div class="dock-sep"></div>
   <div class="dock-item dock-action" onclick="openProviderModal()" title="模型设置">
     <div class="dock-icon">⚙️</div>
+    <div class="dock-dot"></div>
   </div>
   <div class="dock-item dock-action" onclick="openThemeModal()" title="主题设置">
     <div class="dock-icon">🎨</div>
+    <div class="dock-dot"></div>
   </div>
   <div class="dock-item dock-action" onclick="openLogModal()" title="查看日志">
     <div class="dock-icon">📋</div>
+    <div class="dock-dot"></div>
   </div>
   <div class="dock-item dock-action" onclick="location.reload()" title="刷新页面">
     <div class="dock-icon">🔄</div>
+    <div class="dock-dot"></div>
   </div>
 </nav>
 
