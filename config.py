@@ -458,7 +458,7 @@ def get_admin_key_hash() -> str:
 
 def is_prod_mode() -> bool:
     """是否生产模式（启用认证）"""
-    return os.getenv("APP_MODE", "dev") == "prod"
+    return os.getenv("APP_MODE", "prod") == "prod"
 
 def verify_admin_key(key: str) -> bool:
     """校验管理密钥（使用哈希比对）"""

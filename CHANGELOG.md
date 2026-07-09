@@ -16,9 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release notes template
 
 ### Changed
+- **BREAKING**: Default APP_MODE changed from `dev` to `prod` (authentication enabled by default)
 - Updated main.py for PyInstaller path compatibility
 - Updated config.py for PyInstaller path compatibility
 - Improved headless Linux server support
+- Enhanced first-run admin key display with clear instructions
 
 ### Fixed
 - CORS security configuration

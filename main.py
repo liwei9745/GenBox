@@ -2628,21 +2628,39 @@ if __name__ == "__main__":
         admin_key = get_admin_key()
         if not admin_key:
             key = generate_admin_key()
-            print(f"[Security] 首次启动，已生成管理密钥: {key}")
-            print(f"[Security] 请保存此密钥！重启后前端将显示登录页")
+            print(f"""
+╔══════════════════════════════════════════════════════════════╗
+║                    🔐 首次启动 - 安全密钥                    ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  管理密钥已生成，请立即保存：                                 ║
+║                                                              ║
+║  {key}                                                      ║
+║                                                              ║
+║  ⚠️  此密钥仅显示一次，关闭后无法再次查看！                    ║
+║  ⚠️  请复制保存到安全位置（如密码管理器）                      ║
+║                                                              ║
+║  使用方式：                                                  ║
+║  1. 打开浏览器访问 http://localhost:8891                      ║
+║  2. 在登录页输入此密钥                                        ║
+║  3. 或在 API 请求头中添加: X-Admin-Key: <密钥>               ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+            """)
         else:
             print(f"[Security] 管理密钥已加载")
 
-    mode_str = "PRODUCTION" if is_prod_mode() else "DEVELOPMENT"
+    mode_str = "PRODUCTION 🔒" if is_prod_mode() else "DEVELOPMENT ⚠️"
     print(f"""
-==============================================
-   GenBox v2 - Ready (experiment/open-design)
-   Mode:       {mode_str}
-   Local UI:   http://localhost:8891
-   Port:       8891
-   Gallery:    {GALLERY_DIR}
-   Config:     {STORAGE_DIR / 'providers.json'}
-==============================================
+╔══════════════════════════════════════════════════════════════╗
+║                      GenBox v2.0.0                          ║
+╠══════════════════════════════════════════════════════════════╣
+║  模式:     {mode_str:<46}║
+║  地址:     http://localhost:8891                             ║
+║  端口:     8891                                              ║
+║  媒体库:   {str(GALLERY_DIR):<46}║
+║  配置:     {str(STORAGE_DIR / 'providers.json'):<46}║
+╚══════════════════════════════════════════════════════════════╝
     """)
 
     # 自动打开浏览器
