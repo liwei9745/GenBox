@@ -6,6 +6,9 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/liwei9745/GenBox/pulls)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue?logo=docker)](https://github.com/liwei9745/GenBox/pkgs/container/genbox)
 [![Python](https://img.shields.io/badge/Python-3.10+-yellow?logo=python)](https://www.python.org/)
+[![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/liwei9745/GenBox)
+
+**当前稳定版本：v2.3.0** | [发布说明](https://github.com/liwei9745/GenBox/releases/tag/v2.3.0) | [全部版本](https://github.com/liwei9745/GenBox/releases)
 
 > 集成文生图、文生视频、图片超分、媒体库管理的桌面级 AI 创作工具
 > 支持 GPT Image / Gemini / Qwen / Agnes 等主流模型，开箱即用
