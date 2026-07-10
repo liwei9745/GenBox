@@ -431,9 +431,29 @@
                     <span class="info-tip"><span class="info-tip-icon">?</span><span class="info-tip-text">生成后自动放大图片到更高分辨率，可选尺寸和算法</span></span>
                   </label>
                 </div>
-                <div id="upscaleOpts" class="hidden mt-8 rounded p-8 flex gap-6" style="border:1px solid rgba(234,179,8,0.15);background:rgba(234,179,8,0.04);">
-                  <select id="upscaleSize" class="text-xs p-4" style="flex:1;"><option value="1024x1024">1024×1024</option><option value="1536x1536">1536×1536</option><option value="2048x2048" selected>2048×2048</option><option value="3072x3072">3072×3072</option><option value="4096x4096">4096×4096</option></select>
-                  <select id="upscaleMethod" class="text-xs p-4" style="flex:1;"><option value="lanczos3" selected>Lanczos3</option><option value="bicubic">Bicubic</option><option value="nearest">Nearest</option></select>
+                <div id="upscaleOpts" class="hidden mt-8 rounded p-8 flex gap-6" style="border:1px solid rgba(234,179,8,0.15);background:rgba(234,179,8,0.04);flex-wrap:wrap;">
+                  <select id="upscaleSize" class="text-xs p-4" style="flex:1;min-width:120px;">
+                    <option value="1024">最大边 1024</option>
+                    <option value="1536">最大边 1536</option>
+                    <option value="2048" selected>最大边 2048</option>
+                    <option value="3072">最大边 3072</option>
+                    <option value="4096">最大边 4096</option>
+                  </select>
+                  <select id="upscaleRatio" class="text-xs p-4" style="flex:1;min-width:120px;">
+                    <option value="1:1">1:1 正方形</option>
+                    <option value="16:9">16:9 横屏</option>
+                    <option value="21:9">21:9 超宽</option>
+                    <option value="4:3">4:3 横屏</option>
+                    <option value="3:2">3:2 横屏</option>
+                    <option value="9:16">9:16 竖屏</option>
+                    <option value="3:4">3:4 竖屏</option>
+                    <option value="original" selected>保持原图比例</option>
+                  </select>
+                  <select id="upscaleMethod" class="text-xs p-4" style="flex:1;min-width:120px;">
+                    <option value="lanczos3" selected>Lanczos3</option>
+                    <option value="bicubic">Bicubic</option>
+                    <option value="nearest">Nearest</option>
+                  </select>
                 </div>
                 <div id="llmPreviewBox" class="hidden mt-8 rounded p-12" style="border:1px solid var(--border);background:var(--bg-surface);">
                   <div class="flex items-center justify-between mb-8">

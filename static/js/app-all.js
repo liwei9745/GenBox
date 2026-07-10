@@ -1808,6 +1808,7 @@ function doGenerate() {
   if (document.getElementById('chkUpscale').checked) {
     payload.upscale_to = document.getElementById('upscaleSize').value;
     payload.upscale_method = document.getElementById('upscaleMethod').value;
+    payload.upscale_ratio = document.getElementById('upscaleRatio').value;
   }
 
   // 保存生图上下文，用于单模型重试

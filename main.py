@@ -106,6 +106,7 @@ class GenerateRequest(BaseModel):
     # ── 尺寸自适应：小图生成 + 本地放大 ──
     upscale_to: Optional[str] = None
     upscale_method: str = "lanczos3"
+    upscale_ratio: str = "original"  # 宽高比：1:1, 16:9, 21:9, 4:3, 3:2, 9:16, 3:4, original
 
 
 class GenerateResponse(BaseModel):
@@ -656,18 +657,15 @@ async def fetch_models(provider_id: str):
 
 
 # ──────────────────────────────────────────────────────────────
-# 本地图片放大（Pillow Lanczos3）— 移植自 4K Image API
+# 本地图片放大（Pillow Lanczos3）— 支持宽高比
 # ──────────────────────────────────────────────────────────────
-def _do_local_upscale(local_path: str, target_size: str, method: str = "lanczos3") -> str:
-    """将已保存的图片本地放大到目标尺寸，返回新路径（原图不动）"""
+def _do_local_upscale(local_path: str, target_size: str, method: str = "lanczos3", ratio: str = "original") -> str:
+    """将已保存的图片本地放大到目标尺寸，支持宽高比，返回新路径（原图不动）"""
     import io
     from PIL import Image as _PILImage
 
-    # 解析目标尺寸
-    parts = target_size.split("x")
-    if len(parts) != 2:
-        raise ValueError(f"无效尺寸格式: {target_size}")
-    target_w, target_h = int(parts[0]), int(parts[1])
+    # 解析目标最大边
+    max_dim = int(target_size)
 
     # 读取原图
     src = Path(local_path)
@@ -676,22 +674,41 @@ def _do_local_upscale(local_path: str, target_size: str, method: str = "lanczos3
     img = _PILImage.open(src)
     orig_w, orig_h = img.size
 
+    # 根据宽高比计算目标尺寸
+    if ratio == "original":
+        # 保持原图比例，最大边为 target_size
+        scale = max_dim / max(orig_w, orig_h)
+        target_w = int(orig_w * scale)
+        target_h = int(orig_h * scale)
+    else:
+        # 解析宽高比
+        parts = ratio.split(":")
+        if len(parts) != 2:
+            raise ValueError(f"无效宽高比格式: {ratio}")
+        ratio_w, ratio_h = int(parts[0]), int(parts[1])
+
+        # 根据宽高比和最大边计算目标尺寸
+        if orig_w / orig_h > ratio_w / ratio_h:
+            # 原图更宽，以宽度为基准
+            target_w = max_dim
+            target_h = int(max_dim * ratio_h / ratio_w)
+        else:
+            # 原图更高，以高度为基准
+            target_h = max_dim
+            target_w = int(max_dim * ratio_w / ratio_h)
+
     # 已满足目标尺寸
     if target_w <= orig_w and target_h <= orig_h:
         return local_path
 
-    # 等比缩放
-    scale = min(target_w / orig_w, target_h / orig_h)
-    new_w = int(orig_w * scale)
-    new_h = int(orig_h * scale)
-
     resample_map = {"lanczos3": _PILImage.LANCZOS, "bicubic": _PILImage.BICUBIC, "nearest": _PILImage.NEAREST}
     resample = resample_map.get(method, _PILImage.LANCZOS)
 
-    upscaled = img.resize((new_w, new_h), resample)
+    upscaled = img.resize((target_w, target_h), resample)
 
     # 保存到新文件（保留原图）
-    upscaled_path = src.parent / f"{src.stem}_upscaled_{new_w}x{new_h}{src.suffix}"
+    ratio_tag = ratio.replace(":", "x") if ratio != "original" else "orig"
+    upscaled_path = src.parent / f"{src.stem}_upscaled_{target_w}x{target_h}_{ratio_tag}{src.suffix}"
     upscaled.save(str(upscaled_path), format="PNG", quality=95)
 
     # 写入 PNG 元数据（Prompt 等）
@@ -700,6 +717,7 @@ def _do_local_upscale(local_path: str, target_size: str, method: str = "lanczos3
         info = PngImagePlugin.PngInfo()
         info.add_text("UpscaledFrom", str(orig_w) + "x" + str(orig_h))
         info.add_text("UpscaleMethod", method)
+        info.add_text("UpscaleRatio", ratio)
         upscaled.save(str(upscaled_path), format="PNG", pnginfo=info)
     except Exception:
         pass
@@ -810,6 +828,7 @@ async def generate(req: GenerateRequest, request: Request):
         # ── 尺寸自适应 ──
         "upscale_to": req.upscale_to,
         "upscale_method": req.upscale_method,
+        "upscale_ratio": req.upscale_ratio,
     }
 
     # 后台处理
@@ -868,8 +887,13 @@ async def _process_image_gen(gen_id: str):
             # ── 尺寸自适应：生成后本地放大 ──
             if res.success and res.local_path and task.get("upscale_to"):
                 try:
-                    state["log"].append(f"[{time.strftime('%H:%M:%S')}] ⤢ 正在本地放大到 {task['upscale_to']}...")
-                    _upscaled = _do_local_upscale(res.local_path, task["upscale_to"], task.get("upscale_method", "lanczos3"))
+                    state["log"].append(f"[{time.strftime('%H:%M:%S')}] ⤢ 正在本地放大到 {task['upscale_to']} ({task.get('upscale_ratio', 'original')})...")
+                    _upscaled = _do_local_upscale(
+                        res.local_path, 
+                        task["upscale_to"], 
+                        task.get("upscale_method", "lanczos3"),
+                        task.get("upscale_ratio", "original")
+                    )
                     if _upscaled:
                         res.local_path = _upscaled
                         state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✔ 放大完成")
