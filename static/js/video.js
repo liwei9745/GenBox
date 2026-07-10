@@ -135,6 +135,129 @@ window.videoGlobalSettings = {
   steps: null, seed: null
 };
 
+// ── 视频模型参数约束缓存 ──
+window._videoModelSpecCache = {};
+
+/**
+ * 获取视频模型参数约束
+ * @param {string} modelName - 模型名称
+ * @returns {Promise<object>} 模型参数约束
+ */
+window.getVideoModelSpec = async function(modelName) {
+  if (!modelName) return null;
+  if (window._videoModelSpecCache[modelName]) {
+    return window._videoModelSpecCache[modelName];
+  }
+  try {
+    const resp = await fetch(`/api/video/model-spec/${encodeURIComponent(modelName)}`);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    window._videoModelSpecCache[modelName] = data.spec;
+    return data.spec;
+  } catch (e) {
+    console.warn('获取视频模型参数失败:', e);
+    return null;
+  }
+};
+
+/**
+ * 根据模型参数约束动态更新UI选项
+ * @param {string} modelName - 模型名称
+ */
+window.updateVideoUIByModelSpec = async function(modelName) {
+  const spec = await window.getVideoModelSpec(modelName);
+  if (!spec) return;
+  
+  // 更新分辨率选项
+  const sizeSelect = document.getElementById('videoSize');
+  if (sizeSelect && spec.resolutions && spec.resolutions.length > 0) {
+    const currentVal = sizeSelect.value;
+    sizeSelect.innerHTML = '';
+    
+    // 分辨率名称映射
+    const resNames = {
+      '480p': '480p (SD)', '720p': '720p (HD)', '768p': '768p',
+      '1080p': '1080p (Full HD)', '2K': '2K', '4K': '4K (Ultra HD)'
+    };
+    
+    spec.resolutions.forEach(res => {
+      const opt = document.createElement('option');
+      opt.value = res === '4K' ? '3840x2160' : res === '2K' ? '2048x1024' : 
+                  res === '1080p' ? '1920x1080' : res === '720p' ? '1280x720' : 
+                  res === '768p' ? '1024x768' : res === '480p' ? '854x480' : res;
+      opt.textContent = resNames[res] || res;
+      sizeSelect.appendChild(opt);
+    });
+    
+    // 添加自定义选项
+    const customOpt = document.createElement('option');
+    customOpt.value = 'custom';
+    customOpt.textContent = '自定义...';
+    sizeSelect.appendChild(customOpt);
+    
+    // 尝试保持当前选择
+    if ([...sizeSelect.options].some(o => o.value === currentVal)) {
+      sizeSelect.value = currentVal;
+    }
+  }
+  
+  // 更新时长选项（通过帧数范围间接控制）
+  const framesInput = document.getElementById('videoFrames');
+  if (framesInput && spec.duration_options && spec.fps_options && spec.fps_options.length > 0) {
+    const fps = spec.fps_options[0]; // 使用第一个可用FPS
+    const minFrames = Math.max(spec.min_frames || 9, fps + 1);
+    const maxFrames = spec.max_frames || 441;
+    framesInput.min = minFrames;
+    framesInput.max = maxFrames;
+    framesInput.placeholder = `${minFrames}-${maxFrames}`;
+  }
+  
+  // 更新FPS选项
+  const fpsSelect = document.getElementById('videoFPS');
+  if (fpsSelect && spec.fps_options && spec.fps_options.length > 0) {
+    const currentFps = fpsSelect.value;
+    fpsSelect.innerHTML = '';
+    spec.fps_options.forEach(fps => {
+      const opt = document.createElement('option');
+      opt.value = fps;
+      opt.textContent = `${fps} fps`;
+      fpsSelect.appendChild(opt);
+    });
+    if (spec.fps_options.includes(parseInt(currentFps))) {
+      fpsSelect.value = currentFps;
+    }
+  }
+  
+  // 更新推理步数
+  const stepsInput = document.getElementById('videoSteps');
+  const stepsGroup = stepsInput ? stepsInput.closest('.form-group') || stepsInput.parentElement : null;
+  if (stepsGroup) {
+    if (spec.inference_steps_range) {
+      stepsGroup.style.display = '';
+      const [min, max, defaultVal] = spec.inference_steps_range;
+      stepsInput.min = min;
+      stepsInput.max = max;
+      stepsInput.placeholder = `默认${defaultVal}`;
+    } else {
+      stepsGroup.style.display = 'none';
+    }
+  }
+  
+  // 更新负面提示词
+  const negPromptInput = document.getElementById('videoNegPrompt');
+  const negPromptGroup = negPromptInput ? negPromptInput.closest('.form-group') || negPromptInput.parentElement : null;
+  if (negPromptGroup) {
+    negPromptGroup.style.display = spec.supports_negative_prompt ? '' : 'none';
+  }
+  
+  // 更新种子输入
+  const seedInput = document.getElementById('videoSeed');
+  const seedGroup = seedInput ? seedInput.closest('.form-group') || seedInput.parentElement : null;
+  if (seedGroup) {
+    seedGroup.style.display = spec.supports_seed ? '' : 'none';
+  }
+};
+
 window.getVideoProviderCapabilities = function(p) {
   var caps = p.model_capabilities || {};
   var allModels = p.models && p.models.length > 0 ? p.models : (p.model ? [p.model] : []);
@@ -296,6 +419,12 @@ window.onVideoModelChange = function(event) {
       sizeSel.value = 'custom';
       if (customSize) customSize.style.display = 'flex';
     }
+  }
+  
+  // 根据模型参数约束动态更新UI
+  var modelName = val;
+  if (window.updateVideoUIByModelSpec) {
+    window.updateVideoUIByModelSpec(modelName);
   }
 };
 

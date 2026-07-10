@@ -112,6 +112,129 @@ class ProxyConfig(BaseModel):
     password: str = ""
 
 
+class VideoModelSpec(BaseModel):
+    """视频模型参数约束定义"""
+    resolutions: List[str] = ["720p", "1080p"]  # 支持的分辨率档位
+    duration_options: List[int] = [5, 10]        # 支持的时长选项(秒)
+    fps_options: List[int] = [24]                # 支持的FPS选项
+    frame_rule: str = ""                         # 帧数规则: "8n+1", "4n+1", ""(无限制)
+    max_frames: int = 441                        # 最大帧数
+    min_frames: int = 9                          # 最小帧数
+    inference_steps_range: Optional[List[int]] = None  # 推理步数范围 [min, max, default]
+    supports_negative_prompt: bool = True        # 是否支持负面提示词
+    supports_seed: bool = True                   # 是否支持种子
+    supports_image_input: bool = True            # 是否支持图片输入
+    max_image_count: int = 1                     # 最大图片输入数量
+    max_prompt_length: int = 2000                # 最大提示词长度
+
+
+# 各视频模型参数约束预设
+VIDEO_MODEL_SPECS: Dict[str, VideoModelSpec] = {
+    # Google Veo 3.x
+    "veo-3": VideoModelSpec(
+        resolutions=["720p", "1080p", "4K"],
+        duration_options=[4, 6, 8],
+        fps_options=[24],
+        frame_rule="",
+        supports_negative_prompt=False,
+        supports_seed=False,
+        max_image_count=1,
+    ),
+    # Google Veo 2.x
+    "veo-2": VideoModelSpec(
+        resolutions=["720p"],
+        duration_options=[5, 8],
+        fps_options=[24],
+        frame_rule="",
+        supports_negative_prompt=False,
+        supports_seed=False,
+    ),
+    # OpenAI Sora
+    "sora": VideoModelSpec(
+        resolutions=["720p", "1080p"],
+        duration_options=[4, 8, 12, 16, 20],
+        fps_options=[24],
+        frame_rule="",
+        supports_negative_prompt=False,
+        supports_seed=False,
+        max_image_count=2,
+    ),
+    # Kling V2.x
+    "kling-v2": VideoModelSpec(
+        resolutions=["720p", "1080p"],
+        duration_options=[5, 10],
+        fps_options=[24],
+        frame_rule="",
+        supports_negative_prompt=False,
+        supports_seed=False,
+        max_image_count=1,
+    ),
+    # MiniMax / Hailuo
+    "hailuo": VideoModelSpec(
+        resolutions=["768p", "1080p"],
+        duration_options=[6, 10],
+        fps_options=[24],
+        frame_rule="",
+        supports_negative_prompt=False,
+        supports_seed=False,
+        max_image_count=1,
+    ),
+    # Alibaba Wanx 2.1
+    "wanx2.1": VideoModelSpec(
+        resolutions=["480p", "720p"],
+        duration_options=[5],
+        fps_options=[30],
+        frame_rule="",
+        supports_negative_prompt=False,
+        supports_seed=True,
+    ),
+    # Alibaba Wan 2.6/2.7
+    "wan2": VideoModelSpec(
+        resolutions=["720p", "1080p"],
+        duration_options=list(range(2, 16)),
+        fps_options=[30],
+        frame_rule="",
+        supports_negative_prompt=False,
+        supports_seed=True,
+    ),
+    # Tencent HunyuanVideo
+    "hunyuan": VideoModelSpec(
+        resolutions=["480p", "720p"],
+        duration_options=[5],
+        fps_options=[24],
+        frame_rule="4n+1",
+        min_frames=5,
+        max_frames=133,
+        inference_steps_range=[8, 50, 50],
+        supports_negative_prompt=False,
+        supports_seed=False,
+    ),
+    # ByteDance Seedance
+    "seedance": VideoModelSpec(
+        resolutions=["480p", "720p", "1080p", "2K"],
+        duration_options=list(range(4, 16)),
+        fps_options=[24],
+        frame_rule="",
+        supports_negative_prompt=False,
+        supports_seed=True,
+        max_image_count=9,
+    ),
+    # Agnes Video
+    "agnes": VideoModelSpec(
+        resolutions=["480p", "720p", "1080p"],
+        duration_options=list(range(3, 19)),
+        fps_options=[24, 30, 60],
+        frame_rule="8n+1",
+        min_frames=9,
+        max_frames=441,
+        inference_steps_range=[1, 100, 30],
+        supports_negative_prompt=True,
+        supports_seed=True,
+        max_image_count=4,
+    ),
+}
+
+
 class ProvidersConfig(BaseModel):
     """完整配置文件"""
     providers: List[ProviderConfig] = []
