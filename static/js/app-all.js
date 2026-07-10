@@ -4962,6 +4962,18 @@ function renderVideoProviderCards() {
   html = '<div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">&#21452;&#20987;&#22810;&#20010; Provider &#21487;&#21516;&#26102;&#21521;&#22810;&#20010;&#27169;&#22411;&#25552;&#20132;&#20219;&#52;</div>' + html;
   container.innerHTML = html;
   updateVideoGenerateButton();
+  
+  // 初始化时根据当前选中的模型更新参数UI
+  setTimeout(function() {
+    if (selectedVideoProviderIds.length > 0) {
+      var firstSelectedId = selectedVideoProviderIds[0];
+      var modelSelect = document.getElementById('vmodel_' + firstSelectedId);
+      if (modelSelect && modelSelect.value) {
+        console.log('[VideoSpec] 初始化模型参数:', modelSelect.value);
+        updateVideoUIByModelSpec(modelSelect.value);
+      }
+    }
+  }, 100);
 }
 
 function toggleVideoProvider(vpid) {
