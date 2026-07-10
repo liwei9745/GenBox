@@ -3778,6 +3778,7 @@ function renderProviderEdit() {
     provsInGroup.forEach(function(p) {
       var idx = allProviders.indexOf(p);
       var isOpen = providerEditOpenIdx === idx;
+      var et = p.endpoint_type || 'auto';
       var modelOpts = '';
       if (p.models && p.models.length) {
         var filteredModels = filterModelsByType(p.models, p.type);
@@ -3831,6 +3832,21 @@ function renderProviderEdit() {
                 '<option value="video" ' + (p.type==='video'?'selected':'') + '>🎬 生视频</option>' +
                 '<option value="llm" ' + (p.type==='llm'?'selected':'') + '>🤖 LLM</option>' +
               '</select>' +
+            '</div>' +
+            // 端点协议类型
+            '<div style="margin-bottom:8px;">' +
+              '<div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">端点协议类型（auto = 按 URL 自动识别）</div>' +
+              '<select class="modal-input" style="width:100%;padding:6px 8px;font-size:11px;box-sizing:border-box;" id="endpoint_type_' + idx + '">' +
+                '<option value="auto" ' + (et==='auto'?'selected':'') + '>🔄 自动识别 (auto)</option>' +
+                '<option value="openai" ' + (et==='openai'?'selected':'') + '>OpenAI 兼容 (openai)</option>' +
+                '<option value="gemini" ' + (et==='gemini'?'selected':'') + '>Google Gemini</option>' +
+                '<option value="qwen" ' + (et==='qwen'?'selected':'') + '>阿里通义 Qwen</option>' +
+                '<option value="agnes" ' + (et==='agnes'?'selected':'') + '>Agnes AI</option>' +
+                '<option value="volc_ark_plan" ' + (et==='volc_ark_plan'?'selected':'') + '>火山方舟 Agent Plan</option>' +
+                '<option value="volc_ark" ' + (et==='volc_ark'?'selected':'') + '>火山方舟 标准 Ark</option>' +
+              '</select>' +
+              (et==='volc_ark_plan' && p.type==='video' ?
+                '<div style="font-size:9px;color:#f59e0b;margin-top:3px;">⚠️ Small 套餐不支持视频生成，需在 Medium 及以上套餐才能实际出视频</div>' : '') +
             '</div>' +
             // 看板显示名
             '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">' +
@@ -3995,6 +4011,7 @@ function saveProvider(idx) {
     display_name: (document.getElementById('display_name_' + idx) || {value:''}).value,
     capabilities: capabilities,
     skip_proxy: document.getElementById('skip_proxy_' + idx) ? document.getElementById('skip_proxy_' + idx).checked : false,
+    endpoint_type: (document.getElementById('endpoint_type_' + idx) || {value:'auto'}).value,
     quality: '', extra: {}
   };
   _authFetch('/api/providers', {
@@ -4148,21 +4165,22 @@ function fetchModels(idx) {
   var typeVal = document.getElementById('type_' + idx).value;
   var colorVal = document.getElementById('color_' + idx).value;
   var enVal = document.getElementById('en_' + idx).checked;
+  var etVal = (document.getElementById('endpoint_type_' + idx) || {value:'auto'}).value;
 
   var btn = document.getElementById('fetchBtn_' + idx);
   var st  = document.getElementById('fetchStatus_' + idx);
   btn.disabled = true; btn.textContent = '...';
   st.textContent = '连接中...'; st.style.color = 'var(--text-muted)';
 
-  var tmp = { id:pid||'tmp', name:nameVal, type:typeVal, base_url:urlVal, api_key:keyVal, model:'', color:colorVal, enabled:enVal, models:[], quality:'', extra:{} };
+  var tmp = { id:pid||'tmp', name:nameVal, type:typeVal, base_url:urlVal, api_key:keyVal, model:'', color:colorVal, enabled:enVal, endpoint_type:etVal, models:[], quality:'', extra:{} };
 
     _authFetch('/api/providers', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(tmp)})
     .then(function(){ return _authFetch('/api/providers/fetch-models/' + pid); })
     .then(function(r){ return r.json(); })
     .then(function(data){
       if (data.success) {
-        st.textContent = '✅ 拉取成功 ' + data.count + ' 个模型' + (data.is_fallback ? ' (推荐列表)' : '');
-        st.style.color = '#22c3a5';
+        st.textContent = '✅ 拉取成功 ' + data.count + ' 个模型' + (data.message ? ' ' + data.message : '');
+        st.style.color = data.is_fallback ? '#f59e0b' : '#22c3a5';
         try { localStorage.setItem('igs_models_' + pid, JSON.stringify(data.models)); } catch(e){}
         loadProviders().then(function(){ renderProviderEdit(); });
       } else {
@@ -4785,9 +4803,17 @@ function filterModelsByType(models, providerType) {
     if (providerType === 'video') {
       // 生视频模型：包含 t2v, i2v, r2v, veo_, interpolation, video
       if (ml.indexOf('t2v') !== -1 || ml.indexOf('i2v') !== -1 || ml.indexOf('r2v') !== -1) return true;
-      if (ml.indexOf('veo_') !== -1) return true;
+      if (ml.indexOf('veo_') !== -1 || ml.indexOf('veo-') !== -1) return true;
       if (ml.indexOf('interpolation') !== -1) return true;
       if (ml.indexOf('video') !== -1) return true;
+      // 主流视频模型厂商关键词
+      if (ml.indexOf('seedance') !== -1 || ml.indexOf('doubao') !== -1) return true;
+      if (ml.indexOf('sora') !== -1) return true;
+      if (ml.indexOf('kling') !== -1) return true;
+      if (ml.indexOf('hailuo') !== -1 || ml.indexOf('minimax') !== -1) return true;
+      if (ml.indexOf('wanx') !== -1 || ml.indexOf('wan2') !== -1) return true;
+      if (ml.indexOf('hunyuan') !== -1) return true;
+      if (ml.indexOf('gen-3') !== -1 || ml.indexOf('gen3') !== -1) return true;
       return false;
     }
     if (providerType === 'llm') {
@@ -4824,6 +4850,18 @@ function groupVideoModels(models) {
       if (ml.indexOf('veo_3') !== -1) cat = 'Veo 3.x 文生视频 (T2V)';
       else if (ml.indexOf('veo_2') !== -1) cat = 'Veo 2.x 文生视频 (T2V)';
       else cat = '文生视频 (T2V)';
+    } else if (ml.indexOf('seedance') !== -1 || ml.indexOf('doubao') !== -1) {
+      cat = '豆包 Seedance (火山方舟)';
+    } else if (ml.indexOf('kling') !== -1) {
+      cat = '可灵 Kling';
+    } else if (ml.indexOf('hailuo') !== -1 || ml.indexOf('minimax') !== -1) {
+      cat = '海螺 Hailuo (MiniMax)';
+    } else if (ml.indexOf('wanx') !== -1 || ml.indexOf('wan2') !== -1) {
+      cat = '通义万相 Wan';
+    } else if (ml.indexOf('hunyuan') !== -1) {
+      cat = '混元 Hunyuan';
+    } else if (ml.indexOf('sora') !== -1) {
+      cat = 'OpenAI Sora';
     } else {
       cat = '其他';
     }

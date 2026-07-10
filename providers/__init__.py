@@ -72,6 +72,7 @@ def get_video_model_spec(model_name: str):
         ("wan2", "wan2"),
         ("wan_", "wan2"),
         ("hunyuan", "hunyuan"),
+        ("doubao", "seedance"),   # doubao-seedance 系列
         ("seedance", "seedance"),
         ("agnes", "agnes"),
     ]
@@ -332,7 +333,7 @@ async def _http_post_with_retry(url, headers, payload, *, timeout=120.0, max_ret
             except Exception:
                 pass
             raise httpx.HTTPStatusError(
-                f"{e.response.status_code} {e.response.reason_phrase} | Response: {body_text}",
+                f"{e.response.status_code} {e.response.reason_phrase} | Response: {translate_upstream_error(body_text)}",
                 request=e.request, response=e.response
             ) from e
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
@@ -862,27 +863,52 @@ async def enhance_prompt_with_llm_detailed(prompt: str, llm_provider_id: str = N
 # ──────────────────────────────────────────────────────────────
 async def fetch_models_from_upstream(cfg: ProviderConfig) -> List[str]:
     """
-    根据 Provider 的 URL + API Key 调用上游接口获取可用模型列表
-    返回模型 ID 列表
-    """
-    protocol = _detect_protocol(cfg)
+    根据 Provider 配置从上游获取可用模型列表。
 
+    优先使用用户显式设置的 endpoint_type；为 auto 时按 URL 自动识别。
+    任何网络/协议失败都会如实抛出错误，**绝不返回伪造的模型列表**。
+    （火山方舟 Agent Plan 没有公开的模型列表 API，返回官方文档候选名，
+     这些候选名仅表示「可能可用」，真实可用性需在生成时验证。）
+    """
     if not cfg.api_key:
         raise ValueError("API Key 未配置")
     if not cfg.base_url:
         raise ValueError("Base URL 未配置")
 
-    try:
-        if protocol == "gemini":
-            return await _fetch_gemini_models(cfg)
-        elif protocol == "qwen":
-            return await _fetch_qwen_models(cfg)
-        else:
-            return await _fetch_openai_models(cfg)
-    except Exception as e:
-        print(f"[fetch-models] {cfg.name} 拉取失败: {e}")
-        # 返回 fallback 列表而不是直接报错
-        return _get_fallback_models(cfg, protocol)
+    # 1) 确定端点类型（显式优先）
+    et = (cfg.endpoint_type or "auto").strip().lower()
+    if et in ("auto", ""):
+        et = _detect_protocol(cfg)
+
+    # 2) 火山方舟 Agent Plan：无模型列表 API，返回官方候选名
+    if et == "volc_ark_plan":
+        return _volcengine_plan_candidate_models(cfg)
+
+    # 3) 标准 Ark / OpenAI 兼容 / Gemini / Qwen / Agnes：真实拉取，失败即报错
+    if et == "gemini":
+        return await _fetch_gemini_models(cfg)
+    if et == "qwen":
+        return await _fetch_qwen_models(cfg)
+    # volc_ark / openai / agnes 统一走 OpenAI 兼容 GET /v1/models
+    return await _fetch_openai_models(cfg)
+
+
+def _volcengine_plan_candidate_models(cfg: ProviderConfig) -> List[str]:
+    """火山方舟 Agent Plan 无模型列表 API，返回官方文档中的候选模型名。
+
+    仅为「可能可用」的候选，真实可用性需在生成时验证
+    （Small 套餐不支持视频生成，需 Medium 及以上套餐）。
+    """
+    if cfg.type == "video":
+        return [
+            "doubao-seedance-2.0",
+            "doubao-seedance-2.0-fast",
+            "doubao-seedance-2.0-mini",
+            "doubao-seedance-1.5-pro",
+        ]
+    if cfg.type == "image":
+        return ["doubao-seedream-5.0-lite"]
+    return []
 
 
 async def _fetch_openai_models(cfg: ProviderConfig) -> List[str]:
@@ -1020,6 +1046,50 @@ async def _fetch_qwen_models(cfg: ProviderConfig) -> List[str]:
         ]
 
 
+def translate_upstream_error(raw: str) -> str:
+    """将上游模型 API 常见的英文错误翻译成易懂的中文提示。
+
+    无法识别时原样返回，绝不吞掉原始信息（符合「错误要诚实、可懂」原则）。
+    """
+    if not raw:
+        return raw
+    s = raw.strip()
+    low = s.lower()
+
+    rules = [
+        ("does not support image input",
+         "当前模型不支持图片输入。请改用支持图生视频(I2V)/图生图的模型，或去掉图片只用文字生成。"),
+        ("image input",
+         "当前模型不支持图片输入。请改用支持图片的模型，或去掉参考图。"),
+        ("modelnotopen",
+         "该模型尚未在火山方舟控制台开通。请到方舟控制台「模型管理」中开通该模型服务后再试。"),
+        ("unsupportedmodel",
+         "该模型不被当前套餐/端点支持。请确认模型名称正确，且已在对应套餐或控制台开通。"),
+        ("invalidendpointormodel",
+         "模型或端点不存在/无访问权限。请确认模型名称正确，且账户已开通该模型。"),
+        ("authenticationerror",
+         "API Key 无效或无权限。请检查 Key 是否正确、是否复制完整。"),
+        ("invalidapikey",
+         "API Key 无效。请检查 Key 是否正确。"),
+        ("insufficient",
+         "账户余额不足或配额不足。请充值或提升套餐后重试。"),
+        ("quota",
+         "配额不足或已超限。请稍后重试或提升套餐。"),
+        ("rate limit",
+         "请求过于频繁，触发限流。请稍等片刻再试。"),
+        ("ratelimit",
+         "请求过于频繁，触发限流。请稍等片刻再试。"),
+        ("not found",
+         "请求的资源/模型不存在。请检查模型名称或端点。"),
+        ("timeout",
+         "上游响应超时。请稍后重试。"),
+    ]
+    for key, zh in rules:
+        if key in low:
+            return f"{zh}（原始信息：{s[:200]}）"
+    return s
+
+
 def _get_fallback_models(cfg: ProviderConfig, protocol: str) -> List[str]:
     """
     当上游 API 拉取失败时，返回该协议的常用模型列表
@@ -1027,6 +1097,9 @@ def _get_fallback_models(cfg: ProviderConfig, protocol: str) -> List[str]:
     """
     if cfg.type == "video":
         return [
+            "doubao-seedance-2.0",
+            "doubao-seedance-2.0-fast",
+            "doubao-seedance-1.5-pro",
             "veo-3-1-generate-preview",
             "veo-3-1-fast-generate-preview",
             "veo-3-0-generate-001",

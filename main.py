@@ -42,7 +42,7 @@ from config import (
     cfg_mgr, GALLERY_DIR, STORAGE_DIR, ProviderConfig, ProvidersConfig,
     is_prod_mode, get_admin_key, verify_admin_key, generate_admin_key, reset_admin_key,
 )
-from providers import generate_multi, enhance_prompt_with_llm, enhance_prompt_with_llm_detailed, ImageResult, fetch_models_from_upstream, _save_image
+from providers import generate_multi, enhance_prompt_with_llm, enhance_prompt_with_llm_detailed, ImageResult, fetch_models_from_upstream, _save_image, translate_upstream_error
 
 
 # ──────────────────────────────────────────────────────────────
@@ -150,6 +150,8 @@ class ProviderCreateReq(BaseModel):
     color: str = "#0ea5e9"
     display_name: str = ""
     capabilities: Dict[str, bool] = {}  # 能力声明: {"t2i": True, "i2i": True}
+    skip_proxy: bool = False            # 跳过全局代理（直连）
+    endpoint_type: str = "auto"         # 端点协议类型
     extra: dict = {}
 
 
@@ -620,18 +622,24 @@ async def fetch_models(provider_id: str):
             try:
                 models = await fetch_models_from_upstream(p)
                 is_fallback = False
-                # 检查是否是 fallback（通过对比已知 fallback 列表）
-                fallback_signatures = {
-                    "gemini": ["gemini-2.0-flash-exp-image-generation", "gemini-1.5-pro", "gemini-1.5-flash"],
-                    "qwen": ["qwen3.6-plus", "wanx-v1", "wanx2.1-t2i-turbo"],
-                    "openai": ["gpt-image-2", "dall-e-3", "flux-dev", "sd-xl"],
-                }
-                protocol = "gemini" if "gemini" in p.base_url.lower() or "google" in p.base_url.lower() else ("qwen" if "qwen" in p.id else "openai")
-                sig_models = fallback_signatures.get(protocol, [])
-                if protocol == "qwen":
-                    is_fallback = len(models) <= 8 and any(m in models for m in sig_models)
-                elif len(models) <= 8 and any(m in models for m in sig_models):
+                note = ""
+                # 火山方舟 Agent Plan：返回的是官方候选名，并非实时拉取
+                if (p.endpoint_type or "auto").strip().lower() == "volc_ark_plan":
                     is_fallback = True
+                    note = "（Agent Plan 无模型列表 API，以上为官方候选模型，真实可用性需在生成时验证；Small 套餐不支持视频生成）"
+                else:
+                    # 检查是否是 fallback（通过对比已知 fallback 列表）
+                    fallback_signatures = {
+                        "gemini": ["gemini-2.0-flash-exp-image-generation", "gemini-1.5-pro", "gemini-1.5-flash"],
+                        "qwen": ["qwen3.6-plus", "wanx-v1", "wanx2.1-t2i-turbo"],
+                        "openai": ["gpt-image-2", "dall-e-3", "flux-dev", "sd-xl"],
+                    }
+                    protocol = "gemini" if "gemini" in p.base_url.lower() or "google" in p.base_url.lower() else ("qwen" if "qwen" in p.id else "openai")
+                    sig_models = fallback_signatures.get(protocol, [])
+                    if protocol == "qwen":
+                        is_fallback = len(models) <= 8 and any(m in models for m in sig_models)
+                    elif len(models) <= 8 and any(m in models for m in sig_models):
+                        is_fallback = True
 
                 # 自动保存到配置中
                 p.models = models
@@ -644,7 +652,7 @@ async def fetch_models(provider_id: str):
                     "count": len(models),
                     "auto_selected": p.model,
                     "is_fallback": is_fallback,
-                    "message": "(使用推荐列表，上游 API 未响应)" if is_fallback else "",
+                    "message": note if is_fallback else "",
                     "provider_type": p.type,
                 }
             except Exception as e:
@@ -1666,13 +1674,28 @@ class VideoGenerateRequest(BaseModel):
 
 
 def _detect_video_provider_type(provider):
-    """检测视频 Provider 的 API 协议类型: 'agnes' | 'gemini' | 'openai'"""
+    """检测视频 Provider 的 API 协议类型: 'agnes' | 'gemini' | 'volcengine' | 'openai'
+
+    优先使用用户显式设置的 endpoint_type；为 auto 时回退到 URL/ID 启发式。
+    """
+    et = (getattr(provider, 'endpoint_type', None) or 'auto').strip().lower()
+    if et in ("volc_ark_plan", "volc_ark", "volcengine"):
+        return "volcengine"
+    if et == "openai":
+        return "openai"
+    if et == "gemini":
+        return "gemini"
+    if et == "agnes":
+        return "agnes"
+
     base = provider.base_url.lower()
     pid = provider.id.lower()
     if "agnes" in pid or "agnes" in base:
         return "agnes"
     if "gemini" in pid or "localhost:38000" in base or "google" in base or "flow2api" in base:
         return "gemini"
+    if "volcengine" in pid or "volces.com" in base or "ark.cn-beijing" in base:
+        return "volcengine"
     return "openai"
 
 
@@ -1705,6 +1728,76 @@ def _build_agnes_payload(req, effective_model):
         # 无图的关键帧模式（罕见）
         payload["extra_body"] = {"mode": "keyframes"}
 
+    return payload
+
+
+def _volcengine_task_base(base_url: str) -> str:
+    """规范化火山方舟视频任务的基础 URL（返回到 .../tasks 之前的前缀）
+
+    支持用户填写多种形式的 Base URL：
+    - https://ark.cn-beijing.volces.com                         → 追加 /api/v3/contents/generations
+    - https://ark.cn-beijing.volces.com/api/v3                  → 追加 /contents/generations
+    - https://ark.cn-beijing.volces.com/api/plan/v3             → 追加 /contents/generations
+    - https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks → 去掉末尾 /tasks
+    返回值不含末尾的 /tasks，方便统一拼接创建/查询路径。
+    """
+    b = (base_url or "").rstrip("/")
+    # 去掉末尾的 /tasks（用户填了完整任务路径）
+    if b.endswith("/contents/generations/tasks"):
+        return b[:-len("/tasks")]
+    # 已经到 /contents/generations
+    if b.endswith("/contents/generations"):
+        return b
+    # 形如 /api/v3 或 /api/plan/v3
+    if b.endswith("/v3") or "/v3" in b.split("//")[-1]:
+        # 截断到 .../v3
+        idx = b.rfind("/v3")
+        prefix = b[:idx + len("/v3")]
+        return prefix + "/contents/generations"
+    # 裸域名或其他：默认使用标准 /api/v3
+    return b + "/api/v3/contents/generations"
+
+
+def _build_volcengine_payload(req, effective_model):
+    """构建火山方舟 Agent Plan 视频生成请求体"""
+    # 构建 content 数组
+    content = []
+    
+    # 文本提示词
+    prompt_text = req.prompt
+    # 在提示词中追加参数
+    params = []
+    if req.width and req.height:
+        # 计算宽高比
+        from math import gcd
+        w, h = req.width, req.height
+        g = gcd(w, h)
+        ratio = f"{w//g}:{h//g}"
+        params.append(f"--ratio {ratio}")
+    if req.num_frames and req.frame_rate:
+        duration = int(req.num_frames / req.frame_rate)
+        params.append(f"--duration {duration}")
+    if params:
+        prompt_text += " " + " ".join(params)
+    
+    content.append({
+        "type": "text",
+        "text": prompt_text
+    })
+    
+    # 图片输入（图生视频）
+    if req.image:
+        for img_url in req.image:
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": img_url}
+            })
+    
+    payload = {
+        "model": effective_model,
+        "content": content,
+    }
+    
     return payload
 
 
@@ -1904,6 +1997,11 @@ async def video_generate(req: VideoGenerateRequest):
         payload = _build_gemini_payload(req, effective_model)
         api_url = f"{base_url}/chat/completions"
         headers = {"Authorization": f"Bearer {provider.api_key}", "Content-Type": "application/json"}
+    elif provider_type == "volcengine":
+        payload = _build_volcengine_payload(req, effective_model)
+        # Agent Plan / 标准 Ark 均使用 .../contents/generations/tasks 端点
+        api_url = f"{_volcengine_task_base(provider.base_url)}/tasks"
+        headers = {"Authorization": f"Bearer {provider.api_key}", "Content-Type": "application/json"}
     else:
         payload = _build_agnes_payload(req, effective_model)
         api_url = f"{base_url}/videos"
@@ -1939,7 +2037,7 @@ async def video_generate(req: VideoGenerateRequest):
                                 sse_data = _json.loads(data_str)
                                 err = sse_data.get("error")
                                 if err:
-                                    sse_error_msg = err.get("message", str(err))
+                                    sse_error_msg = translate_upstream_error(err.get("message", str(err)))
                                     done_received = True
                                     break
                                 choices = sse_data.get("choices", [])
@@ -1964,9 +2062,9 @@ async def video_generate(req: VideoGenerateRequest):
                             if url_match:
                                 video_result_url = url_match.group(0)
         except _httpx.HTTPStatusError as e:
-            raise HTTPException(status_code=e.response.status_code, detail=f"视频 API 错误: {e.response.text[:500]}")
+            raise HTTPException(status_code=e.response.status_code, detail=f"视频 API 错误: {translate_upstream_error(e.response.text[:500])}")
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"视频 API 调用失败: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"视频 API 调用失败: {translate_upstream_error(str(e))}")
 
         task_id = str(uuid.uuid4())
         video_id = task_id  # Gemini uses task_id as video_id
@@ -1979,6 +2077,24 @@ async def video_generate(req: VideoGenerateRequest):
         else:
             initial_status = "queued"
             initial_progress = 0
+    elif provider_type == "volcengine":
+        # 火山方舟 Agent Plan: 异步任务模式
+        try:
+            async with _httpx.AsyncClient(timeout=180.0) as client:
+                resp = await client.post(api_url, headers=headers, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+        except _httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=e.response.status_code, detail=f"火山方舟 API 错误: {translate_upstream_error(e.response.text[:500])}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"火山方舟 API 调用失败: {translate_upstream_error(str(e))}")
+        
+        # 返回格式: {"id": "cgt-xxx", "status": "queued", ...}
+        task_id = data.get("id") or str(uuid.uuid4())
+        video_id = ""
+        video_result_url = ""
+        initial_status = data.get("status", "queued")
+        initial_progress = 0
     else:
         payload = _build_agnes_payload(req, effective_model)
         api_url = f"{base_url}/videos"
@@ -1988,9 +2104,9 @@ async def video_generate(req: VideoGenerateRequest):
                 resp.raise_for_status()
                 data = resp.json()
         except _httpx.HTTPStatusError as e:
-            raise HTTPException(status_code=e.response.status_code, detail=f"视频 API 错误: {e.response.text[:500]}")
+            raise HTTPException(status_code=e.response.status_code, detail=f"视频 API 错误: {translate_upstream_error(e.response.text[:500])}")
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"视频 API 调用失败: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"视频 API 调用失败: {translate_upstream_error(str(e))}")
         task_id = data.get("task_id") or data.get("id") or str(uuid.uuid4())
         video_id = data.get("video_id", "")
         video_result_url = ""
@@ -2053,6 +2169,84 @@ async def video_generate(req: VideoGenerateRequest):
         task_info["error"] = error_detail
         _save_video_history_entry(task_info)
         print(f"[Video] Gemini 视频生成失败: {error_detail} (model={effective_model})")
+    elif provider_type == "volcengine":
+        # ── 火山方舟: 后台轮询线程 ──
+        def _poll_volcengine(tid, base, key, model, prompt_text, provider_id):
+            import time as _t
+            import requests as _req
+            poll_count = 0
+            max_polls = 180  # 最多轮询 180 次 (约 15 分钟)
+            # 构建轮询 URL（base 已是规范化到 .../contents/generations 的前缀）
+            poll_url = f"{base}/tasks/{tid}"
+            while poll_count < max_polls:
+                _t.sleep(15)  # 火山方舟建议 15 秒轮询间隔
+                poll_count += 1
+                try:
+                    r = _req.get(poll_url, headers={"Authorization": f"Bearer {key}"}, timeout=30)
+                    if r.status_code != 200:
+                        print(f"[Video] 火山方舟轮询失败: {r.status_code} {r.text[:200]}")
+                        continue
+                    result = r.json()
+                    status = result.get("status", "")
+                    # 更新进度
+                    if tid in video_tasks:
+                        video_tasks[tid]["status"] = status
+                        # 简单估算进度
+                        if status == "queued":
+                            video_tasks[tid]["progress"] = 10
+                        elif status == "running":
+                            video_tasks[tid]["progress"] = 50
+                    
+                    if status == "succeeded":
+                        # 提取视频 URL
+                        content = result.get("content", {})
+                        vurl = content.get("video_url", "") if isinstance(content, dict) else ""
+                        if tid in video_tasks:
+                            video_tasks[tid]["video_url"] = vurl
+                            video_tasks[tid]["progress"] = 100
+                            video_tasks[tid]["status"] = "completed"
+                        # 下载视频
+                        if vurl:
+                            try:
+                                vr = _req.get(vurl, timeout=120)
+                                if vr.status_code == 200:
+                                    ts2 = time.strftime("%Y%m%d_%H%M%S")
+                                    safe_p = "".join(c if c.isalnum() else "_" for c in prompt_text[:30])
+                                    vfn = f"{provider_id}_{ts2}_{safe_p}_{uuid.uuid4().hex[:6]}.mp4"
+                                    vp = VIDEO_DIR / vfn
+                                    vp.write_bytes(vr.content)
+                                    _generate_video_thumbnail_async(vp)
+                                    if tid in video_tasks:
+                                        video_tasks[tid]["local_path"] = str(vp)
+                            except Exception as e:
+                                print(f"[Video] 火山方舟视频下载失败: {e}")
+                        if tid in video_tasks:
+                            _save_video_history_entry(video_tasks[tid])
+                        return
+                    elif status in ("failed", "expired"):
+                        error_msg = translate_upstream_error(result.get("error", {}).get("message", "任务失败") if isinstance(result.get("error"), dict) else str(result.get("error", "任务失败")))
+                        if tid in video_tasks:
+                            video_tasks[tid]["status"] = "failed"
+                            video_tasks[tid]["error"] = error_msg
+                            _save_video_history_entry(video_tasks[tid])
+                        print(f"[Video] 火山方舟视频生成失败: {error_msg} (model={model})")
+                        return
+                    # queued/running 继续轮询
+                except Exception as e:
+                    print(f"[Video] 火山方舟轮询异常: {e}")
+                    continue
+            # 超时
+            if tid in video_tasks:
+                video_tasks[tid]["status"] = "timeout"
+                video_tasks[tid]["error"] = "任务超时（超过 15 分钟）"
+                _save_video_history_entry(video_tasks[tid])
+
+        t = threading.Thread(
+            target=_poll_volcengine,
+            args=(task_id, _volcengine_task_base(provider.base_url), provider.api_key, effective_model, req.prompt, provider.id),
+            daemon=True,
+        )
+        t.start()
     else:
         # ── Agnes: 后台轮询线程 ──
         def _poll_agnes(vid, tid, base, key):

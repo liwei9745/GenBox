@@ -82,6 +82,7 @@ class ProviderConfig(BaseModel):
     display_name: str = ""     # 看板分组显示名称（空=使用 name）
     capabilities: Dict[str, bool] = {}  # 能力声明: {"t2i": True, "i2i": True, "i2v": False}
     skip_proxy: bool = False   # 跳过全局代理（直连）
+    endpoint_type: str = "auto"  # 端点协议类型: auto|openai|gemini|qwen|agnes|volc_ark_plan|volc_ark
     extra: Dict[str, Any] = {} # 扩展参数
 
     def get_effective_keys(self) -> List[str]:
