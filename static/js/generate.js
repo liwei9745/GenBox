@@ -371,6 +371,7 @@ window.doGenerate = function() {
   if (document.getElementById('chkUpscale').checked) {
     payload.upscale_to = document.getElementById('upscaleSize').value;
     payload.upscale_method = document.getElementById('upscaleMethod').value;
+    payload.upscale_ratio = document.getElementById('upscaleRatio').value;
   }
 
   _af('/api/generate', {
