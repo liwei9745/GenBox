@@ -4992,6 +4992,153 @@ function updateVideoGenerateButton() {
 
 
 
+// ── 视频模型参数约束缓存 ──
+var _videoModelSpecCache = {};
+
+/**
+ * 获取视频模型参数约束
+ * @param {string} modelName - 模型名称
+ * @returns {Promise<object>} 模型参数约束
+ */
+async function getVideoModelSpec(modelName) {
+  if (!modelName) return null;
+  if (_videoModelSpecCache[modelName]) {
+    return _videoModelSpecCache[modelName];
+  }
+  try {
+    const resp = await fetch(`/api/video/model-spec/${encodeURIComponent(modelName)}`);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    _videoModelSpecCache[modelName] = data.spec;
+    return data.spec;
+  } catch (e) {
+    console.warn('获取视频模型参数失败:', e);
+    return null;
+  }
+}
+
+/**
+ * 根据模型参数约束动态更新UI选项
+ * @param {string} modelName - 模型名称
+ */
+async function updateVideoUIByModelSpec(modelName) {
+  const spec = await getVideoModelSpec(modelName);
+  if (!spec) return;
+  
+  console.log('[VideoSpec] 模型参数约束:', modelName, spec);
+  
+  // 更新分辨率选项
+  const sizeSelect = document.getElementById('videoSize');
+  if (sizeSelect && spec.resolutions && spec.resolutions.length > 0) {
+    const currentVal = sizeSelect.value;
+    sizeSelect.innerHTML = '';
+    
+    // 分辨率名称映射
+    const resNames = {
+      '480p': '480p (SD)', '720p': '720p (HD)', '768p': '768p',
+      '1080p': '1080p (Full HD)', '2K': '2K', '4K': '4K (Ultra HD)'
+    };
+    
+    spec.resolutions.forEach(res => {
+      const opt = document.createElement('option');
+      opt.value = res === '4K' ? '3840x2160' : res === '2K' ? '2048x1024' : 
+                  res === '1080p' ? '1920x1080' : res === '720p' ? '1280x720' : 
+                  res === '768p' ? '1024x768' : res === '480p' ? '854x480' : res;
+      opt.textContent = resNames[res] || res;
+      sizeSelect.appendChild(opt);
+    });
+    
+    // 添加自定义选项
+    const customOpt = document.createElement('option');
+    customOpt.value = 'custom';
+    customOpt.textContent = '自定义...';
+    sizeSelect.appendChild(customOpt);
+    
+    // 尝试保持当前选择
+    if ([...sizeSelect.options].some(o => o.value === currentVal)) {
+      sizeSelect.value = currentVal;
+    }
+  }
+  
+  // 更新帧数范围提示
+  const framesInput = document.getElementById('videoFrames');
+  if (framesInput && spec.duration_options && spec.fps_options && spec.fps_options.length > 0) {
+    const fps = spec.fps_options[0]; // 使用第一个可用FPS
+    const minFrames = Math.max(spec.min_frames || 9, fps + 1);
+    const maxFrames = spec.max_frames || 441;
+    framesInput.min = minFrames;
+    framesInput.max = maxFrames;
+    framesInput.placeholder = `${minFrames}-${maxFrames}`;
+    
+    // 更新帧数规则提示
+    const ruleHint = framesInput.parentElement.querySelector('.text-xs.text-muted');
+    if (ruleHint) {
+      ruleHint.textContent = spec.frame_rule || '无限制';
+    }
+  }
+  
+  // 更新FPS选项
+  const fpsSelect = document.getElementById('videoFPS');
+  if (fpsSelect && spec.fps_options && spec.fps_options.length > 0) {
+    const currentFps = fpsSelect.value;
+    fpsSelect.innerHTML = '';
+    spec.fps_options.forEach(fps => {
+      const opt = document.createElement('option');
+      opt.value = fps;
+      opt.textContent = `${fps} fps`;
+      fpsSelect.appendChild(opt);
+    });
+    if (spec.fps_options.includes(parseInt(currentFps))) {
+      fpsSelect.value = currentFps;
+    }
+  }
+  
+  // 更新时长按钮
+  const durationBtns = document.querySelectorAll('.sub-tab[onclick*="setVideoDuration"]');
+  if (durationBtns.length > 0 && spec.duration_options && spec.fps_options) {
+    const fps = spec.fps_options[0] || 24;
+    durationBtns.forEach(btn => {
+      const onclick = btn.getAttribute('onclick');
+      const match = onclick && onclick.match(/setVideoDuration\((\d+),(\d+)/);
+      if (match) {
+        const frames = parseInt(match[1]);
+        const duration = Math.round((frames - 1) / fps);
+        btn.textContent = `${duration}秒`;
+      }
+    });
+  }
+  
+  // 更新推理步数
+  const stepsInput = document.getElementById('videoSteps');
+  const stepsGroup = stepsInput ? stepsInput.closest('[data-field="steps"]') || stepsInput.parentElement : null;
+  if (stepsGroup) {
+    if (spec.inference_steps_range) {
+      stepsGroup.style.display = '';
+      const [min, max, defaultVal] = spec.inference_steps_range;
+      stepsInput.min = min;
+      stepsInput.max = max;
+      stepsInput.placeholder = `默认${defaultVal}`;
+    } else {
+      stepsGroup.style.display = 'none';
+    }
+  }
+  
+  // 更新负面提示词
+  const negPromptInput = document.getElementById('videoNegPrompt');
+  const negPromptGroup = negPromptInput ? negPromptInput.closest('[data-field="negPrompt"]') || negPromptInput.parentElement : null;
+  if (negPromptGroup) {
+    negPromptGroup.style.display = spec.supports_negative_prompt ? '' : 'none';
+  }
+  
+  // 更新种子输入
+  const seedInput = document.getElementById('videoSeed');
+  const seedGroup = seedInput ? seedInput.closest('[data-field="seed"]') || seedInput.parentElement : null;
+  if (seedGroup) {
+    seedGroup.style.display = spec.supports_seed ? '' : 'none';
+  }
+}
+
+
 function onVideoModelChange(event) {
   // 根据选中的视频模型自动调整推荐参数
   var sel = event && event.target;
@@ -5031,6 +5178,9 @@ function onVideoModelChange(event) {
       if (customSize) customSize.style.display = 'flex';
     }
   }
+  
+  // 根据模型参数约束动态更新UI
+  updateVideoUIByModelSpec(val);
 }
 
 function onVideoSizeChange() {
