@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GenBox</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=11">
-  <link rel="stylesheet" href="/static/css/pages.css?v=11">
+  <link rel="stylesheet" href="/static/css/app.css?v=13">
+  <link rel="stylesheet" href="/static/css/pages.css?v=13">
 </head>
 <body>
 
@@ -130,6 +130,28 @@
   </div>
 </div>
 
+<!-- Update Modal -->
+<div id="updateModal" role="dialog" aria-modal="true" aria-labelledby="updateModalTitle" onclick="if(event.target===this)closeUpdateModal()">
+  <div class="glass-panel update-modal-box">
+    <div class="update-modal-head">
+      <h2 id="updateModalTitle"><span id="updateModalHeading">更新状态</span> <span id="updateModalVersion" style="color:var(--accent);"></span></h2>
+      <button class="btn-ghost" onclick="closeUpdateModal()" title="关闭">✕</button>
+    </div>
+    <div class="update-modal-body">
+      <div id="updateModalNotes" style="font-size:12px;line-height:1.65;color:var(--text-secondary);white-space:pre-wrap;"></div>
+      <div id="updateModalStatus" class="hidden"></div>
+    </div>
+    <div class="update-modal-foot">
+      <button class="btn-ghost" id="updateIgnoreBtn" onclick="ignoreGlobalUpdate()">忽略此版本</button>
+      <div class="update-modal-actions">
+        <button class="btn-ghost" onclick="closeUpdateModal()">稍后</button>
+        <a class="btn-secondary" id="updateDownloadLink" href="https://github.com/liwei9745/GenBox/releases" target="_blank" rel="noopener noreferrer">前往下载</a>
+        <button class="btn-primary" id="updateApplyBtn" onclick="applyGlobalUpdate()">立即更新</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Login Page -->
 <div id="loginPage">
   <div class="glass-panel" style="width:380px;text-align:center;">
@@ -224,20 +246,28 @@
 
     <!-- ════════════════ PAGE: Dashboard ════════════════ -->
     <div id="pageDashboard" class="page-content">
-      <div class="content-header">
-        <div>
-          <div class="content-title">📊 系统看板</div>
-          <div class="content-subtitle">系统状态一览</div>
+      <div class="content-header dashboard-header">
+        <div class="dashboard-header-main">
+          <div class="dashboard-title-block">
+            <div class="content-title">📊 系统看板</div>
+            <div class="content-subtitle">系统状态一览</div>
+          </div>
+          <div class="dashboard-actions">
+            <button id="globalUpdateBadge" class="dashboard-action update-status is-checking" onclick="openUpdateModal()" title="点击查看更新状态">
+              <span id="globalUpdateBadgeIcon" class="dashboard-action-icon">↻</span>
+              <span id="globalUpdateBadgeText">检查更新...</span>
+            </button>
+            <a href="https://github.com/liwei9745/GenBox" target="_blank" rel="noopener noreferrer" title="GitHub 项目地址" class="dashboard-action">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+              <span>GitHub</span>
+            </a>
+            <button class="dashboard-action is-primary" onclick="loadDashboard()"><span class="dashboard-action-icon">↻</span><span>刷新</span></button>
+            <button class="dashboard-action is-warning" onclick="serverControl('restart')"><span class="dashboard-action-icon">↻</span><span>重启</span></button>
+            <button class="dashboard-action is-danger" onclick="serverControl('stop')"><span class="dashboard-action-icon">■</span><span>停止</span></button>
+          </div>
         </div>
-        <div class="flex items-center gap-8">
+        <div class="dashboard-network-row">
           <div id="netStatusBar"></div>
-          <a href="https://github.com/liwei9745/GenBox" target="_blank" title="GitHub 项目地址" style="display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:8px;border:1px solid #6e7681;background:transparent;color:#8b949e;cursor:pointer;text-decoration:none;font-size:12px;transition:all 0.2s;" onmouseover="this.style.borderColor='#8b949e';this.style.color='#f0f6fc';" onmouseout="this.style.borderColor='#6e7681';this.style.color='#8b949e';">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-            GitHub
-          </a>
-          <button class="btn-primary" onclick="loadDashboard()" style="font-size:12px;padding:6px 14px;">🔄 刷新</button>
-          <button onclick="serverControl('restart')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🔄 重启</button>
-          <button onclick="serverControl('stop')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #ef4444;background:transparent;color:#ef4444;cursor:pointer;">⏹ 停止</button>
         </div>
       </div>
       <div id="dashboardContent" class="content-scroll"></div>
@@ -774,6 +804,6 @@
   </div>
 </nav>
 
-<script src="/static/js/app-all.js?v=14"></script>
+<script src="/static/js/app-all.js?v=17"></script>
 </body>
 </html>

@@ -37,7 +37,7 @@ GITHUB_MIRRORS = [
 ]
 
 # 当前版本
-CURRENT_VERSION = "2.3.1"
+CURRENT_VERSION = "2.3.2"
 
 
 class UpdateType(Enum):
@@ -208,6 +208,19 @@ async def apply_source_update(mirror_url: str = "") -> dict:
         )
 
     try:
+        # 获取当前分支，计算对应的上游 ref（避免写死 origin/master 把 dev 等分支覆盖）
+        branch = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=app_dir, capture_output=True, text=True
+        ).stdout.strip()
+        target = f"origin/{branch}" if branch else "origin/master"
+        verify = subprocess.run(
+            ["git", "rev-parse", "--verify", target],
+            cwd=app_dir, capture_output=True, text=True
+        )
+        if verify.returncode != 0:
+            target = "origin/master"
+
         # fetch
         r = subprocess.run(
             ["git", "fetch", "--all", "--tags"],
@@ -216,7 +229,7 @@ async def apply_source_update(mirror_url: str = "") -> dict:
         if r.returncode != 0:
             return {"success": False, "error": f"fetch 失败: {r.stderr[:200]}"}
 
-        # 检查是否有更新
+        # 检查是否有更新（相对当前分支上游）
         r = subprocess.run(
             ["git", "status", "-sb"],
             cwd=app_dir, capture_output=True, text=True
@@ -226,9 +239,9 @@ async def apply_source_update(mirror_url: str = "") -> dict:
         if not behind:
             return {"success": True, "message": "已是最新版本"}
 
-        # reset 到最新
+        # reset 到当前分支上游
         r = subprocess.run(
-            ["git", "reset", "--hard", "origin/master"],
+            ["git", "reset", "--hard", target],
             cwd=app_dir, capture_output=True, text=True, timeout=30
         )
         if r.returncode != 0:

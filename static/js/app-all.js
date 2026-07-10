@@ -107,6 +107,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   renderQuickPrompts();
   loadDashboard();
+  checkGlobalUpdate();
 
   // 拖拽上传 (i2i)
   var zone = document.getElementById('uploadZone');
@@ -2626,7 +2627,7 @@ function loadDashboard() {
       var html = '';
 
       // ── 评分卡片 ──
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px;">';
+      html += '<div class="dashboard-stats-grid">';
       html += _dashCard('🏆 综合评分', '<div style="font-size:36px;font-weight:800;color:' + scoreColor + ';">' + scTotal + '</div><div style="font-size:11px;color:var(--text-muted);">' + scoreLabel + '</div>', scoreColor);
       html += _dashCard('🖼 图片生成', '<div style="font-size:28px;font-weight:700;color:var(--accent);">' + (stImg.total || 0) + '</div><div style="font-size:11px;color:var(--text-muted);">成功 ' + (stImg.success || 0) + ' / 失败 ' + (stImg.failed || 0) + '</div>');
       html += _dashCard('🎬 视频生成', '<div style="font-size:28px;font-weight:700;color:var(--accent-2);">' + (stVid.total || 0) + '</div><div style="font-size:11px;color:var(--text-muted);">成功 ' + (stVid.success || 0) + ' / 失败 ' + (stVid.failed || 0) + '</div>');
@@ -2634,7 +2635,7 @@ function loadDashboard() {
       html += '</div>';
 
       // ── 评分详情 + 系统信息 ──
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">';
+      html += '<div class="dashboard-two-column">';
       html += '<div class="glass-card" style="padding:16px;display:flex;flex-direction:column;">';
       html += '<div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:12px;">🏆 评分详情</div>';
       html += '<div style="flex:1;display:flex;flex-direction:column;justify-content:space-between;">';
@@ -2676,7 +2677,7 @@ function loadDashboard() {
       html += _renderProviderGroups(providers);
 
       // ── 最近活动 + 宿主机资源 ──
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">';
+      html += '<div class="dashboard-two-column">';
 
       // Left: 最近活动
       html += '<div class="glass-card" style="padding:16px;">';
@@ -2711,7 +2712,7 @@ function loadDashboard() {
       html += '</div>';
 
       // ── 快捷导航 ──
-      html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">';
+      html += '<div class="dashboard-quick-grid">';
       html += _quickNav('✨', '生图', "switchNav('generate',document.getElementById('navGen'))");
       html += _quickNav('🎬', '生视频', "switchNav('video',document.getElementById('navVideo'))");
       html += _quickNav('<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>', '媒体库', "switchNav('gallery',document.getElementById('navGallery'))");
@@ -2802,7 +2803,7 @@ function _renderProviderGroups(providers) {
     return h;
   }
 
-  var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">';
+  var html = '<div class="dashboard-two-column dashboard-provider-grid">';
 
   // ── Left: Provider 概览 ──
   html += '<div class="glass-card" style="padding:16px;min-width:0;overflow:hidden;">';
@@ -2954,7 +2955,7 @@ function _loadIpInfo() {
           '<span style="color:var(--text-muted);">' + label + '</span>' +
           '<span style="color:' + (color || 'var(--text-primary)') + ';font-weight:600;max-width:55%;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(String(val)) + '">' + escHtml(String(val)) + '</span></div>';
       }
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">';
+      html += '<div class="ip-info-grid">';
       html += _ipRow('IP 原生性', nativeType, isNative ? '#22c55e' : '#f59e0b');
       html += _ipRow('业务标记', ispType.replace(/.*[（(]/, '').replace(/[）)].*/, '') || '-', ispFlag === 'hosting' ? '#f59e0b' : '#22c55e');
       html += _ipRow('运营类型', ispType, ispFlag === 'hosting' ? '#f59e0b' : '#22c55e');
@@ -2964,7 +2965,7 @@ function _loadIpInfo() {
       // Section 2: ISP 网络底层
       html += '<div style="padding:12px;border-radius:10px;background:var(--bg-surface);border:1px solid var(--border);">';
       html += '<div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:8px;letter-spacing:0.3px;">ISP 网络底层</div>';
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">';
+      html += '<div class="ip-info-grid">';
       html += _ipRow('ASN', asn, '#5b8def');
       html += _ipRow('解析时区', timezone);
       html += _ipRow('偏移量 (Drift)', driftKm + ' km', hasDrift ? '#ef4444' : '#22c55e');
@@ -2974,7 +2975,7 @@ function _loadIpInfo() {
       // Section 3: 风险深度检测
       html += '<div style="padding:12px;border-radius:10px;background:var(--bg-surface);border:1px solid var(--border);">';
       html += '<div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:8px;letter-spacing:0.3px;">风险深度检测</div>';
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">';
+      html += '<div class="ip-info-grid">';
       var spamColor = threatListed ? '#ef4444' : '#22c55e';
       var spamText = threatListed ? '⚠ 已入库 (危险)' : '✅ 纯净无异常';
       html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:10px;border-bottom:1px solid var(--border);"><span style="color:var(--text-muted);">Spamhaus 情报</span><span style="color:' + spamColor + ';font-weight:600;">' + spamText + '</span></div>';
@@ -3154,29 +3155,29 @@ function _loadHostResources() {
 function _loadNetStatus() {
   var bar = document.getElementById('netStatusBar');
   if (!bar) return;
-  bar.innerHTML = '<span style="font-size:10px;color:var(--text-muted);">检测中...</span>';
+  bar.innerHTML = '<span class="network-status-message">检测中...</span>';
 
   _authFetch('/api/dashboard/network')
     .then(function(r){ return r.json(); })
     .then(function(d) {
       var results = d.results || {};
       var names = ['OpenAI', 'Gemini', 'Anthropic', 'Agnes', 'Qwen', 'Zhipu', 'Volcengine', 'Baidu', 'Tencent', 'Moonshot', 'DeepSeek', 'MiniMax'];
-      var html = '<span title="TCP 连接耗时（非 API 响应时间），用于判断网络可达性" style="font-size:9px;color:var(--text-muted);padding:2px 6px;border-radius:8px;background:var(--bg-base);border:1px solid var(--border);cursor:help;">🌐 网络连通</span>';
+      var html = '<span class="network-status-label" title="TCP 连接耗时（非 API 响应时间），用于判断网络可达性">网络连通</span>';
       for (var i = 0; i < names.length; i++) {
         var n = names[i];
         var r = results[n] || {status:'error', ms:0};
-        var dot = r.status === 'ok' ? (r.ms < 800 ? '#22c55e' : r.ms < 2000 ? '#f59e0b' : '#ef4444') : '#ef4444';
+        var statusClass = r.status === 'ok' ? (r.ms < 800 ? 'is-good' : r.ms < 2000 ? 'is-warn' : 'is-error') : 'is-error';
         var label = r.status === 'ok' ? r.ms + 'ms' : '✗';
-        html += '<div title="' + n + (r.status === 'ok' ? ' TCP连接 ' + r.ms + 'ms' : ' 不可达') + '" style="display:flex;align-items:center;gap:3px;padding:3px 8px;border-radius:12px;background:var(--bg-base);border:1px solid var(--border);font-size:10px;">';
-        html += '<span style="width:6px;height:6px;border-radius:50%;background:' + dot + ';flex-shrink:0;"></span>';
-        html += '<span style="color:var(--text-secondary);">' + n + '</span>';
-        html += '<span style="color:' + dot + ';font-weight:600;font-variant-numeric:tabular-nums;">' + label + '</span>';
+        html += '<div class="network-status-chip ' + statusClass + '" title="' + n + (r.status === 'ok' ? ' TCP连接 ' + r.ms + 'ms' : ' 不可达') + '">';
+        html += '<span class="network-status-dot"></span>';
+        html += '<span>' + n + '</span>';
+        html += '<span class="network-status-value">' + label + '</span>';
         html += '</div>';
       }
       bar.innerHTML = html;
     })
     .catch(function() {
-      bar.innerHTML = '<span style="font-size:10px;color:#ef4444;">网络检测失败</span>';
+      bar.innerHTML = '<span class="network-status-message is-error">网络检测失败</span>';
     });
 }
 
@@ -3439,16 +3440,20 @@ function _checkForUpdates() {
     .then(function(r){ return r.json(); })
     .then(function(d) {
       if (d.available) {
+        _globalUpdateData = d;
+        if (localStorage.getItem('genbox_update_check') !== 'off') renderUpdateBadge(d);
         if (badge) { badge.textContent = '有新版本'; badge.style.background = '#f59e0b22'; badge.style.color = '#f59e0b'; }
         var notes = d.release_notes ? '<div style="margin:6px 0;padding:8px;border-radius:6px;background:var(--bg-card);max-height:120px;overflow-y:auto;white-space:pre-wrap;font-size:10px;color:var(--text-secondary);">' + escHtml(d.release_notes) + '</div>' : '';
         if (content) {
           content.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
-            '<span style="color:#f59e0b;font-weight:600;">⬆ v' + d.latest_version + ' 可用</span>' +
+            '<span style="color:#f59e0b;font-weight:600;">⬆ ' + _formatUpdateVersion(d.latest_version) + ' 可用</span>' +
             '<button onclick="_testMirrors()" style="padding:3px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;">🔍 测速</button>' +
-            '<button onclick="_applyUpdate()" style="padding:3px 8px;font-size:10px;border-radius:5px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;">立即更新</button>' +
+            '<button onclick="applyGlobalUpdate()" style="padding:3px 8px;font-size:10px;border-radius:5px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;">立即更新</button>' +
             '</div>' + notes;
         }
       } else {
+        _globalUpdateData = d;
+        renderUpdateBadge(d);
         if (badge) { badge.textContent = '已是最新'; badge.style.background = '#22c55e22'; badge.style.color = '#22c55e'; }
         if (content) content.innerHTML = '<span style="color:#22c55e;">✓ 已是最新版本</span> <button onclick="_checkForUpdates()" style="margin-left:8px;padding:3px 8px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;">重新检测</button>';
       }
@@ -3477,7 +3482,7 @@ function _testMirrors() {
         html += '<span style="flex:1;color:var(--text-secondary);">' + escHtml(m.name) + '</span>';
         html += '<span style="color:' + color + ';">' + status + '</span>';
         if (m.available) {
-          html += '<button onclick="_applyUpdate(\'' + escHtml(m.url) + '\')" style="padding:2px 6px;font-size:9px;border-radius:4px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;">使用此线路更新</button>';
+          html += '<button onclick="_applyUpdate(null, \'' + escHtml(m.url) + '\')" style="padding:2px 6px;font-size:9px;border-radius:4px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;">使用此线路更新</button>';
         }
         html += '</div>';
       }
@@ -3490,33 +3495,190 @@ function _testMirrors() {
     });
 }
 
-function _applyUpdate(downloadUrl) {
+var _globalUpdateData = null;
+
+function _formatUpdateVersion(version) {
+  var value = String(version || '');
+  return /^v/i.test(value) ? value : 'v' + value;
+}
+
+function checkGlobalUpdate(force) {
+  if (!force && localStorage.getItem('genbox_update_check') === 'off') {
+    _globalUpdateData = { disabled: true };
+    renderUpdateBadge(_globalUpdateData);
+    return Promise.resolve(_globalUpdateData);
+  }
+  renderUpdateBadge({ checking: true });
+  return _authFetch('/api/update/check').then(function(r){
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(d){
+    _globalUpdateData = d;
+    renderUpdateBadge(d);
+    return d;
+  }).catch(function(e){
+    _globalUpdateData = { check_error: true, error: e.message };
+    renderUpdateBadge(_globalUpdateData);
+    return _globalUpdateData;
+  });
+}
+
+function renderUpdateBadge(d) {
+  var badge = document.getElementById('globalUpdateBadge');
+  var text = document.getElementById('globalUpdateBadgeText');
+  var icon = document.getElementById('globalUpdateBadgeIcon');
+  var versionSpan = document.getElementById('updateModalVersion');
+  if (!badge || !text) return;
+  badge.classList.remove('hidden', 'has-update', 'is-current', 'is-ignored', 'is-error', 'is-disabled', 'is-checking');
+  if (!d || d.checking) {
+    badge.classList.add('is-checking');
+    if (icon) icon.textContent = '↻';
+    text.textContent = '检查更新...';
+    return;
+  }
+  if (d.disabled) {
+    badge.classList.add('is-disabled');
+    if (icon) icon.textContent = '−';
+    text.textContent = '自动检查已关闭';
+    return;
+  }
+  if (d.check_error) {
+    badge.classList.add('is-error');
+    if (icon) icon.textContent = '!';
+    text.textContent = '更新检查失败';
+    return;
+  }
+  if (d && d.available && d.latest_version) {
+    var ignored = localStorage.getItem('genbox_update_ignored');
+    if (ignored === d.latest_version) {
+      badge.classList.add('is-ignored');
+      if (icon) icon.textContent = '−';
+      text.textContent = _formatUpdateVersion(d.latest_version) + ' 已忽略';
+    } else {
+      badge.classList.add('has-update');
+      if (icon) icon.textContent = '↑';
+      text.textContent = _formatUpdateVersion(d.latest_version) + ' 可用';
+    }
+    if (versionSpan) versionSpan.textContent = _formatUpdateVersion(d.latest_version);
+  } else {
+    var currentVersion = d.current_version || d.latest_version || '';
+    badge.classList.add('is-current');
+    if (icon) icon.textContent = '✓';
+    text.textContent = (currentVersion ? _formatUpdateVersion(currentVersion) + ' ' : '') + '已是最新';
+  }
+}
+
+function openUpdateModal() {
+  var d = _globalUpdateData;
+  if (!d || d.disabled) {
+    checkGlobalUpdate(true).then(openUpdateModal);
+    return;
+  }
+  var heading = document.getElementById('updateModalHeading');
+  var versionEl = document.getElementById('updateModalVersion');
+  var notesEl = document.getElementById('updateModalNotes');
+  var status = document.getElementById('updateModalStatus');
+  status.classList.add('hidden');
+  status.textContent = '';
+  var applyBtn = document.getElementById('updateApplyBtn');
+  applyBtn.disabled = false;
+  var ignoreBtn = document.getElementById('updateIgnoreBtn');
+  var downloadLink = document.getElementById('updateDownloadLink');
+  if (d.check_error) {
+    heading.textContent = '检查更新失败';
+    versionEl.textContent = '';
+    notesEl.textContent = d.error || '暂时无法连接更新服务';
+    ignoreBtn.classList.add('hidden');
+    downloadLink.classList.add('hidden');
+    applyBtn.textContent = '重新检查';
+  } else if (d.available) {
+    heading.textContent = '发现新版本';
+    versionEl.textContent = _formatUpdateVersion(d.latest_version);
+    notesEl.textContent = d.release_notes || '暂无更新说明';
+    ignoreBtn.classList.remove('hidden');
+    downloadLink.classList.remove('hidden');
+    downloadLink.href = 'https://github.com/liwei9745/GenBox/releases/tag/' + encodeURIComponent(d.latest_version);
+    applyBtn.textContent = '立即更新';
+  } else {
+    heading.textContent = '已是最新版本';
+    versionEl.textContent = _formatUpdateVersion(d.current_version || d.latest_version);
+    notesEl.textContent = '当前没有可用更新。';
+    ignoreBtn.classList.add('hidden');
+    downloadLink.classList.add('hidden');
+    applyBtn.textContent = '重新检查';
+  }
+  document.getElementById('updateModal').classList.add('show');
+}
+
+function closeUpdateModal() {
+  document.getElementById('updateModal').classList.remove('show');
+}
+
+function ignoreGlobalUpdate() {
+  var d = _globalUpdateData;
+  if (!d || !d.latest_version) return;
+  localStorage.setItem('genbox_update_ignored', d.latest_version);
+  closeUpdateModal();
+  renderUpdateBadge(d);
+}
+
+function applyGlobalUpdate() {
+  var d = _globalUpdateData;
+  if (!d || !d.available) {
+    checkGlobalUpdate(true).then(openUpdateModal);
+    return;
+  }
+  _applyUpdate(d.download_url || null);
+}
+
+function toggleUpdateCheck(el) {
+  localStorage.setItem('genbox_update_check', el.checked ? 'on' : 'off');
+  if (el.checked) checkGlobalUpdate();
+  else { _globalUpdateData = { disabled: true }; renderUpdateBadge(_globalUpdateData); }
+}
+
+function _applyUpdate(downloadUrl, mirrorUrl) {
   var badge = document.getElementById('updateStatusBadge');
   var content = document.getElementById('updateContent');
+  var globalBtn = document.getElementById('updateApplyBtn');
+  var globalStatus = document.getElementById('updateModalStatus');
   if (badge) { badge.textContent = '更新中...'; badge.style.background = '#3b82f622'; badge.style.color = '#3b82f6'; }
   if (content) content.innerHTML = '<span style="color:#3b82f6;">⏳ 正在更新，请勿关闭页面...</span>';
+  if (globalBtn) { globalBtn.disabled = true; globalBtn.textContent = '更新中...'; }
+  if (globalStatus) { globalStatus.classList.remove('hidden'); globalStatus.textContent = '正在更新，请勿关闭页面...'; }
 
+  if (!downloadUrl && _globalUpdateData) downloadUrl = _globalUpdateData.download_url || null;
   var url = '/api/update/apply';
-  if (downloadUrl) url += '?download_url=' + encodeURIComponent(downloadUrl);
+  var params = [];
+  if (downloadUrl) params.push('download_url=' + encodeURIComponent(downloadUrl));
+  if (mirrorUrl) params.push('mirror=' + encodeURIComponent(mirrorUrl));
+  if (params.length) url += '?' + params.join('&');
 
   _authFetch(url, { method: 'POST' })
     .then(function(r){ return r.json(); })
     .then(function(d) {
-      if (d.ok) {
+      if (d.ok || d.success) {
         if (badge) { badge.textContent = '更新成功'; badge.style.background = '#22c55e22'; badge.style.color = '#22c55e'; }
         if (content) content.innerHTML = '<span style="color:#22c55e;">✓ ' + escHtml(d.message || '更新成功') + '</span>';
+        if (globalBtn) globalBtn.textContent = '更新成功';
+        if (globalStatus) globalStatus.textContent = d.message || '更新成功';
         if (d.restart) {
           if (content) content.innerHTML += '<br><span style="color:var(--text-muted);font-size:10px;">服务将在 3 秒后重启...</span>';
+          if (globalStatus) globalStatus.textContent += ' 服务将在 3 秒后重启...';
           setTimeout(function(){ location.reload(); }, 3000);
         }
       } else {
         if (badge) { badge.textContent = '更新失败'; badge.style.background = '#ef444422'; badge.style.color = '#ef4444'; }
         if (content) content.innerHTML = '<span style="color:#ef4444;">✗ ' + escHtml(d.error || '更新失败') + '</span>';
+        if (globalBtn) { globalBtn.disabled = false; globalBtn.textContent = '重试更新'; }
+        if (globalStatus) globalStatus.textContent = d.error || '更新失败';
       }
     })
     .catch(function(e) {
       if (badge) { badge.textContent = '更新失败'; badge.style.background = '#ef444422'; badge.style.color = '#ef4444'; }
       if (content) content.innerHTML = '<span style="color:#ef4444;">✗ 更新失败: ' + escHtml(e.message) + '</span>';
+      if (globalBtn) { globalBtn.disabled = false; globalBtn.textContent = '重试更新'; }
+      if (globalStatus) globalStatus.textContent = '更新失败: ' + e.message;
     });
 }
 
@@ -3736,6 +3898,8 @@ function renderProviderEdit() {
   html += '</div>';
   html += '<span id="updatePlatformInfo" style="font-size:10px;color:var(--text-muted);"></span>';
   html += '</div>';
+  html += '<label style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
+    '<input type="checkbox" id="updateCheckToggle" ' + (localStorage.getItem('genbox_update_check') !== 'off' ? 'checked' : '') + ' onchange="toggleUpdateCheck(this)" style="accent-color:var(--accent);width:13px;height:13px;"> 启动时自动检查更新</label>';
   html += '<div id="updateContent" style="font-size:11px;color:var(--text-muted);">正在检查更新...</div>';
   html += '</div>';
 

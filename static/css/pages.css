@@ -24,6 +24,168 @@
   margin-top: 2px;
 }
 
+/* ── Dashboard Header ── */
+.dashboard-header {
+  display: block;
+  padding-bottom: 0;
+}
+
+.dashboard-header-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dashboard-title-block {
+  flex: 0 0 auto;
+}
+
+.dashboard-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.dashboard-action {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-default), background var(--duration-fast) var(--ease-default), color var(--duration-fast) var(--ease-default), box-shadow var(--duration-fast) var(--ease-default);
+}
+
+.dashboard-action:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.dashboard-action-icon {
+  width: 14px;
+  font-size: 14px;
+  line-height: 1;
+  text-align: center;
+}
+
+.dashboard-action.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0,122,255,0.2);
+}
+
+.dashboard-action.is-primary:hover { background: #0066d6; color: #fff; }
+.dashboard-action.is-warning { border-color: rgba(245,158,11,0.35); color: #b45309; }
+.dashboard-action.is-warning:hover { background: rgba(245,158,11,0.08); border-color: #f59e0b; color: #92400e; }
+.dashboard-action.is-danger { border-color: rgba(239,68,68,0.32); color: #b91c1c; }
+.dashboard-action.is-danger:hover { background: rgba(239,68,68,0.08); border-color: #ef4444; color: #991b1b; }
+
+.dashboard-network-row {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+
+#netStatusBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  overflow-x: auto;
+  padding-bottom: 3px;
+  scrollbar-width: thin;
+}
+
+.network-status-label,
+.network-status-chip {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.network-status-label { color: var(--text-muted); cursor: help; }
+.network-status-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; }
+.network-status-chip.is-good .network-status-dot { background: #22c55e; }
+.network-status-chip.is-warn .network-status-dot { background: #f59e0b; }
+.network-status-chip.is-error .network-status-dot { background: #ef4444; }
+.network-status-chip.is-good .network-status-value { color: #16a34a; }
+.network-status-chip.is-warn .network-status-value { color: #d97706; }
+.network-status-chip.is-error .network-status-value { color: #dc2626; }
+.network-status-value { font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.network-status-message { font-size: 10px; color: var(--text-muted); }
+.network-status-message.is-error { color: #dc2626; }
+
+.dashboard-stats-grid,
+.dashboard-two-column,
+.dashboard-quick-grid,
+.ip-info-grid {
+  display: grid;
+  min-width: 0;
+}
+
+.dashboard-stats-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dashboard-two-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dashboard-quick-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.ip-info-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .dashboard-header-main { align-items: flex-start; flex-direction: column; }
+  .dashboard-actions { width: 100%; justify-content: flex-start; }
+  .dashboard-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-two-column { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 560px) {
+  .dashboard-action { flex: 1 1 auto; }
+  .dashboard-actions { gap: 6px; }
+  .dashboard-quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ip-info-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ── Content Scroll ── */
 .content-scroll {
   flex: 1;
