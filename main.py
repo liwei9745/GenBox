@@ -1819,6 +1819,81 @@ async def video_generate(req: VideoGenerateRequest):
 
     effective_model = req.model.strip() if req.model else provider.model
     provider_type = _detect_video_provider_type(provider)
+    
+    # ── 智能参数适配：根据模型约束校验并调整参数 ──
+    from providers import get_video_model_spec
+    model_spec = get_video_model_spec(effective_model)
+    adjustment_log = []
+    
+    if model_spec:
+        # 1. 分辨率适配：如果模型不支持当前分辨率，自动降级到最近可用值
+        req_width, req_height = req.width, req.height
+        # 简化分辨率匹配：检查是否在支持范围内
+        max_supported_p = max([int(r.replace("p", "")) for r in model_spec.resolutions if "p" in r] or [1080])
+        if req_width > 1920 or req_height > 1080:
+            # 需要降级
+            scale = min(1920 / req_width, 1080 / req_height) if req_width > 1920 or req_height > 1080 else 1
+            new_w = int(req_width * scale)
+            new_h = int(req_height * scale)
+            adjustment_log.append(f"分辨率从 {req_width}x{req_height} 降级到 {new_w}x{new_h}")
+            req_width, req_height = new_w, new_h
+        
+        # 2. 时长适配：如果模型不支持当前时长，裁剪到最近可用值
+        duration_seconds = req.num_frames / req.frame_rate if req.frame_rate > 0 else 5
+        if duration_seconds not in model_spec.duration_options:
+            # 找到最接近的可用时长
+            closest_duration = min(model_spec.duration_options, key=lambda x: abs(x - duration_seconds))
+            if closest_duration != duration_seconds:
+                adjustment_log.append(f"时长从 {duration_seconds}s 调整到 {closest_duration}s")
+                duration_seconds = closest_duration
+        
+        # 3. FPS适配
+        if req.frame_rate not in model_spec.fps_options:
+            closest_fps = min(model_spec.fps_options, key=lambda x: abs(x - req.frame_rate))
+            if closest_fps != req.frame_rate:
+                adjustment_log.append(f"FPS从 {req.frame_rate} 调整到 {closest_fps}")
+                req.frame_rate = closest_fps
+        
+        # 4. 帧数计算：根据时长和FPS重新计算帧数，并应用帧数规则
+        num_frames = int(duration_seconds * req.frame_rate)
+        
+        # 应用帧数规则
+        if model_spec.frame_rule == "8n+1":
+            num_frames = max(model_spec.min_frames, min(num_frames, model_spec.max_frames))
+            remainder = (num_frames - 1) % 8
+            if remainder != 0:
+                if remainder <= 4:
+                    num_frames = num_frames - remainder
+                else:
+                    num_frames = num_frames + (8 - remainder)
+                num_frames = max(model_spec.min_frames, num_frames)
+            adjustment_log.append(f"帧数规则 8n+1: 调整为 {num_frames} 帧")
+        elif model_spec.frame_rule == "4n+1":
+            num_frames = max(model_spec.min_frames, min(num_frames, model_spec.max_frames))
+            remainder = (num_frames - 1) % 4
+            if remainder != 0:
+                num_frames = num_frames - remainder
+                num_frames = max(model_spec.min_frames, num_frames)
+            adjustment_log.append(f"帧数规则 4n+1: 调整为 {num_frames} 帧")
+        else:
+            num_frames = max(9, min(num_frames, 441))
+        
+        # 5. 推理步数适配
+        if req.num_inference_steps and model_spec.inference_steps_range:
+            min_steps, max_steps, default_steps = model_spec.inference_steps_range
+            if req.num_inference_steps < min_steps:
+                adjustment_log.append(f"推理步数从 {req.num_inference_steps} 调整到 {min_steps}")
+                req.num_inference_steps = min_steps
+            elif req.num_inference_steps > max_steps:
+                adjustment_log.append(f"推理步数从 {req.num_inference_steps} 调整到 {max_steps}")
+                req.num_inference_steps = max_steps
+        
+        # 更新请求参数
+        req.width = req_width
+        req.height = req_height
+        req.num_frames = num_frames
+    
+    provider_type = _detect_video_provider_type(provider)
     # 自动选择正确的模型（T2V vs I2V）
     if provider_type == "gemini":
         effective_model = _auto_select_gemini_model(req, effective_model)
@@ -2096,6 +2171,31 @@ async def video_list(limit: int = 50):
     active = [v for v in video_tasks.values() if v.get("status") not in ("completed", "failed", "error", "cancelled", "timeout")]
     all_entries = active + list(reversed(entries[-limit:]))
     return {"items": all_entries, "total": len(all_entries)}
+
+
+@app.get("/api/video/model-spec/{model_name}")
+async def video_model_spec(model_name: str):
+    """获取视频模型参数约束
+    
+    根据模型名称返回该模型支持的参数范围：
+    - resolutions: 支持的分辨率档位
+    - duration_options: 支持的时长选项(秒)
+    - fps_options: 支持的FPS选项
+    - frame_rule: 帧数规则 (8n+1, 4n+1, 无限制)
+    - inference_steps_range: 推理步数范围 [min, max, default]
+    - supports_negative_prompt: 是否支持负面提示词
+    - supports_seed: 是否支持种子
+    """
+    from providers import get_video_model_spec_dict
+    spec = get_video_model_spec_dict(model_name)
+    return {"model": model_name, "spec": spec}
+
+
+@app.get("/api/video/model-specs")
+async def video_model_specs():
+    """获取所有视频模型参数约束预设"""
+    from config import VIDEO_MODEL_SPECS
+    return {k: v.model_dump() for k, v in VIDEO_MODEL_SPECS.items()}
 
 
 @app.post("/api/video/cancel/{task_id}")

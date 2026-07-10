@@ -16,7 +16,7 @@ import httpx
 from PIL import Image
 from io import BytesIO
 
-from config import cfg_mgr, GALLERY_DIR, ProviderConfig
+from config import cfg_mgr, GALLERY_DIR, ProviderConfig, VideoModelSpec, VIDEO_MODEL_SPECS
 
 
 # 国内模型厂商（始终直连，不走代理）
@@ -49,6 +49,47 @@ def _get_proxy_url(cfg: ProviderConfig = None) -> str | None:
     if cfg and cfg.skip_proxy:
         return None
     return f"{proxy.type}://{proxy.host}:{proxy.port}"
+
+
+def get_video_model_spec(model_name: str):
+    """根据模型名称获取视频模型参数约束
+    
+    匹配规则：按优先级匹配模型名称中的关键词
+    返回: VideoModelSpec 或默认规格
+    """
+    model_lower = model_name.lower() if model_name else ""
+    
+    # 按优先级匹配模型关键词
+    spec_keywords = [
+        ("veo_3", "veo-3"),
+        ("veo_2", "veo-2"),
+        ("veo-", "veo-3"),      # veo-3-1, veo-3-0 等
+        ("sora", "sora"),
+        ("kling", "kling-v2"),
+        ("hailuo", "hailuo"),
+        ("minimax", "hailuo"),
+        ("wanx2", "wanx2.1"),
+        ("wan2", "wan2"),
+        ("wan_", "wan2"),
+        ("hunyuan", "hunyuan"),
+        ("seedance", "seedance"),
+        ("agnes", "agnes"),
+    ]
+    
+    for keyword, spec_key in spec_keywords:
+        if keyword in model_lower:
+            return VIDEO_MODEL_SPECS.get(spec_key)
+    
+    # 默认返回 Agnes 规格（最灵活）
+    return VIDEO_MODEL_SPECS.get("agnes")
+
+
+def get_video_model_spec_dict(model_name: str) -> dict:
+    """获取视频模型参数约束的字典格式（用于API返回）"""
+    spec = get_video_model_spec(model_name)
+    if spec:
+        return spec.model_dump()
+    return VideoModelSpec().model_dump()
 
 
 @dataclass
