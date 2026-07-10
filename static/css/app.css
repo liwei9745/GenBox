@@ -1213,7 +1213,7 @@ textarea {
 
 /* ── 21. Modals ── */
 #lightbox, #compareModal, #providerModal, #addProviderTypeModal,
-#themeModal, #logModal, #llmModal, #loginPage, #welcomePage, #setupWizard {
+#themeModal, #logModal, #llmModal, #loginPage, #welcomePage, #setupWizard, #updateModal {
   display: none;
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -1221,7 +1221,7 @@ textarea {
 }
 
 #lightbox.show, #compareModal.show, #providerModal.show, #addProviderTypeModal.show,
-#themeModal.show, #logModal.show, #llmModal.show, #loginPage.show, #welcomePage.show, #setupWizard.show {
+#themeModal.show, #logModal.show, #llmModal.show, #loginPage.show, #welcomePage.show, #setupWizard.show, #updateModal.show {
   display: flex;
 }
 
@@ -1264,6 +1264,73 @@ textarea {
   font-size: 12px;
   text-align: center;
   max-width: 80vw;
+}
+
+/* ── Global Update Badge & Update Modal ── */
+#globalUpdateBadge {
+  color: var(--text-secondary);
+}
+#globalUpdateBadge.hidden { display: none !important; }
+#globalUpdateBadge.has-update {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0,122,255,0.22);
+}
+#globalUpdateBadge.is-current { border-color: rgba(34,197,94,0.28); background: rgba(34,197,94,0.08); color: #15803d; }
+#globalUpdateBadge.is-ignored { border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.08); color: #b45309; }
+#globalUpdateBadge.is-error { border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.08); color: #b91c1c; }
+#globalUpdateBadge.is-disabled { opacity: 0.72; }
+#updateModal {
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0,0,0,0.42);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.update-modal-box {
+  width: min(560px, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+}
+.update-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.update-modal-head h2 { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.update-modal-body { padding: 16px 20px; }
+#updateModalStatus {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.update-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.update-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+@media (max-width: 560px) {
+  #updateModal { padding: 12px; }
+  .update-modal-box { width: 100%; }
+  .update-modal-foot, .update-modal-actions { width: 100%; }
+  .update-modal-actions > * { flex: 1; justify-content: center; white-space: nowrap; }
 }
 
 #lightbox-prompt-box {
@@ -1434,10 +1501,7 @@ textarea {
   font-weight: 700;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
   letter-spacing: -0.3px;
-  background: linear-gradient(135deg, var(--text), var(--accent));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
 }
 
 .provider-modal-body {
