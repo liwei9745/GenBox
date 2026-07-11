@@ -7,6 +7,11 @@
 .env.local
 .env.production
 storage/providers.json
+storage/sync.json
+storage/sync_manifest.json
+storage/gallery/.hash_index.json
+storage/gallery/.md5_index.json
+storage/sync_thumbnails/
 
 # ══ 运行时数据（用户生成，禁止入库）══
 storage/gallery/
@@ -37,6 +42,7 @@ Thumbs.db
 
 # ══ 日志 ══
 *.log
+*.err
 logs/
 
 # ══ 临时文件 ══

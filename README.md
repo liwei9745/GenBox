@@ -8,7 +8,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10+-yellow?logo=python)](https://www.python.org/)
 [![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/liwei9745/GenBox)
 
-**当前稳定版本：v2.3.0** | [发布说明](https://github.com/liwei9745/GenBox/releases/tag/v2.3.0) | [全部版本](https://github.com/liwei9745/GenBox/releases)
+**当前稳定版本：v2.4.0** | [发布说明](https://github.com/liwei9745/GenBox/releases/tag/v2.4.0) | [全部版本](https://github.com/liwei9745/GenBox/releases)
 
 > 集成文生图、文生视频、图片超分、媒体库管理的桌面级 AI 创作工具
 > 支持 GPT Image / Gemini / Qwen / Agnes 等主流模型，开箱即用
@@ -283,6 +283,16 @@ docker-compose up -d
 本地生成的图片和视频统一管理
 
 ![媒体库](screenshots/sanitized/09-gallery-images.png)
+
+### 云端同步（chatgpt2api）
+
+将远程 chatgpt2api 部署的图片同步到本地媒体库，免去手动搬运：
+
+- 在「系统设置 → 云端同步」添加远程部署（地址 + API Key），支持连接测试
+- 按日期范围筛选远端图片，自动按内容哈希去重，避免重复导入
+- 支持按日期 / 体积 / 比例批量选择要同步的图片
+- 同步后的图片自动标记「☁ 云端」来源标签，并回填原始提示词（从远端调用日志关联），可直接在灯箱中复用提示词
+- 缩略图经服务端同源代理加载，规避浏览器跨域限制
 
 ---
 

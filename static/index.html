@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GenBox</title>
   <link rel="stylesheet" href="/static/css/app.css?v=13">
-  <link rel="stylesheet" href="/static/css/pages.css?v=13">
+  <link rel="stylesheet" href="/static/css/pages.css?v=14">
 </head>
 <body>
 
@@ -568,6 +568,7 @@
       <div class="px-16 mb-12 flex gap-8 items-center flex-wrap" id="galleryToolbar">
         <select id="gallerySortBy" onchange="applyGallerySort()" class="media-filter-select"><option value="created_at_desc">时间 ↓</option><option value="created_at_asc">时间 ↑</option><option value="model_asc">Provider A-Z</option><option value="model_desc">Provider Z-A</option><option value="prompt_asc">提示词 A-Z</option></select>
         <select id="galleryProviderFilter" onchange="applyMediaFilters()" class="media-filter-select"><option value="">所有 Provider</option></select>
+        <select id="galleryGroupMode" onchange="applyMediaFilters()" class="media-filter-select"><option value="flat">平铺展示</option><option value="model">按模型分组</option></select>
         <input type="text" id="gallerySearchInput" class="media-search-input" placeholder="搜索提示词.." oninput="applyMediaFilters()">
         <button class="btn-ghost" onclick="toggleGallerySelectMode()" id="btnGallerySelect">☑ 选择模式</button>
         <button class="btn-ghost hidden" onclick="selectAllGallery()" id="btnSelAll" style="color:var(--accent);">全选</button>
@@ -577,6 +578,7 @@
         <button class="btn-primary hidden" onclick="batchDownloadGallery()" id="btnDlSelected">📥 下载 (<span id="dlGalleryCount">0</span>)</button>
         <button class="btn-primary hidden" onclick="deleteSelectedGallery()" id="btnDelSelected" style="background:#ef4444;">🗑 删除 (<span id="selGalleryCount">0</span>)</button>
         <button class="btn-ghost" onclick="loadGallery()">🔄 刷新</button>
+        <button class="btn-primary" id="btnRemoteSync" onclick="openSyncModal()" style="margin-left:auto;">☁ 从远程同步</button>
       </div>
       <div class="content-scroll">
         <div class="gallery-grid" id="galleryGrid">加载中...</div>
@@ -804,6 +806,79 @@
   </div>
 </nav>
 
-<script src="/static/js/app-all.js?v=17"></script>
+<!-- ══════════════════ 远程同步弹窗 ══════════════════ -->
+<div id="syncModal" class="modal-overlay sync-modal" role="dialog" aria-modal="true" aria-labelledby="syncModalTitle">
+  <div class="glass-panel modal-card sync-modal-card">
+    <div class="modal-header">
+      <div class="modal-title" id="syncModalTitle">☁ 从远程 chatgpt2api 同步图片</div>
+      <button class="modal-close" onclick="closeSyncModal()" aria-label="关闭远程同步窗口">×</button>
+    </div>
+
+    <div class="sync-body">
+      <!-- 部署配置 -->
+      <div class="sync-section">
+        <div class="sync-section-title">① 远程部署</div>
+        <div class="sync-deployments" id="syncDeployments"></div>
+        <div class="sync-deploy-form">
+          <input id="syncDepName" class="sync-input" placeholder="名称（如 我的VPS）" />
+          <input id="syncDepUrl" class="sync-input" placeholder="Base URL（如 http://host:3000）" />
+          <input id="syncDepKey" class="sync-input" type="password" placeholder="Admin Bearer Token" />
+          <button class="btn-ghost" onclick="testInlineSyncDeployment()">测试连接</button>
+          <button class="btn-secondary" onclick="saveSyncDeployment()">保存部署</button>
+        </div>
+        <div id="syncDeployStatus" class="sync-status" role="status" aria-live="polite"></div>
+      </div>
+
+      <!-- 预览与筛选 -->
+      <div class="sync-section">
+        <div class="sync-section-title">② 选择要同步的图片</div>
+        <div class="sync-filters">
+          <select id="syncDepSelect" class="media-filter-select" onchange="loadSyncPreview()">
+            <option value="">— 选择部署 —</option>
+          </select>
+          <select id="syncDateRange" class="media-filter-select" onchange="onSyncDateRangeChange()">
+            <option value="">全部时间</option>
+            <option value="today">今天</option>
+            <option value="month">本月</option>
+            <option value="custom">自定义范围</option>
+          </select>
+          <input id="syncDateStart" type="date" class="media-filter-select hidden" onchange="loadSyncPreview()" />
+          <input id="syncDateEnd" type="date" class="media-filter-select hidden" onchange="loadSyncPreview()" />
+          <select id="syncAspect" class="media-filter-select" onchange="applySyncFilters()">
+            <option value="">比例不限</option>
+            <option value="square">正方形</option>
+            <option value="portrait">竖图</option>
+            <option value="landscape">横图</option>
+          </select>
+          <select id="syncSize" class="media-filter-select" onchange="applySyncFilters()">
+            <option value="">大小不限</option>
+            <option value="small">&lt;1MB</option>
+            <option value="mid">1–5MB</option>
+            <option value="large">&gt;5MB</option>
+          </select>
+          <button class="btn-secondary" onclick="loadSyncPreview()">扫描预览</button>
+        </div>
+        <div class="sync-toolbar">
+          <button class="btn-ghost" onclick="syncSelectAll(true)">全选</button>
+          <button class="btn-ghost" onclick="syncSelectAll(false)">取消全选</button>
+          <span class="sync-count" id="syncSelectedCount" role="status" aria-live="polite">已选 0</span>
+          <button class="btn-primary" id="syncImportBtn" onclick="startSyncImport()" disabled>⬇️ 同步选中 (<span id="syncImportNum">0</span>)</button>
+        </div>
+        <div class="sync-preview" id="syncPreview">
+          <div class="sync-empty">选择部署后点击「预览」以拉取远端图片并去重。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sync-progress hidden" id="syncProgressBox">
+      <div class="sync-progress-bar"><div class="sync-progress-fill" id="syncProgressFill"></div></div>
+      <div class="sync-progress-text" id="syncProgressText">准备中…</div>
+    </div>
+  </div>
+</div>
+
+<link rel="stylesheet" href="/static/css/sync.css?v=7">
+<script src="/static/js/app-all.js?v=19"></script>
+<script src="/static/js/sync.js?v=6"></script>
 </body>
 </html>

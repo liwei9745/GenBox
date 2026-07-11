@@ -5,6 +5,7 @@ FastAPI 主入口
 import os
 import sys
 import platform
+import re
 import threading
 import asyncio
 import json as _json
@@ -13,6 +14,7 @@ import uuid
 import webbrowser
 from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.parse import quote, urlsplit
 
 # ──────────────────────────────────────────────────────────────
 # PyInstaller 路径兼容
@@ -34,7 +36,7 @@ if getattr(sys, 'frozen', False):
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -43,6 +45,12 @@ from config import (
     is_prod_mode, get_admin_key, verify_admin_key, generate_admin_key, reset_admin_key,
 )
 from providers import generate_multi, enhance_prompt_with_llm, enhance_prompt_with_llm_detailed, ImageResult, fetch_models_from_upstream, _save_image, translate_upstream_error
+
+# ── 远程 chatgpt2api 兼容部署同步 ──
+from sync.models import RemoteImageRecord, SyncCandidate, SyncDeployment
+from sync.client import ChatGPT2APIClient, sha256_bytes
+from sync.manifest import SyncManifest, LocalImageIndex
+import sync.store as sync_store
 
 
 # ──────────────────────────────────────────────────────────────
@@ -201,29 +209,27 @@ async def csrf_protection(request: Request, call_next):
     if request.method in ("POST", "PUT", "DELETE"):
         origin = request.headers.get("origin", "")
         referer = request.headers.get("referer", "")
-        # 获取允许的源
-        allowed_origins = set(ALLOWED_ORIGINS)
-        # 本地地址也允许
-        local_origins = {"http://localhost:8891", "http://127.0.0.1:8891", "http://localhost:8890", "http://127.0.0.1:8890"}
-        allowed_origins.update(local_origins)
-        # 检查 Origin
-        if origin:
-            origin_host = origin.split("://")[1].split("/")[0] if "://" in origin else origin
-            allowed_hosts = set()
-            for o in allowed_origins:
-                if "://" in o:
-                    allowed_hosts.add(o.split("://")[1].split("/")[0])
-            if origin_host not in allowed_hosts:
-                return JSONResponse(status_code=403, content={"error": "CSRF 验证失败", "code": "CSRF_REJECTED"})
-        # 检查 Referer
-        elif referer:
-            referer_host = referer.split("://")[1].split("/")[0] if "://" in referer else referer
-            allowed_hosts = set()
-            for o in allowed_origins:
-                if "://" in o:
-                    allowed_hosts.add(o.split("://")[1].split("/")[0])
-            if referer_host not in allowed_hosts:
-                return JSONResponse(status_code=403, content={"error": "CSRF 验证失败", "code": "CSRF_REJECTED"})
+        source = origin or referer
+        if source:
+            source_authority = urlsplit(source).netloc.lower()
+            request_authority = request.headers.get("host", "").lower()
+            configured = set(ALLOWED_ORIGINS)
+            configured.update({
+                "http://localhost:8891", "http://127.0.0.1:8891",
+                "http://localhost:8890", "http://127.0.0.1:8890",
+            })
+            allowed_authorities = {
+                urlsplit(value.strip()).netloc.lower()
+                for value in configured if urlsplit(value.strip()).netloc
+            }
+            if not source_authority or (
+                source_authority != request_authority
+                and source_authority not in allowed_authorities
+            ):
+                return JSONResponse(
+                    status_code=403,
+                    content={"error": "CSRF 验证失败", "code": "CSRF_REJECTED"},
+                )
     return await call_next(request)
 
 # ──────────────────────────────────────────────────────────────
@@ -334,11 +340,19 @@ def _scan_gallery(limit: int = 100) -> List[dict]:
         
         # 从 PNG 元数据中读取 prompt
         prompt_text = ""
+        source = "cloud" if f.stem.startswith("remote_") else "local"
+        tags = ["cloud-sync"] if source == "cloud" else []
         try:
             from PIL import Image
             with Image.open(f) as img:
                 if img.info and "Prompt" in img.info:
                     prompt_text = img.info["Prompt"]
+                if img.info and img.info.get("Model"):
+                    model_name = img.info["Model"]
+                if img.info and img.info.get("Source"):
+                    source = img.info["Source"]
+                if img.info and img.info.get("Tags"):
+                    tags = [tag.strip() for tag in img.info["Tags"].split(",") if tag.strip()]
         except Exception as e:
             pass
         
@@ -365,6 +379,8 @@ def _scan_gallery(limit: int = 100) -> List[dict]:
             "created_at": created,
             "thumbnail": f"/api/gallery/thumb/{f.name}",
             "file_size": f.stat().st_size,
+            "source": source,
+            "tags": tags,
         })
     
     # 扫描视频
@@ -3115,6 +3131,300 @@ async def setup_first_run():
 async def setup_confirm():
     """确认已保存密钥"""
     return {"ok": True, "message": "设置完成"}
+
+
+# ──────────────────────────────────────────────────────────────
+# 远程同步：chatgpt2api 兼容部署图片拉取
+# 鉴权由全局 admin_auth_middleware 处理（prod 模式校验 X-Admin-Key）
+# ──────────────────────────────────────────────────────────────
+sync_tasks: Dict[str, dict] = {}
+
+
+def _save_synced_image(data: bytes, deployment_name: str, remote_path: str,
+                       remote_created_at: str, prompt: str = "", model: str = ""):
+    """保存远端同步来的图片到本地图库，写入 PNG 元数据。返回 (local_path, filename)。"""
+    from io import BytesIO
+    from PIL import Image, PngImagePlugin
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    safe_name = "".join(c if c.isalnum() else "_" for c in (deployment_name or "remote")[:20])
+    filename = f"remote_{safe_name}_{ts}_{uuid.uuid4().hex[:6]}.png"
+    try:
+        img = Image.open(BytesIO(data))
+        buf = BytesIO()
+        metadata = PngImagePlugin.PngInfo()
+        metadata.add_text("Prompt", prompt or "")
+        metadata.add_text("Model", model or "remote-sync")
+        metadata.add_text("CreatedAt", remote_created_at or ts)
+        metadata.add_text("SourcePath", remote_path)
+        metadata.add_text("Source", "cloud")
+        metadata.add_text("SourceDeployment", deployment_name)
+        metadata.add_text("Tags", "cloud-sync")
+        img.save(buf, format="PNG", pnginfo=metadata)
+        out = buf.getvalue()
+    except Exception as e:  # noqa
+        print(f"[Sync] PNG 元数据写入失败，直接保存: {e}")
+        out = data
+    out_path = GALLERY_DIR / filename
+    out_path.write_bytes(out)
+    return str(out_path), filename
+
+
+def _refresh_synced_image_metadata(local_path: str, deployment_name: str, remote_path: str,
+                                   remote_created_at: str, prompt: str, model: str) -> bool:
+    """为历史同步图片补写来源、提示词和模型元数据。"""
+    from PIL import Image, PngImagePlugin
+
+    path = Path(local_path)
+    if not path.is_absolute():
+        path = GALLERY_DIR / path.name
+    if not path.is_file() or path.suffix.lower() != ".png":
+        return False
+    try:
+        with Image.open(path) as source:
+            source.load()
+            image = source.copy()
+            existing = {k: v for k, v in source.info.items() if isinstance(v, str)}
+        desired = {
+            **existing,
+            "Prompt": prompt or existing.get("Prompt", ""),
+            "Model": model or existing.get("Model", "remote-sync"),
+            "CreatedAt": remote_created_at or existing.get("CreatedAt", ""),
+            "SourcePath": remote_path,
+            "Source": "cloud",
+            "SourceDeployment": deployment_name,
+            "Tags": "cloud-sync",
+        }
+        if all(existing.get(key) == value for key, value in desired.items()):
+            return False
+        metadata = PngImagePlugin.PngInfo()
+        for key, value in desired.items():
+            metadata.add_text(key, value)
+        temp_path = path.with_suffix(".sync-meta.tmp")
+        image.save(temp_path, format="PNG", pnginfo=metadata)
+        temp_path.replace(path)
+        return True
+    except Exception as e:  # noqa
+        print(f"[Sync] 历史图片元数据修复失败 {path.name}: {e}")
+        return False
+
+
+@app.get("/api/sync/deployments")
+async def sync_list_deployments():
+    """列出已配置的远程部署（不含 token 明文）。"""
+    deps = sync_store.list_deployments()
+    return {"deployments": [d.model_dump(exclude={"api_key"}) for d in deps]}
+
+
+@app.post("/api/sync/deployments")
+async def sync_upsert_deployment(body: dict = {}):
+    """新增/更新远程部署。"""
+    if not body.get("base_url"):
+        raise HTTPException(status_code=400, detail="base_url 必填")
+    dep = sync_store.upsert_deployment(body)
+    return {"deployment": dep.model_dump(exclude={"api_key"})}
+
+
+@app.delete("/api/sync/deployments/{deployment_id}")
+async def sync_delete_deployment(deployment_id: str):
+    ok = sync_store.delete_deployment(deployment_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="部署不存在")
+    return {"deleted": True}
+
+
+@app.post("/api/sync/test")
+async def sync_test_connection(body: dict = {}):
+    """测试部署连通性与 admin 权限；支持已存部署或内联 base_url+api_key。"""
+    dep_id = body.get("deployment_id") or body.get("id")
+    dep = sync_store.get_deployment(dep_id) if dep_id else None
+    if not dep:
+        base = body.get("base_url", "")
+        key = body.get("api_key", "")
+        if not base:
+            raise HTTPException(status_code=400, detail="缺少部署或 base_url")
+        dep = SyncDeployment(id="__test__", name="test", base_url=base, api_key=key)
+    client = ChatGPT2APIClient(dep.base_url, dep.api_key)
+    try:
+        info = await client.probe()
+        return {"ok": True, **info}
+    except Exception as e:  # noqa
+        return {"ok": False, "error": str(e)[:200]}
+
+
+@app.post("/api/sync/preview")
+async def sync_preview(body: dict = {}):
+    """列出远端图片并去重，返回待选卡片（已同步/本地重复会被过滤或标记）。"""
+    dep_id = body.get("deployment_id", "")
+    dep = sync_store.get_deployment(dep_id)
+    if not dep:
+        raise HTTPException(status_code=404, detail="部署不存在")
+    start_date = body.get("start_date", "")
+    end_date = body.get("end_date", "")
+    client = ChatGPT2APIClient(dep.base_url, dep.api_key)
+    try:
+        raw = await client.list_all_images(start_date, end_date)
+    except Exception as e:  # noqa
+        raise HTTPException(status_code=502, detail=f"远端列表失败: {str(e)[:200]}")
+    try:
+        remote_metadata = await client.list_image_metadata()
+    except Exception as e:  # noqa
+        print(f"[Sync] 远端提示词日志不可用，继续无提示词预览: {e}")
+        remote_metadata = {}
+
+    manifest = SyncManifest()
+    local_idx = LocalImageIndex()
+
+    # ── 第一级：path+size 快速过滤，收集需哈希校验的候选 ──
+    pending = []
+    for item in raw:
+        path = item.get("path", "")
+        if manifest.is_synced(dep_id, path, item.get("size", 0)):
+            entry = manifest.get(f"{dep_id}::{path}") or {}
+            remote_url = client.resolve_url(item.get("url", ""))
+            meta = remote_metadata.get(remote_url, {})
+            _refresh_synced_image_metadata(
+                entry.get("local_path", ""), dep.name, path, item.get("created_at", ""),
+                str(meta.get("prompt") or ""), str(meta.get("model") or ""),
+            )
+            continue
+        if item.get("type", "image") != "image":
+            continue
+        pending.append(item)
+
+    # 上游文件名格式为 <epoch>_<md5(image_bytes)>.png，可无网络完成精确内容去重。
+    # 不符合该格式的兼容部署仍列为 new，导入时会下载并用 SHA-256 二次校验。
+    local_idx.ensure_md5_index()
+    candidates = []
+    md5_pattern = re.compile(r"(?:^|_)([0-9a-fA-F]{32})(?:\.[^.]+)?$")
+
+    for item in pending:
+        path = item.get("path", "")
+        rec = RemoteImageRecord(
+            deployment_id=dep_id, path=path,
+            name=item.get("name", ""), filename=item.get("filename", ""),
+            url=client.resolve_url(item.get("url", "")),
+            thumbnail_url=client.resolve_url(item.get("thumbnail_url", "")),
+            created_at=item.get("created_at", ""),
+            size=item.get("size", 0),
+            width=item.get("width"), height=item.get("height"),
+            remote_type=item.get("type", "image"),
+        )
+        meta = remote_metadata.get(rec.url, {})
+        rec.prompt = str(item.get("prompt") or meta.get("prompt") or "")
+        rec.model = str(item.get("model") or meta.get("model") or "")
+        proxy_thumbnail = (
+            "/api/sync/thumbnail?deployment_id=" + quote(dep_id, safe="")
+            + "&url=" + quote(rec.thumbnail_url, safe="")
+        ) if rec.thumbnail_url else ""
+        match = md5_pattern.search(rec.filename or path.rsplit("/", 1)[-1])
+        remote_md5 = match.group(1).lower() if match else ""
+        if remote_md5 and local_idx.contains_md5(remote_md5):
+            manifest.add(dep_id, path, local_idx.md5_index[remote_md5], "", rec.size, rec.created_at)
+            candidates.append(SyncCandidate(
+                deployment_id=dep_id, path=path, name=rec.name,
+                url=rec.url,
+                thumbnail_url=proxy_thumbnail, created_at=rec.created_at,
+                size=rec.size, width=rec.width, height=rec.height, aspect=rec.aspect,
+                status="duplicate-local", reason="本地已存在相同内容图片",
+                prompt=rec.prompt, model=rec.model,
+            ).model_dump())
+            continue
+        candidates.append(SyncCandidate(
+            deployment_id=dep_id, path=path, name=rec.name,
+            url=rec.url,
+            thumbnail_url=proxy_thumbnail, created_at=rec.created_at,
+            size=rec.size, width=rec.width, height=rec.height, aspect=rec.aspect,
+            status="new", prompt=rec.prompt, model=rec.model,
+        ).model_dump())
+    return {"candidates": candidates, "total": len(candidates)}
+
+
+@app.get("/api/sync/thumbnail")
+async def sync_thumbnail(deployment_id: str, url: str):
+    """同源代理并缓存远端缩略图，避免浏览器 CSP/跨域限制。"""
+    dep = sync_store.get_deployment(deployment_id)
+    if not dep:
+        raise HTTPException(status_code=404, detail="部署不存在")
+    remote = urlsplit(url)
+    expected = urlsplit(dep.base_url)
+    if remote.scheme not in ("http", "https") or remote.netloc.lower() != expected.netloc.lower():
+        raise HTTPException(status_code=400, detail="缩略图地址不属于该部署")
+
+    cache_dir = STORAGE_DIR / "sync_thumbnails"
+    cache_dir.mkdir(exist_ok=True)
+    cache_file = cache_dir / f"{sha256_bytes(url.encode('utf-8'))}.png"
+    headers = {"Cache-Control": "public, max-age=86400"}
+    if cache_file.exists():
+        return FileResponse(cache_file, media_type="image/png", headers=headers)
+
+    try:
+        data = await ChatGPT2APIClient(dep.base_url, dep.api_key).download(url)
+    except Exception as e:  # noqa
+        raise HTTPException(status_code=502, detail=f"缩略图加载失败: {str(e)[:160]}")
+    cache_file.write_bytes(data)
+    return Response(content=data, media_type="image/png", headers=headers)
+
+
+@app.post("/api/sync/import")
+async def sync_import(body: dict = {}):
+    """导入选中的远端图片（后台任务，带进度）。"""
+    dep_id = body.get("deployment_id", "")
+    items = body.get("items", [])
+    dep = sync_store.get_deployment(dep_id)
+    if not dep:
+        raise HTTPException(status_code=404, detail="部署不存在")
+    if not items:
+        raise HTTPException(status_code=400, detail="未选择图片")
+    task_id = uuid.uuid4().hex[:12]
+    sync_tasks[task_id] = {
+        "status": "running", "total": len(items), "done": 0,
+        "errors": [], "results": [],
+    }
+
+    async def _run():
+        client = ChatGPT2APIClient(dep.base_url, dep.api_key)
+        manifest = SyncManifest()
+        local_idx = LocalImageIndex()
+        sem = asyncio.Semaphore(4)
+        for it in items:
+            async with sem:
+                try:
+                    url = client.resolve_url(it.get("url", ""))
+                    data = await client.download(url)
+                    h = sha256_bytes(data)
+                    if local_idx.contains_hash(h):
+                        manifest.add(dep_id, it.get("path", ""), local_idx.index[h], h,
+                                     it.get("size", 0), it.get("created_at", ""))
+                        sync_tasks[task_id]["results"].append(
+                            {"path": it.get("path"), "status": "duplicate-local"})
+                        sync_tasks[task_id]["done"] += 1
+                        continue
+                    _, fname = _save_synced_image(
+                        data, dep.name, it.get("path", ""), it.get("created_at", ""),
+                        it.get("prompt", ""), it.get("model", ""),
+                    )
+                    local_idx.index[h] = fname
+                    manifest.add(dep_id, it.get("path", ""), str(GALLERY_DIR / fname), h,
+                                 it.get("size", 0), it.get("created_at", ""))
+                    sync_tasks[task_id]["results"].append(
+                        {"path": it.get("path"), "status": "imported", "file": fname})
+                except Exception as e:  # noqa
+                    sync_tasks[task_id]["errors"].append(
+                        {"path": it.get("path"), "error": str(e)[:160]})
+                sync_tasks[task_id]["done"] += 1
+        local_idx.save()
+        sync_tasks[task_id]["status"] = "done"
+
+    asyncio.create_task(_run())
+    return {"task_id": task_id, "total": len(items)}
+
+
+@app.get("/api/sync/status/{task_id}")
+async def sync_task_status(task_id: str):
+    t = sync_tasks.get(task_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return t
 
 
 # ──────────────────────────────────────────────────────────────
