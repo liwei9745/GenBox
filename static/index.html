@@ -815,9 +815,15 @@
     </div>
 
     <div class="sync-body">
+      <ol class="sync-steps">
+        <li><b>1</b> 填写并保存远程部署</li>
+        <li><b>2</b> 选择部署 → 点「扫描预览」</li>
+        <li><b>3</b> 勾选图片 → 点「同步选中」</li>
+      </ol>
+
       <!-- 部署配置 -->
       <div class="sync-section">
-        <div class="sync-section-title">① 远程部署</div>
+        <div class="sync-section-title">① 添加远程部署（chatgpt2api）</div>
         <div class="sync-deployments" id="syncDeployments"></div>
         <div class="sync-deploy-form">
           <input id="syncDepName" class="sync-input" placeholder="名称（如 我的VPS）" />
@@ -826,12 +832,16 @@
           <button class="btn-ghost" onclick="testInlineSyncDeployment()">测试连接</button>
           <button class="btn-secondary" onclick="saveSyncDeployment()">保存部署</button>
         </div>
+        <div class="sync-hint-box">
+          <div>· <b>Base URL</b>：填写 chatgpt2api「接口信息」页的 <b>基础端点</b>（例如 http://host:3000）</div>
+          <div>· <b>Admin Bearer Token</b>：填写 chatgpt2api「接口信息」页的 <b>当前调用密钥</b></div>
+        </div>
         <div id="syncDeployStatus" class="sync-status" role="status" aria-live="polite"></div>
       </div>
 
       <!-- 预览与筛选 -->
       <div class="sync-section">
-        <div class="sync-section-title">② 选择要同步的图片</div>
+        <div class="sync-section-title">② 扫描预览并选择图片</div>
         <div class="sync-filters">
           <select id="syncDepSelect" class="media-filter-select" onchange="loadSyncPreview()">
             <option value="">— 选择部署 —</option>
@@ -858,6 +868,9 @@
           </select>
           <button class="btn-secondary" onclick="loadSyncPreview()">扫描预览</button>
         </div>
+        <div class="sync-hint-box sync-hint-inline">
+          先在上方的部署列表中选择一个部署，再点「扫描预览」拉取远端图片（自动按内容去重）。预览图加载完成后，勾选要同步的图片，最后点「同步选中」。
+        </div>
         <div class="sync-toolbar">
           <button class="btn-ghost" onclick="syncSelectAll(true)">全选</button>
           <button class="btn-ghost" onclick="syncSelectAll(false)">取消全选</button>
@@ -877,8 +890,8 @@
   </div>
 </div>
 
-<link rel="stylesheet" href="/static/css/sync.css?v=7">
+<link rel="stylesheet" href="/static/css/sync.css?v=8">
 <script src="/static/js/app-all.js?v=19"></script>
-<script src="/static/js/sync.js?v=6"></script>
+<script src="/static/js/sync.js?v=7"></script>
 </body>
 </html>
