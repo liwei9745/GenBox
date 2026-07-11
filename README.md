@@ -8,7 +8,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10+-yellow?logo=python)](https://www.python.org/)
 [![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/liwei9745/GenBox)
 
-**当前稳定版本：v2.4.0** | [发布说明](https://github.com/liwei9745/GenBox/releases/tag/v2.4.0) | [全部版本](https://github.com/liwei9745/GenBox/releases)
+**当前稳定版本：v2.4.1** | [发布说明](https://github.com/liwei9745/GenBox/releases/tag/v2.4.1) | [全部版本](https://github.com/liwei9745/GenBox/releases)
 
 > 集成文生图、文生视频、图片超分、媒体库管理的桌面级 AI 创作工具
 > 支持 GPT Image / Gemini / Qwen / Agnes 等主流模型，开箱即用

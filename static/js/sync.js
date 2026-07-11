@@ -58,7 +58,7 @@
     document.body.style.overflow = "hidden";
     loadSyncDeployments();
     $("syncPreview").innerHTML =
-      '<div class="sync-empty">选择部署后点击「预览」以拉取远端图片并去重。</div>';
+      '<div class="sync-empty">按上方 3 步操作：<br>① 在「远程部署」处保存 chatgpt2api 部署<br>② 在下方选择该部署并点「扫描预览」<br>③ 预览图出现后勾选图片，再点「同步选中」</div>';
     setTimeout(function () { $("syncModal").querySelector(".modal-close").focus(); }, 0);
   };
 

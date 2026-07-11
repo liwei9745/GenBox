@@ -37,7 +37,7 @@ GITHUB_MIRRORS = [
 ]
 
 # 当前版本
-CURRENT_VERSION = "2.4.0"
+CURRENT_VERSION = "2.4.1"
 
 
 class UpdateType(Enum):
