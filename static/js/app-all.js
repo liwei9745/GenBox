@@ -2410,12 +2410,26 @@ function renderGalleryItems(items) {
       default: return (b.created_at || '').localeCompare(a.created_at || '');
     }
   });
+  var groupMode = document.getElementById('galleryGroupMode');
+  var groupByModel = groupMode && groupMode.value === 'model';
+  if (groupByModel) {
+    sorted.sort(function(a, b) {
+      var modelCmp = (a.model || 'unknown').localeCompare(b.model || 'unknown');
+      if (modelCmp) return modelCmp;
+      return (b.created_at || '').localeCompare(a.created_at || '');
+    });
+  }
   var h = '';
   var inSelectMode = document.getElementById('btnGallerySelect') && document.getElementById('btnGallerySelect').classList.contains('active');
+  var currentModel = null;
   for (var i = 0; i < sorted.length; i++) {
     (function(item){
       var f = item.local_path.split(/[\\/]/).pop();
       var pInfo = findProvider(item.model) || {name: item.model, color: '#5b8def'};
+      if (groupByModel && currentModel !== (item.model || 'unknown')) {
+        currentModel = item.model || 'unknown';
+        h += '<div class="gallery-model-header"><span class="gallery-model-dot" style="background:' + escAttr(pInfo.color || '#5b8def') + '"></span><span>' + escHtml(pInfo.name || currentModel) + '</span><span class="gallery-model-count">' + sorted.filter(function(x) { return (x.model || 'unknown') === currentModel; }).length + '</span></div>';
+      }
       var isSelected = selectedGalleryItems.indexOf(item.id) !== -1;
       var isVideo = item.type === 'video';
       
@@ -2428,6 +2442,9 @@ function renderGalleryItems(items) {
       var typeIcon = '';
       var badgesHtml = '';
       var videoOverlayHtml = '';
+      if (!isVideo && (item.source === 'cloud' || (item.tags || []).indexOf('cloud-sync') !== -1)) {
+        badgesHtml = '<div class="gallery-cloud-badge" title="从云端同步">☁ 云端</div>';
+      }
       if (isVideo) {
         typeIcon = '<div class="vid-play"><div class="vid-play-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>';
         badgesHtml = '';

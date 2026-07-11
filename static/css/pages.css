@@ -1008,6 +1008,20 @@ body.dragging-divider {
   white-space: nowrap;
 }
 
+.gallery-cloud-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 4;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(14, 165, 233, 0.9);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
 .gallery-item-actions {
   display: flex;
   gap: 6px;

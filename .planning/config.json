@@ -1,0 +1,27 @@
+{
+  "mode": "interactive",
+  "granularity": "standard",
+  "parallelization": true,
+  "commit_docs": true,
+  "model_profile": "adaptive",
+  "workflow": {
+    "research": true,
+    "plan_check": false,
+    "verifier": false,
+    "nyquist_validation": true,
+    "auto_advance": false
+  },
+  "plan_review": {
+    "source_grounding": false
+  },
+  "ship": {
+    "pr_body_sections": [
+      {
+        "heading": "Risks & Dependencies",
+        "enabled": true,
+        "source": "PLAN.md ## Risks || PLAN.md ## Dependencies",
+        "fallback": "- No known high-risk rollout dependencies."
+      }
+    ]
+  }
+}
