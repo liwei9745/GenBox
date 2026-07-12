@@ -187,6 +187,13 @@ jobs:
           cp README.md artifacts/release-linux/
           cd artifacts/release-linux && zip -r ../${{ env.APP_NAME }}-Linux-x64.zip .
 
+      - name: Package Docker Compose release
+        run: |
+          mkdir -p artifacts/release-docker
+          cp docker-compose.yml artifacts/release-docker/
+          cp .env.example artifacts/release-docker/.env
+          cd artifacts/release-docker && zip -r ../${{ env.APP_NAME }}-Docker-Compose.zip .
+
       - name: Select release notes
         id: rn
         shell: bash
@@ -211,7 +218,8 @@ jobs:
           gh release upload "${{ github.ref_name }}" \
             "artifacts/${{ env.APP_NAME }}-Windows.zip" \
             "artifacts/${{ env.APP_NAME }}-macOS.zip" \
-            "artifacts/${{ env.APP_NAME }}-Linux-x64.zip"
+            "artifacts/${{ env.APP_NAME }}-Linux-x64.zip" \
+            "artifacts/${{ env.APP_NAME }}-Docker-Compose.zip"
           
           # Upload standalone executables (for advanced users)
           gh release upload "${{ github.ref_name }}" \
