@@ -1,8 +1,6 @@
-version: "3.8"
-
 services:
   genbox:
-    build: .
+    image: ${GENBOX_IMAGE:-ghcr.io/liwei9745/genbox:latest}
     container_name: genbox
     ports:
       - "8891:8891"
