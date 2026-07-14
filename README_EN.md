@@ -158,7 +158,7 @@ Thank you to everyone who contributes to the upstream projects whose public work
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=liwei9745/GenBox&type=Date)](https://www.star-history.com/#liwei9745/GenBox&Date)
+[![Star History Chart](screenshots/readme/star-history.svg)](https://www.star-history.com/#liwei9745/GenBox&Date)
 
 ## Community and License
 

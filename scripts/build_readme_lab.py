@@ -22,6 +22,10 @@ README_ASSETS = {
         ROOT / "screenshots" / "readme" / "star-history.svg",
         "star-history.svg",
     ),
+    "screenshots/readme/star-history.svg": (
+        ROOT / "screenshots" / "readme" / "star-history.svg",
+        "star-history.svg",
+    ),
 }
 
 
