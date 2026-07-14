@@ -7,11 +7,9 @@
 
 ## Immediate Objective
 
-Gather owner review of the audience-focused README and v2.5.0 Release rewrite
-in the local README laboratory, then commit/push the accepted documentation and
-update the public Release body. Resume post-release clean-install and upgrade
-acceptance afterward. Do not begin chatgpt2api sender Push, batch transfer,
-scheduling, or source-cleanup work during this gate.
+Resume post-release clean-install and upgrade-path acceptance against the public
+v2.5.0 artifacts and updated documentation. Do not begin chatgpt2api sender
+Push, batch transfer, scheduling, or source-cleanup work during this gate.
 
 ## Current Verified State
 
@@ -53,6 +51,12 @@ scheduling, or source-cleanup work during this gate.
 - Chinese and English v2.5.0 release notes now lead with which artifact to
   download, how to start, and the one-time legacy Windows upgrade warning, then
   group user-visible additions, fixes, limits, and collapsed technical proof.
+- `VERIFIED PUBLIC` Owner-approved documentation was merged to `master` as
+  `029dd62` and pushed on 2026-07-14. The v2.5.0 GitHub Release body now uses
+  the reordered Chinese notes with absolute public image/document links; all
+  eight existing release assets remain attached.
+- `VERIFIED CI` GitHub Actions run `29320721741` completed the master-branch
+  Docker image workflow successfully for `029dd62`.
 - GitHub Release `v2.5.0` is public at tag commit `a675f8c`. Desktop Actions run
   `29308338415` and Docker tag run `29308338400` completed successfully.
 - All seven downloadable payloads match the published `SHA256SUMS.txt`; the
@@ -64,9 +68,8 @@ scheduling, or source-cleanup work during this gate.
 1. Install the Windows ZIP in a clean directory and verify first-run setup.
 2. Deploy the public Docker Compose bundle with new credentials and empty storage.
 3. Verify the documented one-time manual upgrade from v2.4.1 or earlier.
-4. After owner acceptance, commit and push the audience-focused README, English
-   screenshots, documentation matrix, and Release notes; then update the public
-   v2.5.0 Release body and verify its GitHub rendering.
+4. Recheck the public README and Release links during clean-install acceptance;
+   the initial publication and API/blob verification passed on 2026-07-14.
 5. Record results before selecting the next pre-Push phase.
 
 ## Safety And Scope
