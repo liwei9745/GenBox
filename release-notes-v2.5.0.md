@@ -1,84 +1,113 @@
-# GenBox v2.5.0 - Extension Center, Bilingual UX, and Verified Releases
+# GenBox v2.5.0 - Easier to Start, Better for Long-Term Use
 
-> A major update spanning product experience, remote-service operations, security boundaries, and release infrastructure.
+> Multi-model creation, the Extension Center, bilingual onboarding, and a verified release pipeline come together in one stable release.
 
-## Highlights
+## Which File Should I Download?
+
+| Your system | Recommended download | What to do next |
+|---|---|---|
+| Windows 10/11 | [GenBox-Windows.zip](https://github.com/liwei9745/GenBox/releases/download/v2.5.0/GenBox-Windows.zip) | Extract and double-click `GenBox.exe` |
+| macOS | [GenBox-macOS.zip](https://github.com/liwei9745/GenBox/releases/download/v2.5.0/GenBox-macOS.zip) | Extract and run `GenBox-macOS` |
+| Linux | [GenBox-Linux-x64.zip](https://github.com/liwei9745/GenBox/releases/download/v2.5.0/GenBox-Linux-x64.zip) | Extract and add execute permission |
+| NAS / VPS / Docker | [GenBox-Docker-Compose-v2.5.0.zip](https://github.com/liwei9745/GenBox/releases/download/v2.5.0/GenBox-Docker-Compose-v2.5.0.zip) | Extract, configure `.env`, and start Compose |
+
+Desktop archives include the runtime; Python is not required. After startup, open:
+
+```text
+http://localhost:8891
+```
+
+The standalone `GenBox.exe`, `GenBox-macOS`, and `GenBox-Linux-x64` files are update payloads. New users should normally choose the ZIP archive.
+
+## Get Started in Three Minutes
+
+1. Download and extract the ZIP for your platform.
+2. Start GenBox. If the browser does not open, visit `http://localhost:8891`.
+3. Add one model service URL, model name, and API key under Model settings.
+4. Open Images, select a model, enter a prompt, and generate.
+
+> [!IMPORTANT]
+> **Do not use the old in-app updater when moving from Windows v2.4.1 or earlier.** It can select the ZIP and attempt to overwrite the running program. Exit the old client, download `GenBox-Windows.zip`, and replace it manually once. v2.5.0 fixes the update flow used by later versions.
+
+## What Changed?
+
+| Multi-model image workspace | Extension Center |
+|---|---|
+| ![GenBox multi-model image workspace](screenshots/sanitized/en-02-generate-workspace.png) | ![GenBox Extension Center](screenshots/sanitized/en-03-extension-center.png) |
+
+### Creation experience
+
+- Image and video creation now provide single-model and multi-model comparison workspaces.
+- The image workspace adds collapsible creation tools and a task monitor.
+- The local media library, history, and prompt reuse remain part of the same workflow.
+- Ten coordinated themes, shared monoline icons, and an auto-hiding Dock reduce visual clutter.
+
+### Beginner experience
+
+- Chinese and English now use stable translation keys instead of runtime text scanning.
+- Onboarding explains first creation, GenBox capabilities, chatgpt2api, and why the products connect.
+- Dashboard, Images, Video, Media Library, History, and Extensions share consistent titles and supporting text.
 
 ### Extension Center
 
-- Save and manage VPS targets with SSH host-key verification.
-- Run read-only discovery and create fixed isolated chatgpt2api deployment plans.
-- Deploy and manage isolated instances without browser-supplied shell commands.
+- Save VPS targets, verify SSH host keys, and run read-only discovery through guided steps.
+- Create fixed deployment plans for isolated chatgpt2api instances.
 - Prepare and verify Tailscale private networking.
-- Deliver console/API URLs and manage credentials through show-once or explicit encrypted local storage.
+- Manage service URLs, runtime state, and credentials explicitly saved in the local encrypted vault.
 
-Existing production chatgpt2api instances remain read-only. Development uses separate directories, ports, containers, Compose projects, and credentials.
+## What Was Fixed?
 
-### GenBox and chatgpt2api foundation
+- Fixed first-run Windows crashes caused by Unicode console output on GBK systems.
+- Fixed updater ZIP selection and unsafe self-replacement while the client is running.
+- Fixed video Provider initialization timing that could leave model lists empty.
+- Fixed white primary surfaces remaining under some dark themes.
+- Fixed route, Back/Forward, and refresh behavior so workspace state restores reliably.
+- The release workflow now starts Windows, macOS, and Linux clients and verifies their HTTP endpoints.
 
-- Existing GenBox-initiated remote Pull remains available.
-- The GenBox Push receiver now supports source authentication, SHA-256 validation, idempotency, deduplication, and import receipts.
-- Network workflows can prepare a private route and save the final destination URL.
+## Docker Quick Start
 
-> [!NOTE]
-> Sender-side per-generation Push, batch and scheduled transfer, and receipt-gated source cleanup are not complete end to end and are not presented as available in this release.
+```bash
+cp .env.example .env
+docker compose pull
+docker compose up -d
+```
 
-### Bilingual onboarding and unified UI
+Runtime data lives in `storage/`. Before remote access, configure administrator authentication and set `ALLOWED_ORIGINS` to the actual HTTPS or private-network origin.
 
-- Fixed-key Chinese and English translations replace runtime text scanning.
-- Dashboard, Images, Video, Media Library, History, and Extensions share one three-line heading system.
-- Four-stage onboarding explains first creation, GenBox capabilities, chatgpt2api, and the value of connecting both products.
-- Image and video workspaces provide single-model and multi-model comparison modes.
-- Ten coordinated themes, unified monoline icons, collapsible tools, and an auto-hiding Dock.
+## Upgrading from an Older Version
 
-### Verified release pipeline
-
-Thanks to [@yukkcat](https://github.com/yukkcat) for proposing the Docker Compose bundle in [PR #4](https://github.com/liwei9745/GenBox/pull/4). This release extends that work with:
-
-- GHCR-backed Compose deployment without local source builds.
-- A dedicated production Docker environment template.
-- Windows, macOS, and Linux client startup smoke tests after packaging.
-- A fix for first-run Windows GBK console crashes on Unicode output.
-- Locked runtime, test, and PyInstaller build dependencies.
-- SHA-256 checksums for release artifacts.
-
-## Artifacts
-
-| File | Purpose |
-|---|---|
-| `GenBox-Windows.zip` | Ready-to-run Windows client |
-| `GenBox-macOS.zip` | macOS client |
-| `GenBox-Linux-x64.zip` | Linux/VPS client |
-| `GenBox-Docker-Compose-v2.5.0.zip` | Docker Compose deployment bundle |
-| `SHA256SUMS.txt` | SHA-256 checksums |
-
-## Upgrade Notes
-
-> [!IMPORTANT]
-> The updater in Windows EXE releases v2.4.1 and earlier can select the ZIP asset and then attempts to overwrite its own locked executable. Do not rely on the old in-app updater for this jump. Download `GenBox-Windows.zip`, exit the old client, and replace the executable manually once. v2.5.0 fixes asset selection and performs replacement after the old process exits, enabling the corrected flow for later releases.
-
-1. Back up `.env`, `storage/providers.json`, media, and other runtime data.
+1. Back up `.env`, `storage/providers.json`, media, and the rest of `storage/`.
 2. Never overwrite an existing `storage/` directory with release files.
-3. Source Git users must preserve local changes first; the legacy updater follows the current remote branch with `git reset --hard`.
-4. Legacy Docker users must adopt the new Compose bundle while preserving `.env` and `storage/`, then run `docker compose pull && docker compose up -d`. The in-app updater cannot migrate an old local `build` configuration to the GHCR image.
+3. Follow the one-time manual Windows upgrade above for v2.4.1 and earlier.
+4. Legacy Docker users should keep `.env` and `storage/`, adopt the new Compose bundle, and run `docker compose pull && docker compose up -d`.
 5. Verify Model settings, Media Library, administrator login, and remote sync after startup.
 
-Release clients default to `http://localhost:8891`. Source development uses port `8892` through `.env.example`.
+## Current Limitations
 
-## Verification
-
-- 76 automated tests pass, including release-asset selection, Windows post-exit replacement, packaged-client console output, and public screenshot references.
-- Chinese and English routes and onboarding pass desktop, narrow, and mobile checks.
-- Dependencies install and tests pass in a fresh isolated Python environment.
-- A Windows PyInstaller client builds and passes a real HTTP startup smoke test.
-- Docker Compose bundle content and production defaults are covered by automated tests.
-
-## Known Limitations
-
-- Sender Push, batch/scheduled transfer, and verified source cleanup remain future phases.
-- Durable deployment-task recovery after process restart is incomplete.
+- Sender-side automatic Push after generation, batch/scheduled transfer, and receipt-gated cleanup are not complete end to end.
+- Durable deployment-task recovery after a process restart still needs work.
 - NetBird and Cloudflare Tunnel do not yet have the same acceptance coverage as Tailscale.
-- Windows EXE releases v2.4.1 and earlier require one manual upgrade to v2.5.0; legacy Docker Compose installations require manual configuration migration.
-- Starlette currently emits a forward-looking `httpx2` migration warning in tests; runtime behavior is unaffected.
+- chatgpt2api is a third-party reverse-engineering research project and can put accounts at risk.
 
-See [`docs/STATUS.md`](docs/STATUS.md) for detailed evidence and current boundaries.
+<details>
+<summary><strong>Security, checksums, and release verification</strong></summary>
+
+- SHA-256 values for every artifact are published in [SHA256SUMS.txt](https://github.com/liwei9745/GenBox/releases/download/v2.5.0/SHA256SUMS.txt).
+- Administrator credentials, per-source Push keys, and Tailscale enrollment information remain separate.
+- Source media is retained by default; future cleanup requires an authenticated receipt, matching SHA-256, and explicit opt-in.
+- GitHub Actions builds all three desktop clients and performs real HTTP startup smoke tests before publication.
+- The Docker Compose bundle pulls `ghcr.io/liwei9745/genbox` without a local source build.
+
+</details>
+
+<details>
+<summary><strong>Developer and complete change references</strong></summary>
+
+- [Changelog](CHANGELOG.md)
+- [Current status and verification evidence](docs/STATUS.md)
+- [Documentation matrix](docs/README.md)
+- [All v2.5.0 artifacts](https://github.com/liwei9745/GenBox/releases/tag/v2.5.0)
+
+</details>
+
+Thanks to [@yukkcat](https://github.com/yukkcat) for proposing the GHCR Docker Compose release bundle in [PR #4](https://github.com/liwei9745/GenBox/pull/4).

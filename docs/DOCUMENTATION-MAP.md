@@ -5,6 +5,9 @@
 Keep product documentation useful without turning README or release notes into
 an unlimited development diary. Each fact belongs to one document class.
 
+The user-facing navigation hub is [`docs/README.md`](README.md). This file owns
+maintenance policy; the hub owns discoverability by audience and task.
+
 ## Pinned Documents
 
 These documents are primary entry points and should stay concise, accurate, and
