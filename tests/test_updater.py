@@ -30,13 +30,14 @@ def test_asset_returns_none_when_only_archive_exists() -> None:
 
 def test_windows_restart_script_replaces_after_stopping_process() -> None:
     target = Path("C:/GenBox/GenBox.exe")
+    staged = Path("C:/GenBox/.GenBox.exe.update")
     script = updater._windows_restart_script(
         target,
-        Path("C:/GenBox/.GenBox.exe.update"),
+        staged,
         Path("C:/GenBox/GenBox.exe.bak"),
         4321,
     )
 
     assert "taskkill /PID 4321 /T /F" in script
-    assert script.index("taskkill") < script.index('move /Y "C:\\GenBox\\GenBox.exe"')
-    assert 'move /Y "C:\\GenBox\\.GenBox.exe.update" "C:\\GenBox\\GenBox.exe"' in script
+    assert script.index("taskkill") < script.index(f'move /Y "{target}"')
+    assert f'move /Y "{staged}" "{target}"' in script
