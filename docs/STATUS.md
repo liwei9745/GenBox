@@ -541,9 +541,8 @@
   shortened to avoid an orphaned final character at narrow widths.
 - `VERIFIED IN CODE/TESTS` `python -m pytest -q` completed with 77 passing tests;
   `python -m py_compile scripts/build_readme_lab.py` and `git diff --check` pass.
-- `UNVERIFIED PUBLIC` The restored README has not yet been committed and pushed,
-  so its final GitHub rendering remains part of the post-release documentation
-  gate.
+- `VERIFIED PUBLIC` The restored README foundation was committed and pushed as
+  part of the documentation publication completed on 2026-07-14.
 
 ## Audience-Focused README And Release Information Architecture
 
@@ -578,18 +577,21 @@
 - `VERIFIED IN CODE/TESTS/UI` The documentation laboratory now also previews
   the source-hashed Chinese and English v2.5.0 Release Notes through the
   `README / Release v2.5.0` selector and shareable `?document=release` URL.
-- `UNVERIFIED PUBLIC` The audience-focused rewrite, English screenshots, and
-  reordered Release notes remain local pending owner review. The public v2.5.0
-  Release body has not been changed.
+- `VERIFIED PUBLIC` The owner-approved rewrite was merged to `master` at
+  `029dd62` and pushed on 2026-07-14. GitHub's README blob matches the local
+  `README.md` blob exactly. The public v2.5.0 Release body now uses the reordered
+  Chinese notes with absolute public screenshot and documentation links while
+  retaining all eight published assets.
+- `VERIFIED CI` Master-branch Docker workflow run `29320721741` completed
+  successfully for `029dd62`.
 
 ## Next Tasks
 
-1. Gather owner review on the local README laboratory, then commit and push the
-   accepted audience-focused rewrite and update the public v2.5.0 Release body.
-2. Continue the v2.5.0 clean-install and upgrade-path acceptance gate.
-3. Keep subsequent work in the pre-Push UI scope unless the project owner
+1. Continue the v2.5.0 clean-install and upgrade-path acceptance gate, including
+   a final public-link and rendered-image check.
+2. Keep subsequent work in the pre-Push UI scope unless the project owner
    explicitly authorizes entry into chatgpt2api sender Push development.
-4. Preserve the local accepted baseline: `node --check static/js/i18n.js`,
+3. Preserve the local accepted baseline: `node --check static/js/i18n.js`,
    `node --check static/js/app-all.js`, `python -m pytest -q`, and bilingual
    browser acceptance for both the application and README laboratory.
 
@@ -597,8 +599,7 @@
 
 Phase 1 remains accepted. Resume with `AGENTS.md`, `HANDOFF.md`, this file, and
 `docs/ONBOARDING-UI-CONTRACT.md`. The heading/onboarding refinement and README
-restoration are locally accepted on port `8892`; begin from owner review of
-`static/readme-lab.html`, then complete the public GitHub rendering check and
-post-release gate. Preserve production `chatgpt2api-warp`, leave
+publication are accepted; resume the public-artifact clean-install and upgrade
+gate. Preserve production `chatgpt2api-warp`, leave
 `.planning/STATE.md` untouched, and do not enter sender Push unless explicitly
 redirected. The current verified baseline is 77 passing tests.
