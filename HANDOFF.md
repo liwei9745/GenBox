@@ -3,12 +3,14 @@
 **Updated:** 2026-07-14
 **Branch:** `dev`
 **Local development port:** `8892`
-**Verified test baseline:** `77 passed`
+**Verified test baseline:** `78 passed`
 
 ## Immediate Objective
 
-Run post-release clean-install and upgrade-path acceptance against the public
-v2.5.0 artifacts. Do not begin chatgpt2api sender Push, batch transfer,
+Gather owner review of the audience-focused README and v2.5.0 Release rewrite
+in the local README laboratory, then commit/push the accepted documentation and
+update the public Release body. Resume post-release clean-install and upgrade
+acceptance afterward. Do not begin chatgpt2api sender Push, batch transfer,
 scheduling, or source-cleanup work during this gate.
 
 ## Current Verified State
@@ -27,7 +29,9 @@ scheduling, or source-cleanup work during this gate.
   the old updater selects the ZIP first and cannot overwrite its locked process.
 - Legacy Docker users must migrate to the new Compose bundle while preserving
   `.env` and `storage/`; the old in-app update cannot rewrite host Compose config.
-- `python -m pytest -q` passes all 77 tests. JavaScript syntax checks, Python
+- Snapshot commit `ae90ce6` preserves the prior structured README restoration
+  and laboratory before the audience-focused rewrite.
+- `python -m pytest -q` passes all 78 tests. JavaScript syntax checks, Python
   compilation, and `git diff --check` pass.
 - README screenshots were replaced with four current v2.5.0 captures from an
   isolated client. Dashboard device values are labeled synthetic demo data.
@@ -39,6 +43,16 @@ scheduling, or source-cleanup work during this gate.
   in Chinese/English, desktop/narrow, and light/dark modes. Local cached public
   contributor and Star History assets keep the lab compatible with the global
   CSP; source hashes and asset mappings are covered by tests.
+- README structure now follows patterns verified from ComfyUI, AUTOMATIC1111,
+  Fooocus, InvokeAI, Open WebUI, and n8n: positioning and product visuals first,
+  platform download choice and the shortest startup path next, with operations
+  and developer detail folded or routed through `docs/README.md`.
+- Chinese and English README files use separate reviewed screenshot sets. The
+  English Dashboard replaces host, network, disk, and IP values with explicit
+  demo data; no temporary raw capture remains in the repository.
+- Chinese and English v2.5.0 release notes now lead with which artifact to
+  download, how to start, and the one-time legacy Windows upgrade warning, then
+  group user-visible additions, fixes, limits, and collapsed technical proof.
 - GitHub Release `v2.5.0` is public at tag commit `a675f8c`. Desktop Actions run
   `29308338415` and Docker tag run `29308338400` completed successfully.
 - All seven downloadable payloads match the published `SHA256SUMS.txt`; the
@@ -50,9 +64,9 @@ scheduling, or source-cleanup work during this gate.
 1. Install the Windows ZIP in a clean directory and verify first-run setup.
 2. Deploy the public Docker Compose bundle with new credentials and empty storage.
 3. Verify the documented one-time manual upgrade from v2.4.1 or earlier.
-4. After the README restoration is committed and pushed, confirm its screenshots,
-   acknowledgements, contributor wall, Star History, and quick-start links render
-   correctly on GitHub.
+4. After owner acceptance, commit and push the audience-focused README, English
+   screenshots, documentation matrix, and Release notes; then update the public
+   v2.5.0 Release body and verify its GitHub rendering.
 5. Record results before selecting the next pre-Push phase.
 
 ## Safety And Scope

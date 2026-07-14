@@ -50,37 +50,71 @@ def test_packaged_console_output_avoids_ansi_and_emoji_status_markers():
 
 
 def test_public_documentation_uses_current_sanitized_screenshots():
-    readmes = "\n".join(
-        (ROOT / filename).read_text(encoding="utf-8")
-        for filename in ("README.md", "README_EN.md")
-    )
-    current = {
-        "01-dashboard.png",
-        "02-generate-workspace.png",
-        "03-extension-center.png",
-        "04-onboarding.png",
+    expected = {
+        "README.md": {
+            "01-dashboard.png",
+            "02-generate-workspace.png",
+            "03-extension-center.png",
+            "04-onboarding.png",
+        },
+        "README_EN.md": {
+            "en-01-dashboard.png",
+            "en-02-generate-workspace.png",
+            "en-03-extension-center.png",
+            "en-04-onboarding.png",
+        },
     }
 
-    for filename in current:
-        assert f"screenshots/sanitized/{filename}" in readmes
-        assert (ROOT / "screenshots" / "sanitized" / filename).is_file()
-    assert "02-generate-t2i.png" not in readmes
+    for readme_name, screenshots in expected.items():
+        readme = (ROOT / readme_name).read_text(encoding="utf-8")
+        for filename in screenshots:
+            assert f"screenshots/sanitized/{filename}" in readme
+            assert (ROOT / "screenshots" / "sanitized" / filename).is_file()
+        assert "02-generate-t2i.png" not in readme
+
+    assert "en-01-dashboard.png" not in (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "screenshots/sanitized/01-dashboard.png" not in (ROOT / "README_EN.md").read_text(encoding="utf-8")
 
 
-def test_readme_lab_content_matches_source_readmes():
+def test_release_notes_lead_with_download_and_first_run_guidance():
+    for filename in ("release-notes-v2.5.0-zh.md", "release-notes-v2.5.0.md"):
+        notes = (ROOT / filename).read_text(encoding="utf-8")
+        visible_lead = notes.split("<details>", 1)[0]
+        assert "GenBox-Windows.zip" in visible_lead
+        assert "GenBox-macOS.zip" in visible_lead
+        assert "GenBox-Linux-x64.zip" in visible_lead
+        assert "GenBox-Docker-Compose-v2.5.0.zip" in visible_lead
+        assert "http://localhost:8891" in visible_lead
+        assert "v2.4.1" in visible_lead
+
+
+def test_readme_lab_content_matches_source_documents():
     payload = json.loads((ROOT / "static" / "readme-lab-content.json").read_text(encoding="utf-8"))
+    lab = (ROOT / "static" / "readme-lab.html").read_text(encoding="utf-8")
     expected_assets = {
         "upstream-contributors.svg",
         "star-history.svg",
     }
 
-    for language, filename in (("zh", "README.md"), ("en", "README_EN.md")):
-        source = (ROOT / filename).read_text(encoding="utf-8")
-        assert payload[language]["sha256"] == hashlib.sha256(source.encode("utf-8")).hexdigest()
-        assert "Star History" in payload[language]["markdown"]
-        assert "readme-assets" in payload[language]["markdown"]
+    sources = {
+        "readme": {"zh": "README.md", "en": "README_EN.md"},
+        "release": {"zh": "release-notes-v2.5.0-zh.md", "en": "release-notes-v2.5.0.md"},
+    }
+    assert 'id="document"' in lab
+    assert "state.payload[state.document][state.language]" in lab
+    assert "Release v2.5.0" in lab
+    for document, languages in sources.items():
+        for language, filename in languages.items():
+            source = (ROOT / filename).read_text(encoding="utf-8")
+            item = payload[document][language]
+            assert item["sha256"] == hashlib.sha256(source.encode("utf-8")).hexdigest()
+            assert "readme-assets" in item["markdown"]
+
+    for language in ("zh", "en"):
+        markdown = payload["readme"][language]["markdown"]
+        assert "Star History" in markdown
         for asset in expected_assets:
-            assert f"/static/readme-assets/{asset}" in payload[language]["markdown"]
+            assert f"/static/readme-assets/{asset}" in markdown
             assert (ROOT / "static" / "readme-assets" / asset).is_file()
 
 

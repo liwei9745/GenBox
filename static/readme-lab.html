@@ -21,8 +21,9 @@
 </head>
 <body>
   <header class="toolbar">
-    <div class="brand"><div class="mark">◇</div><div><strong>README LAB</strong><span>GenBox documentation preview</span></div></div>
+    <div class="brand"><div class="mark">◇</div><div><strong id="brandTitle">README LAB</strong><span>GenBox documentation preview</span></div></div>
     <div class="controls">
+      <select id="document" aria-label="Preview document"><option value="readme">README</option><option value="release">Release v2.5.0</option></select>
       <select id="language" aria-label="README language"><option value="zh">中文</option><option value="en">English</option></select>
       <div class="segment" aria-label="Preview width"><button type="button" data-width="desktop" class="active">Desktop</button><button type="button" data-width="narrow">Narrow</button></div>
       <button type="button" class="icon-btn" id="theme" title="Toggle theme">◐</button>
@@ -35,7 +36,8 @@
     <section class="stage"><div class="viewport" id="viewport"><article class="readme" id="readme"></article></div></section>
   </main>
   <script>
-    const state={payload:null,language:'zh'};
+    const params=new URLSearchParams(location.search);
+    const state={payload:null,document:params.get('document')==='release'?'release':'readme',language:params.get('lang')==='en'?'en':'zh'};
     const escapeHtml=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     const slug=value=>value.toLowerCase().replace(/<[^>]+>/g,'').replace(/[^\w\u4e00-\u9fff -]/g,'').trim().replace(/\s+/g,'-');
     function inline(value){
@@ -64,9 +66,11 @@
       }
       flushParagraph();flushList();flushQuote();return html;
     }
-    function paint(){const item=state.payload[state.language];const root=document.getElementById('readme');root.innerHTML=render(item.markdown);const badges=root.querySelector('h1')?.nextElementSibling;if(badges)badges.classList.add('badges');root.querySelectorAll('img').forEach(img=>{if(/^https?:/.test(img.getAttribute('src')||'')){const fallback=document.createElement('span');fallback.className='external-image'+(/Star History|contributors/i.test(img.alt)?' chart':'');fallback.textContent=img.alt||'External image';img.replaceWith(fallback)}});const toc=document.getElementById('toc');toc.innerHTML='';root.querySelectorAll('h2,h3').forEach(heading=>{const link=document.createElement('a');link.href='#'+heading.id;link.textContent=(heading.tagName==='H3'?'  ':'')+heading.textContent;toc.appendChild(link)});document.getElementById('status').textContent=item.sha256.slice(0,10);document.documentElement.lang=state.language==='zh'?'zh-CN':'en'}
-    async function load(){const response=await fetch('/static/readme-lab-content.json?ts='+Date.now());state.payload=await response.json();paint()}
-    document.getElementById('language').addEventListener('change',event=>{state.language=event.target.value;paint()});
+    function paint(){const item=state.payload[state.document][state.language];const root=document.getElementById('readme');root.innerHTML=render(item.markdown);const badges=root.querySelector('h1')?.nextElementSibling;if(state.document==='readme'&&badges)badges.classList.add('badges');root.querySelectorAll('img').forEach(img=>{if(/^https?:/.test(img.getAttribute('src')||'')){const fallback=document.createElement('span');fallback.className='external-image'+(/Star History|contributors/i.test(img.alt)?' chart':'');fallback.textContent=img.alt||'External image';img.replaceWith(fallback)}});const toc=document.getElementById('toc');toc.innerHTML='';root.querySelectorAll('h2,h3').forEach(heading=>{const link=document.createElement('a');link.href='#'+heading.id;link.textContent=(heading.tagName==='H3'?'  ':'')+heading.textContent;toc.appendChild(link)});document.getElementById('status').textContent=item.sha256.slice(0,10);document.getElementById('brandTitle').textContent=state.document==='release'?'RELEASE NOTES LAB':'README LAB';document.title=state.document==='release'?'GenBox Release Notes Lab':'GenBox README Lab';document.documentElement.lang=state.language==='zh'?'zh-CN':'en'}
+    function syncUrl(){const next=new URL(location.href);if(state.document==='release')next.searchParams.set('document','release');else next.searchParams.delete('document');if(state.language==='en')next.searchParams.set('lang','en');else next.searchParams.delete('lang');history.replaceState(null,'',next)}
+    async function load(){const response=await fetch('/static/readme-lab-content.json?ts='+Date.now());state.payload=await response.json();document.getElementById('document').value=state.document;document.getElementById('language').value=state.language;paint()}
+    document.getElementById('document').addEventListener('change',event=>{state.document=event.target.value;syncUrl();paint();window.scrollTo({top:0,behavior:'instant'})});
+    document.getElementById('language').addEventListener('change',event=>{state.language=event.target.value;syncUrl();paint();window.scrollTo({top:0,behavior:'instant'})});
     document.querySelectorAll('[data-width]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-width]').forEach(item=>item.classList.remove('active'));button.classList.add('active');document.getElementById('viewport').classList.toggle('narrow',button.dataset.width==='narrow')}));
     document.getElementById('theme').addEventListener('click',()=>document.body.classList.toggle('dark'));
     document.getElementById('reload').addEventListener('click',load);

@@ -545,10 +545,47 @@
   so its final GitHub rendering remains part of the post-release documentation
   gate.
 
+## Audience-Focused README And Release Information Architecture
+
+- `VERIFIED RESEARCH` On 2026-07-14, README and latest-Release structure was
+  compared across ComfyUI, AUTOMATIC1111 Stable Diffusion WebUI, Fooocus,
+  InvokeAI, Open WebUI, and n8n. The consistent high-value pattern is a short
+  product promise, visible product imagery, a small capability set, and the
+  shortest installation path before long feature or operator detail. Mature
+  Release notes prioritize artifact choice, startup/upgrade action, user-visible
+  additions, fixes, and known limits before generated changelogs or proof.
+- `VERIFIED IN CODE/UI` Chinese and English README files now lead with GenBox's
+  origin as a multi-model image comparison tool, explain the current local-first
+  media workspace in beginner language, present four screenshots as a labeled
+  two-by-two product board, and place platform downloads plus
+  `http://localhost:8891` before technical configuration.
+- `VERIFIED IN CODE/UI` Docker/source setup, chatgpt2api sender boundaries, and
+  upstream contributor imagery are collapsed by default. A new bilingual
+  `docs/README.md` routes users, operators, integration developers, contributors,
+  and maintainers to the correct stable or rolling document.
+- `VERIFIED IN CODE/UI` Four English screenshots were captured from an isolated
+  empty client. The English Dashboard sanitizer replaces host, network, disk,
+  and public-IP values with explicit demo data; Extension Center uses the RFC
+  5737 address `192.0.2.10` and a fictional account name.
+- `VERIFIED IN CODE` The Chinese and English v2.5.0 notes now put platform
+  download selection, startup steps, and the legacy Windows upgrade warning at
+  the top; additions, fixes, deployment, limitations, checksums, and developer
+  references follow in user-priority order with advanced evidence collapsed.
+- `VERIFIED IN TESTS/UI` The README lab passes Chinese/English, desktop/narrow,
+  image-language separation, local cached image loading, zero open details by
+  default, and horizontal-overflow checks. `python -m pytest -q` passes 78 tests;
+  local link, text safety, Python compilation, and `git diff --check` pass.
+- `VERIFIED IN CODE/TESTS/UI` The documentation laboratory now also previews
+  the source-hashed Chinese and English v2.5.0 Release Notes through the
+  `README / Release v2.5.0` selector and shareable `?document=release` URL.
+- `UNVERIFIED PUBLIC` The audience-focused rewrite, English screenshots, and
+  reordered Release notes remain local pending owner review. The public v2.5.0
+  Release body has not been changed.
+
 ## Next Tasks
 
 1. Gather owner review on the local README laboratory, then commit and push the
-   accepted restoration before checking the public GitHub rendering.
+   accepted audience-focused rewrite and update the public v2.5.0 Release body.
 2. Continue the v2.5.0 clean-install and upgrade-path acceptance gate.
 3. Keep subsequent work in the pre-Push UI scope unless the project owner
    explicitly authorizes entry into chatgpt2api sender Push development.

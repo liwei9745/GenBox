@@ -52,12 +52,19 @@ def main() -> None:
         if existing.is_file():
             existing.unlink()
 
-    zh, zh_hash = prepare(ROOT / "README.md")
-    en, en_hash = prepare(ROOT / "README_EN.md")
-    payload = {
-        "zh": {"sha256": zh_hash, "markdown": zh},
-        "en": {"sha256": en_hash, "markdown": en},
+    documents = {
+        "readme": {"zh": ROOT / "README.md", "en": ROOT / "README_EN.md"},
+        "release": {
+            "zh": ROOT / "release-notes-v2.5.0-zh.md",
+            "en": ROOT / "release-notes-v2.5.0.md",
+        },
     }
+    payload = {}
+    for document, language_paths in documents.items():
+        payload[document] = {}
+        for language, markdown_path in language_paths.items():
+            markdown, digest = prepare(markdown_path)
+            payload[document][language] = {"sha256": digest, "markdown": markdown}
     OUTPUT.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(OUTPUT)
 
