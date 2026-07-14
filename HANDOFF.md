@@ -57,6 +57,9 @@ Push, batch transfer, scheduling, or source-cleanup work during this gate.
   eight existing release assets remain attached.
 - `VERIFIED CI` GitHub Actions run `29320721741` completed the master-branch
   Docker image workflow successfully for `029dd62`.
+- Public rendering uses the repository-hosted Star History snapshot because the
+  third-party live chart endpoint returned a broken image during publication
+  acceptance; the snapshot still links to the live Star History page.
 - GitHub Release `v2.5.0` is public at tag commit `a675f8c`. Desktop Actions run
   `29308338415` and Docker tag run `29308338400` completed successfully.
 - All seven downloadable payloads match the published `SHA256SUMS.txt`; the

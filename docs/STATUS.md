@@ -584,6 +584,10 @@
   retaining all eight published assets.
 - `VERIFIED CI` Master-branch Docker workflow run `29320721741` completed
   successfully for `029dd62`.
+- `VERIFIED PUBLIC/FIXED` GitHub rendering showed the third-party live Star
+  History endpoint as a broken image while all other README and Release images
+  loaded. README now uses the reviewed repository snapshot and keeps the chart
+  linked to the live Star History page.
 
 ## Next Tasks
 
