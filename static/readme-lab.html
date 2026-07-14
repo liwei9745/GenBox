@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GenBox README Lab</title>
+  <style>
+    :root{--bg:#eef2f6;--panel:#fff;--line:#d8dee7;--text:#1f2328;--muted:#66707d;--accent:#0969da;--code:#f6f8fa;--quote:#d0d7de;--shadow:0 12px 36px rgba(31,35,40,.08)}
+    *{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:"Segoe UI","Microsoft YaHei",sans-serif;color:var(--text);background:var(--bg);letter-spacing:0}
+    body.dark{--bg:#11161d;--panel:#20262e;--line:#39424e;--text:#e6edf3;--muted:#9da7b3;--accent:#58a6ff;--code:#161b22;--quote:#59636f;--shadow:0 12px 36px rgba(0,0,0,.28)}
+    button,select{font:inherit}.toolbar{position:sticky;top:0;z-index:20;height:58px;display:flex;align-items:center;gap:12px;padding:0 18px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--panel) 94%,transparent);backdrop-filter:blur(16px)}
+    .brand{display:flex;align-items:center;gap:10px;min-width:230px}.mark{width:28px;height:28px;display:grid;place-items:center;color:var(--accent);font-size:22px}.brand strong{font-size:14px}.brand span{display:block;color:var(--muted);font-size:10px;margin-top:2px}
+    .controls{margin-left:auto;display:flex;align-items:center;gap:8px}.segment{display:flex;border:1px solid var(--line);border-radius:6px;padding:2px;background:var(--code)}.segment button,.icon-btn,select{height:32px;border:0;border-radius:4px;background:transparent;color:var(--muted);padding:0 10px;cursor:pointer}.segment button.active{background:var(--panel);color:var(--text);box-shadow:0 1px 3px rgba(31,35,40,.12)}.icon-btn{width:34px;padding:0;border:1px solid var(--line);font-size:17px}select{border:1px solid var(--line);background:var(--panel);color:var(--text)}
+    .workspace{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:calc(100vh - 58px)}.toc{position:sticky;top:58px;height:calc(100vh - 58px);overflow:auto;padding:22px 16px;border-right:1px solid var(--line);background:var(--panel)}.toc a{display:block;padding:6px 9px;border-left:2px solid transparent;color:var(--muted);font-size:12px;text-decoration:none}.toc a:hover{color:var(--accent);border-color:var(--accent)}
+    .stage{padding:28px;overflow:hidden}.viewport{width:min(100%,1040px);margin:0 auto;transition:width .2s ease}.viewport.narrow{width:min(100%,720px)}.readme{padding:42px 48px;background:var(--panel);border:1px solid var(--line);border-radius:6px;box-shadow:var(--shadow);font-size:15px;line-height:1.65;overflow-wrap:anywhere}
+    .readme h1,.readme h2,.readme h3,.readme h4{line-height:1.25;margin:28px 0 14px}.readme h1{font-size:30px;margin-top:0;padding-bottom:12px;border-bottom:1px solid var(--line)}.readme h2{font-size:23px;padding-bottom:8px;border-bottom:1px solid var(--line)}.readme h3{font-size:18px}.readme h4{font-size:15px}.readme p{margin:0 0 15px}.readme a{color:var(--accent);text-decoration:none}.readme a:hover{text-decoration:underline}.readme img{display:block;max-width:100%;height:auto;margin:16px auto;border-radius:4px}.readme p>a>img{margin:12px 0}.readme hr{height:1px;border:0;background:var(--line);margin:28px 0}
+    .readme blockquote{margin:16px 0;padding:9px 16px;border-left:4px solid var(--quote);color:var(--muted);background:var(--code)}.readme .callout{border:1px solid #54aeff;border-left-width:4px;border-radius:4px;color:var(--text)}.readme .callout strong:first-child{color:var(--accent)}
+    .readme code{padding:2px 5px;border-radius:4px;background:var(--code);font-family:Consolas,"SFMono-Regular",monospace;font-size:.88em}.readme pre{overflow:auto;padding:16px;border:1px solid var(--line);border-radius:5px;background:var(--code);line-height:1.45}.readme pre code{padding:0;background:none}.readme table{display:block;width:100%;overflow:auto;border-collapse:collapse;margin:14px 0 22px}.readme th,.readme td{padding:8px 11px;border:1px solid var(--line);text-align:left;vertical-align:top}.readme th{background:var(--code);font-weight:600}.readme ul,.readme ol{padding-left:26px;margin:8px 0 16px}.readme details{margin:10px 0;padding:10px 14px;border:1px solid var(--line);border-radius:5px;background:var(--panel)}.readme summary{cursor:pointer;font-weight:600}.readme .badges img{display:inline-block;margin:2px 3px 2px 0}.external-image{display:inline-flex;align-items:center;min-height:24px;margin:2px 4px 2px 0;padding:2px 8px;border:1px solid var(--line);border-radius:4px;background:var(--code);color:var(--muted);font-size:11px}.external-image.chart{display:flex;justify-content:center;min-height:150px;margin:14px 0;padding:40px;font-size:14px}
+    .status{color:var(--muted);font-size:11px;white-space:nowrap}@media(max-width:900px){.workspace{grid-template-columns:1fr}.toc{display:none}.stage{padding:14px}.readme{padding:28px 22px}.brand{min-width:0}.brand span,.status{display:none}}@media(max-width:620px){.toolbar{padding:0 10px}.controls{gap:4px}.segment button{padding:0 7px}.readme{padding:22px 16px;font-size:14px}.readme h1{font-size:25px}.readme h2{font-size:20px}}
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand"><div class="mark">◇</div><div><strong>README LAB</strong><span>GenBox documentation preview</span></div></div>
+    <div class="controls">
+      <select id="language" aria-label="README language"><option value="zh">中文</option><option value="en">English</option></select>
+      <div class="segment" aria-label="Preview width"><button type="button" data-width="desktop" class="active">Desktop</button><button type="button" data-width="narrow">Narrow</button></div>
+      <button type="button" class="icon-btn" id="theme" title="Toggle theme">◐</button>
+      <button type="button" class="icon-btn" id="reload" title="Reload README">↻</button>
+      <span class="status" id="status">Loading</span>
+    </div>
+  </header>
+  <main class="workspace">
+    <nav class="toc" id="toc" aria-label="README outline"></nav>
+    <section class="stage"><div class="viewport" id="viewport"><article class="readme" id="readme"></article></div></section>
+  </main>
+  <script>
+    const state={payload:null,language:'zh'};
+    const escapeHtml=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    const slug=value=>value.toLowerCase().replace(/<[^>]+>/g,'').replace(/[^\w\u4e00-\u9fff -]/g,'').trim().replace(/\s+/g,'-');
+    function inline(value){
+      const tokens=[];
+      let text=escapeHtml(value).replace(/`([^`]+)`/g,(_,code)=>{tokens.push('<code>'+code+'</code>');return '@@TOKEN'+(tokens.length-1)+'@@'});
+      text=text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g,'<img src="$2" alt="$1">').replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2">$1</a>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/\*([^*]+)\*/g,'<em>$1</em>');
+      return text.replace(/@@TOKEN(\d+)@@/g,(_,index)=>tokens[Number(index)]);
+    }
+    function render(markdown){
+      const lines=markdown.replace(/\r/g,'').split('\n');let html='',paragraph=[],list='',quote=[],code=false,codeLang='',codeLines=[];
+      const flushParagraph=()=>{if(paragraph.length){html+='<p>'+inline(paragraph.join(' '))+'</p>';paragraph=[]}};
+      const flushList=()=>{if(list){html+='</'+list+'>';list=''}};
+      const flushQuote=()=>{if(quote.length){const callout=quote.some(line=>line.includes('[!IMPORTANT]'));const content=quote.map(line=>inline(line.replace('[!IMPORTANT]','IMPORTANT'))).join('<br>');html+='<blockquote class="'+(callout?'callout':'')+'">'+content+'</blockquote>';quote=[]}};
+      for(let i=0;i<lines.length;i++){
+        const raw=lines[i],line=raw.trimEnd();
+        if(line.startsWith('```')){flushParagraph();flushList();flushQuote();if(code){html+='<pre><code class="language-'+escapeHtml(codeLang)+'">'+escapeHtml(codeLines.join('\n'))+'</code></pre>';code=false;codeLines=[]}else{code=true;codeLang=line.slice(3).trim()}continue}
+        if(code){codeLines.push(raw);continue}
+        if(line.startsWith('>')){flushParagraph();flushList();quote.push(line.replace(/^>\s?/,''));continue}else flushQuote();
+        if(!line.trim()){flushParagraph();flushList();continue}
+        if(/^<\/?(details|summary|a|img)/.test(line.trim())){flushParagraph();flushList();html+=line;continue}
+        const heading=line.match(/^(#{1,4})\s+(.+)$/);if(heading){flushParagraph();flushList();const level=heading[1].length,id=slug(heading[2]);html+='<h'+level+' id="'+id+'">'+inline(heading[2])+'</h'+level+'>';continue}
+        if(/^---+$/.test(line.trim())){flushParagraph();flushList();html+='<hr>';continue}
+        if(line.includes('|')&&i+1<lines.length&&/^\s*\|?\s*:?-+/.test(lines[i+1])){flushParagraph();flushList();const rows=[];rows.push(line);i++;while(i+1<lines.length&&lines[i+1].includes('|')&&lines[i+1].trim()){i++;rows.push(lines[i])}const cells=row=>row.trim().replace(/^\||\|$/g,'').split('|').map(cell=>cell.trim());const header=cells(rows[0]);html+='<table><thead><tr>'+header.map(cell=>'<th>'+inline(cell)+'</th>').join('')+'</tr></thead><tbody>';for(const row of rows.slice(1)){html+='<tr>'+cells(row).map(cell=>'<td>'+inline(cell)+'</td>').join('')+'</tr>'}html+='</tbody></table>';continue}
+        const unordered=line.match(/^\s*[-*]\s+(.+)$/),ordered=line.match(/^\s*\d+\.\s+(.+)$/);if(unordered||ordered){flushParagraph();const type=ordered?'ol':'ul';if(list!==type){flushList();html+='<'+type+'>';list=type}html+='<li>'+inline((unordered||ordered)[1])+'</li>';continue}
+        paragraph.push(line.trim());
+      }
+      flushParagraph();flushList();flushQuote();return html;
+    }
+    function paint(){const item=state.payload[state.language];const root=document.getElementById('readme');root.innerHTML=render(item.markdown);const badges=root.querySelector('h1')?.nextElementSibling;if(badges)badges.classList.add('badges');root.querySelectorAll('img').forEach(img=>{if(/^https?:/.test(img.getAttribute('src')||'')){const fallback=document.createElement('span');fallback.className='external-image'+(/Star History|contributors/i.test(img.alt)?' chart':'');fallback.textContent=img.alt||'External image';img.replaceWith(fallback)}});const toc=document.getElementById('toc');toc.innerHTML='';root.querySelectorAll('h2,h3').forEach(heading=>{const link=document.createElement('a');link.href='#'+heading.id;link.textContent=(heading.tagName==='H3'?'  ':'')+heading.textContent;toc.appendChild(link)});document.getElementById('status').textContent=item.sha256.slice(0,10);document.documentElement.lang=state.language==='zh'?'zh-CN':'en'}
+    async function load(){const response=await fetch('/static/readme-lab-content.json?ts='+Date.now());state.payload=await response.json();paint()}
+    document.getElementById('language').addEventListener('change',event=>{state.language=event.target.value;paint()});
+    document.querySelectorAll('[data-width]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-width]').forEach(item=>item.classList.remove('active'));button.classList.add('active');document.getElementById('viewport').classList.toggle('narrow',button.dataset.width==='narrow')}));
+    document.getElementById('theme').addEventListener('click',()=>document.body.classList.toggle('dark'));
+    document.getElementById('reload').addEventListener('click',load);
+    load().catch(error=>{document.getElementById('status').textContent='Failed';document.getElementById('readme').textContent=error.message});
+  </script>
+</body>
+</html>

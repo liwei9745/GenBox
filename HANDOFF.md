@@ -3,7 +3,7 @@
 **Updated:** 2026-07-14
 **Branch:** `dev`
 **Local development port:** `8892`
-**Verified test baseline:** `76 passed`
+**Verified test baseline:** `77 passed`
 
 ## Immediate Objective
 
@@ -27,10 +27,18 @@ scheduling, or source-cleanup work during this gate.
   the old updater selects the ZIP first and cannot overwrite its locked process.
 - Legacy Docker users must migrate to the new Compose bundle while preserving
   `.env` and `storage/`; the old in-app update cannot rewrite host Compose config.
-- `python -m pytest -q` passes all 76 tests. JavaScript syntax checks, Python
+- `python -m pytest -q` passes all 77 tests. JavaScript syntax checks, Python
   compilation, and `git diff --check` pass.
 - README screenshots were replaced with four current v2.5.0 captures from an
   isolated client. Dashboard device values are labeled synthetic demo data.
+- The structured Chinese and English README content has been restored without
+  removing the v2.5.0 release guidance. Acknowledged projects/authors, upstream
+  contributors, community links, configuration, troubleshooting, repository
+  structure, and the public Star History chart are present again.
+- `http://127.0.0.1:8892/static/readme-lab.html` renders the actual README source
+  in Chinese/English, desktop/narrow, and light/dark modes. Local cached public
+  contributor and Star History assets keep the lab compatible with the global
+  CSP; source hashes and asset mappings are covered by tests.
 - GitHub Release `v2.5.0` is public at tag commit `a675f8c`. Desktop Actions run
   `29308338415` and Docker tag run `29308338400` completed successfully.
 - All seven downloadable payloads match the published `SHA256SUMS.txt`; the
@@ -42,7 +50,9 @@ scheduling, or source-cleanup work during this gate.
 1. Install the Windows ZIP in a clean directory and verify first-run setup.
 2. Deploy the public Docker Compose bundle with new credentials and empty storage.
 3. Verify the documented one-time manual upgrade from v2.4.1 or earlier.
-4. Confirm README screenshots and quick-start links render correctly on GitHub.
+4. After the README restoration is committed and pushed, confirm its screenshots,
+   acknowledgements, contributor wall, Star History, and quick-start links render
+   correctly on GitHub.
 5. Record results before selecting the next pre-Push phase.
 
 ## Safety And Scope
@@ -60,6 +70,7 @@ node --check static/js/app-all.js
 node --check static/js/extensions.js
 node --check static/js/sync.js
 python -m pytest -q
+python scripts/build_readme_lab.py
 python scripts/smoke_client.py --executable dist/GenBox.exe
 ```
 

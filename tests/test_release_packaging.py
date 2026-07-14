@@ -1,6 +1,8 @@
 import subprocess
 import sys
 import zipfile
+import hashlib
+import json
 from pathlib import Path
 
 from genbox_version import __version__
@@ -63,6 +65,23 @@ def test_public_documentation_uses_current_sanitized_screenshots():
         assert f"screenshots/sanitized/{filename}" in readmes
         assert (ROOT / "screenshots" / "sanitized" / filename).is_file()
     assert "02-generate-t2i.png" not in readmes
+
+
+def test_readme_lab_content_matches_source_readmes():
+    payload = json.loads((ROOT / "static" / "readme-lab-content.json").read_text(encoding="utf-8"))
+    expected_assets = {
+        "upstream-contributors.svg",
+        "star-history.svg",
+    }
+
+    for language, filename in (("zh", "README.md"), ("en", "README_EN.md")):
+        source = (ROOT / filename).read_text(encoding="utf-8")
+        assert payload[language]["sha256"] == hashlib.sha256(source.encode("utf-8")).hexdigest()
+        assert "Star History" in payload[language]["markdown"]
+        assert "readme-assets" in payload[language]["markdown"]
+        for asset in expected_assets:
+            assert f"/static/readme-assets/{asset}" in payload[language]["markdown"]
+            assert (ROOT / "static" / "readme-assets" / asset).is_file()
 
 
 def test_docker_bundle_contains_only_public_deployment_files(tmp_path):

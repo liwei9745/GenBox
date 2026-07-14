@@ -522,23 +522,46 @@
   `static/onboarding-lab.html`, with no horizontal overflow and no regression
   to Provider-name onboarding content.
 
+## README Restoration And Laboratory
+
+- `VERIFIED IN CODE/UI` On 2026-07-14, the Chinese and English README files
+  regained their structured navigation, first-run guidance, troubleshooting,
+  capability/configuration sections, technology and repository overview,
+  acknowledged projects and authors, upstream contributor wall, community
+  links, and Star History while retaining the v2.5.0 release scope and explicit
+  sender-Push limitations.
+- `VERIFIED IN CODE/TESTS` `scripts/build_readme_lab.py` now builds deterministic
+  source-hashed Chinese and English preview data and copies sanitized product
+  screenshots plus public cached contributor and Star History assets into
+  `static/readme-assets/`. Tests fail when README source and preview data diverge
+  or the restored visual assets disappear.
+- `VERIFIED LIVE` `http://127.0.0.1:8892/static/readme-lab.html` passed Chinese
+  and English rendering, desktop/narrow controls, light/dark themes, table and
+  image rendering, and horizontal-overflow checks. The Chinese title was
+  shortened to avoid an orphaned final character at narrow widths.
+- `VERIFIED IN CODE/TESTS` `python -m pytest -q` completed with 77 passing tests;
+  `python -m py_compile scripts/build_readme_lab.py` and `git diff --check` pass.
+- `UNVERIFIED PUBLIC` The restored README has not yet been committed and pushed,
+  so its final GitHub rendering remains part of the post-release documentation
+  gate.
+
 ## Next Tasks
 
-1. Gather owner review on the local `8892` implementation of the heading and
-   onboarding refinement before starting another UI pass.
-2. Keep subsequent work in the pre-Push UI scope unless the project owner
+1. Gather owner review on the local README laboratory, then commit and push the
+   accepted restoration before checking the public GitHub rendering.
+2. Continue the v2.5.0 clean-install and upgrade-path acceptance gate.
+3. Keep subsequent work in the pre-Push UI scope unless the project owner
    explicitly authorizes entry into chatgpt2api sender Push development.
-3. Preserve the local accepted baseline: `node --check static/js/i18n.js`,
+4. Preserve the local accepted baseline: `node --check static/js/i18n.js`,
    `node --check static/js/app-all.js`, `python -m pytest -q`, and bilingual
-   browser acceptance on `1280x720`, `1033x1074`, and `390x844`.
+   browser acceptance for both the application and README laboratory.
 
 ## Resume Instructions
 
 Phase 1 remains accepted. Resume with `AGENTS.md`, `HANDOFF.md`, this file, and
-`docs/ONBOARDING-UI-CONTRACT.md`. The heading/onboarding refinement is now
-implemented and locally accepted on port `8892`; the next session should begin
-from owner review or follow-up polish, not from the old Provider-strip plan.
-Keep all work local on port `8892`, preserve production `chatgpt2api-warp`, and
-do not enter the sender Push phase unless explicitly redirected. The current
-verified baseline is 66 passing tests plus bilingual browser acceptance on
-2026-07-14.
+`docs/ONBOARDING-UI-CONTRACT.md`. The heading/onboarding refinement and README
+restoration are locally accepted on port `8892`; begin from owner review of
+`static/readme-lab.html`, then complete the public GitHub rendering check and
+post-release gate. Preserve production `chatgpt2api-warp`, leave
+`.planning/STATE.md` untouched, and do not enter sender Push unless explicitly
+redirected. The current verified baseline is 77 passing tests.
