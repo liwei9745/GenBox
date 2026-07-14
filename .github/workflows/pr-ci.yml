@@ -1,0 +1,53 @@
+name: Master PR Quality Gate
+
+on:
+  pull_request:
+    branches: ["master"]
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  quality:
+    name: Test pull request
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Validate JavaScript
+        run: |
+          node --check static/js/i18n.js
+          node --check static/js/app-all.js
+          node --check static/js/extensions.js
+          node --check static/js/sync.js
+
+      - name: Build README laboratory
+        run: python scripts/build_readme_lab.py
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Check whitespace errors
+        run: git diff --check
+
+      - name: Check generated artifact freshness
+        run: git diff --exit-code
