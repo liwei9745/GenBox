@@ -1,225 +1,113 @@
-# GenBox - All-in-One AI Creation Platform
+# GenBox - Local-First AI Creation and Media Workspace
 
-> A desktop-grade AI creation tool integrating text-to-image, text-to-video, image upscaling, and media library management.
-> Supports GPT Image / Gemini / Qwen / Agnes and more — ready to use out of the box.
+[![CI](https://github.com/liwei9745/GenBox/actions/workflows/build.yml/badge.svg)](https://github.com/liwei9745/GenBox/actions/workflows/build.yml)
+[![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue?logo=docker)](https://github.com/liwei9745/GenBox/pkgs/container/genbox)
+[![Python](https://img.shields.io/badge/Python-3.12-yellow?logo=python)](https://www.python.org/)
+[![License](https://img.shields.io/github/license/liwei9745/GenBox)](LICENSE)
 
-> 💡 Like it? Give us a [Star](https://github.com/liwei9745/GenBox/stargazer) to show your support!
+GenBox combines image generation, video generation, prompt assistance, media management, history, and remote-service operations in one local web workspace. It can run as a desktop client or on a NAS, VPS, or Docker host.
 
-![Dashboard](screenshots/sanitized/01-dashboard.png)
+> [!IMPORTANT]
+> **v2.5.0 is a major experience and infrastructure update.**
+> It adds the Extension Center, guided chatgpt2api deployment and private networking, bilingual UI, four-stage onboarding, shared page headings, an encrypted credential vault, and a verified release pipeline. GenBox includes remote Pull and an authenticated idempotent Push receiver foundation. Sender-side automatic Push, batch and scheduled transfer, and verified cleanup are still future phases.
 
----
+**Current release candidate: v2.5.0** · [Release notes](release-notes-v2.5.0.md) · [Changelog](CHANGELOG.md) · [Releases](https://github.com/liwei9745/GenBox/releases)
 
-## Features
+![GenBox Dashboard](screenshots/sanitized/01-dashboard.png)
 
-### Multi-Model Aggregation
-Connect OpenAI, Gemini, Qwen, Agnes and more — manage all providers from a single interface.
+> Hostname, capacity, and runtime values in the Dashboard screenshot are explicitly labeled demo data and do not identify a real device.
 
-### Parallel Generation + Real-time Preview
-Generate images from multiple models simultaneously, with real-time grouped results and automatic retry on failure.
+## Highlights
 
-### Image Upscaling
-Built-in Lanczos3 super-resolution algorithm — upscale to 4K with one click after generation.
+![GenBox Extension Center](screenshots/sanitized/03-extension-center.png)
 
-### Video Generation
-Supports text-to-video, image-to-video, keyframe interpolation, and multiple duration options.
+- Single- and multi-model workspaces for image and video generation.
+- Text-to-image, image-to-image, variation, upscaling, text-to-video, image-to-video, and keyframe flows.
+- Searchable media library, history, batch actions, and prompt reuse.
+- Guided isolated chatgpt2api deployment, private-network preparation, and managed instance delivery.
+- Remote Pull into the local media library and a secure GenBox Push receiver foundation.
+- Chinese and English UI, coordinated themes, shared page headings, and beginner onboarding.
+- Windows, macOS, Linux, and Docker release artifacts with startup smoke tests and SHA-256 checksums.
 
-### Frosted Glass UI
-Sci-fi frosted glass design with 8 themes — switch instantly.
+![GenBox multi-model image workspace](screenshots/sanitized/02-generate-workspace.png)
 
-### Media Library
-Unified management for local images and videos with batch download, delete, and rename.
-
----
-
-## Screenshots
-
-### Generation Workspace
-
-Three-column layout: Model Selection | Real-time Preview | Prompt Input
-
-![Generate Page](screenshots/sanitized/02-generate-t2i.png)
-
-<details>
-<summary>More generation modes</summary>
-
-| Image-to-Image | Variation |
-|----------------|-----------|
-| ![Image-to-Image](screenshots/sanitized/03-generate-i2i.png) | ![Variation](screenshots/sanitized/04-generate-variation.png) |
-
-</details>
-
----
-
-### Video Generation
-
-Supports text-to-video, image-to-video, and keyframe modes
-
-![Video Page](screenshots/sanitized/05-video-t2v.png)
-
-<details>
-<summary>More video modes</summary>
-
-| Image-to-Video | Keyframes | Advanced Options |
-|----------------|-----------|------------------|
-| ![Image-to-Video](screenshots/sanitized/06-video-i2v.png) | ![Keyframes](screenshots/sanitized/07-video-keyframes.png) | ![Advanced](screenshots/sanitized/08-video-advanced.png) |
-
-</details>
-
----
-
-### Media Library
-
-Unified management for locally generated images and videos
-
-![Media Library](screenshots/sanitized/09-gallery-images.png)
-
----
-
-### Settings
-
-| Provider Management | Theme Switching | Log Viewer |
-|---------------------|-----------------|------------|
-| ![Provider](screenshots/sanitized/12-modal-provider.png) | ![Theme](screenshots/sanitized/13-modal-theme.png) | ![Log](screenshots/sanitized/14-modal-log.png) |
-
----
+![GenBox beginner onboarding](screenshots/sanitized/04-onboarding.png)
 
 ## Quick Start
 
-### Requirements
+### Desktop client
 
-- Python 3.10+ (local deployment)
-- Or Docker (container deployment)
-- Windows / macOS / Linux
+Download the platform archive from [Releases](https://github.com/liwei9745/GenBox/releases/latest). Python is not required.
 
-### Installation
+| Platform | Archive | Start |
+|---|---|---|
+| Windows | `GenBox-Windows.zip` | Double-click `GenBox.exe` |
+| macOS | `GenBox-macOS.zip` | `chmod +x GenBox-macOS && xattr -c GenBox-macOS && ./GenBox-macOS` |
+| Linux | `GenBox-Linux-x64.zip` | `chmod +x GenBox-Linux-x64 && ./GenBox-Linux-x64` |
 
-**Step 1: Clone the repo**
+Open `http://localhost:8891` if the browser does not open automatically. Store the first-run administrator key in a password manager.
 
-```bash
-git clone -b feat/glass-ui-redesign https://github.com/liwei9745/GenBox.git
-cd GenBox
-```
+### Docker Compose
 
-**Step 2: Install dependencies**
-
-```bash
-pip install -r requirements.txt
-```
-
-**Step 3: Configure API**
-
-Option A: Web interface (recommended)
-
-Start the server, then open Provider Management in the browser to fill in API URLs and keys.
-
-Option B: Environment variables
+Download `GenBox-Docker-Compose-v2.5.0.zip`, extract it, then run:
 
 ```bash
 cp .env.example .env
-# Edit .env to add your API keys
+docker compose pull
+docker compose up -d
 ```
 
-Both methods sync automatically — use either one.
+Read the first administrator key with `docker compose logs genbox`; it is persisted to the mounted `.env`. Runtime data stays in `./storage`. Set `ALLOWED_ORIGINS` to the real HTTPS or private-network URL before remote access.
 
-**Step 4: Start**
+### Source
 
 ```bash
+git clone https://github.com/liwei9745/GenBox.git
+cd GenBox
+python -m venv .venv
+python -m pip install -r requirements.txt
 python main.py
 ```
 
-Browser opens automatically at `http://localhost:8891`
+Source development uses port `8892` from `.env.example`; release clients and Docker use `8891`.
 
----
+## chatgpt2api and GenBox
 
-### Docker Deployment
+Think of chatgpt2api as a creation station on a remote server and GenBox as your own media library.
 
-No Python or dependencies needed — one command to start:
+- chatgpt2api exposes implemented ChatGPT web capabilities through compatible APIs and manages accounts, proxies, diagnostics, and remote images.
+- GenBox provides creation workflows, long-term media organization, history, prompt reuse, deployment, and connection management.
+- Today GenBox can guide deployment, establish a private link, and Pull remote images.
+- Automatic sender Push, batch and scheduled transfer, and receipt-gated cleanup remain future work.
 
-**Option A: docker-compose (recommended)**
+chatgpt2api is a third-party reverse-engineering research project and can put accounts at risk. Do not test with important or high-value accounts.
+
+## Security Boundaries
+
+- Never commit `.env`, `storage/`, vaults, logs, user media, or real credentials.
+- Existing production chatgpt2api instances stay read-only during development.
+- GenBox administrator credentials and per-source Push keys are separate.
+- Source media is retained by default; cleanup requires an authenticated matching receipt and explicit opt-in.
+- The browser submits structured deployment intent, never arbitrary remote shell commands.
+
+## Documentation
+
+- [Product](docs/PRODUCT.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Decisions](docs/DECISIONS.md)
+- [Current status](docs/STATUS.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Documentation maintenance map](docs/DOCUMENTATION-MAP.md)
+
+## Development
 
 ```bash
-git clone -b feat/glass-ui-redesign https://github.com/liwei9745/GenBox.git
-cd GenBox
-cp .env.example .env
-# Edit .env to add API keys
-docker-compose up -d
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
 ```
 
-**Option B: Direct run**
-
-```bash
-docker build -t genbox .
-docker run -d -p 8891:8891 \
-  -v ./storage:/app/storage \
-  -v ./.env:/app/.env \
-  genbox
-```
-
-Visit `http://localhost:8891`
-
----
-
-## Usage
-
-1. On first run, an admin key is generated automatically
-2. Click "Provider Management" in the bottom Dock to add your AI models
-3. Select model → Enter prompt → Click "Generate"
-4. Generated images are managed in the Media Library
-
----
-
-## Supported Model Protocols
-
-| Protocol | Supported Models |
-|----------|------------------|
-| OpenAI Compatible | GPT Image 2, DALL-E 3, Flux, SD-XL, SD-3, etc. |
-| Gemini | gemini-2.0-flash, gemini-3.1-flash, etc. |
-| Qwen | qwen3.6-Plus, qwen3.5-Plus, Wanx series |
-| Agnes | agnes-image-2.0-flash (image), agnes-video (video) |
-
----
-
-## Configuration
-
-### API URL Configuration
-
-In the Web interface's Provider Management, you can:
-
-- Configure multiple endpoints per model (automatic round-robin failover)
-- Configure multiple API Keys per endpoint (automatic round-robin rate-limit handling)
-- Configure HTTP/SOCKS5 proxy
-
-### Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `GPT_IMAGE_API_KEY` | OpenAI / GPT Image API Key |
-| `GPT_IMAGE_BASE_URL` | API URL, default `https://api.openai.com/v1` |
-| `GEMINI_API_KEY` | Google Gemini API Key |
-| `QWEN_API_KEY` | Qwen (通义千问) API Key |
-| `AGNES_API_KEY` | Agnes AI API Key |
-| `LLM_API_KEY` | LLM for prompt optimization (optional) |
-| `APP_MODE` | `dev` (no auth) or `prod` (admin key required) |
-
----
-
-## Tech Stack
-
-- Backend: Python + FastAPI
-- Frontend: Vanilla HTML/CSS/JS (Frosted Glass UI)
-- AI Interface: OpenAI-compatible protocol
-- Image Processing: Pillow (Lanczos3 upscaling)
-
----
-
-## Community
-
-QQ Group: 1005859624
-
-Welcome to share usage tips and feedback issues!
-
----
+Build dependencies live in `requirements-build.txt`. The release workflow builds all three desktop clients, starts each packaged application, creates the Docker Compose bundle, and publishes SHA-256 checksums.
 
 ## License
 
-MIT
+[MIT](LICENSE)

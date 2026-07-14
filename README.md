@@ -1,395 +1,168 @@
-# GenBox - 一站式 AI 创作平台
+# GenBox - 本地优先的 AI 创作与媒体管理工作台
 
-[![CI](https://github.com/liwei9745/GenBox/actions/workflows/build.yml/badge.svg)](https://github.com/liwei9745/GenBox/actions)
-[![GitHub Stars](https://img.shields.io/github/stars/liwei9745/GenBox?style=flat&logo=github)](https://github.com/liwei9745/GenBox/stargazers)
-[![License](https://img.shields.io/github/license/liwei9745/GenBox)](https://github.com/liwei9745/GenBox/blob/master/LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/liwei9745/GenBox/pulls)
+[![CI](https://github.com/liwei9745/GenBox/actions/workflows/build.yml/badge.svg)](https://github.com/liwei9745/GenBox/actions/workflows/build.yml)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue?logo=docker)](https://github.com/liwei9745/GenBox/pkgs/container/genbox)
-[![Python](https://img.shields.io/badge/Python-3.10+-yellow?logo=python)](https://www.python.org/)
-[![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/liwei9745/GenBox)
+[![Python](https://img.shields.io/badge/Python-3.12-yellow?logo=python)](https://www.python.org/)
+[![License](https://img.shields.io/github/license/liwei9745/GenBox)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/liwei9745/GenBox/pulls)
 
-**当前稳定版本：v2.4.1** | [发布说明](https://github.com/liwei9745/GenBox/releases/tag/v2.4.1) | [全部版本](https://github.com/liwei9745/GenBox/releases)
+GenBox 把图片生成、视频生成、提示词辅助、媒体库、历史记录和远程服务管理放在一个本地 Web 工作台中。它既可以作为桌面客户端运行，也可以部署在 NAS、VPS 或 Docker 中。
 
-> 集成文生图、文生视频、图片超分、媒体库管理的桌面级 AI 创作工具
-> 支持 GPT Image / Gemini / Qwen / Agnes 等主流模型，开箱即用
+> [!IMPORTANT]
+> **v2.5.0 是一次重大体验与基础设施更新。**
+> 本次新增扩展中心、chatgpt2api 引导部署与私网连接、双语界面、四段式新手引导、统一页面标题、加密凭证库和新的发布构建链路。GenBox 已具备远程 Pull 同步和认证幂等的 Push 接收端基础；chatgpt2api 发送端自动 Push、批量/定时搬运与确认后清理仍属于后续阶段，本文不会把它们描述为已完成。
 
-> 💡 觉得不错？点个 [Star](https://github.com/liwei9745/GenBox/stargazer) 鼓励一下吧！
+**当前发布候选：v2.5.0** · [版本说明](release-notes-v2.5.0-zh.md) · [更新历史](CHANGELOG.md) · [全部 Releases](https://github.com/liwei9745/GenBox/releases)
 
-> 📢 **QQ 交流群**：[点击加入 gemini/gpt-2api 交流群](http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=cAD_FiBuEpMzJJCoPTCjK_S9JITQgRw4&authKey=4x7%2Bkfemg5zoik3%2Bna3Biag6CBTkQ88VqDP0gmQTswH9o1OsWL6B%2BguJpfYKzASS&noverify=0&group_code=1005859624)（入群回答：来自猴哥电话GenBox仓库）
+![GenBox 系统看板](screenshots/sanitized/01-dashboard.png)
 
-![系统看板](screenshots/sanitized/01-dashboard.png)
+> 看板截图中的主机名、容量和运行统计为明确标注的演示数据，不对应真实设备。
 
----
+## 本次重大更新
+
+### 扩展中心与 chatgpt2api
+
+![GenBox 扩展中心](screenshots/sanitized/03-extension-center.png)
+
+- 图形化完成 VPS 目标保存、SSH 主机指纹确认、只读环境发现、部署计划和隔离实例部署。
+- 提供 Tailscale 私网准备、连通性验证、服务地址交付和已部署实例管理。
+- 支持从兼容 chatgpt2api 实例主动 Pull 图片到本地媒体库。
+- GenBox Push 接收端已实现来源认证、SHA-256、幂等与去重；发送端工作仍未端到端完成。
+- 管理密钥默认仅本次显示，也可以由用户明确选择保存在本机加密凭证库中。
+
+### 创作工作台与媒体管理
+
+- 图片和视频支持单模型工作台与多模型并排对比。
+- 图片支持文生图、图生图、变体、超分辨率和多图结果管理。
+- 视频支持文生视频、图生视频与关键帧流程。
+- 媒体库支持筛选、排序、搜索、批量操作、历史回看和提示词复用。
+- 提示词辅助可把自然语言意图整理为更适合模型的提示词。
+
+### 双语、主题与新手引导
+
+![GenBox 新手引导](screenshots/sanitized/04-onboarding.png)
+
+- 中文和 English 使用固定翻译键，模型名、用户提示词、密钥和原始日志保持原样。
+- Dashboard、Images、Video、Media Library、History 和 Extensions 使用统一三行标题体系。
+- 新手引导按“首次创作 → GenBox 能力 → chatgpt2api 介绍 → 为什么连接 GenBox”组织。
+- 10 套协调主题、统一线性图标、可折叠创作工具栏和自动隐藏 Dock。
+
+### 发布与安全
+
+- Windows、macOS、Linux 客户端使用固定构建依赖，并在 GitHub Actions 中实际启动冒烟验证。
+- Docker Compose 发布包默认拉取 GHCR 镜像，解压、配置 `.env` 后即可启动。
+- 每次 Release 附带 SHA-256 校验文件。
+- 敏感运行数据、真实环境地址、凭证、原始日志和未脱敏截图不进入发布包。
 
 ## 快速开始
 
-### 🎯 下载客户端（推荐）
+### 桌面客户端
 
-> ✅ **无需安装 Python、无需配置环境，下载即用**
+前往 [Releases](https://github.com/liwei9745/GenBox/releases/latest) 下载对应平台压缩包。客户端已经包含 Python 运行环境。
 
-前往 [Releases 页面](https://github.com/liwei9745/GenBox/releases/latest) 下载：
+| 平台 | 发布包 | 启动方式 |
+|---|---|---|
+| Windows | `GenBox-Windows.zip` | 解压后双击 `GenBox.exe` |
+| macOS | `GenBox-macOS.zip` | `chmod +x GenBox-macOS && xattr -c GenBox-macOS && ./GenBox-macOS` |
+| Linux | `GenBox-Linux-x64.zip` | `chmod +x GenBox-Linux-x64 && ./GenBox-Linux-x64` |
 
-| 平台 | 文件 | 用途 | 运行方式 |
-|------|------|------|----------|
-| **Windows** | `GenBox.exe` | 本地使用 | 双击运行 |
-| **macOS** | `GenBox-macOS` | 本地使用 | 终端运行 `chmod +x GenBox-macOS && ./GenBox-macOS` |
-| **Linux** | `GenBox-Linux` | VPS 部署 | 终端运行 `chmod +x GenBox-Linux && ./GenBox-Linux` |
+浏览器未自动打开时，访问 `http://localhost:8891`。首次启动会引导你选择运行模式并生成管理员密钥，请把密钥保存在密码管理器中。
 
-#### Windows 详细步骤
+### Docker Compose
 
-1. 点击上方链接，下载 `GenBox.exe`
-2. 双击运行（首次可能需要在 Windows Defender 中点击"仍要运行"）
-3. 浏览器自动打开 `http://localhost:8891`
-4. 按照界面引导选择部署模式即可
-
-#### macOS 注意事项
-
-首次运行可能提示"无法验证开发者"：
-
-1. 打开 **系统设置 → 隐私与安全性**
-2. 在「安全性」部分点击 **仍要打开**
-
-#### Linux (VPS) 注意事项
+下载 `GenBox-Docker-Compose-v2.5.0.zip`，解压后：
 
 ```bash
-chmod +x GenBox-Linux-x64
-./GenBox-Linux-x64
-```
-
-首次运行会引导你选择部署模式并自动生成管理员密钥。
-
----
-
-### 🔧 故障排除
-
-#### Windows 双击闪退
-
-如果双击 `GenBox.exe` 后窗口一闪而过，请按以下步骤排查：
-
-**方法一：使用启动脚本**
-
-双击 `start.bat` 或右键 `start.ps1` → 使用 PowerShell 运行，会自动检查环境并显示错误信息。
-
-**方法二：手动排查**
-
-1. **以管理员身份运行 CMD**，然后执行：
-   ```cmd
-   cd GenBox所在目录
-   GenBox.exe
-   ```
-
-2. **检查常见问题**：
-   - 端口被占用：修改 `.env` 中的 `PORT` 环境变量
-   - 缺少 VC++ 运行时：下载安装 [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe)
-   - 防火墙拦截：允许程序通过防火墙
-
-3. **运行环境检查脚本**：
-   ```cmd
-   python check_env.py
-   ```
-
-#### macOS 无法打开
-
-1. 打开 **系统设置 → 隐私与安全性**
-2. 在「安全性」部分点击 **仍要打开**
-
-#### Linux 权限不足
-
-```bash
-chmod +x GenBox-Linux-x64
-./GenBox-Linux-x64
-```
-
----
-
-### 📦 首次启动向导
-
-无论使用哪个平台，首次启动都会显示配置向导：
-
-```
-请选择部署方式：
-  [1] 本地使用    - 无需认证，打开即用（适合个人电脑）
-  [2] VPS 部署    - 需要密钥认证，可远程访问（适合服务器）
-  [3] Docker 部署 - 使用 .env.example 配置（适合生产环境）
-```
-
-- 选择 **1**（本地）：直接使用，无需任何配置
-- 选择 **2**（VPS）：会自动生成管理密钥，并引导配置网络
-- 选择 **3**（Docker）：显示 Docker 部署指引
-
----
-
-### 💻 源码部署
-
-<details>
-<summary>点击展开源码部署步骤</summary>
-
-#### 环境要求
-
-| 依赖 | 说明 |
-|------|------|
-| Python 3.10+ | 必需 |
-| pip | Python 包管理器 |
-| ffmpeg | 视频生成必需（`sudo apt install ffmpeg` 或 `brew install ffmpeg`） |
-| 现代浏览器 | Chrome / Firefox / Safari / Edge |
-
-#### 安装步骤
-
-**第一步：克隆项目**
-
-```bash
-git clone -b feat/quick-action-buttons https://github.com/liwei9745/GenBox.git
-cd GenBox
-```
-
-**第二步：安装依赖**
-
-```bash
-pip install -r requirements.txt
-```
-
-**第三步：启动（首次运行会引导配置）**
-
-```bash
-python main.py
-```
-
-首次启动时会显示配置向导：
-
-```
-请选择部署方式：
-  [1] 本地使用    - 无需认证，打开即用
-  [2] VPS 部署    - 需要密钥认证，可远程访问
-  [3] Docker 部署 - 使用 .env.example 配置
-```
-
-浏览器自动打开 `http://localhost:8891`
-
-</details>
-
----
-
-### 🐳 Docker 部署
-
-<details>
-<summary>点击展开 Docker 部署步骤</summary>
-
-**步骤 1：配置环境**
-
-```bash
-git clone -b feat/quick-action-buttons https://github.com/liwei9745/GenBox.git
-cd GenBox
 cp .env.example .env
+docker compose pull
+docker compose up -d
 ```
 
-**步骤 2：编辑 `.env` 文件**
+默认访问 `http://localhost:8891`。首次管理员密钥可通过 `docker compose logs genbox` 查看一次，并会写回挂载的 `.env`；运行数据保存在当前目录的 `storage/`。远程访问前必须把 `.env` 中的 `ALLOWED_ORIGINS` 改为实际 HTTPS 或私网地址。
 
-> ⚠️ **必填项**：`ALLOWED_ORIGINS` 必须设置为你的服务器 IP 或域名
+### 源码运行
 
 ```bash
-# 最小配置示例（VPS 部署）
-APP_MODE=prod
-ALLOWED_ORIGINS=http://你的服务器IP:8891
-GPT_IMAGE_API_KEY=sk-xxx
-GPT_IMAGE_BASE_URL=https://api.openai.com/v1
+git clone https://github.com/liwei9745/GenBox.git
+cd GenBox
+python -m venv .venv
+
+# Windows
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python main.py
+
+# macOS / Linux
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python main.py
 ```
 
-**步骤 3：启动容器**
+源码开发默认使用 `.env.example` 中的 `8892`；发布客户端和 Docker 默认使用 `8891`。
+
+## 使用路径
+
+1. 在“模型设置”中添加至少一个图片或视频 Provider。
+2. 在图片或视频工作台输入提示词并生成内容。
+3. 在媒体库和历史记录中筛选、查看和复用结果。
+4. 需要远程服务时，再进入“扩展中心”配置独立实例与私网连接。
+
+![GenBox 多模型图片工作台](screenshots/sanitized/02-generate-workspace.png)
+
+## chatgpt2api 与 GenBox 的关系
+
+可以把 chatgpt2api 理解为放在远程服务器上的创作站，把 GenBox 理解为自己的作品仓库：
+
+- chatgpt2api 负责把已经实现的 ChatGPT 官网能力整理为兼容 API，并管理账号、代理、调用日志和远程图片。
+- GenBox 负责本地创作入口、长期媒体保存、分类检索、历史与提示词复用，以及服务部署和连接管理。
+- 当前可以由 GenBox 引导部署、建立私网并主动 Pull 图片。
+- 后续自动 Push、批量/定时同步和安全清理完成后，远程作品搬运会进一步自动化。
+
+chatgpt2api 属于第三方逆向研究项目，存在账号受限风险。请阅读其项目声明，不要使用重要或高价值账号测试。
+
+## 安全边界
+
+- 不要把 `.env`、`storage/`、凭证库、日志、用户媒体或真实配置提交到 Git。
+- 生产 chatgpt2api 实例在开发期间只读；新功能必须使用隔离开发实例。
+- GenBox 管理员密钥与每个 Push 来源密钥相互独立。
+- 源图片默认保留；只有匹配 SHA-256 的认证成功回执和明确用户选择才能允许后续清理。
+- 浏览器不会提交任意远程 shell 命令，部署命令由后端固定适配器生成。
+
+## 文档入口
+
+| 文档 | 用途 | 更新方式 |
+|---|---|---|
+| [产品定义](docs/PRODUCT.md) | 产品目标、用户旅程和范围 | 稳定，产品方向变化时更新 |
+| [架构](docs/ARCHITECTURE.md) | 仓库边界、部署与同步架构 | 稳定，架构变化时更新 |
+| [决策记录](docs/DECISIONS.md) | 已接受的安全与技术决策 | 追加 ADR，不覆盖历史 |
+| [当前状态](docs/STATUS.md) | 已验证事实、阻塞项与下一步 | 随开发持续更新 |
+| [路线图](docs/ROADMAP.md) | 阶段、交付物和验收标准 | 阶段状态变化时更新 |
+| [文档维护规则](docs/DOCUMENTATION-MAP.md) | 哪些文档置顶、冻结或滚动维护 | 文档体系变化时更新 |
+
+## 开发与测试
 
 ```bash
-docker-compose up -d
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+node --check static/js/i18n.js
+node --check static/js/app-all.js
 ```
 
-**步骤 4：访问**
+桌面客户端构建依赖见 `requirements-build.txt`。发布工作流会构建三平台客户端、启动实际 HTTP 冒烟检查、生成 Docker Compose 包并输出 `SHA256SUMS.txt`。
 
-- 本机：`http://localhost:8891`
-- VPS：`http://你的服务器IP:8891`
+## 项目状态
 
-首次访问会显示管理密钥，请立即保存！
+- 已完成：本地创作与媒体管理、远程 Pull、扩展中心基础、隔离部署、私网流程、Push 接收端基础、双语与新手引导。
+- 尚未完成：chatgpt2api 发送端单图 Push、批量和定时增量 Push、确认后源图清理、干净仓库重新部署验收与上游交付。
 
-</details>
+详细证据和限制请查看 [docs/STATUS.md](docs/STATUS.md)。
 
----
+## 社区与致谢
 
-## 使用说明
+- [GitHub Issues](https://github.com/liwei9745/GenBox/issues)
+- [QQ 交流群](https://qm.qq.com/q/yegwCqJisS)
+- [yukkcat/chatgpt2api](https://github.com/yukkcat/chatgpt2api)
 
-1. 首次使用会自动生成管理员密钥
-2. 在底部 Dock 栏点击「Provider 管理」添加你的 AI 模型
-3. 选择模型 → 输入提示词 → 点击「生成图片」
-4. 生成的图片在媒体库中管理
-
----
-
-## 主要特性
-
-### 多模型聚合
-同时接入 OpenAI、Gemini、Qwen、Agnes 等 AI 模型，一个界面管理所有 Provider
-
-### 并行生成 + 实时预览
-多模型同时出图，结果实时分组展示，失败自动重试
-
-### 图片超分放大
-内置 Lanczos3 超分辨率算法，生成后一键放大到 4K 分辨率
-
-### 视频生成
-支持文生视频、图生视频、关键帧插值，多种时长可选
-
-### 毛玻璃 UI
-磨砂玻璃科幻风格，8 种主题一键切换
-
-### 媒体库管理
-本地图片/视频统一管理，支持批量下载、删除、重命名
-
----
-
-## 页面展示
-
-### 生图工作台
-
-三栏布局：模型选择 | 实时预览 | 提示词输入
-
-![生图页面](screenshots/sanitized/02-generate-t2i.png)
-
-<details>
-<summary>查看更多生图模式</summary>
-
-| 图生图 | 变形 |
-|--------|------|
-| ![图生图](screenshots/sanitized/03-generate-i2i.png) | ![变形](screenshots/sanitized/04-generate-variation.png) |
-
-</details>
-
----
-
-### 视频生成
-
-支持文生视频、图生视频、关键帧模式
-
-![视频页面](screenshots/sanitized/05-video-t2v.png)
-
-<details>
-<summary>查看更多视频模式</summary>
-
-| 图生视频 | 关键帧 | 高级选项 |
-|----------|--------|----------|
-| ![图生视频](screenshots/sanitized/06-video-i2v.png) | ![关键帧](screenshots/sanitized/07-video-keyframes.png) | ![高级选项](screenshots/sanitized/08-video-advanced.png) |
-
-</details>
-
----
-
-### 媒体库
-
-本地生成的图片和视频统一管理
-
-![媒体库](screenshots/sanitized/09-gallery-images.png)
-
-### 云端同步（chatgpt2api）
-
-将远程 chatgpt2api 部署的图片同步到本地媒体库，免去手动搬运：
-
-- 在「系统设置 → 云端同步」添加远程部署（地址 + API Key），支持连接测试
-- 按日期范围筛选远端图片，自动按内容哈希去重，避免重复导入
-- 支持按日期 / 体积 / 比例批量选择要同步的图片
-- 同步后的图片自动标记「☁ 云端」来源标签，并回填原始提示词（从远端调用日志关联），可直接在灯箱中复用提示词
-- 缩略图经服务端同源代理加载，规避浏览器跨域限制
-
----
-
-### 系统设置
-
-| Provider 管理 | 主题切换 | 日志查看 |
-|---------------|----------|----------|
-| ![Provider](screenshots/sanitized/12-modal-provider.png) | ![主题](screenshots/sanitized/13-modal-theme.png) | ![日志](screenshots/sanitized/14-modal-log.png) |
-
----
-
-## 支持的模型协议
-
-| 协议 | 支持的模型 |
-|------|-----------|
-| OpenAI 兼容 | GPT Image 2、DALL-E 3、Flux、SD-XL、SD-3 等 |
-| Gemini | gemini-2.0-flash、gemini-3.1-flash 等 |
-| Qwen | qwen3.6-Plus、qwen3.5-Plus、Wanx 系列 |
-| Agnes | agnes-image-2.0-flash（图）、agnes-video（视频） |
-
----
-
-## 配置说明
-
-### API 地址配置
-
-在 Web 界面的 Provider 管理中，你可以：
-
-- 为每个模型配置多个端点（自动轮询容灾）
-- 为每个端点配置多个 API Key（自动轮询防限流）
-- 配置 HTTP/SOCKS5 代理
-
-### 环境变量
-
-| 变量名 | 说明 |
-|--------|------|
-| `GPT_IMAGE_API_KEY` | OpenAI / GPT Image API Key |
-| `GPT_IMAGE_BASE_URL` | API 地址，默认 `https://api.openai.com/v1` |
-| `GEMINI_API_KEY` | Google Gemini API Key |
-| `QWEN_API_KEY` | 通义千问 API Key |
-| `AGNES_API_KEY` | Agnes AI API Key |
-| `LLM_API_KEY` | LLM 提示词优化（可选） |
-
----
-
-## 技术栈
-
-- 后端：Python + FastAPI
-- 前端：原生 HTML/CSS/JS（毛玻璃 UI）
-- AI 接口：OpenAI 兼容协议
-- 图片处理：Pillow（Lanczos3 超分）
-
----
-
-## 致谢
-
-本项目的生图/生视频能力依赖以下优秀的开源项目，特此感谢：
-
-| 项目 | 作者 | 贡献 |
-|------|------|------|
-| [chatgpt2api](https://github.com/basketikun/chatgpt2api) | [basketikun](https://github.com/basketikun) | GPT Image 生图接口支持 |
-| [4k-image-api](https://github.com/jianjianai/4k-image-api) | [简简aw](https://github.com/jianjianai) | 图片变形 + Lanczos3 超分辨率 |
-| [flow2api](https://github.com/TheSmallHanCat/flow2api) | [TheSmallHanCat](https://github.com/TheSmallHanCat) | Gemini 生图/生视频接口支持 |
-| [gemini2api](https://github.com/xwteam/gemini2api) | [xwteam](https://github.com/xwteam) | Gemini Pro 生图接口支持 |
-| [AIClient2API](https://github.com/justlovemaki/AIClient2API) | [justlovemaki](https://github.com/justlovemaki) | 多协议 AI API 代理 |
-| [Agnes AI](https://platform.agnes-ai.com) | [Sapiens AI](https://agnes-ai.com) | Agnes 生图/生视频 API |
-
-### 原版项目贡献者
-
-感谢所有为上游项目做出贡献的开发者：
-
-<a href="https://github.com/basketikun/chatgpt2api/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=basketikun/chatgpt2api" />
-</a>
-
----
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=liwei9745%2FGenBox&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=liwei9745/GenBox&type=date&theme=dark&legend=top-left&sealed_token=hbmjRTt8aa2MlVE9G0ff1S26Mg3GmI67QmAkoE-0Qz5hToR2-s0x810BeIFuXoiju0TCvYVRKBuvO9toojQR-vyxBsjsrjWI2IsR8mU32j9LyO4M00O0wQ" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=liwei9745/GenBox&type=date&legend=top-left&sealed_token=hbmjRTt8aa2MlVE9G0ff1S26Mg3GmI67QmAkoE-0Qz5hToR2-s0x810BeIFuXoiju0TCvYVRKBuvO9toojQR-vyxBsjsrjWI2IsR8mU32j9LyO4M00O0wQ" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=liwei9745/GenBox&type=date&legend=top-left&sealed_token=hbmjRTt8aa2MlVE9G0ff1S26Mg3GmI67QmAkoE-0Qz5hToR2-s0x810BeIFuXoiju0TCvYVRKBuvO9toojQR-vyxBsjsrjWI2IsR8mU32j9LyO4M00O0wQ" />
- </picture>
-</a>
-
----
-
-## 交流群
-
-QQ 群：1005859624（猴哥电话，非群主）
-
-欢迎交流使用心得和反馈问题
-
----
+GenBox 使用 FastAPI、原生 HTML/CSS/JavaScript、Pillow、AsyncSSH 和其他开源组件构建。感谢所有上游项目和贡献者。
 
 ## License
 
-MIT
+[MIT](LICENSE)

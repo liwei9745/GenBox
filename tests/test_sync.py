@@ -15,8 +15,11 @@ if str(ROOT) not in sys.path:
 
 from sync.client import sha256_bytes, is_url_safe, _normalize_base_url, ChatGPT2APIClient, extract_image_metadata
 from sync.models import RemoteImageRecord, SyncConfig, SyncDeployment
+from sync.ingest import authenticate_push_source, load_push_keys, validate_image_payload
 import sync.store as store
 import sync.manifest as manifest_mod
+from PIL import Image
+import io
 
 
 def test_sha256_known():
@@ -127,6 +130,21 @@ def test_local_index_hash(tmp_path, monkeypatch):
     assert idx2.contains_hash(h) is True
 
 
+def test_local_sha256_index_discovers_existing_files(tmp_path, monkeypatch):
+    gallery = tmp_path / "gallery"
+    gallery.mkdir()
+    monkeypatch.setattr(manifest_mod, "GALLERY_DIR", gallery)
+    monkeypatch.setattr(manifest_mod, "LOCAL_INDEX_FILE", gallery / ".hash_index.json")
+    monkeypatch.setattr(manifest_mod, "LOCAL_MD5_INDEX_FILE", gallery / ".md5_index.json")
+    image = gallery / "existing.png"
+    image.write_bytes(b"existing image bytes")
+
+    idx = manifest_mod.LocalImageIndex()
+    idx.ensure_sha256_index()
+
+    assert idx.contains_hash(hashlib.sha256(image.read_bytes()).hexdigest()) is True
+
+
 def test_local_md5_index(tmp_path, monkeypatch):
     gallery = tmp_path / "gallery"
     gallery.mkdir()
@@ -142,3 +160,29 @@ def test_local_md5_index(tmp_path, monkeypatch):
     digest = hashlib.md5(b"same image bytes").hexdigest()
     assert idx.contains_md5(digest) is True
     assert idx.md5_index[digest] == "a.png"
+
+
+def test_push_source_auth_requires_matching_identity_and_key():
+    raw = '{"vps-a":"secret-a","vps-b":"secret-b"}'
+    assert load_push_keys(raw) == {"vps-a": "secret-a", "vps-b": "secret-b"}
+    assert authenticate_push_source("vps-a", "secret-a", raw) is True
+    assert authenticate_push_source("vps-a", "secret-b", raw) is False
+    assert authenticate_push_source("../vps-a", "secret-a", raw) is False
+
+
+def test_validate_push_image_payload():
+    output = io.BytesIO()
+    Image.new("RGB", (3, 2), "red").save(output, format="PNG")
+    payload = output.getvalue()
+
+    metadata = validate_image_payload(payload, "image/png")
+
+    assert metadata["width"] == 3
+    assert metadata["height"] == 2
+    assert metadata["size"] == len(payload)
+    assert metadata["sha256"] == hashlib.sha256(payload).hexdigest()
+
+
+def test_validate_push_image_rejects_non_image():
+    with pytest.raises(ValueError, match="invalid image payload"):
+        validate_image_payload(b"not an image", "image/png")

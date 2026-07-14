@@ -9,22 +9,18 @@ import subprocess
 import shutil
 from pathlib import Path
 
+from genbox_version import APP_NAME, __version__
+
 # ──────────────────────────────────────────────────────────────
 # 配置
 # ──────────────────────────────────────────────────────────────
-APP_NAME = "GenBox"
-APP_VERSION = "2.0.0"
+APP_VERSION = __version__
 MAIN_SCRIPT = "main.py"
 
 # 需要打包的数据文件
 DATA_FILES = [
     ("static", "static"),
     ("providers", "providers"),
-    (".env.example", "."),
-    ("requirements.txt", "."),
-    ("check_env.py", "."),
-    ("start.bat", "."),
-    ("README.md", "."),
 ]
 
 # 隐藏导入（PyInstaller 可能检测不到的模块）
@@ -50,6 +46,17 @@ HIDDEN_IMPORTS = [
     "psutil",
     "dotenv",
     "dotenv.main",
+    "asyncssh",
+    "cryptography",
+    "cryptography.fernet",
+    "extensions",
+    "extensions.credential_vault",
+    "extensions.discovery",
+    "extensions.local_tailscale",
+    "extensions.network_adapters",
+    "extensions.orchestrator",
+    "sync.ingest",
+    "tzdata",
 ]
 
 # 排除的模块（减小体积）

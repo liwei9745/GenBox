@@ -58,7 +58,7 @@
     document.body.style.overflow = "hidden";
     loadSyncDeployments();
     $("syncPreview").innerHTML =
-      '<div class="sync-empty">按上方 3 步操作：<br>① 在「远程部署」处保存 chatgpt2api 部署<br>② 在下方选择该部署并点「扫描预览」<br>③ 预览图出现后勾选图片，再点「同步选中」</div>';
+      i18nText('sync.instructions_html');
     setTimeout(function () { $("syncModal").querySelector(".modal-close").focus(); }, 0);
   };
 
@@ -101,7 +101,7 @@
         var deps = d.deployments || [];
         var box = $("syncDeployments");
         if (!deps.length) {
-          box.innerHTML = '<div class="sync-empty">尚未配置远程部署。</div>';
+          box.innerHTML = i18nText('sync.no_deployment_html');
         } else {
           box.innerHTML = deps.map(function (dep) {
             return (
@@ -109,24 +109,24 @@
               '<span class="sync-dep-name">' + esc(dep.name) + "</span>" +
               '<span class="sync-dep-url">' + esc(dep.base_url) + "</span>" +
               '<button class="btn-ghost btn-sm" onclick="testSyncDeployment(\'' +
-              dep.id + "',this)\">测试</button>" +
+              dep.id + "',this)\">" + i18nText('common.test') + "</button>" +
               '<button class="btn-ghost btn-sm sync-delete-btn" onclick="deleteSyncDeployment(\'' +
-              dep.id + "')\">删除</button>" +
+              dep.id + "')\">" + i18nText('common.delete') + "</button>" +
               "</div>"
             );
           }).join("");
         }
         var sel = $("syncDepSelect");
         sel.innerHTML =
-          '<option value="">— 选择部署 —</option>' +
+          '<option value="">' + i18nText('sync.choose_deployment') + '</option>' +
           deps.map(function (dep) {
             return '<option value="' + dep.id + '">' + esc(dep.name) + "</option>";
           }).join("");
         if (selectedId) sel.value = selectedId;
       })
       .catch(function (e) {
-        $("syncDeployments").innerHTML = '<div class="sync-empty">部署加载失败</div>';
-        setDeployStatus("加载失败: " + e.message, "error");
+        $("syncDeployments").innerHTML = i18nText('sync.load_failed_html');
+        setDeployStatus(i18nText('common.load_failed_prefix') + e.message, "error");
       });
   }
 
@@ -134,8 +134,8 @@
     var name = $("syncDepName").value.trim();
     var url = $("syncDepUrl").value.trim();
     var key = $("syncDepKey").value;
-    if (!url) { alert("请填写 Base URL"); return; }
-    setDeployStatus("正在保存…", "");
+    if (!url) { alert(i18nText('sync.url_required')); return; }
+    setDeployStatus(i18nText('sync.saving'), "");
     _authFetch("/api/sync/deployments", {
       method: "POST",
       body: JSON.stringify({ name: name, base_url: url, api_key: key }),
@@ -145,23 +145,23 @@
         $("syncDepName").value = "";
         $("syncDepUrl").value = "";
         $("syncDepKey").value = "";
-        setDeployStatus("保存成功，可测试连接或扫描预览。", "success");
+        setDeployStatus(i18nText('sync.saved'), "success");
         loadSyncDeployments(d.deployment && d.deployment.id);
       })
-      .catch(function (e) { setDeployStatus("保存失败: " + e.message, "error"); });
+      .catch(function (e) { setDeployStatus(i18nText('common.save_failed_colon') + e.message, "error"); });
   };
 
   window.deleteSyncDeployment = function (id) {
-    if (!confirm("确认删除该远程部署？")) return;
+    if (!confirm(i18nText('sync.delete_confirm'))) return;
     _authFetch("/api/sync/deployments/" + id, { method: "DELETE" })
       .then(readJson)
       .then(function () { loadSyncDeployments(); })
-      .catch(function (e) { setDeployStatus("删除失败: " + e.message, "error"); });
+      .catch(function (e) { setDeployStatus(i18nText('common.delete_failed_colon') + e.message, "error"); });
   };
 
   window.testSyncDeployment = function (id, button) {
-    var oldText = button ? button.textContent : "测试";
-    if (button) { button.disabled = true; button.textContent = "测试中…"; }
+    var oldText = button ? button.textContent : i18nText('common.test');
+    if (button) { button.disabled = true; button.textContent = i18nText('sync.testing'); }
     _authFetch("/api/sync/test", {
       method: "POST",
       body: JSON.stringify({ deployment_id: id }),
@@ -169,12 +169,12 @@
       .then(readJson)
       .then(function (d) {
         if (d.ok) {
-          alert("连接成功\n版本: " + (d.version || "未知") + "\n角色: " + (d.role || "未知"));
+          alert(i18nText('sync.connection_success') + (d.version || i18nText('sync.unknown')) + i18nText('sync.role_prefix') + (d.role || i18nText('sync.unknown')));
         } else {
-          alert("连接失败: " + (d.error || "未知错误"));
+          alert(i18nText('sync.connection_failed_prefix') + (d.error || i18nText('sync.unknown_error')));
         }
       })
-      .catch(function (e) { alert("测试出错: " + e.message); })
+      .catch(function (e) { alert(i18nText('sync.test_error_prefix') + e.message); })
       .finally(function () {
         if (button) { button.disabled = false; button.textContent = oldText; }
       });
@@ -185,11 +185,11 @@
     state.deploymentId = id;
     if (!id) {
       $("syncPreview").innerHTML =
-        '<div class="sync-empty">请先选择一个远程部署。</div>';
+        i18nText('sync.choose_first_html');
       return;
     }
     var dr = dateRangeParams();
-    $("syncPreview").innerHTML = '<div class="sync-empty">正在拉取远端图片并去重，请稍候…</div>';
+    $("syncPreview").innerHTML = i18nText('sync.loading_remote_html');
     _authFetch("/api/sync/preview", {
       method: "POST",
       body: JSON.stringify({
@@ -205,14 +205,14 @@
       })
       .catch(function (e) {
         $("syncPreview").innerHTML =
-          '<div class="sync-empty">预览失败: ' + esc(e.message) + "</div>";
+          i18nText('sync.preview_failed_html') + esc(e.message) + "</div>";
       });
   };
 
   window.testInlineSyncDeployment = function () {
     var url = $("syncDepUrl").value.trim();
     var key = $("syncDepKey").value;
-    if (!url) { alert("请填写 Base URL"); return; }
+    if (!url) { alert(i18nText('sync.url_required')); return; }
     _authFetch("/api/sync/test", {
       method: "POST",
       body: JSON.stringify({ base_url: url, api_key: key }),
@@ -220,10 +220,10 @@
       .then(readJson)
       .then(function (d) {
         alert(d.ok
-          ? "连接成功\n版本: " + (d.version || "未知") + "\n角色: " + (d.role || "未知")
-          : "连接失败: " + (d.error || "未知错误"));
+          ? i18nText('sync.connection_success') + (d.version || i18nText('sync.unknown')) + i18nText('sync.role_prefix') + (d.role || i18nText('sync.unknown'))
+          : i18nText('sync.connection_failed_prefix') + (d.error || i18nText('sync.unknown_error')));
       })
-      .catch(function (e) { alert("测试出错: " + e.message); });
+      .catch(function (e) { alert(i18nText('sync.test_error_prefix') + e.message); });
   };
 
   window.onSyncDateRangeChange = function () {
@@ -256,26 +256,26 @@
   function renderCandidates(list) {
     var box = $("syncPreview");
     if (!list.length) {
-      box.innerHTML = '<div class="sync-empty">没有需要同步的新图片（已同步或与本地重复均已排除）。</div>';
+      box.innerHTML = i18nText('sync.no_new_html');
       updateCounts();
       return;
     }
     box.innerHTML = list.map(function (c, i) {
       var selectable = c.status === "new";
       var badge = "";
-      if (c.status === "duplicate-local") badge = '<span class="sync-badge dup">本地重复</span>';
-      else if (c.status === "error") badge = '<span class="sync-badge err">错误</span>';
-      else if (c.status === "already-synced") badge = '<span class="sync-badge ok">已同步</span>';
+      if (c.status === "duplicate-local") badge = i18nText('sync.local_duplicate_html');
+      else if (c.status === "error") badge = i18nText('sync.error_html');
+      else if (c.status === "already-synced") badge = i18nText('sync.synced_html');
       var thumb = c.thumbnail_url
-        ? '<button type="button" class="sync-thumb-button" title="点击放大" aria-label="放大预览 ' + esc(c.name || c.path || "图片") + '" onclick="event.preventDefault();event.stopPropagation();openSyncImagePreview(\'' + escAttrJs(c.thumbnail_url) + '\',\'' + escAttrJs(c.name || c.path || "远端图片") + '\')"><img class="sync-thumb" loading="lazy" src="' + esc(c.thumbnail_url) + '" onerror="this.parentNode.classList.add(\'sync-thumb-error\')"></button>'
-        : '<div class="sync-thumb sync-thumb-empty">无图</div>';
+        ? '<button type="button" class="sync-thumb-button" title="' + i18nText('sync.zoom_title') + '" aria-label="' + i18nText('sync.zoom_aria_prefix') + esc(c.name || c.path || i18nText('sync.image')) + '" onclick="event.preventDefault();event.stopPropagation();openSyncImagePreview(\'' + escAttrJs(c.thumbnail_url) + '\',\'' + escAttrJs(c.name || c.path || i18nText('sync.remote_image')) + '\')"><img class="sync-thumb" loading="lazy" src="' + esc(c.thumbnail_url) + '" onerror="this.parentNode.classList.add(\'sync-thumb-error\')"></button>'
+        : i18nText('sync.no_image_html');
       return (
         '<label class="sync-card ' + (selectable ? "" : "sync-card-disabled") + '">' +
         '<input type="checkbox" class="sync-check" data-i="' + i + '" ' +
         (selectable ? "" : "disabled") + " onchange=\"updateCounts()\">" +
         thumb +
         '<div class="sync-card-meta">' +
-        "<div>" + esc(c.name || c.path || "图片") + "</div>" +
+        "<div>" + esc(c.name || c.path || i18nText('sync.image')) + "</div>" +
         "<div class='sync-card-sub'>" + esc((c.created_at || "").slice(0, 10)) +
         " · " + fmtBytes(c.size) +
         (c.width ? " · " + c.width + "×" + c.height : "") + "</div>" +
@@ -302,7 +302,7 @@
     var checks = document.querySelectorAll("#syncPreview .sync-check");
     var n = 0;
     checks.forEach(function (c) { if (c.checked && !c.disabled) n++; });
-    $("syncSelectedCount").textContent = "已选 " + n;
+    $("syncSelectedCount").textContent = i18nText('sync.selected_prefix') + n;
     $("syncImportNum").textContent = n;
     $("syncImportBtn").disabled = n === 0;
   };
@@ -346,7 +346,7 @@
       .then(function (d) {
         if (d.task_id) pollSyncStatus(d.task_id, items.length);
       })
-      .catch(function (e) { alert("同步启动失败: " + e.message); $("syncImportBtn").disabled = false; });
+      .catch(function (e) { alert(i18nText('sync.start_failed_prefix') + e.message); $("syncImportBtn").disabled = false; });
   };
 
   function pollSyncStatus(taskId, total) {
@@ -358,10 +358,10 @@
           var pct = total ? Math.round((t.done / total) * 100) : 0;
           $("syncProgressFill").style.width = pct + "%";
           $("syncProgressText").textContent =
-            "已处理 " + t.done + "/" + total +
-            (t.errors && t.errors.length ? "（错误 " + t.errors.length + "）" : "");
+            i18nText('sync.processed_prefix') + t.done + "/" + total +
+            (t.errors && t.errors.length ? i18nText('sync.error_count_prefix') + t.errors.length + "）" : "");
           if (t.status === "done") {
-            $("syncProgressText").textContent = "同步完成 ✓ 已导入到媒体库";
+            $("syncProgressText").textContent = i18nText('sync.complete');
             if (typeof loadGallery === "function") loadGallery();
             setTimeout(closeSyncModal, 1500);
           } else {

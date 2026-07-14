@@ -5,7 +5,7 @@
 GenBox is a single-process FastAPI desktop/server app (UI bundled as a static SPA) that
 generates and manages AI images and videos across multiple providers. This milestone adds
 a **remote gallery sync** feature: pull images from an external `chatgpt2api`-compatible
-deployment (e.g. the user's VPS at `http://43.131.226.9:3000/v1`) into the local media
+deployment (for example `http://192.0.2.10:3000/v1`) into the local media
 library, showing only new images as a selectable, filterable sync window so the user picks
 what to import.
 

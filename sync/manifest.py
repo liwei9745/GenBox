@@ -136,6 +136,19 @@ class LocalImageIndex:
                 continue
         self.save()
 
+    def ensure_sha256_index(self):
+        """Incrementally hash gallery files that are not yet in the SHA-256 index."""
+        current_files = {f.name for f in GALLERY_DIR.glob("*.png")}
+        self.index = {
+            digest: filename for digest, filename in self.index.items()
+            if filename in current_files
+        }
+        known_files = set(self.index.values())
+        for path in GALLERY_DIR.glob("*.png"):
+            if path.name not in known_files:
+                self.ensure_file_hashed(path)
+        self.save()
+
     def ensure_file_hashed(self, path: Path) -> Optional[str]:
         """若文件尚未索引则计算哈希并写入；返回 sha256。"""
         filename = path.name

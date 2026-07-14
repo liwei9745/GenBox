@@ -12,8 +12,10 @@ storage/sync_manifest.json
 storage/gallery/.hash_index.json
 storage/gallery/.md5_index.json
 storage/sync_thumbnails/
+storage/extensions.json
 
 # ══ 运行时数据（用户生成，禁止入库）══
+storage/
 storage/gallery/
 storage/videos/
 storage/video_thumbs/
@@ -48,6 +50,9 @@ logs/
 # ══ 临时文件 ══
 *.tmp
 *.temp
+artifacts/
+.release/
+.snapshots/
 # 实验分支配置
 config/
 
@@ -59,9 +64,21 @@ dist/
 # ══ AI 开发工具（不需要入库）══
 .hermes/
 .opencode/
+.codex/
+.codegraph/
 skills/
 AGENTS.md
+!AGENTS.md
+CLAUDE.md
 SPEC.md
 FUNCTIONALITY.md
 opencode-prompt.md
 strix_runs/
+
+# ══ 本地规划、记忆与生成报告 ══
+.planning/tmp/
+.planning/ui-reviews/
+memory/
+wiki-knowledge/
+screenshots/output/
+screenshots/screenshots/
