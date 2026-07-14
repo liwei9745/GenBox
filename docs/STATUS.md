@@ -3,7 +3,7 @@
 **Last updated:** 2026-07-14
 **Current branch:** `dev`
 **Current phase:** Phase 1 - ACCEPTED
-**Current objective:** Close out and verify the v2.5.0 release candidate without entering chatgpt2api sender Push development. Shared headings, bilingual onboarding, Extension Center foundations, dependency locking, release packaging, and PR #4's Docker Compose intent are implemented locally.
+**Current objective:** v2.5.0 is published and artifact-verified. The next gate is clean-install and upgrade-path acceptance from the public Release without entering chatgpt2api sender Push development.
 **Test baseline:** 76 tests collected, all passing as of 2026-07-14.
 ## Status Legend
 
@@ -16,10 +16,13 @@
 
 ## Verified In Code And Local Tests
 
+- `VERIFIED LIVE` On 2026-07-14, GitHub Release `v2.5.0` was published from tag commit `a675f8c`. Actions run `29308338415` passed source tests, Windows/macOS/Linux builds, packaged-client smoke tests, and Release creation. Docker runs `29308338400`, `29308333677`, and `29308293307` passed for tag, master, and dev.
+- `VERIFIED LIVE` All seven downloadable v2.5.0 payloads were downloaded again from GitHub and matched the published `SHA256SUMS.txt`. The Release contains Windows, macOS, Linux, Docker Compose, standalone executables, and the checksum file; the Docker archive contains only `.env.example`, `LICENSE`, `README.md`, and `docker-compose.yml`.
+- `VERIFIED IN CODE/TESTS` A clean Python 3.12.13 environment passes all 76 tests. The release process corrected a missing eager-annotation import, made updater assertions platform-independent, and initialized the Buildx container driver required by GitHub Actions cache export.
 - `VERIFIED IN CODE/TESTS` The v2.5.0 packaged-client updater selects exact standalone release assets, rejects archive payloads, and uses a detached post-exit replacement helper instead of overwriting the running executable.
 - `VERIFIED LIVE` On 2026-07-14, a running Windows `GenBox.exe` rejected direct write access with a sharing violation, confirming that v2.4.1 and earlier cannot reliably self-update to v2.5.0. Those Windows users require one manual client replacement; the limitation is prominent in both v2.5.0 release-note languages.
 - `VERIFIED IN CODE/TESTS` Legacy Docker Compose installations using local `build` configuration require manual migration to the v2.5.0 GHCR-backed Compose bundle. Pulling an image inside the old container does not migrate the host Compose definition.
-- `VERIFIED LIVE` On 2026-07-14, the rebuilt Windows v2.5.0 candidate was 32,392,135 bytes and passed a real HTTP packaged-client smoke test on an isolated ephemeral port.
+- `VERIFIED LIVE` On 2026-07-14, the published Windows v2.5.0 standalone executable is 28,792,940 bytes; both local and GitHub Actions packaged-client HTTP smoke tests passed.
 - `VERIFIED IN CODE/TESTS` `python -m pytest -q` passed all 76 tests; Python and JavaScript syntax checks and `git diff --check` also passed.
 - `VERIFIED IN CODE/UI` The public screenshot set now contains four current v2.5.0 views captured from an isolated empty-data client. Dashboard host-specific values are replaced by `scripts/sanitize_dashboard_screenshot.py` with labeled demo data; the Extension Center uses the RFC 5737 placeholder `192.0.2.10` and no screenshots contain credentials or user media.
 

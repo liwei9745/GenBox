@@ -11,7 +11,7 @@ GenBox combines image generation, video generation, prompt assistance, media man
 > **v2.5.0 is a major experience and infrastructure update.**
 > It adds the Extension Center, guided chatgpt2api deployment and private networking, bilingual UI, four-stage onboarding, shared page headings, an encrypted credential vault, and a verified release pipeline. GenBox includes remote Pull and an authenticated idempotent Push receiver foundation. Sender-side automatic Push, batch and scheduled transfer, and verified cleanup are still future phases.
 
-**Current release candidate: v2.5.0** · [Release notes](release-notes-v2.5.0.md) · [Changelog](CHANGELOG.md) · [Releases](https://github.com/liwei9745/GenBox/releases)
+**Current stable release: v2.5.0** · [Release notes](release-notes-v2.5.0.md) · [Changelog](CHANGELOG.md) · [Releases](https://github.com/liwei9745/GenBox/releases)
 
 ![GenBox Dashboard](screenshots/sanitized/01-dashboard.png)
 
