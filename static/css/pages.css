@@ -15,7 +15,7 @@
   font-size: var(--text-xl);
   font-weight: var(--weight-bold);
   color: var(--text-primary);
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .content-subtitle {
@@ -24,10 +24,92 @@
   margin-top: 2px;
 }
 
+.page-heading {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.page-heading-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 40px;
+  flex: 0 0 34px;
+  color: var(--accent);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.page-heading-mark::after {
+  content: none;
+}
+
+.page-heading-mark svg {
+  position: relative;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.page-heading-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.page-heading-kicker {
+  display: block;
+  margin: 0;
+  color: var(--accent);
+  font-size: 8px;
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  opacity: .88;
+}
+
+.page-heading-copy > strong,
+.page-heading-copy > .content-title {
+  display: block;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.page-heading-copy > span:not(.page-heading-kicker),
+.page-heading-copy > .content-subtitle {
+  display: block;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.page-heading-header {
+  min-height: 72px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(90deg, var(--accent-light), transparent 42%);
+}
+
 /* ── Dashboard Header ── */
 .dashboard-header {
   display: block;
-  padding-bottom: 0;
+  padding: 12px var(--space-7) 0;
+  background: linear-gradient(100deg, var(--accent-light), transparent 48%);
 }
 
 .dashboard-header-main {
@@ -180,6 +262,10 @@
 }
 
 @media (max-width: 560px) {
+  .page-heading-mark { width: 40px; height: 40px; flex-basis: 40px; }
+  .page-heading-kicker { font-size: 8px; }
+  .dashboard-header,
+  .page-heading-header { padding-left: 16px; padding-right: 16px; }
   .dashboard-action { flex: 1 1 auto; }
   .dashboard-actions { gap: 6px; }
   .dashboard-quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1474,4 +1560,101 @@ body.dragging-divider {
   justify-content: center;
   z-index: 2;
   pointer-events: none;
+}
+
+.dashboard-community{display:inline-flex;align-items:center}.dashboard-community .dashboard-action{border-radius:var(--radius-sm)}.dashboard-community-join{border-color:color-mix(in srgb,var(--accent) 42%,var(--border));color:var(--accent);background:color-mix(in srgb,var(--accent) 6%,var(--bg-surface))}.dashboard-community-join:hover{border-color:var(--accent);color:var(--accent)}
+@media(max-width:760px){.dashboard-community{flex:1 1 100%}.dashboard-community-join{flex:1}}
+
+
+/* 2026-07-14 heading rhythm refinement */
+.page-heading {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.page-heading-mark {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  margin-top: 2px;
+}
+
+.page-heading-copy {
+  gap: 4px;
+}
+
+.page-heading-kicker {
+  font-size: 10px;
+  line-height: 1.25;
+  letter-spacing: .16em;
+  opacity: .92;
+}
+
+.page-heading-copy > strong,
+.page-heading-copy > .content-title {
+  font-size: 20px;
+  line-height: 1.16;
+}
+
+.page-heading-copy > span:not(.page-heading-kicker),
+.page-heading-copy > .content-subtitle {
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 68ch;
+}
+
+.page-heading-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px var(--space-7) 12px;
+  min-height: 96px;
+  background: linear-gradient(96deg, var(--accent-light), transparent 46%);
+}
+
+.page-heading-header .content-title,
+.page-heading-header .content-subtitle {
+  margin: 0;
+}
+
+.dashboard-header {
+  padding: 14px var(--space-7) 0;
+}
+
+.dashboard-header-main {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.dashboard-title-block {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+@media (max-width: 760px) {
+  .page-heading-header {
+    min-height: 0;
+    padding: 12px 16px 10px;
+  }
+
+  .page-heading {
+    gap: 10px;
+  }
+
+  .page-heading-mark {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+  }
+
+  .page-heading-copy > strong,
+  .page-heading-copy > .content-title {
+    font-size: 18px;
+  }
+
+  .page-heading-copy > span:not(.page-heading-kicker),
+  .page-heading-copy > .content-subtitle {
+    font-size: 11px;
+  }
 }

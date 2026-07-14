@@ -34,7 +34,7 @@ BASE_PATH = get_base_path()
 if getattr(sys, 'frozen', False):
     os.chdir(Path(sys.executable).parent)
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -50,7 +50,24 @@ from providers import generate_multi, enhance_prompt_with_llm, enhance_prompt_wi
 from sync.models import RemoteImageRecord, SyncCandidate, SyncDeployment
 from sync.client import ChatGPT2APIClient, sha256_bytes
 from sync.manifest import SyncManifest, LocalImageIndex
+from sync.ingest import authenticate_push_source, validate_image_payload
 import sync.store as sync_store
+from extensions.models import (
+    ExtensionDeployRequest, ExtensionDiscoveryRequest, ExtensionKeyResetRequest,
+    ExtensionPlanRequest, ExtensionTestRequest, ManagedCredentialUpsertRequest,
+    VaultPasswordRequest,
+)
+from extensions.orchestrator import (
+    deployment_plans, extension_tasks, reset_managed_admin_key,
+    test_connection as test_extension_connection,
+)
+from extensions.discovery import discover_environment
+import extensions.store as extensions_store
+from extensions.credential_vault import credential_vault
+from extensions.catalog import public_catalog
+from extensions.models import NetworkConnectRequest
+from extensions.network_adapters import network_tasks
+from extensions.local_tailscale import begin_login, enable_genbox_serve, local_install_tasks, local_status
 
 
 # ──────────────────────────────────────────────────────────────
@@ -168,8 +185,11 @@ class ProviderCreateReq(BaseModel):
 # ──────────────────────────────────────────────────────────────
 app = FastAPI(title="GenBox", version="2.0.0")
 app_start_time = time.time()
+GENBOX_PORT = int(os.getenv("GENBOX_PORT", "8892"))
+GENBOX_LOCAL_URL = f"http://localhost:{GENBOX_PORT}"
+GENBOX_LOOPBACK_URL = f"http://127.0.0.1:{GENBOX_PORT}"
 
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:8891,http://127.0.0.1:8891").split(",")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", f"{GENBOX_LOCAL_URL},{GENBOX_LOOPBACK_URL}").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -215,7 +235,7 @@ async def csrf_protection(request: Request, call_next):
             request_authority = request.headers.get("host", "").lower()
             configured = set(ALLOWED_ORIGINS)
             configured.update({
-                "http://localhost:8891", "http://127.0.0.1:8891",
+                GENBOX_LOCAL_URL, GENBOX_LOOPBACK_URL,
                 "http://localhost:8890", "http://127.0.0.1:8890",
             })
             allowed_authorities = {
@@ -1014,10 +1034,12 @@ async def _process_image_gen(gen_id: str):
         if cid not in continuous_sessions:
             continuous_sessions[cid] = {"images": [], "prompts": [], "context": ""}
         continuous_sessions[cid]["prompts"].append(task["prompt"])
+        continuous_sessions[cid]["prompts"] = continuous_sessions[cid]["prompts"][-3:]
         for key, res in task["results"].items():
             if res["success"] and res["local_path"]:
                 continuous_sessions[cid]["images"].append(res["local_path"])
-        continuous_sessions[cid]["context"] = " | ".join(continuous_sessions[cid]["prompts"][-3:])
+        continuous_sessions[cid]["images"] = continuous_sessions[cid]["images"][-12:]
+        continuous_sessions[cid]["context"] = " | ".join(continuous_sessions[cid]["prompts"])
         task["continuous_id"] = cid
 
     # 记录历史
@@ -3003,10 +3025,10 @@ async def server_control(action: str = "status"):
     if action == "status":
         try:
             import urllib.request
-            urllib.request.urlopen("http://127.0.0.1:8891/", timeout=2)
-            return {"status": "running", "port": 8891}
+            urllib.request.urlopen(f"{GENBOX_LOOPBACK_URL}/", timeout=2)
+            return {"status": "running", "port": GENBOX_PORT}
         except Exception:
-            return {"status": "stopped", "port": 8891}
+            return {"status": "stopped", "port": GENBOX_PORT}
     elif action == "restart":
         subprocess.Popen(["python", "main.py"], cwd=str(STORAGE_DIR.parent))
         return {"status": "restarting"}
@@ -3082,6 +3104,8 @@ async def get_update_info():
 # ──────────────────────────────────────────────────────────────
 AUTH_EXEMPT_PATHS = {
     "/api/setup/status", "/api/setup/confirm", "/api/setup/first-run",
+    "/api/sync/push",
+    "/api/sync/push/status",
     "/favicon.ico",
 }
 
@@ -3135,7 +3159,7 @@ async def setup_confirm():
 
 # ──────────────────────────────────────────────────────────────
 # 远程同步：chatgpt2api 兼容部署图片拉取
-# 鉴权由全局 admin_auth_middleware 处理（prod 模式校验 X-Admin-Key）
+# 拉取接口由全局 admin 中间件保护；push 使用独立的来源身份密钥。
 # ──────────────────────────────────────────────────────────────
 sync_tasks: Dict[str, dict] = {}
 
@@ -3419,12 +3443,342 @@ async def sync_import(body: dict = {}):
     return {"task_id": task_id, "total": len(items)}
 
 
+@app.post("/api/sync/push")
+async def sync_push_image(
+    image: UploadFile = File(...),
+    remote_path: str = Form(...),
+    created_at: str = Form(""),
+    prompt: str = Form(""),
+    model: str = Form(""),
+    x_genbox_source: str = Header(default=""),
+    x_genbox_key: str = Header(default=""),
+):
+    """Receive one image from an authenticated remote deployment.
+
+    A successful response is the durable acknowledgement a sender may use before
+    applying its separately configured source-retention policy.
+    """
+    try:
+        authenticated = authenticate_push_source(x_genbox_source, x_genbox_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if not authenticated:
+        raise HTTPException(status_code=401, detail="无效的推送来源或 API Key")
+    if not remote_path.strip() or len(remote_path) > 1024:
+        raise HTTPException(status_code=400, detail="remote_path 无效")
+
+    payload = await image.read()
+    try:
+        metadata = validate_image_payload(payload, image.content_type or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    manifest = SyncManifest()
+    existing = manifest.get(f"{x_genbox_source}::{remote_path}")
+    existing_path = Path(existing.get("local_path", "")) if existing else None
+    if (
+        existing
+        and existing.get("sha256") == metadata["sha256"]
+        and existing_path
+        and existing_path.is_file()
+    ):
+        return {
+            "ok": True,
+            "status": "already-imported",
+            "source_id": x_genbox_source,
+            "remote_path": remote_path,
+            "sha256": metadata["sha256"],
+            "local_file": Path(existing.get("local_path", "")).name,
+            "safe_to_delete_source": True,
+        }
+
+    local_index = LocalImageIndex()
+    local_index.ensure_sha256_index()
+    if local_index.contains_hash(metadata["sha256"]):
+        filename = local_index.index[metadata["sha256"]]
+        status = "duplicate-local"
+    else:
+        _, filename = _save_synced_image(
+            payload, x_genbox_source, remote_path, created_at, prompt, model,
+        )
+        local_index.index[metadata["sha256"]] = filename
+        local_index.save()
+        status = "imported"
+
+    local_path = str(GALLERY_DIR / filename)
+    manifest.add(
+        x_genbox_source, remote_path, local_path, metadata["sha256"],
+        metadata["size"], created_at,
+    )
+    return {
+        "ok": True,
+        "status": status,
+        "source_id": x_genbox_source,
+        "remote_path": remote_path,
+        "sha256": metadata["sha256"],
+        "local_file": filename,
+        "width": metadata["width"],
+        "height": metadata["height"],
+        "safe_to_delete_source": True,
+    }
+
+
+@app.get("/api/sync/push/status")
+async def sync_push_status(
+    x_genbox_source: str = Header(default=""),
+    x_genbox_key: str = Header(default=""),
+):
+    """Validate a push identity without creating a gallery item."""
+    try:
+        authenticated = authenticate_push_source(x_genbox_source, x_genbox_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if not authenticated:
+        raise HTTPException(status_code=401, detail="无效的推送来源或 API Key")
+    return {
+        "ok": True,
+        "source_id": x_genbox_source,
+        "max_image_bytes": int(os.getenv("GENBOX_PUSH_MAX_BYTES", str(25 * 1024 * 1024))),
+    }
+
+
 @app.get("/api/sync/status/{task_id}")
 async def sync_task_status(task_id: str):
     t = sync_tasks.get(task_id)
     if not t:
         raise HTTPException(status_code=404, detail="任务不存在")
     return t
+
+
+@app.get("/api/extensions/targets")
+async def extension_list_targets():
+    return {"targets": [target.model_dump() for target in extensions_store.list_targets()]}
+
+
+@app.get("/api/extensions/targets/batch")
+async def extension_get_batch_targets():
+    return {"target_ids": extensions_store.get_batch_target_ids()}
+
+
+@app.put("/api/extensions/targets/batch")
+async def extension_save_batch_targets(body: ExtensionBatchTargetsRequest):
+    return {"target_ids": extensions_store.save_batch_target_ids(body.target_ids)}
+
+
+@app.get("/api/extensions/catalog")
+async def extension_catalog():
+    return public_catalog()
+
+
+@app.post("/api/extensions/targets")
+async def extension_save_target(body: dict = {}):
+    target = extensions_store.upsert_target(body)
+    return {"target": target.model_dump()}
+
+
+@app.delete("/api/extensions/targets/{target_id}")
+async def extension_delete_target(target_id: str):
+    if not extensions_store.delete_target(target_id):
+        raise HTTPException(status_code=404, detail="目标不存在")
+    return {"deleted": True}
+
+
+@app.post("/api/extensions/ssh/test")
+async def extension_test_ssh(body: ExtensionTestRequest):
+    try:
+        return await test_extension_connection(body)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+
+
+@app.post("/api/extensions/deploy")
+async def extension_start_deploy(body: ExtensionDeployRequest):
+    try:
+        task_id = extension_tasks.create(body)
+        return {"task_id": task_id}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+
+
+@app.post("/api/extensions/discover")
+async def extension_discover(body: ExtensionDiscoveryRequest):
+    try:
+        return await discover_environment(body)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+
+
+@app.post("/api/extensions/deploy/plan")
+async def extension_deploy_plan(body: ExtensionPlanRequest):
+    try:
+        discovery = await discover_environment(body)
+        return {"plan": deployment_plans.create(body, discovery), "discovery": discovery}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+
+
+@app.get("/api/extensions/tasks/{task_id}")
+async def extension_task_status(task_id: str):
+    state = extension_tasks.get(task_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return state
+
+
+@app.post("/api/extensions/tasks/{task_id}/delivery")
+async def extension_task_delivery(task_id: str):
+    key = extension_tasks.take_delivery(task_id)
+    if not key:
+        raise HTTPException(status_code=404, detail="一次性交付信息不存在或已读取")
+    return {"admin_key": key, "shown_once": True}
+
+
+@app.get("/api/extensions/instances")
+async def extension_instances(target_id: str = ""):
+    return {"instances": [item.model_dump() for item in extensions_store.list_instances(target_id)]}
+
+
+def _managed_vault_instance(instance_id: str):
+    instance = extensions_store.get_instance(instance_id)
+    if not instance or not instance.managed:
+        raise HTTPException(status_code=404, detail="托管实例不存在")
+    return instance
+
+
+def _vault_error(exc: Exception):
+    if isinstance(exc, PermissionError):
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
+    if isinstance(exc, KeyError):
+        raise HTTPException(status_code=404, detail="未保存该实例凭证") from exc
+    if isinstance(exc, RuntimeError):
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/extensions/vault/status")
+async def extension_vault_status():
+    return credential_vault.status()
+
+
+@app.post("/api/extensions/vault/setup")
+async def extension_vault_setup(body: VaultPasswordRequest):
+    try:
+        return credential_vault.setup(body.password)
+    except Exception as exc:
+        _vault_error(exc)
+
+
+@app.post("/api/extensions/vault/unlock")
+async def extension_vault_unlock(body: VaultPasswordRequest):
+    try:
+        return credential_vault.unlock(body.password)
+    except Exception as exc:
+        _vault_error(exc)
+
+
+@app.post("/api/extensions/vault/lock")
+async def extension_vault_lock():
+    return credential_vault.lock()
+
+
+@app.get("/api/extensions/vault/credentials")
+async def extension_vault_list():
+    try:
+        return {"credentials": credential_vault.list_metadata()}
+    except Exception as exc:
+        _vault_error(exc)
+
+
+@app.get("/api/extensions/vault/credentials/{instance_id}")
+async def extension_vault_get(instance_id: str):
+    _managed_vault_instance(instance_id)
+    try:
+        return {"instance_id": instance_id, "credential": credential_vault.get(instance_id).model_dump()}
+    except Exception as exc:
+        _vault_error(exc)
+
+
+@app.put("/api/extensions/vault/credentials/{instance_id}")
+async def extension_vault_upsert(instance_id: str, body: ManagedCredentialUpsertRequest):
+    _managed_vault_instance(instance_id)
+    try:
+        return {"credential": credential_vault.upsert(instance_id, body.credential)}
+    except Exception as exc:
+        _vault_error(exc)
+
+
+@app.delete("/api/extensions/vault/credentials/{instance_id}")
+async def extension_vault_delete(instance_id: str):
+    _managed_vault_instance(instance_id)
+    try:
+        if not credential_vault.delete(instance_id):
+            raise KeyError(instance_id)
+        return {"deleted": True}
+    except Exception as exc:
+        _vault_error(exc)
+
+
+@app.post("/api/extensions/instances/reset-admin-key")
+async def extension_reset_admin_key(body: ExtensionKeyResetRequest):
+    try:
+        return await reset_managed_admin_key(body)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+
+
+@app.post("/api/extensions/tasks/{task_id}/cancel")
+async def extension_cancel_task(task_id: str):
+    if not extension_tasks.cancel(task_id):
+        raise HTTPException(status_code=409, detail="任务无法取消")
+    return {"cancelled": True}
+
+
+@app.post("/api/extensions/network/connect")
+async def extension_connect_network(body: NetworkConnectRequest):
+    task_id = network_tasks.create(body)
+    return {"task_id": task_id}
+
+
+@app.get("/api/extensions/network/local/tailscale/status")
+async def extension_local_tailscale_status():
+    return await asyncio.to_thread(local_status)
+
+
+@app.post("/api/extensions/network/local/tailscale/install")
+async def extension_local_tailscale_install():
+    return {"task_id": local_install_tasks.create()}
+
+
+@app.get("/api/extensions/network/local/tailscale/install/{task_id}")
+async def extension_local_tailscale_install_status(task_id: str):
+    state = local_install_tasks.get(task_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="安装任务不存在")
+    return state
+
+
+@app.post("/api/extensions/network/local/tailscale/login")
+async def extension_local_tailscale_login():
+    try:
+        return await asyncio.to_thread(begin_login)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+
+
+@app.post("/api/extensions/network/local/tailscale/serve")
+async def extension_local_tailscale_serve():
+    try:
+        return await asyncio.to_thread(enable_genbox_serve)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+
+
+@app.get("/api/extensions/network/tasks/{task_id}")
+async def extension_network_task_status(task_id: str):
+    state = network_tasks.get(task_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="连接任务不存在")
+    return state
 
 
 # ──────────────────────────────────────────────────────────────
@@ -3592,8 +3946,8 @@ if __name__ == "__main__":
 ║                      GenBox v2.0.0                          ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  模式:     {mode_str:<46}║
-║  地址:     http://localhost:8891                             ║
-║  端口:     8891                                              ║
+║  地址:     {GENBOX_LOCAL_URL:<48}║
+║  端口:     {GENBOX_PORT:<48}║
 ║  媒体库:   {str(GALLERY_DIR):<46}║
 ║  配置:     {str(STORAGE_DIR / 'providers.json'):<46}║
 ╚══════════════════════════════════════════════════════════════╝
@@ -3603,7 +3957,7 @@ if __name__ == "__main__":
     def _open_browser():
         time.sleep(1.5)
         try:
-            webbrowser.open("http://localhost:8891")
+            webbrowser.open(GENBOX_LOCAL_URL)
         except Exception:
             pass  # 无头环境忽略
     threading.Thread(target=_open_browser, daemon=True).start()
@@ -3611,6 +3965,6 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8891,
+        port=GENBOX_PORT,
         reload=False,
     )

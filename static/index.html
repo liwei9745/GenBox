@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GenBox</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=13">
-  <link rel="stylesheet" href="/static/css/pages.css?v=14">
+  <link rel="stylesheet" href="/static/css/app.css?v=31">
+  <link rel="stylesheet" href="/static/css/pages.css?v=17">
 </head>
 <body>
 
@@ -20,18 +20,18 @@
   <div id="lightbox-controls">
     <button class="btn-secondary" onclick="zoomIn(event)">🔍+</button>
     <button class="btn-secondary" onclick="zoomOut(event)">🔍-</button>
-    <button class="btn-secondary" onclick="zoomReset(event)">重置</button>
-    <a id="lightbox-dl" href="" download class="btn-secondary">⬇ 下载原图</a>
-    <button class="btn-secondary" onclick="openCompareFromLightbox(event)">🔀 对比</button>
-    <button class="btn-secondary btn-action-i2i" onclick="sendToImageToImage(event)">🎯 图生图</button>
-    <button class="btn-secondary btn-action-i2v" onclick="sendToVideo(event)">🎬 生视频</button>
-    <button class="btn-secondary" onclick="closeLightbox(event)">✕ 关闭</button>
+    <button class="btn-secondary" onclick="zoomReset(event)"><span data-i18n="common.reset">重置</span></button>
+    <a id="lightbox-dl" href="" download class="btn-secondary"><span data-i18n="common.download_original">⬇ 下载原图</span></a>
+    <button class="btn-secondary" onclick="openCompareFromLightbox(event)"><span data-i18n="common.compare">🔀 对比</span></button>
+    <button class="btn-secondary btn-action-i2i" onclick="sendToImageToImage(event)"><span data-i18n="common.image_to_image">🎯 图生图</span></button>
+    <button class="btn-secondary btn-action-i2v" onclick="sendToVideo(event)"><span data-i18n="common.create_video">🎬 生视频</span></button>
+    <button class="btn-secondary" onclick="closeLightbox(event)"><span data-i18n="common.close_icon">✕ 关闭</span></button>
   </div>
   <div id="lightbox-info"></div>
   <div id="lightbox-prompt-box" style="display:none;">
     <div class="flex items-center justify-between mb-6">
-      <span class="lb-prompt-label">📝 生图提示词</span>
-      <button class="btn-ghost" onclick="copyLightboxPrompt()">📋 复制</button>
+      <span class="lb-prompt-label"><span data-i18n="lightbox.image_prompt">📝 生图提示词</span></span>
+      <button class="btn-ghost" onclick="copyLightboxPrompt()"><span data-i18n="common.copy_icon">📋 复制</span></button>
     </div>
     <div id="lightbox-prompt"></div>
   </div>
@@ -40,8 +40,8 @@
 <!-- Compare Modal -->
 <div id="compareModal">
   <div class="compare-header">
-    <h3>🔀 多模型结果对比</h3>
-    <button class="btn-secondary" onclick="closeCompare()">✕ 关闭</button>
+    <h3><span data-i18n="lightbox.compare_title">🔀 多模型结果对比</span></h3>
+    <button class="btn-secondary" onclick="closeCompare()"><span data-i18n="common.close_icon">✕ 关闭</span></button>
   </div>
   <div class="compare-scroll" id="compareItems"></div>
 </div>
@@ -53,10 +53,10 @@
     <div class="resize-handle-b" onmousedown="startModalResize(event,'ns')"></div>
     <div class="resize-handle-br" onmousedown="startModalResize(event,'both')"></div>
     <div class="provider-modal-head">
-      <h2>Provider 管理</h2>
+      <h2><span data-i18n="provider.title">Provider 管理</span></h2>
       <div class="flex gap-8">
-        <button class="btn-secondary" onclick="reloadProviders()">🔄 重载</button>
-        <button class="btn-primary" onclick="openAddProviderTypeModal()">+ 添加</button>
+        <button class="btn-secondary" onclick="reloadProviders()"><span data-i18n="common.reload">🔄 重载</span></button>
+        <button class="btn-primary" onclick="openAddProviderTypeModal()"><span data-i18n="common.add">+ 添加</span></button>
         <button class="btn-close-modal" onclick="closeProviderModal()">✕</button>
       </div>
     </div>
@@ -67,13 +67,13 @@
 <!-- Add Provider Type Modal -->
 <div id="addProviderTypeModal">
   <div class="glass-panel" style="width:360px;">
-    <h3 class="text-lg font-bold mb-16">选择 Provider 类型</h3>
+    <h3 class="text-lg font-bold mb-16"><span data-i18n="provider.choose_type">选择 Provider 类型</span></h3>
     <div class="flex flex-col gap-10">
-      <button class="btn-secondary" onclick="addProviderWithType('image')" style="padding:14px;justify-content:flex-start;font-size:13px;">🎨 生图模型</button>
-      <button class="btn-secondary" onclick="addProviderWithType('video')" style="padding:14px;justify-content:flex-start;font-size:13px;">🎬 生视频模型</button>
-      <button class="btn-secondary" onclick="addProviderWithType('llm')" style="padding:14px;justify-content:flex-start;font-size:13px;">🤖 LLM 提示词优化</button>
+      <button class="btn-secondary" onclick="addProviderWithType('image')" style="padding:14px;justify-content:flex-start;font-size:13px;"><span data-i18n="provider.image">🎨 生图模型</span></button>
+      <button class="btn-secondary" onclick="addProviderWithType('video')" style="padding:14px;justify-content:flex-start;font-size:13px;"><span data-i18n="provider.video">🎬 生视频模型</span></button>
+      <button class="btn-secondary" onclick="addProviderWithType('llm')" style="padding:14px;justify-content:flex-start;font-size:13px;"><span data-i18n="provider.llm">🤖 LLM 提示词优化</span></button>
     </div>
-    <button class="btn-ghost w-full mt-12" onclick="closeAddProviderTypeModal()">取消</button>
+    <button class="btn-ghost w-full mt-12" onclick="closeAddProviderTypeModal()"><span data-i18n="common.cancel">取消</span></button>
   </div>
 </div>
 
@@ -81,13 +81,27 @@
 <div id="themeModal">
   <div class="theme-box">
     <div class="theme-head">
-      <h2>🎨 主题设置</h2>
+      <h2><span data-i18n="appearance.title">🎨 主题设置</span></h2>
       <button class="btn-ghost" onclick="closeThemeModal()">✕</button>
     </div>
-    <div class="theme-body" id="themePresets"></div>
+    <div class="nav-style-section"><div class="nav-style-title"><strong><span data-i18n="appearance.nav_title">导航图标与 Logo</span></strong><span><span data-i18n="appearance.nav_hint">默认方案 C · 可单独切换</span></span></div><div class="nav-style-presets" id="navStylePresets"></div></div><div class="personalization-section">
+  <div class="personalization-grid">
+    <section class="personalization-card" aria-labelledby="fontSizeTitle">
+      <h3 id="fontSizeTitle"><span data-i18n="appearance.font_title">界面文字大小</span></h3>
+      <p><span data-i18n="appearance.font_hint">使用安全档位放大文字，控件会同步增高，避免文字挤出卡片。</span></p>
+      <div class="segmented-setting" id="fontSizeOptions"></div>
+    </section>
+    <section class="personalization-card" aria-labelledby="workspaceTitle">
+      <h3 id="workspaceTitle"><span data-i18n="appearance.workspace_title">工作区布局</span></h3>
+      <p><span data-i18n="appearance.workspace_hint">选择常用工作区，或在自定义模式中隐藏暂时不用的功能。系统看板和主题设置始终保留。</span></p>
+      <div class="workspace-presets" id="workspacePresets"></div>
+      <div class="workspace-feature-list" id="workspaceFeatureList"></div>
+    </section>
+  </div>
+</div><div class="theme-body" id="themePresets"></div>
     <div class="theme-foot">
-      <span class="text-xs text-muted">主题保存在浏览器本地，刷新不丢失</span>
-      <button class="btn-secondary" onclick="closeThemeModal()">完成</button>
+      <span class="text-xs text-muted"><span data-i18n="appearance.saved_hint">主题保存在浏览器本地，刷新不丢失</span></span>
+      <button class="btn-secondary" onclick="closeThemeModal()"><span data-i18n="common.done">完成</span></button>
     </div>
   </div>
 </div>
@@ -96,22 +110,22 @@
 <div id="logModal">
   <div class="log-box">
     <div class="log-box-head">
-      <h2>📋 系统日志</h2>
+      <h2><span data-i18n="logs.title">📋 系统日志</span></h2>
       <div class="flex gap-4 flex-wrap">
-        <button class="log-filter-btn active" onclick="filterLog('')" data-cat="">全部</button>
-        <button class="log-filter-btn" onclick="filterLog('generate')" data-cat="generate">🎨 生图</button>
-        <button class="log-filter-btn" onclick="filterLog('delete')" data-cat="delete">🗑 删除</button>
+        <button class="log-filter-btn active" onclick="filterLog('')" data-cat=""><span data-i18n="common.all">全部</span></button>
+        <button class="log-filter-btn" onclick="filterLog('generate')" data-cat="generate"><span data-i18n="logs.images">🎨 生图</span></button>
+        <button class="log-filter-btn" onclick="filterLog('delete')" data-cat="delete"><span data-i18n="common.delete_icon">🗑 删除</span></button>
         <button class="log-filter-btn" onclick="filterLog('provider')" data-cat="provider">📌 Provider</button>
-        <button class="log-filter-btn" onclick="filterLog('system')" data-cat="system">💻 系统</button>
-        <button class="log-filter-btn" onclick="filterLog('error')" data-cat="error">⚠ 错误</button>
+        <button class="log-filter-btn" onclick="filterLog('system')" data-cat="system"><span data-i18n="common.system">💻 系统</span></button>
+        <button class="log-filter-btn" onclick="filterLog('error')" data-cat="error"><span data-i18n="common.error">⚠ 错误</span></button>
       </div>
       <div class="flex gap-6 ml-auto">
-        <button class="btn-ghost" onclick="loadLogs()">🔄 刷新</button>
-        <button class="btn-ghost" onclick="clearLogs()" style="color:#f87171;border-color:#f8717133;">清空</button>
+        <button class="btn-ghost" onclick="loadLogs()"><span data-i18n="common.refresh_icon">🔄 刷新</span></button>
+        <button class="btn-ghost" onclick="clearLogs()" style="color:#f87171;border-color:#f8717133;"><span data-i18n="common.clear">清空</span></button>
         <button class="btn-ghost" onclick="closeLogModal()">✕</button>
       </div>
     </div>
-    <div class="log-box-body" id="logBody">加载中...</div>
+    <div class="log-box-body" id="logBody"><span data-i18n="common.loading">加载中...</span></div>
   </div>
 </div>
 
@@ -119,13 +133,13 @@
 <div id="llmModal">
   <div class="theme-box" style="width:480px;">
     <div class="theme-head">
-      <h2>🤖 提示词优化设置</h2>
+      <h2><span data-i18n="prompt.settings_title">🤖 提示词优化设置</span></h2>
       <button class="btn-ghost" onclick="closeLLMModal()">✕</button>
     </div>
     <div class="theme-body" id="llmProviderList"></div>
     <div class="theme-foot">
-      <span class="text-xs text-muted">选择用于优化提示词的 LLM Provider</span>
-      <button class="btn-secondary" onclick="closeLLMModal()">完成</button>
+      <span class="text-xs text-muted"><span data-i18n="prompt.settings_hint">选择用于优化提示词的 LLM Provider</span></span>
+      <button class="btn-secondary" onclick="closeLLMModal()"><span data-i18n="common.done">完成</span></button>
     </div>
   </div>
 </div>
@@ -134,19 +148,19 @@
 <div id="updateModal" role="dialog" aria-modal="true" aria-labelledby="updateModalTitle" onclick="if(event.target===this)closeUpdateModal()">
   <div class="glass-panel update-modal-box">
     <div class="update-modal-head">
-      <h2 id="updateModalTitle"><span id="updateModalHeading">更新状态</span> <span id="updateModalVersion" style="color:var(--accent);"></span></h2>
-      <button class="btn-ghost" onclick="closeUpdateModal()" title="关闭">✕</button>
+      <h2 id="updateModalTitle"><span id="updateModalHeading"><span data-i18n="update.status">更新状态</span></span> <span id="updateModalVersion" style="color:var(--accent);"></span></h2>
+      <button class="btn-ghost" onclick="closeUpdateModal()" title="关闭" data-i18n-title="common.close">✕</button>
     </div>
     <div class="update-modal-body">
       <div id="updateModalNotes" style="font-size:12px;line-height:1.65;color:var(--text-secondary);white-space:pre-wrap;"></div>
       <div id="updateModalStatus" class="hidden"></div>
     </div>
     <div class="update-modal-foot">
-      <button class="btn-ghost" id="updateIgnoreBtn" onclick="ignoreGlobalUpdate()">忽略此版本</button>
+      <button class="btn-ghost" id="updateIgnoreBtn" onclick="ignoreGlobalUpdate()"><span data-i18n="update.ignore">忽略此版本</span></button>
       <div class="update-modal-actions">
-        <button class="btn-ghost" onclick="closeUpdateModal()">稍后</button>
-        <a class="btn-secondary" id="updateDownloadLink" href="https://github.com/liwei9745/GenBox/releases" target="_blank" rel="noopener noreferrer">前往下载</a>
-        <button class="btn-primary" id="updateApplyBtn" onclick="applyGlobalUpdate()">立即更新</button>
+        <button class="btn-ghost" onclick="closeUpdateModal()"><span data-i18n="update.later">稍后</span></button>
+        <a class="btn-secondary" id="updateDownloadLink" href="https://github.com/liwei9745/GenBox/releases" target="_blank" rel="noopener noreferrer"><span data-i18n="update.download">前往下载</span></a>
+        <button class="btn-primary" id="updateApplyBtn" onclick="applyGlobalUpdate()"><span data-i18n="update.apply">立即更新</span></button>
       </div>
     </div>
   </div>
@@ -156,11 +170,11 @@
 <div id="loginPage">
   <div class="glass-panel" style="width:380px;text-align:center;">
     <div class="text-xl mb-12">🔐</div>
-    <h2 class="text-lg font-bold mb-6">需要认证</h2>
-    <p class="text-sm text-muted mb-20">请输入管理员密钥以继续</p>
-    <input type="password" id="loginKeyInput" placeholder="输入 Admin Key..." class="w-full mb-12">
-    <button class="btn-primary w-full" onclick="doLogin()">登录</button>
-    <div id="loginError" class="hidden text-sm mt-8" style="color:#ef4444;">密钥无效，请重试</div>
+    <h2 class="text-lg font-bold mb-6"><span data-i18n="auth.required">需要认证</span></h2>
+    <p class="text-sm text-muted mb-20"><span data-i18n="auth.enter_admin">请输入管理员密钥以继续</span></p>
+    <input type="password" id="loginKeyInput" placeholder="输入 Admin Key..." class="w-full mb-12" data-i18n-placeholder="auth.admin_placeholder">
+    <button class="btn-primary w-full" onclick="doLogin()"><span data-i18n="auth.login">登录</span></button>
+    <div id="loginError" class="hidden text-sm mt-8" style="color:#ef4444;"><span data-i18n="auth.invalid">密钥无效，请重试</span></div>
   </div>
 </div>
 
@@ -168,32 +182,32 @@
 <div id="welcomePage">
   <div class="glass-panel" style="width:420px;text-align:center;">
     <div class="text-xl mb-12">🎉</div>
-    <h2 class="text-lg font-bold mb-6">欢迎使用 GenBox!</h2>
-    <p class="text-sm text-muted mb-16">你的管理员密钥已生成，请妥善保存</p>
+    <h2 class="text-lg font-bold mb-6"><span data-i18n="welcome.title">欢迎使用 GenBox!</span></h2>
+    <p class="text-sm text-muted mb-16"><span data-i18n="welcome.key_hint">你的管理员密钥已生成，请妥善保存</span></p>
     <div id="welcomeKeyBox" onclick="copyWelcomeKey()" style="padding:12px 16px;background:var(--bg-surface);border:1px dashed var(--accent);border-radius:10px;cursor:pointer;margin-bottom:16px;">
-      <div class="text-xs text-muted mb-4">点击复制密钥</div>
+      <div class="text-xs text-muted mb-4"><span data-i18n="welcome.copy_key">点击复制密钥</span></div>
       <div id="welcomeKeyText" style="font-size:14px;font-weight:700;color:var(--accent);font-family:monospace;word-break:break-all;"></div>
     </div>
-    <button class="btn-primary w-full" onclick="confirmWelcome()">我已保存，继续设置</button>
+    <button class="btn-primary w-full" onclick="confirmWelcome()"><span data-i18n="welcome.continue">我已保存，继续设置</span></button>
   </div>
 </div>
 
 <!-- Setup Wizard -->
 <div id="setupWizard">
   <div class="glass-panel" style="width:min(900px,95vw);max-height:90vh;overflow-y:auto;">
-    <h2 class="text-lg font-bold mb-4">🚀 快速配置</h2>
-    <p class="text-sm text-muted mb-20">填写 API Key 即可开始使用，其余配置可在设置中修改</p>
+    <h2 class="text-lg font-bold mb-4"><span data-i18n="setup.title">🚀 快速配置</span></h2>
+    <p class="text-sm text-muted mb-20"><span data-i18n="setup.hint">填写 API Key 即可开始使用，其余配置可在设置中修改</span></p>
     <div class="dash-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
       <div>
-        <h3 class="text-sm font-bold mb-10">🎨 生图模型</h3>
+        <h3 class="text-sm font-bold mb-10"><span data-i18n="provider.image">🎨 生图模型</span></h3>
         <div class="flex flex-col gap-8">
-          <div><label class="text-xs text-muted">GPT Image</label><input type="text" id="sw_gpt_url" placeholder="URL (默认 OpenAI)" class="w-full text-xs p-8"><input type="password" id="sw_gpt_key" placeholder="API Key" class="w-full text-xs p-8 mt-4"></div>
+          <div><label class="text-xs text-muted">GPT Image</label><input type="text" id="sw_gpt_url" placeholder="URL (默认 OpenAI)" class="w-full text-xs p-8" data-i18n-placeholder="setup.openai_default"><input type="password" id="sw_gpt_key" placeholder="API Key" class="w-full text-xs p-8 mt-4"></div>
           <div><label class="text-xs text-muted">Gemini</label><input type="text" id="sw_gem_url" placeholder="URL" class="w-full text-xs p-8"><input type="password" id="sw_gem_key" placeholder="API Key" class="w-full text-xs p-8 mt-4"></div>
           <div><label class="text-xs text-muted">Qwen</label><input type="text" id="sw_qwen_url" placeholder="URL" class="w-full text-xs p-8"><input type="password" id="sw_qwen_key" placeholder="API Key" class="w-full text-xs p-8 mt-4"></div>
         </div>
       </div>
       <div>
-        <h3 class="text-sm font-bold mb-10">🎬 生视频模型</h3>
+        <h3 class="text-sm font-bold mb-10"><span data-i18n="provider.video">🎬 生视频模型</span></h3>
         <div class="flex flex-col gap-8">
           <div><label class="text-xs text-muted">Agnes Video</label><input type="text" id="sw_agnes_v_url" placeholder="URL" class="w-full text-xs p-8"><input type="password" id="sw_agnes_v_key" placeholder="API Key" class="w-full text-xs p-8 mt-4"></div>
           <div><label class="text-xs text-muted">Gemini Video</label><input type="text" id="sw_gem_v_url" placeholder="URL" class="w-full text-xs p-8"><input type="password" id="sw_gem_v_key" placeholder="API Key" class="w-full text-xs p-8 mt-4"></div>
@@ -201,15 +215,15 @@
         </div>
       </div>
       <div>
-        <h3 class="text-sm font-bold mb-10">🤖 提示词优化 (可选)</h3>
+        <h3 class="text-sm font-bold mb-10"><span data-i18n="setup.llm_optional">🤖 提示词优化 (可选)</span></h3>
         <div class="flex flex-col gap-8">
           <div><label class="text-xs text-muted">LLM Provider</label><input type="text" id="sw_llm_url" placeholder="URL" class="w-full text-xs p-8"><input type="password" id="sw_llm_key" placeholder="API Key" class="w-full text-xs p-8 mt-4"></div>
         </div>
       </div>
     </div>
     <div class="flex gap-8 justify-between">
-      <button class="btn-ghost" onclick="closeSetupWizard()">跳过</button>
-      <button class="btn-primary" onclick="submitSetupWizard()">保存配置</button>
+      <button class="btn-ghost" onclick="closeSetupWizard()"><span data-i18n="common.skip">跳过</span></button>
+      <button class="btn-primary" onclick="submitSetupWizard()"><span data-i18n="setup.save">保存配置</span></button>
     </div>
   </div>
 </div>
@@ -221,23 +235,23 @@
 
   <!-- ── Sidebar (icon-only, settings only — Dock handles nav) ── -->
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-logo">
-      <div class="sidebar-logo-icon">⚡</div>
-    </div>
+    <div class="sidebar-logo"><div class="genbox-brand" aria-label="GenBox"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 27 9.5v13L16 29 5 22.5v-13Z"/><path d="m5 9.5 11 6.5 11-6.5M16 16v13"/><circle cx="16" cy="16" r="2.2"/></svg><span>GenBox</span></div></div>
     <nav class="sidebar-nav">
-      <div class="nav-item" id="navDashboard" onclick="switchNav('dashboard',this)" title="系统看板"><span class="nav-icon">📊</span><span class="nav-label">系统看板</span></div>
-      <div class="nav-item" id="navGen" onclick="switchNav('generate',this)" title="生图"><span class="nav-icon">✨</span><span class="nav-label">生图</span></div>
-      <div class="nav-item" id="navVideo" onclick="switchNav('video',this)" title="生视频"><span class="nav-icon">🎬</span><span class="nav-label">生视频</span></div>
-      <div class="nav-item" id="navGallery" onclick="switchNav('gallery',this)" title="媒体库"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg></span><span class="nav-label">媒体库</span></div>
-      <div class="nav-item" id="navHistory" onclick="switchNav('history',this)" title="历史"><span class="nav-icon">📜</span><span class="nav-label">历史</span></div>
+      <div class="nav-item" id="navDashboard" onclick="switchNav('dashboard',this)" title="系统看板" data-i18n-title="nav.dashboard"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 16v-4m5 4V8m5 8v-6"/></svg></span><span class="nav-label"><span data-i18n="nav.dashboard">系统看板</span></span></div>
+      <div class="nav-item" id="navGen" onclick="switchNav('generate',this)" title="生图" data-i18n-title="nav.images"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m5 17 5-5 4 4 2-2 3 3M17 7v4m-2-2h4"/></svg></span><span class="nav-label"><span data-i18n="nav.images">生图</span></span></div>
+      <div class="nav-item" id="navVideo" onclick="switchNav('video',this)" title="生视频" data-i18n-title="nav.video"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m9 9 4 3-4 3Zm7 1 5-3v10l-5-3"/></svg></span><span class="nav-label"><span data-i18n="nav.video">生视频</span></span></div>
+      <div class="nav-item" id="navGallery" onclick="switchNav('gallery',this)" title="媒体库" data-i18n-title="nav.library"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="14" height="13" rx="2"/><path d="M8 6V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2"/><circle cx="8.5" cy="10" r="1.25"/><path d="m5.5 17 4-4 2.5 2.5 2-2 3.5 3.5"/></svg></span><span class="nav-label"><span data-i18n="nav.library">媒体库</span></span></div>
+      <div class="nav-item" id="navHistory" onclick="switchNav('history',this)" title="历史" data-i18n-title="nav.history"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg></span><span class="nav-label"><span data-i18n="nav.history">历史</span></span></div>
+      <div class="nav-item" id="navExtensions" onclick="switchNav('extensions',this)" title="扩展功能" data-i18n-title="nav.extensions"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 5h10M5 7v10m14-10v10M7 19h10"/></svg></span><span class="nav-label"><span data-i18n="nav.extensions">扩展功能</span></span></div>
     </nav>
     <div class="sidebar-divider"></div>
     <nav class="sidebar-nav" style="flex:none;">
-      <div class="nav-item" onclick="openProviderModal()" title="模型设置"><span class="nav-icon">⚙</span><span class="nav-label">模型设置</span></div>
-      <div class="nav-item" onclick="openProviderModal('llm')" title="提示词优化设置"><span class="nav-icon">🤖</span><span class="nav-label">提示词优化设置</span></div>
-      <div class="nav-item" onclick="openThemeModal()" title="主题设置"><span class="nav-icon">🎨</span><span class="nav-label">主题设置</span></div>
-      <div class="nav-item" onclick="openLogModal()" title="查看日志"><span class="nav-icon">📋</span><span class="nav-label">查看日志</span></div>
-      <div class="nav-item" onclick="location.reload()" title="刷新页面"><span class="nav-icon">↻</span><span class="nav-label">刷新页面</span></div>
+      <div class="nav-item" onclick="openProviderModal()" title="模型设置" data-i18n-title="nav.models"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3"/><circle cx="12" cy="12" r="3"/><path d="M9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m12 0h4M2 15h4m12 0h4"/></svg></span><span class="nav-label"><span data-i18n="nav.models">模型设置</span></span></div>
+      <div class="nav-item" onclick="openProviderModal('llm')" title="提示词优化设置" data-i18n-title="nav.prompt_settings"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17H3v-4a9 9 0 1 1 4 7.5L4 22v-4"/><path d="M8 11h.01M12 11h.01M16 11h.01"/></svg></span><span class="nav-label"><span data-i18n="nav.prompt_settings">提示词优化设置</span></span></div>
+      <div class="nav-item" onclick="openThemeModal()" title="主题设置" data-i18n-title="nav.appearance"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1.2a1.8 1.8 0 0 0 0-3.6h-.7a1.7 1.7 0 0 1 0-3.4H16a5 5 0 0 0 0-10Z"/><circle cx="7" cy="10" r=".7"/><circle cx="9" cy="6.5" r=".7"/><circle cx="14" cy="6.5" r=".7"/></svg></span><span class="nav-label"><span data-i18n="nav.appearance">主题设置</span></span></div>
+      <div class="nav-item" onclick="openLogModal()" title="查看日志" data-i18n-title="nav.logs"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M8 9h8m-8 4h8m-8 4h5"/></svg></span><span class="nav-label"><span data-i18n="nav.logs">查看日志</span></span></div>
+      <div class="nav-item" onclick="openOnboardingGuide()" title="新手引导" data-i18n-title="nav.guide"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5Z"/><circle cx="12" cy="12" r="1"/></svg></span><span class="nav-label"><span data-i18n="nav.guide">新手引导</span></span></div>
+      <div class="nav-item" onclick="location.reload()" title="刷新页面" data-i18n-title="nav.refresh"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.2 8a7 7 0 0 1 11.6-1L20 12M4 12l2.2 5a7 7 0 0 0 11.6-1"/></svg></span><span class="nav-label"><span data-i18n="nav.refresh">刷新页面</span></span></div>
     </nav>
   </aside>
 
@@ -248,22 +262,36 @@
     <div id="pageDashboard" class="page-content">
       <div class="content-header dashboard-header">
         <div class="dashboard-header-main">
-          <div class="dashboard-title-block">
-            <div class="content-title">📊 系统看板</div>
-            <div class="content-subtitle">系统状态一览</div>
+          <div class="page-heading dashboard-title-block">
+            <div class="page-heading-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 16v-4m5 4V8m5 8v-6"/></svg>
+            </div>
+            <div class="page-heading-copy">
+              <span class="page-heading-kicker">GENBOX CONTROL CENTER</span>
+              <div class="content-title" id="dashboardTitle"><span data-i18n="nav.dashboard">系统看板</span></div>
+              <div class="content-subtitle" id="dashboardSubtitle"><span data-i18n="dashboard.subtitle">系统状态一览</span></div>
+            </div>
           </div>
           <div class="dashboard-actions">
-            <button id="globalUpdateBadge" class="dashboard-action update-status is-checking" onclick="openUpdateModal()" title="点击查看更新状态">
+            <label class="language-switch" title="切换界面语言" data-i18n-title="language.switch_title">
+              <span aria-hidden="true">🌐</span>
+              <select id="languageSelect" onchange="setUiLanguage(this.value)" aria-label="界面语言" data-i18n-aria-label="language.select_label">
+                <option value="zh-CN"><span data-i18n="language.chinese">中文</span></option>
+                <option value="en">EN</option>
+              </select>
+            </label>
+            <button id="globalUpdateBadge" class="dashboard-action update-status is-checking" onclick="openUpdateModal()" title="点击查看更新状态" data-i18n-title="update.open_status">
               <span id="globalUpdateBadgeIcon" class="dashboard-action-icon">↻</span>
-              <span id="globalUpdateBadgeText">检查更新...</span>
+              <span id="globalUpdateBadgeText"><span data-i18n="update.checking">检查更新...</span></span>
             </button>
-            <a href="https://github.com/liwei9745/GenBox" target="_blank" rel="noopener noreferrer" title="GitHub 项目地址" class="dashboard-action">
+            <div class="dashboard-community"><a href="https://qm.qq.com/q/yegwCqJisS" target="_blank" rel="noopener noreferrer" class="dashboard-action dashboard-community-join" title="打开 QQ 并申请加入交流群" data-i18n-title="community.open"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18.5c-2.2-.6-3.5-2-3.5-3.7 0-1.1.5-2.1 1.4-2.9C4.7 7.2 7.4 3.5 12 3.5s7.3 3.7 7.1 8.4c.9.8 1.4 1.8 1.4 2.9 0 1.7-1.3 3.1-3.5 3.7"/><path d="M8 18c1.1 1 2.4 1.5 4 1.5s2.9-.5 4-1.5M9 11h.01M15 11h.01"/></svg><span><span data-i18n="community.label">GenBox | ChatGPT2API QQ交流群</span></span></a></div>
+            <a href="https://github.com/liwei9745/GenBox" target="_blank" rel="noopener noreferrer" title="GitHub 项目地址" class="dashboard-action" data-i18n-title="github.title">
               <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
               <span>GitHub</span>
             </a>
-            <button class="dashboard-action is-primary" onclick="loadDashboard()"><span class="dashboard-action-icon">↻</span><span>刷新</span></button>
-            <button class="dashboard-action is-warning" onclick="serverControl('restart')"><span class="dashboard-action-icon">↻</span><span>重启</span></button>
-            <button class="dashboard-action is-danger" onclick="serverControl('stop')"><span class="dashboard-action-icon">■</span><span>停止</span></button>
+            <button class="dashboard-action is-primary" onclick="loadDashboard()"><span class="dashboard-action-icon">↻</span><span id="dashboardRefreshLabel"><span data-i18n="common.refresh">刷新</span></span></button>
+            <button class="dashboard-action is-warning" onclick="serverControl('restart')"><span class="dashboard-action-icon">↻</span><span id="dashboardRestartLabel"><span data-i18n="dashboard.restart">重启</span></span></button>
+            <button class="dashboard-action is-danger" onclick="serverControl('stop')"><span class="dashboard-action-icon">■</span><span id="dashboardStopLabel"><span data-i18n="dashboard.stop">停止</span></span></button>
           </div>
         </div>
         <div class="dashboard-network-row">
@@ -275,33 +303,34 @@
 
     <!-- ════════════════ PAGE: Generate ════════════════ -->
     <div id="pageGenerate" class="page-content hidden">
+      <div class="creator-mode-bar"><div class="page-heading creator-heading"><div class="page-heading-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m5 17 5-5 4 4 2-2 3 3M17 7v4m-2-2h4"/></svg></div><div class="page-heading-copy"><span class="page-heading-kicker">GENBOX IMAGE STUDIO</span><strong id="imageWorkbenchTitle"><span data-i18n="creator.image_multi_title">多模型生图对比</span></strong><span id="imageWorkbenchHint"><span data-i18n="creator.image_multi_hint">同一提示词同时调用多个模型，快速比较结果。</span></span></div></div><label class="creator-single-picker"><span><span data-i18n="creator.current_model">当前模型</span></span><select id="imageSingleProvider" onchange="selectSingleCreatorProvider('image',this.value)"></select></label><div class="creator-mode-switch"><button id="imageModeMulti" class="active" onclick="setCreatorWorkbenchMode('image','multi')"><span data-i18n="creator.multi_mode">多模型对比</span></button><button id="imageModeSingle" onclick="setCreatorWorkbenchMode('image','single')"><span data-i18n="creator.single_mode">单模型工作台</span></button></div></div>
       <div class="generate-layout">
 
         <!-- Left: Models + Settings -->
         <div class="generate-left glass-card">
-          <div class="text-sm font-bold mb-8">🎨 生图模型</div>
+          <div class="text-sm font-bold mb-8"><span data-i18n="provider.image">🎨 生图模型</span></div>
           <div class="flex items-center justify-between mb-8">
-            <span class="text-xs text-muted">已选 <span id="selCountBadge" class="text-accent font-bold">0</span> 个</span>
+            <span class="text-xs text-muted"><span data-i18n="creator.selected">已选</span> <span id="selCountBadge" class="text-accent font-bold">0</span> <span data-i18n="creator.unit_count">个</span></span>
           </div>
           <div id="providerList"></div>
           <div class="mt-12" style="border-top:1px solid var(--border);padding-top:12px;">
-            <div class="param-label mb-8">📐 图像设置</div>
+            <div class="param-label mb-8"><span data-i18n="creator.image_settings">📐 图像设置</span></div>
             <div class="mb-10">
-              <div class="param-label">模型</div>
-              <select id="selModel" onchange="onImageSettingsModelChange()" class="w-full text-sm p-8"><option value="_global">全局设置</option></select>
+              <div class="param-label"><span data-i18n="creator.model">模型</span></div>
+              <select id="selModel" onchange="onImageSettingsModelChange()" class="w-full text-sm p-8"><option value="_global"><span data-i18n="creator.global_settings">全局设置</span></option></select>
             </div>
             <div class="mb-10">
-              <div class="param-label">质量</div>
+              <div class="param-label"><span data-i18n="creator.quality">质量</span></div>
               <div class="flex gap-4 flex-wrap" id="qualityBtns">
-                <button class="quality-btn active" data-val="" onclick="setQuality(this,'')">自动</button>
-                <button class="quality-btn" data-val="low" onclick="setQuality(this,'low')">低</button>
-                <button class="quality-btn" data-val="medium" onclick="setQuality(this,'medium')">中</button>
-                <button class="quality-btn" data-val="high" onclick="setQuality(this,'high')">高</button>
+                <button class="quality-btn active" data-val="" onclick="setQuality(this,'')"><span data-i18n="common.auto">自动</span></button>
+                <button class="quality-btn" data-val="low" onclick="setQuality(this,'low')"><span data-i18n="common.low">低</span></button>
+                <button class="quality-btn" data-val="medium" onclick="setQuality(this,'medium')"><span data-i18n="common.medium">中</span></button>
+                <button class="quality-btn" data-val="high" onclick="setQuality(this,'high')"><span data-i18n="common.high">高</span></button>
               </div>
               <input type="hidden" id="selQuality" value="">
             </div>
             <div class="mb-10">
-              <div class="param-label">尺寸</div>
+              <div class="param-label"><span data-i18n="creator.size">尺寸</span></div>
               <div class="flex gap-6 items-center">
                 <input type="number" id="inputW" value="1024" min="256" max="4096" step="64" oninput="onSizeInput()" style="width:80px;">
                 <span class="text-muted text-sm">×</span>
@@ -309,7 +338,7 @@
               </div>
             </div>
             <div class="mb-10">
-              <div class="param-label">宽高比</div>
+              <div class="param-label"><span data-i18n="creator.aspect_ratio">宽高比</span></div>
               <div class="grid gap-4" style="grid-template-columns:repeat(5,1fr);" id="ratioGrid">
                 <button class="ratio-btn active" data-ratio="1:1" onclick="setRatio(this,'1:1')">1:1</button>
                 <button class="ratio-btn" data-ratio="2:3" onclick="setRatio(this,'2:3')">2:3</button>
@@ -330,7 +359,7 @@
               <input type="hidden" id="selRatio" value="1:1">
             </div>
             <div class="mb-10">
-              <div class="param-label">生成数量</div>
+              <div class="param-label"><span data-i18n="creator.quantity">生成数量</span></div>
               <div class="flex gap-4 flex-wrap" id="qtyBtns">
                 <button class="qty-btn active" data-val="1" onclick="setQty(this,1)">1</button>
                 <button class="qty-btn" data-val="2" onclick="setQty(this,2)">2</button>
@@ -346,11 +375,11 @@
               <input type="hidden" id="selQty" value="1">
             </div>
             <div class="flex gap-6 mt-4">
-              <button class="btn-primary w-full" onclick="saveImageSettings()" style="font-size:11px;padding:6px 12px;">💾 保存设置</button>
+              <button class="btn-primary w-full" onclick="saveImageSettings()" style="font-size:11px;padding:6px 12px;"><span data-i18n="creator.save_settings">💾 保存设置</span></button>
             </div>
             <div id="saveSettingsToast" class="hidden mt-6 text-center text-xs font-semibold" style="color:#22c55e;padding:4px 8px;border-radius:6px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);"></div>
             <div id="strengthGroup" class="hidden">
-              <div class="param-label">变换强度 <span id="strengthVal" class="text-accent" style="float:right;">0.55</span></div>
+              <div class="param-label"><span data-i18n="creator.strength">变换强度</span> <span id="strengthVal" class="text-accent" style="float:right;">0.55</span></div>
               <input type="range" id="selStrength" min="0.1" max="0.95" step="0.05" value="0.55" class="w-full" style="accent-color:var(--accent);" oninput="document.getElementById('strengthVal').textContent=this.value">
             </div>
           </div>
@@ -364,15 +393,15 @@
             <div class="resize-handle-left" id="resizeLeft" onmousedown="startResize(event,'left')"></div>
             <div class="resize-handle-bottom" id="resizeBottom" onmousedown="startResize(event,'bottom')"></div>
             <div class="flex items-center justify-between" style="margin-bottom:6px;">
-              <div class="text-sm font-bold">🎯 实时预览</div>
+              <div class="text-sm font-bold"><span data-i18n="creator.live_preview">🎯 实时预览</span></div>
               <div class="flex gap-8 items-center">
                 <span id="resultCount" class="text-xs text-muted"></span>
-                <button class="btn-ghost" onclick="openCompare()" style="font-size:10px;padding:4px 8px;">🔀 对比</button>
-                <button class="btn-ghost" onclick="clearGroupedPreviews()" style="font-size:10px;padding:4px 8px;color:#ef4444;" title="清空所有预览">🗑 清空</button>
+                <button class="btn-ghost" onclick="openCompare()" style="font-size:10px;padding:4px 8px;"><span data-i18n="common.compare">🔀 对比</span></button>
+                <button class="btn-ghost" onclick="clearGroupedPreviews()" style="font-size:10px;padding:4px 8px;color:#ef4444;" title="清空所有预览" data-i18n-title="creator.clear_preview_title"><span data-i18n="common.clear_icon">🗑 清空</span></button>
               </div>
             </div>
             <div id="previewEmpty" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;text-align:center;padding:40px 20px;">
-              <div>🖼 选择模型 + 输入提示词<br><br>生成后图片将在此处实时展示</div>
+              <div><span data-i18n="creator.empty_preview_1">🖼 选择模型 + 输入提示词</span><br><br><span data-i18n="creator.empty_preview_2">生成后图片将在此处实时展示</span></div>
             </div>
 
             <!-- Main content: images left, logs right -->
@@ -381,7 +410,7 @@
               <div id="previewResults" class="preview-grid" style="min-width:0;"></div>
               <!-- Right: Per-Provider Logs (vertical card) -->
               <div id="previewLogSection" class="hidden" style="width:280px;flex-shrink:0;display:flex;flex-direction:column;background:var(--bg-base);border:1px solid var(--border);border-radius:10px;padding:10px;overflow-y:auto;max-height:100%;">
-                <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:8px;">📋 实时日志</div>
+                <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:8px;"><span data-i18n="creator.live_log">📋 实时日志</span></div>
                 <div id="previewLogGrid" style="display:flex;flex-direction:column;gap:8px;flex:1;"></div>
               </div>
             </div>
@@ -389,10 +418,10 @@
             <!-- Progress (inside preview card) -->
             <div id="progressBox" class="hidden" style="border-top:1px solid var(--border);padding-top:12px;margin-top:auto;">
               <div class="flex items-center justify-between mb-6">
-                <div class="progress-label" id="progressText" style="font-size:12px;font-weight:600;">正在生成...</div>
+                <div class="progress-label" id="progressText" style="font-size:12px;font-weight:600;"><span data-i18n="creator.generating">正在生成...</span></div>
                 <div class="flex items-center gap-10">
                   <div id="progressTimer" class="text-sm text-accent font-semibold">⏱ <span id="elapsedSeconds">0.0</span>s</div>
-                  <button id="progressCloseBtn" onclick="document.getElementById('progressBox').classList.add('hidden')" class="hidden text-xs p-4 rounded" style="border:1px solid var(--border);background:var(--bg-surface);color:var(--text-muted);cursor:pointer;">✕ 关闭</button>
+                  <button id="progressCloseBtn" onclick="document.getElementById('progressBox').classList.add('hidden')" class="hidden text-xs p-4 rounded" style="border:1px solid var(--border);background:var(--bg-surface);color:var(--text-muted);cursor:pointer;"><span data-i18n="common.close_icon">✕ 关闭</span></button>
                 </div>
               </div>
               <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
@@ -407,77 +436,75 @@
               <div class="glass-card" style="padding:14px 16px;">
                 <div class="flex items-center justify-between flex-wrap gap-10">
                   <div class="sub-tabs">
-                    <button class="sub-tab active" id="subTabT2I" onclick="switchSubTab('t2i')">📝 文生图</button>
-                    <button class="sub-tab" id="subTabI2I" onclick="switchSubTab('i2i')">🖼 图生图</button>
-                    <button class="sub-tab" id="subTabVAR" onclick="switchSubTab('variation')">🔄 变形</button>
+                    <button class="sub-tab active" id="subTabT2I" onclick="switchSubTab('t2i')"><span data-i18n="creator.t2i">📝 文生图</span></button>
+                    <button class="sub-tab" id="subTabI2I" onclick="switchSubTab('i2i')"><span data-i18n="creator.i2i">🖼 图生图</span></button>
+                    <button class="sub-tab" id="subTabVAR" onclick="switchSubTab('variation')"><span data-i18n="creator.variation">🔄 变形</span></button>
                   </div>
-                  <button class="btn-primary" id="btnGen" onclick="doGenerate()">🚀 生成图片</button>
+                  <button class="btn-primary" id="btnGen" onclick="doGenerate()"><span data-i18n="creator.generate_image">🚀 生成图片</span></button>
                 </div>
               </div>
 
               <!-- T2I Panel -->
               <div class="glass-card" id="panelT2I">
                 <div class="flex items-center gap-6 mb-10">
-                  <button class="btn-secondary" id="btnModeNewbie" onclick="setPromptMode('newbie')">📝 新手模式</button>
-                  <button class="btn-ghost" id="btnModePro" onclick="setPromptMode('pro')">🎯 专业模式</button>
+                  <button class="btn-secondary" id="btnModeNewbie" onclick="setPromptMode('newbie')"><span data-i18n="creator.newbie_mode">📝 新手模式</span></button>
+                  <button class="btn-ghost" id="btnModePro" onclick="setPromptMode('pro')"><span data-i18n="creator.pro_mode">🎯 专业模式</span></button>
                 </div>
                 <div id="promptNewbie">
-                  <div class="param-label mb-8">提示词 Prompt</div>
-                  <textarea id="txtPrompt" rows="4" placeholder="描述你想要生成的图片..."></textarea>
+                  <div class="param-label mb-8"><span data-i18n="creator.prompt_label">提示词 Prompt</span></div>
+                  <textarea id="txtPrompt" rows="4" placeholder="描述你想要生成的图片..." data-i18n-placeholder="creator.prompt_placeholder"></textarea>
                 </div>
                 <div id="promptPro" class="hidden">
-                  <div class="param-label mb-6" style="color:var(--accent);">系统提示词 System Prompt</div>
-                  <textarea id="txtSysPrompt" rows="3" placeholder="定义整体风格、画质..."></textarea>
-                  <div class="param-label" style="margin:10px 0 6px;color:var(--accent-2);">用户提示词 User Prompt</div>
-                  <textarea id="txtUserPrompt" rows="3" placeholder="描述具体画面内容..."></textarea>
+                  <div class="param-label mb-6" style="color:var(--accent);"><span data-i18n="creator.system_prompt">系统提示词 System Prompt</span></div>
+                  <textarea id="txtSysPrompt" rows="3" placeholder="定义整体风格、画质..." data-i18n-placeholder="creator.system_prompt_placeholder"></textarea>
+                  <div class="param-label" style="margin:10px 0 6px;color:var(--accent-2);"><span data-i18n="creator.user_prompt">用户提示词 User Prompt</span></div>
+                  <textarea id="txtUserPrompt" rows="3" placeholder="描述具体画面内容..." data-i18n-placeholder="creator.user_prompt_placeholder"></textarea>
                 </div>
                 <div id="enhanceResult" class="hidden mt-8 rounded p-10" style="background:var(--bg-surface);border:1px solid var(--border);">
-                  <div class="text-xs font-semibold text-accent mb-4">✨ 优化后提示词</div>
+                  <div class="text-xs font-semibold text-accent mb-4"><span data-i18n="creator.optimized_prompt">✨ 优化后提示词</span></div>
                   <div id="enhanceText" class="text-xs" style="line-height:1.5;"></div>
                   <div class="flex gap-4 mt-6">
-                    <button class="btn-ghost" onclick="insertEnhance()" style="font-size:11px;padding:3px 8px;">📥 插入</button>
-                    <button class="btn-ghost" onclick="copyEnhance()" style="font-size:11px;padding:3px 8px;">📋 复制</button>
+                    <button class="btn-ghost" onclick="insertEnhance()" style="font-size:11px;padding:3px 8px;"><span data-i18n="common.insert">📥 插入</span></button>
+                    <button class="btn-ghost" onclick="copyEnhance()" style="font-size:11px;padding:3px 8px;"><span data-i18n="common.copy_icon">📋 复制</span></button>
                     <button class="btn-ghost ml-auto" onclick="hideEnhance()" style="font-size:11px;padding:3px 8px;">✕</button>
                   </div>
                 </div>
                 <div class="mt-12 rounded p-12 flex items-center gap-10 flex-wrap" style="border:1px solid var(--border);background:var(--bg-surface);">
                   <label class="flex items-center gap-6 text-sm cursor-pointer whitespace-nowrap">
                     <input type="checkbox" id="chkEnhance" class="rounded" style="accent-color:var(--accent);">
-                    <span class="text-accent font-semibold">✨</span> 提示词优化
+                    <span class="text-accent font-semibold">✨</span> <span data-i18n="creator.prompt_optimization">提示词优化</span>
                   </label>
                   <div style="flex:1;"></div>
-                  <button id="btnPreviewLLM" onclick="previewLLMOptimize()" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:11px;cursor:pointer;">⚡ 点击优化</button>
-                  <button id="btnUndoLLM" onclick="undoLLMOptimize()" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:11px;cursor:pointer;">↩ 撤销回退</button>
+                  <button id="btnPreviewLLM" onclick="previewLLMOptimize()" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:11px;cursor:pointer;"><span data-i18n="creator.optimize">⚡ 点击优化</span></button>
+                  <button id="btnUndoLLM" onclick="undoLLMOptimize()" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:11px;cursor:pointer;"><span data-i18n="creator.undo">↩ 撤销回退</span></button>
                 </div>
                 <div class="flex gap-8 mt-8 flex-wrap">
                   <label class="flex items-center gap-6 text-xs cursor-pointer font-semibold" style="background:rgba(91,141,239,0.06);padding:6px 10px;border-radius:6px;">
-                    <input type="checkbox" id="chkContinuous" class="rounded" style="accent-color:var(--accent);">
-                    🔗 连续生图
-                    <span class="info-tip"><span class="info-tip-icon">?</span><span class="info-tip-text">启用后自动循环生图，可配合 LLM 优化实现全自动创作</span></span>
+                    <input type="checkbox" id="chkContinuous" class="rounded" style="accent-color:var(--accent);" onchange="setContinuousGeneration(this.checked)"> <span id="continuousModeLabel"><span data-i18n="creator.independent">每次独立生成</span></span> <span class="info-tip"><span class="info-tip-icon">?</span><span class="info-tip-text"><span data-i18n="creator.record_hint">默认关闭时，每次只处理当前提示词。开启后只会把最近 3 条提示词和 12 张图片归入同一创作记录，不会自动反复生图，也不会把旧内容再次发送给模型。</span></span></span>
                   </label>
                   <label class="flex items-center gap-6 text-xs cursor-pointer font-semibold" style="background:rgba(234,179,8,0.06);padding:6px 10px;border-radius:6px;border:1px solid rgba(234,179,8,0.15);">
                     <input type="checkbox" id="chkUpscale" class="rounded" style="accent-color:#eab308;" onchange="document.getElementById('upscaleOpts').classList.toggle('hidden',!this.checked)">
-                    ⤢ 本地放大
-                    <span class="info-tip"><span class="info-tip-icon">?</span><span class="info-tip-text">生成后自动放大图片到更高分辨率，可选尺寸和算法</span></span>
+                    <span data-i18n="creator.local_upscale">⤢ 本地放大</span>
+                    <span class="info-tip"><span class="info-tip-icon">?</span><span class="info-tip-text"><span data-i18n="creator.upscale_hint">生成后自动放大图片到更高分辨率，可选尺寸和算法</span></span></span>
                   </label>
                 </div>
                 <div id="upscaleOpts" class="hidden mt-8 rounded p-8 flex gap-6" style="border:1px solid rgba(234,179,8,0.15);background:rgba(234,179,8,0.04);flex-wrap:wrap;">
                   <select id="upscaleSize" class="text-xs p-4" style="flex:1;min-width:120px;">
-                    <option value="1024">最大边 1024</option>
-                    <option value="1536">最大边 1536</option>
-                    <option value="2048" selected>最大边 2048</option>
-                    <option value="3072">最大边 3072</option>
-                    <option value="4096">最大边 4096</option>
+                    <option value="1024"><span data-i18n="creator.max_1024">最大边 1024</span></option>
+                    <option value="1536"><span data-i18n="creator.max_1536">最大边 1536</span></option>
+                    <option value="2048" selected><span data-i18n="creator.max_2048">最大边 2048</span></option>
+                    <option value="3072"><span data-i18n="creator.max_3072">最大边 3072</span></option>
+                    <option value="4096"><span data-i18n="creator.max_4096">最大边 4096</span></option>
                   </select>
                   <select id="upscaleRatio" class="text-xs p-4" style="flex:1;min-width:120px;">
-                    <option value="1:1">1:1 正方形</option>
-                    <option value="16:9">16:9 横屏</option>
-                    <option value="21:9">21:9 超宽</option>
-                    <option value="4:3">4:3 横屏</option>
-                    <option value="3:2">3:2 横屏</option>
-                    <option value="9:16">9:16 竖屏</option>
-                    <option value="3:4">3:4 竖屏</option>
-                    <option value="original" selected>保持原图比例</option>
+                    <option value="1:1"><span data-i18n="creator.square">1:1 正方形</span></option>
+                    <option value="16:9"><span data-i18n="creator.landscape_169">16:9 横屏</span></option>
+                    <option value="21:9"><span data-i18n="creator.ultrawide">21:9 超宽</span></option>
+                    <option value="4:3"><span data-i18n="creator.landscape_43">4:3 横屏</span></option>
+                    <option value="3:2"><span data-i18n="creator.landscape_32">3:2 横屏</span></option>
+                    <option value="9:16"><span data-i18n="creator.portrait_916">9:16 竖屏</span></option>
+                    <option value="3:4"><span data-i18n="creator.portrait_34">3:4 竖屏</span></option>
+                    <option value="original" selected><span data-i18n="creator.original_ratio">保持原图比例</span></option>
                   </select>
                   <select id="upscaleMethod" class="text-xs p-4" style="flex:1;min-width:120px;">
                     <option value="lanczos3" selected>Lanczos3</option>
@@ -487,14 +514,14 @@
                 </div>
                 <div id="llmPreviewBox" class="hidden mt-8 rounded p-12" style="border:1px solid var(--border);background:var(--bg-surface);">
                   <div class="flex items-center justify-between mb-8">
-                    <span class="text-xs font-semibold text-accent">📝 优化对比</span>
+                    <span class="text-xs font-semibold text-accent"><span data-i18n="creator.optimization_compare">📝 优化对比</span></span>
                     <button onclick="closeLLMPreview()" class="text-xs text-muted" style="border:none;background:transparent;cursor:pointer;">✕</button>
                   </div>
                   <div id="llmPreviewOriginal" class="text-xs text-muted p-8 rounded mb-6" style="background:var(--bg-base);border:1px solid var(--border);line-height:1.5;"></div>
-                  <div class="text-center text-xs text-accent mb-6 font-semibold">⬇ 优化后 ⬇</div>
+                  <div class="text-center text-xs text-accent mb-6 font-semibold"><span data-i18n="creator.optimized_below">⬇ 优化后 ⬇</span></div>
                   <div id="llmPreviewOptimized" class="text-xs p-8 rounded" style="background:var(--bg-base);border:1px solid var(--accent);max-height:100px;overflow-y:auto;line-height:1.5;"></div>
                   <div id="llmPreviewError" class="hidden text-xs p-8 rounded mt-6" style="color:#f59e0b;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);"></div>
-                  <button onclick="insertLLMPreview()" class="w-full mt-8 p-6 rounded text-xs font-semibold" style="border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;">📥 插入优化结果</button>
+                  <button onclick="insertLLMPreview()" class="w-full mt-8 p-6 rounded text-xs font-semibold" style="border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;"><span data-i18n="creator.insert_optimized">📥 插入优化结果</span></button>
                 </div>
               </div>
 
@@ -503,36 +530,36 @@
                 <div style="display:flex;gap:12px;align-items:stretch;">
                   <!-- 左侧：参考图片 (20%) -->
                   <div style="flex:0 0 20%;min-width:120px;">
-                    <div class="param-label mb-8">参考图片</div>
+                    <div class="param-label mb-8"><span data-i18n="creator.reference_image">参考图片</span></div>
                     <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()" style="height:100%;min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;">
                       <img id="uploadPreview" class="upload-preview-img hidden" src="" style="max-height:60px;object-fit:contain;">
                       <div id="uploadPlaceholder" style="text-align:center;">
                         <div class="text-base mb-4">🖼</div>
-                        <div class="text-xs text-muted">点击或拖拽上传</div>
+                        <div class="text-xs text-muted"><span data-i18n="creator.upload_reference">点击或拖拽上传</span></div>
                       </div>
                     </div>
                     <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
                   </div>
                   <!-- 右侧：修改提示词 (80%) -->
                   <div style="flex:1;display:flex;flex-direction:column;">
-                    <div class="param-label mb-8">修改提示词 (可选)</div>
-                    <textarea id="txtPromptI2I" rows="3" placeholder="描述你希望如何修改这张图片..." style="flex:1;resize:none;"></textarea>
+                    <div class="param-label mb-8"><span data-i18n="creator.edit_prompt_optional">修改提示词 (可选)</span></div>
+                    <textarea id="txtPromptI2I" rows="3" placeholder="描述你希望如何修改这张图片..." style="flex:1;resize:none;" data-i18n-placeholder="creator.edit_prompt_placeholder"></textarea>
                   </div>
                 </div>
               </div>
 
               <!-- VAR Panel -->
               <div class="glass-card hidden" id="panelVAR">
-                <div class="param-label mb-8">源图片</div>
+                <div class="param-label mb-8"><span data-i18n="creator.source_image">源图片</span></div>
                 <div class="upload-zone" id="uploadZoneVar" onclick="document.getElementById('fileInputVar').click()">
                   <div class="text-lg mb-6">🔄</div>
-                  <div class="text-sm text-muted">点击或拖拽上传源图片</div>
+                  <div class="text-sm text-muted"><span data-i18n="creator.upload_source">点击或拖拽上传源图片</span></div>
                   <img id="uploadPreviewVar" class="upload-preview-img hidden" src="">
                 </div>
                 <input type="file" id="fileInputVar" accept="image/*" class="hidden" onchange="handleFileSelectVar(event)">
                 <div class="mt-12 flex gap-12">
-                  <div style="flex:1;"><div class="param-label">输出尺寸</div><select id="varSize" class="w-full"><option value="1024x1024">1024×1024</option><option value="512x512">512×512</option><option value="256x256">256×256</option></select></div>
-                  <div style="flex:1;"><div class="param-label">数量</div><select id="varCount" class="w-full"><option value="1">1</option><option value="2">2</option><option value="4">4</option></select></div>
+                  <div style="flex:1;"><div class="param-label"><span data-i18n="creator.output_size">输出尺寸</span></div><select id="varSize" class="w-full"><option value="1024x1024">1024×1024</option><option value="512x512">512×512</option><option value="256x256">256×256</option></select></div>
+                  <div style="flex:1;"><div class="param-label"><span data-i18n="creator.count">数量</span></div><select id="varCount" class="w-full"><option value="1">1</option><option value="2">2</option><option value="4">4</option></select></div>
                 </div>
               </div>
             </div>
@@ -540,8 +567,8 @@
             <!-- Bottom-Right: Quick Prompts (快捷提示词) -->
             <div class="generate-quick-col" id="quickCard">
               <div class="flex items-center justify-between mb-10">
-                <div class="param-label" style="margin:0;">💡 快捷提示词</div>
-                <input type="text" id="quickSearch" placeholder="🔍 搜索提示词.." class="text-xs p-8" style="width:140px;">
+                <div class="param-label" style="margin:0;"><span data-i18n="creator.quick_prompts">💡 快捷提示词</span></div>
+                <input type="text" id="quickSearch" placeholder="🔍 搜索提示词.." class="text-xs p-8" style="width:140px;" data-i18n-placeholder="common.search_prompt_icon">
               </div>
               <div id="quickArea" style="overflow-y:auto;flex:1;"></div>
             </div>
@@ -553,115 +580,116 @@
 
     <!-- ════════════════ PAGE: Gallery ════════════════ -->
     <div id="pageGallery" class="page-content hidden">
-      <div class="content-header">
-        <div>
-          <div class="content-title">🖼 媒体库</div>
-          <div class="content-subtitle">本地保存的图片与视频</div>
+      <div class="content-header page-heading-header">
+        <div class="page-heading">
+          <div class="page-heading-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="14" height="13" rx="2"/><path d="M8 6V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2"/><circle cx="8.5" cy="10" r="1.25"/><path d="m5.5 17 4-4 2.5 2.5 2-2 3.5 3.5"/></svg></div>
+          <div class="page-heading-copy"><span class="page-heading-kicker">GENBOX MEDIA VAULT</span><div class="content-title"><span data-i18n="nav.library">媒体库</span></div><div class="content-subtitle"><span data-i18n="library.subtitle">本地保存的图片与视频</span></div></div>
         </div>
       </div>
       <div class="px-16 mb-8">
         <div class="sub-tabs">
-          <button class="sub-tab active" id="mediaTabImage" onclick="switchMediaTab('image')">🖼 图片</button>
-          <button class="sub-tab" id="mediaTabVideo" onclick="switchMediaTab('video')">🎬 视频</button>
+          <button class="sub-tab active" id="mediaTabImage" onclick="switchMediaTab('image')"><span data-i18n="library.images">🖼 图片</span></button>
+          <button class="sub-tab" id="mediaTabVideo" onclick="switchMediaTab('video')"><span data-i18n="library.videos">🎬 视频</span></button>
         </div>
       </div>
       <div class="px-16 mb-12 flex gap-8 items-center flex-wrap" id="galleryToolbar">
-        <select id="gallerySortBy" onchange="applyGallerySort()" class="media-filter-select"><option value="created_at_desc">时间 ↓</option><option value="created_at_asc">时间 ↑</option><option value="model_asc">Provider A-Z</option><option value="model_desc">Provider Z-A</option><option value="prompt_asc">提示词 A-Z</option></select>
-        <select id="galleryProviderFilter" onchange="applyMediaFilters()" class="media-filter-select"><option value="">所有 Provider</option></select>
-        <select id="galleryGroupMode" onchange="applyMediaFilters()" class="media-filter-select"><option value="flat">平铺展示</option><option value="model">按模型分组</option></select>
-        <input type="text" id="gallerySearchInput" class="media-search-input" placeholder="搜索提示词.." oninput="applyMediaFilters()">
-        <button class="btn-ghost" onclick="toggleGallerySelectMode()" id="btnGallerySelect">☑ 选择模式</button>
-        <button class="btn-ghost hidden" onclick="selectAllGallery()" id="btnSelAll" style="color:var(--accent);">全选</button>
-        <button class="btn-ghost hidden" onclick="deselectAllGallery()" id="btnSelNone">取消全选</button>
-        <button class="btn-secondary hidden" onclick="galleryStartRename()" id="btnGalleryRename">✏️ 重命名</button>
-        <button class="btn-secondary hidden" onclick="pushGalleryToReference()" id="btnPushToRef">➡️ 推送图生图</button>
-        <button class="btn-primary hidden" onclick="batchDownloadGallery()" id="btnDlSelected">📥 下载 (<span id="dlGalleryCount">0</span>)</button>
-        <button class="btn-primary hidden" onclick="deleteSelectedGallery()" id="btnDelSelected" style="background:#ef4444;">🗑 删除 (<span id="selGalleryCount">0</span>)</button>
-        <button class="btn-ghost" onclick="loadGallery()">🔄 刷新</button>
-        <button class="btn-primary" id="btnRemoteSync" onclick="openSyncModal()" style="margin-left:auto;">☁ 从远程同步</button>
+        <select id="gallerySortBy" onchange="applyGallerySort()" class="media-filter-select"><option value="created_at_desc"><span data-i18n="library.time_desc">时间 ↓</span></option><option value="created_at_asc"><span data-i18n="library.time_asc">时间 ↑</span></option><option value="model_asc"><span data-i18n="library.provider_az">Provider A-Z</span></option><option value="model_desc"><span data-i18n="library.provider_za">Provider Z-A</span></option><option value="prompt_asc"><span data-i18n="library.prompt_az">提示词 A-Z</span></option></select>
+        <select id="galleryProviderFilter" onchange="applyMediaFilters()" class="media-filter-select"><option value=""><span data-i18n="library.all_providers">所有 Provider</span></option></select>
+        <select id="galleryGroupMode" onchange="applyMediaFilters()" class="media-filter-select"><option value="flat"><span data-i18n="library.flat">平铺展示</span></option><option value="model"><span data-i18n="library.grouped">按模型分组</span></option></select>
+        <input type="text" id="gallerySearchInput" class="media-search-input" placeholder="搜索提示词.." oninput="applyMediaFilters()" data-i18n-placeholder="common.search_prompt">
+        <button class="btn-ghost" onclick="toggleGallerySelectMode()" id="btnGallerySelect"><span data-i18n="library.select_mode">☑ 选择模式</span></button>
+        <button class="btn-ghost hidden" onclick="selectAllGallery()" id="btnSelAll" style="color:var(--accent);"><span data-i18n="library.select_all">全选</span></button>
+        <button class="btn-ghost hidden" onclick="deselectAllGallery()" id="btnSelNone"><span data-i18n="library.select_none">取消全选</span></button>
+        <button class="btn-secondary hidden" onclick="galleryStartRename()" id="btnGalleryRename"><span data-i18n="library.rename">✏️ 重命名</span></button>
+        <button class="btn-secondary hidden" onclick="pushGalleryToReference()" id="btnPushToRef"><span data-i18n="library.send_i2i">➡️ 推送图生图</span></button>
+        <button class="btn-primary hidden" onclick="batchDownloadGallery()" id="btnDlSelected"><span data-i18n="library.download_selected">📥 下载 (</span><span id="dlGalleryCount">0</span>)</button>
+        <button class="btn-primary hidden" onclick="deleteSelectedGallery()" id="btnDelSelected" style="background:#ef4444;"><span data-i18n="library.delete_selected">🗑 删除 (</span><span id="selGalleryCount">0</span>)</button>
+        <button class="btn-ghost" onclick="loadGallery()"><span data-i18n="common.refresh_icon">🔄 刷新</span></button>
+        <button class="btn-primary" id="btnRemoteSync" onclick="openSyncModal()" style="margin-left:auto;"><span data-i18n="library.remote_sync">☁ 从远程同步</span></button>
       </div>
       <div class="content-scroll">
-        <div class="gallery-grid" id="galleryGrid">加载中...</div>
+        <div class="gallery-grid" id="galleryGrid"><span data-i18n="common.loading">加载中...</span></div>
       </div>
     </div>
 
     <!-- ════════════════ PAGE: History ════════════════ -->
     <div id="pageHistory" class="page-content hidden">
-      <div class="content-header">
-        <div>
-          <div class="content-title">📜 历史记录</div>
-          <div class="content-subtitle">记录每次生图</div>
+      <div class="content-header page-heading-header">
+        <div class="page-heading">
+          <div class="page-heading-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg></div>
+          <div class="page-heading-copy"><span class="page-heading-kicker">GENBOX ACTIVITY ARCHIVE</span><div class="content-title"><span data-i18n="history.title">历史记录</span></div><div class="content-subtitle"><span data-i18n="history.subtitle">记录每次生图</span></div></div>
         </div>
       </div>
       <div class="px-16 flex gap-8 items-center flex-wrap">
-        <input type="text" id="historySearch" placeholder="🔍 搜索提示词.." oninput="loadHistory()" class="text-sm p-8" style="width:180px;border-radius:8px;">
-        <select id="historyFilterProvider" onchange="loadHistory()" class="text-sm p-8" style="border-radius:8px;"><option value="">所有 Provider</option></select>
-        <select id="historyFilterMode" onchange="loadHistory()" class="text-sm p-8" style="border-radius:8px;"><option value="">所有模式</option><option value="t2i">文生图</option><option value="i2i">图生图</option></select>
-        <select id="historySortBy" onchange="loadHistory()" class="text-sm p-8" style="border-radius:8px;"><option value="time_desc">时间 ↓</option><option value="time_asc">时间 ↑</option></select>
+        <input type="text" id="historySearch" placeholder="🔍 搜索提示词.." oninput="loadHistory()" class="text-sm p-8" style="width:180px;border-radius:8px;" data-i18n-placeholder="common.search_prompt_icon">
+        <select id="historyFilterProvider" onchange="loadHistory()" class="text-sm p-8" style="border-radius:8px;"><option value=""><span data-i18n="library.all_providers">所有 Provider</span></option></select>
+        <select id="historyFilterMode" onchange="loadHistory()" class="text-sm p-8" style="border-radius:8px;"><option value=""><span data-i18n="history.all_modes">所有模式</span></option><option value="t2i"><span data-i18n="history.t2i">文生图</span></option><option value="i2i"><span data-i18n="history.i2i">图生图</span></option></select>
+        <select id="historySortBy" onchange="loadHistory()" class="text-sm p-8" style="border-radius:8px;"><option value="time_desc"><span data-i18n="library.time_desc">时间 ↓</span></option><option value="time_asc"><span data-i18n="library.time_asc">时间 ↑</span></option></select>
       </div>
-      <div class="content-scroll"><div id="historyList">加载中...</div></div>
+      <div class="content-scroll"><div id="historyList"><span data-i18n="common.loading">加载中...</span></div></div>
     </div>
 
     <!-- ════════════════ PAGE: Video ════════════════ -->
     <div id="pageVideo" class="page-content hidden">
+      <div class="creator-mode-bar"><div class="page-heading creator-heading"><div class="page-heading-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m9 9 4 3-4 3Zm7 1 5-3v10l-5-3"/></svg></div><div class="page-heading-copy"><span class="page-heading-kicker">GENBOX MOTION STUDIO</span><strong id="videoWorkbenchTitle"><span data-i18n="video.multi_title">多模型视频对比</span></strong><span id="videoWorkbenchHint"><span data-i18n="video.multi_hint">同时提交多个视频模型，集中比较生成结果。</span></span></div></div><label class="creator-single-picker"><span><span data-i18n="creator.current_model">当前模型</span></span><select id="videoSingleProvider" onchange="selectSingleCreatorProvider('video',this.value)"></select></label><div class="creator-mode-switch"><button id="videoModeMulti" class="active" onclick="setCreatorWorkbenchMode('video','multi')"><span data-i18n="creator.multi_mode">多模型对比</span></button><button id="videoModeSingle" onclick="setCreatorWorkbenchMode('video','single')"><span data-i18n="creator.single_mode">单模型工作台</span></button></div></div>
       <div class="generate-layout">
 
         <!-- Left: Video Settings -->
         <div class="generate-left glass-card">
-          <div class="text-sm font-bold mb-12">🎬 视频参数</div>
+          <div class="text-sm font-bold mb-12"><span data-i18n="video.settings">🎬 视频参数</span></div>
           <div id="videoProviderCards"></div>
-          <label class="text-xs font-semibold text-secondary mb-4 block">视频尺寸</label>
+          <label class="text-xs font-semibold text-secondary mb-4 block"><span data-i18n="video.size">视频尺寸</span></label>
           <select id="videoSize" class="text-sm p-8 mb-10" onchange="onVideoSizeChange()">
-            <option value="1152x768">1152×768 (横版 3:2)</option>
-            <option value="768x1152">768×1152 (竖版 2:3)</option>
+            <option value="1152x768"><span data-i18n="video.size_32_landscape">1152×768 (横版 3:2)</span></option>
+            <option value="768x1152"><span data-i18n="video.size_23_portrait">768×1152 (竖版 2:3)</span></option>
             <option value="1280x720">1280×720 (HD)</option>
-            <option value="720x1280">720×1280 (HD 竖版)</option>
+            <option value="720x1280"><span data-i18n="video.size_hd_portrait">720×1280 (HD 竖版)</span></option>
             <option value="1920x1080">1920×1080 (Full HD)</option>
-            <option value="custom">自定义...</option>
+            <option value="custom"><span data-i18n="common.custom">自定义...</span></option>
           </select>
           <div id="videoCustomSize" class="hidden" style="display:none;gap:6px;margin-bottom:10px;">
-            <input type="number" id="videoCustomW" placeholder="宽" class="text-sm p-8" style="width:48%;" min="256" max="2048">
-            <input type="number" id="videoCustomH" placeholder="高" class="text-sm p-8" style="width:48%;" min="256" max="2048">
+            <input type="number" id="videoCustomW" placeholder="宽" class="text-sm p-8" style="width:48%;" min="256" max="2048" data-i18n-placeholder="common.width">
+            <input type="number" id="videoCustomH" placeholder="高" class="text-sm p-8" style="width:48%;" min="256" max="2048" data-i18n-placeholder="common.high">
           </div>
-          <label class="text-xs font-semibold text-secondary mb-4 block">时长预设</label>
+          <label class="text-xs font-semibold text-secondary mb-4 block"><span data-i18n="video.duration_preset">时长预设</span></label>
           <div class="flex gap-4 mb-6">
-            <button class="sub-tab active" onclick="setVideoDuration(121,24,this)">5秒</button>
-            <button class="sub-tab" onclick="setVideoDuration(241,24,this)">10秒</button>
-            <button class="sub-tab" onclick="setVideoDuration(361,24,this)">15秒</button>
+            <button class="sub-tab active" onclick="setVideoDuration(121,24,this)"><span data-i18n="video.seconds_5">5秒</span></button>
+            <button class="sub-tab" onclick="setVideoDuration(241,24,this)"><span data-i18n="video.seconds_10">10秒</span></button>
+            <button class="sub-tab" onclick="setVideoDuration(361,24,this)"><span data-i18n="video.seconds_15">15秒</span></button>
           </div>
           <div class="flex gap-6 items-center mb-10">
-            <span class="text-xs text-muted">帧数</span>
+            <span class="text-xs text-muted"><span data-i18n="video.frames">帧数</span></span>
             <input type="number" id="videoFrames" value="121" class="text-sm p-8" style="width:60px;" min="9" max="441" step="8">
             <span class="text-xs text-muted">8n+1</span>
           </div>
           <label class="text-xs font-semibold text-secondary mb-4 block">FPS</label>
           <select id="videoFPS" class="text-sm p-8 mb-10"><option value="8">8 fps</option><option value="16">16 fps</option><option value="24" selected>24 fps</option><option value="30">30 fps</option></select>
           <div class="cursor-pointer flex items-center gap-4 mb-8" onclick="toggleVideoAdvanced()">
-            <span class="text-xs font-semibold text-secondary">高级选项</span>
+            <span class="text-xs font-semibold text-secondary"><span data-i18n="video.advanced">高级选项</span></span>
             <span id="videoAdvChevron" class="text-xs text-muted">▶</span>
           </div>
           <div id="videoAdvanced" class="hidden">
             <div class="form-group" data-field="steps">
-              <label class="text-xs font-semibold text-secondary mb-4 block">推理步数</label>
-              <input type="number" id="videoSteps" placeholder="默认" class="text-sm p-8 mb-10" min="1" max="100">
+              <label class="text-xs font-semibold text-secondary mb-4 block"><span data-i18n="video.steps">推理步数</span></label>
+              <input type="number" id="videoSteps" placeholder="默认" class="text-sm p-8 mb-10" min="1" max="100" data-i18n-placeholder="common.default">
             </div>
             <div class="form-group" data-field="seed">
               <label class="text-xs font-semibold text-secondary mb-4 block">Seed</label>
               <div class="flex gap-6 mb-10">
-                <input type="number" id="videoSeed" placeholder="随机" class="text-sm p-8" style="flex:1;">
+                <input type="number" id="videoSeed" placeholder="随机" class="text-sm p-8" style="flex:1;" data-i18n-placeholder="common.random">
                 <button class="btn-ghost" onclick="document.getElementById('videoSeed').value=Math.floor(Math.random()*999999)">🎲</button>
               </div>
             </div>
             <div class="form-group" data-field="negPrompt">
-              <label class="text-xs font-semibold text-secondary mb-4 block">负面提示词</label>
-              <input type="text" id="videoNegPrompt" placeholder="不希望出现的内容..." class="text-sm p-8 mb-10">
+              <label class="text-xs font-semibold text-secondary mb-4 block"><span data-i18n="video.negative_prompt">负面提示词</span></label>
+              <input type="text" id="videoNegPrompt" placeholder="不希望出现的内容..." class="text-sm p-8 mb-10" data-i18n-placeholder="video.negative_placeholder">
             </div>
           </div>
           <div class="mt-8">
             <div class="sub-tabs w-full">
-              <button class="sub-tab active" id="vSubTabTi2vid" onclick="switchVideoSubTab('ti2vid')" style="flex:1;text-align:center;">文生视频</button>
-              <button class="sub-tab" id="vSubTabI2vid" onclick="switchVideoSubTab('i2vid')" style="flex:1;text-align:center;">图生视频</button>
-              <button class="sub-tab" id="vSubTabKeyframes" onclick="switchVideoSubTab('keyframes')" style="flex:1;text-align:center;">关键帧</button>
+              <button class="sub-tab active" id="vSubTabTi2vid" onclick="switchVideoSubTab('ti2vid')" style="flex:1;text-align:center;"><span data-i18n="video.t2v">文生视频</span></button>
+              <button class="sub-tab" id="vSubTabI2vid" onclick="switchVideoSubTab('i2vid')" style="flex:1;text-align:center;"><span data-i18n="video.i2v">图生视频</span></button>
+              <button class="sub-tab" id="vSubTabKeyframes" onclick="switchVideoSubTab('keyframes')" style="flex:1;text-align:center;"><span data-i18n="video.keyframes">关键帧</span></button>
             </div>
           </div>
         </div>
@@ -674,19 +702,19 @@
             <div class="resize-handle-left" onmousedown="startResize(event,'left')"></div>
             <div class="resize-handle-bottom" onmousedown="startResize(event,'bottom')"></div>
             <div class="flex items-center justify-between mb-10">
-              <div class="text-sm font-bold">🎥 视频预览</div>
+              <div class="text-sm font-bold"><span data-i18n="video.preview">🎥 视频预览</span></div>
               <div class="flex gap-8 items-center">
                 <span id="videoTaskStatus" class="text-xs text-muted"></span>
                 <span id="videoResultCount" class="text-xs text-muted"></span>
               </div>
             </div>
             <div id="videoPreviewEmpty" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;text-align:center;padding:40px 20px;">
-              <div>🎬 选择模型 + 输入提示词<br><br>生成后视频将在此处分组展示</div>
+              <div><span data-i18n="video.empty_1">🎬 选择模型 + 输入提示词</span><br><br><span data-i18n="video.empty_2">生成后视频将在此处分组展示</span></div>
             </div>
             <div id="videoPreviewResults" class="hidden flex-col gap-12" style="overflow-y:auto;max-height:calc(100vh - 300px);"></div>
-            <div class="text-xs font-semibold text-secondary mb-6 mt-10">📋 本次会话</div>
+            <div class="text-xs font-semibold text-secondary mb-6 mt-10"><span data-i18n="video.session">📋 本次会话</span></div>
             <div id="videoHistoryList" style="overflow-y:auto;max-height:calc(100vh - 520px);">
-              <div class="text-xs text-muted text-center p-20">暂无视频</div>
+              <div class="text-xs text-muted text-center p-20"><span data-i18n="video.none">暂无视频</span></div>
             </div>
           </div>
 
@@ -694,40 +722,40 @@
           <div class="generate-bottom-row">
             <div class="generate-input-col" style="flex:1;">
               <div class="generate-center glass-card" style="padding:16px;">
-                <div class="text-sm font-bold mb-10">📝 视频提示词</div>
-                <textarea id="videoPrompt" rows="6" placeholder="描述你想生成的视频内容..." class="text-sm" style="min-height:120px;"></textarea>
+                <div class="text-sm font-bold mb-10"><span data-i18n="video.prompt">📝 视频提示词</span></div>
+                <textarea id="videoPrompt" rows="6" placeholder="描述你想生成的视频内容..." class="text-sm" style="min-height:120px;" data-i18n-placeholder="video.prompt_placeholder"></textarea>
 
                 <div id="videoI2VPanel" class="hidden mt-12">
-                  <div class="text-sm font-semibold text-secondary mb-8">📷 参考图片</div>
+                  <div class="text-sm font-semibold text-secondary mb-8"><span data-i18n="video.reference">📷 参考图片</span></div>
                   <div class="mb-8">
                     <div class="sub-tabs">
-                      <button class="sub-tab active" onclick="setVideoImageRole('first_frame',this)">⬅️ 首帧</button>
-                      <button class="sub-tab" onclick="setVideoImageRole('reference',this)">🖼 参考</button>
-                      <button class="sub-tab" onclick="setVideoImageRole('first_last',this)">🔗 首尾帧</button>
-                      <button class="sub-tab" onclick="setVideoImageRole('last_frame',this)">➡️ 尾帧</button>
+                      <button class="sub-tab active" onclick="setVideoImageRole('first_frame',this)"><span data-i18n="video.first_frame">⬅️ 首帧</span></button>
+                      <button class="sub-tab" onclick="setVideoImageRole('reference',this)"><span data-i18n="video.reference_short">🖼 参考</span></button>
+                      <button class="sub-tab" onclick="setVideoImageRole('first_last',this)"><span data-i18n="video.first_last">🔗 首尾帧</span></button>
+                      <button class="sub-tab" onclick="setVideoImageRole('last_frame',this)"><span data-i18n="video.last_frame">➡️ 尾帧</span></button>
                     </div>
                   </div>
                   <div id="videoUploadZone" class="upload-zone p-16 mb-8" onclick="document.getElementById('videoFileInput').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleVideoDrop(event)">
                     <div class="text-base mb-4">📁</div>
-                    <div class="text-sm text-muted">拖拽图片或点击上传</div>
+                    <div class="text-sm text-muted"><span data-i18n="video.upload">拖拽图片或点击上传</span></div>
                     <input type="file" id="videoFileInput" accept="image/*" class="hidden" onchange="handleVideoFileSelect(event)" multiple>
                   </div>
-                  <button class="btn-secondary w-full text-sm p-8 mb-8" onclick="openVideoPreviewPicker()">🎯 从图库取图</button>
+                  <button class="btn-secondary w-full text-sm p-8 mb-8" onclick="openVideoPreviewPicker()"><span data-i18n="video.pick_gallery">🎯 从图库取图</span></button>
                   <div id="videoImagePreview" class="flex gap-6 flex-wrap" style="min-height:40px;"></div>
                 </div>
 
                 <div id="videoKeyframesPanel" class="hidden mt-12">
-                  <div class="text-sm font-semibold text-secondary mb-8">🖼 关键帧图片</div>
+                  <div class="text-sm font-semibold text-secondary mb-8"><span data-i18n="video.keyframe_images">🖼 关键帧图片</span></div>
                   <div class="upload-zone p-16 mb-8" onclick="document.getElementById('kfFileInput').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleKfDrop(event)">
                     <div class="text-base mb-4">🎬</div>
-                    <div class="text-sm text-muted">拖拽多张关键帧图片或点击上传</div>
+                    <div class="text-sm text-muted"><span data-i18n="video.keyframe_upload">拖拽多张关键帧图片或点击上传</span></div>
                     <input type="file" id="kfFileInput" accept="image/*" class="hidden" onchange="handleKfFileSelect(event)" multiple>
                   </div>
-                  <button class="btn-secondary w-full text-sm p-8 mb-8" onclick="openVideoPreviewPicker()">🎯 从图库取图</button>
+                  <button class="btn-secondary w-full text-sm p-8 mb-8" onclick="openVideoPreviewPicker()"><span data-i18n="video.pick_gallery">🎯 从图库取图</span></button>
                   <div id="kfImagePreview" class="flex gap-6 flex-wrap" style="min-height:40px;"></div>
                 </div>
 
-                <button id="videoGenBtn" class="btn-primary w-full p-12 text-base font-bold mb-10" onclick="startVideoGenerate()" disabled>🚀 选择 Provider 后生成</button>
+                <button id="videoGenBtn" class="btn-primary w-full p-12 text-base font-bold mb-10" onclick="startVideoGenerate()" disabled><span data-i18n="video.choose_provider">🚀 选择 Provider 后生成</span></button>
 
                 <div id="videoProgressBar" class="hidden mb-10">
                   <div class="rounded overflow-hidden mb-4" style="background:var(--bg-surface);height:6px;">
@@ -735,14 +763,14 @@
                   </div>
                   <div class="flex justify-between text-xs text-muted">
                     <span id="videoProgressText">0%</span>
-                    <span id="videoElapsed">已用时 0s</span>
+                    <span id="videoElapsed"><span data-i18n="video.elapsed_zero">已用时 0s</span></span>
                   </div>
                 </div>
 
                 <div id="videoLogWrap" class="hidden mb-10">
                   <div class="flex items-center justify-between mb-4">
-                    <span class="text-xs font-semibold text-secondary">📋 实时日志</span>
-                    <button class="btn-ghost" onclick="clearVideoLog()" style="font-size:10px;padding:2px 6px;">清空</button>
+                    <span class="text-xs font-semibold text-secondary"><span data-i18n="creator.live_log">📋 实时日志</span></span>
+                    <button class="btn-ghost" onclick="clearVideoLog()" style="font-size:10px;padding:2px 6px;"><span data-i18n="common.clear">清空</span></button>
                   </div>
                   <div id="videoLogArea" class="rounded p-8" style="max-height:120px;overflow-y:auto;background:var(--bg-card);border:1px solid var(--border);font-family:monospace;font-size:10px;line-height:1.6;"></div>
                 </div>
@@ -755,10 +783,240 @@
       </div>
     </div>
 
-    <!-- Status Bar -->
+    <!-- ════════════════ PAGE: Extensions ════════════════ -->
+    <div id="pageExtensions" class="page-content hidden">
+      <header class="extension-console-header content-header page-heading-header">
+        <div class="page-heading extension-console-identity">
+          <div class="page-heading-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/><circle cx="12" cy="12" r="1.7"/></svg></div>
+          <div class="page-heading-copy"><span class="page-heading-kicker">GENBOX EXTENSION SERVICES</span><h1 class="content-title"><span data-i18n="extensions.title">Extension Service Console</span></h1><p class="content-subtitle"><span data-i18n="extensions.subtitle">Deploy AI services, connect remote VPS targets, and manage private links.</span></p></div>
+        </div>
+        <div class="extension-console-meta"><span>CHATGPT2API</span><strong id="extensionOverallStatus" class="extension-status"><span data-i18n="common.not_configured">Not configured</span></strong></div>
+      </header>
+      <section class="extension-deployed glass-panel">
+        <div class="ext-deployed-collapsed">
+          <span><span data-i18n="extensions.drawer_hint">服务面板已收纳至右侧，可随时查看运行状态、访问地址与密钥管理</span></span>
+          <button type="button" id="extFab" class="ext-service-launcher" aria-label="查看已部署服务" onclick="extensionOpenDrawer()" data-i18n-aria-label="extensions.open_services_label">
+            <span class="ext-brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" width="24" height="24" fill="none"><path d="M16 3.5 26.8 9.7v12.6L16 28.5 5.2 22.3V9.7L16 3.5Z" stroke="currentColor" stroke-width="1.8"/><circle cx="16" cy="16" r="3.2" fill="currentColor"/><path d="M16 8.5v4.2M22.5 12.2l-3.7 2.1M22.5 19.8l-3.7-2.1M16 23.5v-4.2M9.5 19.8l3.7-2.1M9.5 12.2l3.7 2.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+            <span class="ext-launcher-copy"><b><span data-i18n="extensions.open_services_label">查看已部署服务</span></b><small><span class="ext-live-dot"></span><span data-i18n="extensions.service_center">服务控制中心</span></small></span>
+            <svg class="ext-launcher-arrow" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </div>
+      </section>
+      <div class="extension-layout">
+        <nav class="extension-step-nav" aria-label="部署步骤" data-i18n-aria-label="extensions.steps_label">
+          <ol id="extensionSteps">
+            <li class="active" data-step="1" aria-current="step" tabindex="0" role="button" onclick="extensionGoToStep(1)" onkeydown="extensionStepKey(event,1)"><b>1</b><span><span data-i18n="extensions.step_vps">VPS 信息</span></span></li>
+            <li data-step="2" tabindex="0" role="button" onclick="extensionGoToStep(2)" onkeydown="extensionStepKey(event,2)"><b>2</b><span><span data-i18n="extensions.step_deploy">部署服务</span></span></li>
+            <li data-step="3" tabindex="0" role="button" onclick="extensionGoToStep(3)" onkeydown="extensionStepKey(event,3)"><b>3</b><span><span data-i18n="extensions.step_choose_network">选择链路</span></span></li>
+            <li data-step="4" tabindex="0" role="button" onclick="extensionGoToStep(4)" onkeydown="extensionStepKey(event,4)"><b>4</b><span><span data-i18n="extensions.step_configure">配置连接</span></span></li>
+            <li data-step="5" tabindex="0" role="button" onclick="extensionGoToStep(5)" onkeydown="extensionStepKey(event,5)"><b>5</b><span><span data-i18n="extensions.step_verify">验证完成</span></span></li>
+          </ol>
+        </nav>
+        <section class="extension-workspace glass-panel">
+          <div class="extension-pane" data-pane="1">
+            <h2 tabindex="-1"><span data-i18n="extensions.connect_vps">连接 VPS</span></h2>
+            <div class="extension-target-bar">
+              <label><span data-i18n="extensions.saved_vps">已保存 VPS</span><select id="extTargetSelect" onchange="extensionLoadTarget(this.value)"><option value=""><span data-i18n="extensions.current_unsaved">当前未保存</span></option></select></label>
+              <button type="button" class="btn-ghost" onclick="extensionNewTarget()"><span data-i18n="extensions.new_vps">新增 VPS</span></button>
+              <button type="button" class="btn-secondary" onclick="extensionSaveTarget()"><span data-i18n="common.save">保存</span></button>
+              <button type="button" class="btn-ghost extension-delete-target" id="extDeleteTarget" onclick="extensionDeleteTarget()" disabled><span data-i18n="common.delete">删除</span></button>
+            </div>
+            <div class="extension-form-grid">
+              <label><span data-i18n="extensions.name">名称</span><input id="extName" value="我的 VPS" autocomplete="off"></label>
+              <label><span data-i18n="extensions.host">IP 地址或域名</span><input id="extHost" placeholder="192.0.2.10" autocomplete="off"></label>
+              <label><span data-i18n="extensions.ssh_port">SSH 端口</span><input id="extPort" type="number" value="22" min="1" max="65535"></label>
+              <label><span data-i18n="extensions.ssh_username">SSH 用户名</span><input id="extUsername" value="ubuntu" autocomplete="username"></label>
+            </div>
+            <fieldset class="extension-auth"><legend><span data-i18n="extensions.auth_method">鉴权方式</span></legend>
+              <div class="extension-segments">
+                <button type="button" class="active" data-auth="password" onclick="extensionSetAuth('password')"><span data-i18n="extensions.password">密码</span></button>
+                <button type="button" data-auth="key" onclick="extensionSetAuth('key')"><span data-i18n="extensions.private_key">SSH 私钥</span></button>
+              </div>
+              <label id="extPasswordWrap"><span data-i18n="extensions.ssh_password">SSH 密码</span><input id="extPassword" type="password" autocomplete="current-password"></label>
+              <label id="extKeyWrap" class="hidden"><span data-i18n="extensions.private_key">SSH 私钥</span><textarea id="extPrivateKey" rows="6" spellcheck="false"></textarea></label>
+              <label><span data-i18n="extensions.sudo_password">sudo 密码（留空则复用 SSH 密码）</span><input id="extSudoPassword" type="password" autocomplete="off" placeholder="仅非 root 且需要提权时使用" data-i18n-placeholder="extensions.sudo_placeholder"></label>
+            </fieldset>
+            <div id="extHostKeyConfirm" class="extension-confirm hidden" role="alert"></div>
+            <div class="extension-actions"><button class="btn-secondary" onclick="extensionTestSSH(false)"><span data-i18n="extensions.test_connection">测试连接</span></button><button class="btn-primary" onclick="extensionNext(2)"><span data-i18n="common.next">下一步</span></button></div>
+          </div>
+          <div class="extension-pane hidden" data-pane="2">
+            <h2 tabindex="-1"><span data-i18n="extensions.deploy_chatgpt2api">部署 chatgpt2api</span></h2>
+            <section class="extension-batch-selector" aria-labelledby="extBatchTitle"><div class="extension-batch-heading"><div><span>DEPLOYMENT TARGETS</span><h3 id="extBatchTitle"><span data-i18n="extensions.choose_deploy_targets">选择本次部署的 VPS</span></h3><p><span data-i18n="extensions.batch_hint">可规划多台服务器；真正部署时仍会逐台确认 SSH 凭据和安全计划。</span></p></div><div class="extension-batch-actions"><button class="btn-ghost" type="button" onclick="extensionSelectAllBatchTargets()"><span data-i18n="library.select_all">全选</span></button><button class="btn-primary" type="button" onclick="extensionSaveBatchTargets()"><span data-i18n="extensions.save_selection">保存选择</span></button></div></div><div id="extBatchTargets" class="extension-batch-targets"></div><div id="extBatchSummary" class="extension-batch-summary"><span data-i18n="extensions.no_server_selected">尚未选择服务器</span></div></section>
+            <div class="extension-catalog-preview">
+              <div class="extension-catalog-heading"><b><span data-i18n="extensions.catalog">应用目录</span></b><span><span data-i18n="extensions.catalog_hint">当前仅 chatgpt2api 可部署，其余模板为规划占位</span></span></div>
+              <div id="extCatalogGroups" class="extension-catalog-groups"></div>
+            </div>
+            <div class="extension-discovery-bar"><div><b><span data-i18n="extensions.discover_first">先检测，再决定</span></b><span><span data-i18n="extensions.readonly_hint">仅执行只读命令，不修改已有服务</span></span></div><button class="btn-primary" id="extDiscoverBtn" onclick="extensionDiscover()"><span data-i18n="extensions.discover">检测 VPS 环境</span></button></div>
+            <div id="extDiscoveryResult" class="extension-discovery-result hidden">
+              <div id="extEnvironmentSummary" class="extension-metrics"></div>
+              <div><b><span data-i18n="extensions.discovered_instances">发现的实例</span></b><div id="extExistingInstances" class="extension-instance-list"></div></div>
+            </div>
+            <fieldset class="extension-choice-group"><legend><span data-i18n="extensions.intent_title">你这次要做什么</span></legend>
+              <label><input type="radio" name="extIntent" value="use-existing" onchange="extensionSelectIntent(this)"><span><b><span data-i18n="extensions.intent_existing">继续使用当前服务</span></b><small><span data-i18n="extensions.intent_existing_hint">推荐接入已有实例，不改变现有部署</span></small></span></label>
+              <label><input type="radio" name="extIntent" value="development" checked onchange="extensionSelectIntent(this)"><span><b><span data-i18n="extensions.intent_development">开发或测试新功能 · 当前场景</span></b><small><span data-i18n="extensions.intent_development_hint">推荐从现有实例创建安全隔离副本</span></small></span></label>
+              <label><input type="radio" name="extIntent" value="first-install" onchange="extensionSelectIntent(this)"><span><b><span data-i18n="extensions.intent_production">首次部署正式服务</span></b><small><span data-i18n="extensions.intent_production_hint">推荐新建生产实例</span></small></span></label>
+            </fieldset>
+            <fieldset class="extension-choice-group"><legend><span data-i18n="extensions.strategy">实例策略</span></legend>
+              <label><input type="radio" name="extStrategy" value="existing"><span><b><span data-i18n="extensions.strategy_existing">接入已有实例</span></b><small><span data-i18n="extensions.strategy_existing_hint">不重建、不迁移数据，适合已有健康服务</span></small></span></label>
+              <label class="selected"><input type="radio" name="extStrategy" value="isolated" checked><span><b><span data-i18n="extensions.strategy_isolated">创建隔离测试实例</span></b><small><span data-i18n="extensions.strategy_isolated_hint">独立端口、目录和 Compose 项目，推荐开发验收</span></small></span></label>
+              <label><input type="radio" name="extStrategy" value="new"><span><b><span data-i18n="extensions.strategy_new">新建生产实例</span></b><small><span data-i18n="extensions.strategy_new_hint">没有可用实例时使用，部署前仍会预览全部变更</span></small></span></label>
+            </fieldset>
+            <fieldset class="extension-choice-group" id="extCloneOptions"><legend><span data-i18n="extensions.clone_data">隔离实例初始数据</span></legend>
+              <label><input type="radio" name="extCloneScope" value="empty" checked><span><b><span data-i18n="extensions.clone_empty">空白实例</span></b><small><span data-i18n="extensions.clone_empty_hint">不复制任何业务数据，风险最低</span></small></span></label>
+              <label><input type="radio" name="extCloneScope" value="media"><span><b><span data-i18n="extensions.clone_media">仅复制历史媒体</span></b><small><span data-i18n="extensions.clone_media_hint">复制图片和索引，不复制账号及项目设置</span></small></span></label>
+              <label><input type="radio" name="extCloneScope" value="working-copy"><span><b><span data-i18n="extensions.clone_working">安全工作副本 · 当前推荐</span></b><small><span data-i18n="extensions.clone_working_hint">复制数据和设置；保留账号凭据，但移除 GenBox 密钥、回执与调度状态，并关闭自动备份</span></small></span></label>
+              <label><span data-i18n="extensions.source_instance">源实例</span><select id="extCloneSource" onchange="extensionSelectCloneSource(this)"><option value=""><span data-i18n="extensions.choose_after_discovery">检测环境后选择</span></option></select></label>
+              <div class="extension-clone-warning"><span data-i18n="extensions.working_copy_warning">工作副本含账号等敏感业务配置，仅用于独立开发验收。源实例保持运行且不会被写入。</span></div>
+            </fieldset>
+            <fieldset class="extension-choice-group"><legend><span data-i18n="extensions.deploy_method">部署方式</span></legend><div id="extDeploymentModes" class="extension-mode-list"><span class="extension-placeholder"><span data-i18n="extensions.method_after_discovery">检测环境后显示推荐方式</span></span></div></fieldset>
+            <div class="extension-form-grid"><label><span data-i18n="extensions.instance_name">实例名称</span><input id="extInstanceId" value="chatgpt2api-dev" pattern="[a-z0-9-]+"></label><label><span data-i18n="extensions.service_port">服务端口</span><input id="extServicePort" type="number" value="33010" min="1" max="65535"></label><label><span data-i18n="extensions.container_image">容器镜像</span><input id="extImage" value="ghcr.io/yukkcat/chatgpt2api:latest"></label></div>
+            <div id="extPlanPreview" class="extension-plan-preview hidden"></div>
+            <div class="extension-progress"><div><span id="extProgressLabel"><span data-i18n="common.waiting">等待开始</span></span><span id="extProgressPercent">0%</span></div><div class="extension-progress-track"><div id="extProgressFill"></div></div></div>
+            <ol id="extTimeline" class="extension-timeline"></ol>
+            <pre id="extLogs" class="extension-logs" aria-live="polite"></pre>
+            <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(1)"><span data-i18n="common.previous">上一步</span></button><button class="btn-secondary" id="extPlanBtn" onclick="extensionCreatePlan()"><span data-i18n="extensions.create_plan">生成安全计划</span></button><button class="btn-primary" id="extDeployBtn" onclick="extensionStartDeploy()" disabled><span data-i18n="extensions.confirm_deploy">确认并部署</span></button><button class="btn-secondary" onclick="extensionNext(3)"><span data-i18n="extensions.continue_network">继续配置链路</span></button></div>
+          </div>
+          <div class="extension-pane hidden" data-pane="3">
+            <h2 tabindex="-1"><span data-i18n="extensions.choose_primary_network">选择主连接方式</span></h2>
+            <div class="extension-endpoint-grid">
+              <section class="extension-endpoint" aria-labelledby="extLocalEndpointTitle">
+                <div class="extension-endpoint-head"><div><span><span data-i18n="extensions.this_computer">这台电脑</span></span><b id="extLocalEndpointTitle"><span data-i18n="extensions.local_endpoint">GenBox 本机端</span></b></div><strong id="extLocalTailscaleState"><span data-i18n="extensions.waiting_detection">等待检测</span></strong></div>
+                <p id="extLocalTailscaleDetail"><span data-i18n="extensions.local_network_hint">检查网络工具，并开放 GenBox 私网入口。</span></p>
+                <dl><dt><span data-i18n="extensions.genbox_page">GenBox 页面</span></dt><dd id="extLocalAppPort"><span data-i18n="extensions.waiting_detection">等待检测</span></dd><dt><span data-i18n="extensions.private_entry">私网入口</span></dt><dd id="extLocalServePort"><span data-i18n="extensions.waiting_detection">等待检测</span></dd></dl>
+                <div class="extension-actions extension-inline-actions">
+                  <button class="btn-secondary" onclick="extensionCheckLocalTailscale()"><span data-i18n="extensions.detect_again">重新检测</span></button>
+                  <button class="btn-primary" id="extLocalInstallBtn" onclick="extensionInstallLocalTailscale()"><span data-i18n="common.install">安装</span></button>
+                  <button class="btn-primary" id="extLocalLoginBtn" onclick="extensionLoginLocalTailscale()"><span data-i18n="auth.login">登录</span></button>
+                  <button class="btn-secondary" id="extLocalServeBtn" onclick="extensionServeLocalGenBox()"><span data-i18n="extensions.enable_private_entry">启用私网入口</span></button>
+                  <span id="extLocalActionStatus" class="extension-action-status pending"><span data-i18n="extensions.waiting_detection">等待检测</span></span>
+                </div>
+              </section>
+              <section class="extension-endpoint" aria-labelledby="extRemoteEndpointTitle">
+                <div class="extension-endpoint-head"><div><span><span data-i18n="extensions.remote_server">远程服务器</span></span><b id="extRemoteEndpointTitle"><span data-i18n="extensions.vps_endpoint">VPS 端</span></b></div><strong id="extRemoteNetworkState"><span data-i18n="extensions.waiting_configuration">等待配置</span></strong></div>
+                <p id="extRemoteNetworkDetail"><span data-i18n="extensions.remote_auto_hint">GenBox 会通过已确认的 SSH 连接自动安装并加入同一个网络。</span></p>
+                <label><span data-i18n="extensions.operation_mode">处理方式</span><select id="extRemoteNetworkMode" onchange="extensionSetRemoteNetworkMode()"><option value="auto"><span data-i18n="extensions.auto_connect">自动安装并连接</span></option><option value="existing"><span data-i18n="extensions.existing_connect">已有工具，只连接和检测</span></option><option value="manual" disabled><span data-i18n="extensions.manual_later">我手动配置，稍后检测（后续开放）</span></option></select></label>
+                <dl><dt><span data-i18n="extensions.primary_network">当前主链路</span></dt><dd id="extRemotePrimaryNetwork">Tailscale</dd><dt><span data-i18n="extensions.backup_network">备用链路</span></dt><dd id="extRemoteBackupNetworks"><span data-i18n="extensions.switch_later">以后可添加并一键切换</span></dd></dl>
+              </section>
+            </div>
+            <div id="extTailscaleKeyGuide" class="extension-key-guide">
+              <div><b><span data-i18n="extensions.no_auth_key">还没有一次性 Auth Key？</span></b><span><span data-i18n="extensions.auth_key_intro">打开官方密钥页面，创建后回到下一步粘贴即可。</span></span></div>
+              <a class="btn-secondary" href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener noreferrer"><span data-i18n="extensions.open_tailscale_keys">打开 Tailscale 密钥页面</span></a>
+              <ol><li><span data-i18n="extensions.key_step_1">找到 Auth keys，点击 Generate auth key</span></li><li><span data-i18n="extensions.key_step_2">Reusable 关闭，Ephemeral 关闭，Pre-approved 开启</span></li><li><span data-i18n="extensions.key_step_3">有效期选 1 天，Tags 留空，然后生成</span></li></ol>
+            </div>
+            <div class="extension-network-options">
+              <label class="selected"><input type="radio" name="extNetwork" value="tailscale" checked onchange="extensionSelectNetwork(this)"><b>Tailscale Personal</b><span><span data-i18n="extensions.tailscale_hint">推荐，个人免费，安装和维护最简单</span></span></label>
+              <label><input type="radio" name="extNetwork" value="netbird" onchange="extensionSelectNetwork(this)"><b>NetBird</b><span><span data-i18n="extensions.netbird_hint">开源，可使用云服务或自托管控制面</span></span></label>
+              <label><input type="radio" name="extNetwork" value="cloudflare" onchange="extensionSelectNetwork(this)"><b>Cloudflare Tunnel</b><span><span data-i18n="extensions.cloudflare_hint">适合已有 Cloudflare 域名的用户</span></span></label>
+            </div>
+            <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(2)"><span data-i18n="common.previous">上一步</span></button><button class="btn-primary" onclick="extensionNext(4)"><span data-i18n="extensions.configure_option">配置此方案</span></button></div>
+          </div>
+          <div class="extension-pane hidden" data-pane="4">
+            <h2 tabindex="-1"><span data-i18n="extensions.step_configure">配置连接</span></h2>
+            <div class="extension-network-toolbar"><div><span>TAILSCALE ADMIN</span><p><span data-i18n="extensions.admin_console_hint">需要查看设备是否在线？可直接打开官方管理控制台。</span></p></div><a class="btn-secondary" href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener noreferrer"><span data-i18n="extensions.open_tailscale_admin">打开 Tailscale 管理控制台</span></a></div>
+            <div class="extension-network-form">
+              <div class="extension-placeholder"><b id="extNetworkTitle">Tailscale Personal</b><p id="extNetworkHelp"><span data-i18n="extensions.choose_operation_first">请先选择这次要执行的操作。</span></p></div>
+              <fieldset class="extension-network-mode-cards"><legend><span data-i18n="extensions.operation_question">这次要做什么？</span></legend>
+                <label class="selected"><input type="radio" name="extNetworkOperation" value="auto" checked onchange="extensionChooseNetworkMode(this)"><span><b><span data-i18n="extensions.first_connect">首次安装并连接</span></b><small><span data-i18n="extensions.first_connect_hint">VPS 还没有加入私有网络，需要一次性 Auth Key。</span></small></span></label>
+                <label><input type="radio" name="extNetworkOperation" value="existing" onchange="extensionChooseNetworkMode(this)"><span><b><span data-i18n="extensions.recheck_existing">已安装，重新检测连接</span></b><small><span data-i18n="extensions.recheck_existing_hint">不重复安装，不需要 Auth Key，只检查互通和 GenBox 访问。</span></small></span></label>
+              </fieldset>
+              <div id="extNetworkKeySteps" class="extension-key-steps"><a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener noreferrer"><span data-i18n="extensions.key_page_link">没有 Key？点击打开官方生成页面</span></a><span><span data-i18n="extensions.paste_prefix">生成后，把以</span> <code>tskey-auth-</code> <span data-i18n="extensions.paste_suffix">开头的内容粘贴到下面。</span></span></div>
+              <label id="extTokenLabel"><span data-i18n="extensions.auth_key_label">一次性 Auth Key</span><input id="extNetworkToken" type="password" autocomplete="off" placeholder="粘贴 tskey-auth-..." data-i18n-placeholder="extensions.auth_key_placeholder"></label>
+              <label><span data-i18n="extensions.device_name">设备名称</span><input id="extDeviceName" value="genbox-vps" pattern="[A-Za-z0-9._-]+"></label>
+              <label id="extManagementWrap" class="hidden"><span data-i18n="extensions.management_url">Management URL（自托管 NetBird 可选）</span><input id="extManagementUrl" placeholder="https://netbird.example.com"></label>
+              <section id="extMobileJoin" class="extension-mobile-join" aria-labelledby="extMobileJoinTitle">
+                <div class="extension-mobile-copy"><span class="extension-mobile-kicker"><span data-i18n="extensions.mobile_optional">可选 · 手机也要访问 GenBox 时使用</span></span><h3 id="extMobileJoinTitle"><span data-i18n="extensions.mobile_title">用手机扫码安装 Tailscale</span></h3><ol><li><span data-i18n="extensions.mobile_step_1">手机扫描右侧二维码，安装 Tailscale。</span></li><li><span data-i18n="extensions.mobile_step_2">使用与这台电脑相同的 Tailscale 账号登录。</span></li><li><span data-i18n="extensions.mobile_step_3">连接完成后，手机即可通过私网地址访问 GenBox。</span></li></ol><div class="extension-mobile-links"><a class="btn-secondary" href="https://tailscale.com/download/ios" target="_blank" rel="noopener noreferrer">iPhone / iPad</a><a class="btn-secondary" href="https://tailscale.com/download/android" target="_blank" rel="noopener noreferrer">Android</a></div><p><span data-i18n="extensions.mobile_privacy">二维码只打开 Tailscale 官方下载页，不包含 Auth Key、密码或其他私密信息。</span></p></div>
+                <a class="extension-mobile-qr" href="https://tailscale.com/download" target="_blank" rel="noopener noreferrer" aria-label="打开 Tailscale 官方下载页" data-i18n-aria-label="extensions.mobile_download_label"><img src="/static/assets/tailscale-mobile-download-qr.png" alt="Tailscale 官方下载页二维码" width="168" height="168"><span><span data-i18n="extensions.scan_download">扫码打开官方下载页</span></span></a>
+              </section>
+              <div class="extension-progress"><div><span id="extNetworkProgressLabel"><span data-i18n="extensions.waiting_connection">等待连接</span></span><span id="extNetworkProgressPercent">0%</span></div><div class="extension-progress-track"><div id="extNetworkProgressFill"></div></div></div>
+              <ol id="extNetworkTimeline" class="extension-timeline"></ol>
+              <pre id="extNetworkLogs" class="extension-logs" aria-live="polite"></pre>
+              <div id="extNetworkRecovery" class="extension-network-recovery hidden"><span><span data-i18n="extensions.recheck_note">已经安装并加入网络？无需新 Key，可只重新检查。</span></span><button class="btn-secondary" onclick="extensionRetryNetworkCheck()"><span data-i18n="extensions.recheck_link">重新检查链路</span></button></div>
+            </div>
+            <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(3)"><span data-i18n="common.previous">上一步</span></button><button class="btn-primary" id="extNetworkConnectBtn" onclick="extensionConnectNetwork()"><span data-i18n="extensions.install_connect">安装并连接</span></button></div>
+          </div>
+          <div class="extension-pane hidden" data-pane="5">
+            <h2 tabindex="-1"><span data-i18n="extensions.verify_finish">验证并完成</span></h2>
+            <div class="extension-verification" id="extVerification">
+              <div data-check="local"><span data-i18n="extensions.local_tailscale">本机 Tailscale</span><span><span data-i18n="extensions.waiting_verification">等待验证</span></span></div>
+              <div data-check="peer"><span data-i18n="extensions.local_to_vps">本机到 VPS</span><span><span data-i18n="extensions.waiting_verification">等待验证</span></span></div>
+              <div data-check="genbox"><span data-i18n="extensions.vps_to_genbox">VPS 到 GenBox</span><span><span data-i18n="extensions.waiting_verification">等待验证</span></span></div>
+              <div data-check="url"><span data-i18n="extensions.private_url">GenBox 私网 URL</span><span><span data-i18n="extensions.waiting_generation">等待生成</span></span></div>
+            </div>
+            <div id="extHandoff" class="extension-handoff hidden">
+              <div class="extension-handoff-heading"><div><b><span data-i18n="extensions.instance_ready">实例已就绪</span></b><span id="extHandoffInstance"></span></div><a class="btn-primary" id="extOpenConsole" target="_blank" rel="noopener noreferrer"><span data-i18n="common.open_console">打开控制台</span></a></div>
+              <label><span data-i18n="extensions.console_url">控制台地址</span><div class="extension-copy-row"><input id="extConsoleUrl" readonly><button class="btn-secondary" onclick="extensionCopy('extConsoleUrl')"><span data-i18n="common.copy">复制</span></button></div></label>
+              <label><span data-i18n="extensions.api_url">API 地址</span><div class="extension-copy-row"><input id="extApiUrl" readonly><button class="btn-secondary" onclick="extensionCopy('extApiUrl')"><span data-i18n="common.copy">复制</span></button></div></label>
+              <label><span data-i18n="extensions.admin_key">管理密钥</span><div class="extension-copy-row"><input id="extAdminKey" type="password" readonly><button class="btn-secondary" onclick="extensionRevealKey('extAdminKey')"><span data-i18n="common.show">显示</span></button><button class="btn-primary" onclick="extensionCopy('extAdminKey')"><span data-i18n="common.copy">复制</span></button></div></label>
+              <fieldset class="ext-delivery-choice"><legend><span data-i18n="extensions.delivery_choice">交付后如何处理</span></legend><label><input type="radio" name="extCredentialDelivery" value="once" checked onchange="extensionDeliveryChoice()"> <span data-i18n="extensions.show_once">仅本次显示</span></label><label><input type="radio" name="extCredentialDelivery" value="save" onchange="extensionDeliveryChoice()"> <span data-i18n="extensions.save_encrypted">加密保存在本机</span></label><p><span data-i18n="extensions.save_warning">本地保存便于以后查看，但任何能访问此 GenBox 和解锁密码的人都可能读取凭证。解锁密码不会保存。</span></p><div id="extDeliverySave" class="hidden"><input id="extDeliveryVaultPassword" type="password" autocomplete="new-password" placeholder="凭证库解锁密码（首次至少 8 位）" data-i18n-placeholder="extensions.vault_password_first"><button class="btn-primary" onclick="extensionSaveDeliveredCredential()"><span data-i18n="extensions.save_to_vault">保存到本机凭证库</span></button></div></fieldset>
+              <ol class="extension-next-steps"><li><span data-i18n="extensions.checklist_login">打开控制台并粘贴管理密钥登录</span></li><li><span data-i18n="extensions.checklist_accounts">检查账号池和代理出口</span></li><li><span data-i18n="extensions.checklist_push">配置 GenBox Push 并先测试连接</span></li><li><span data-i18n="extensions.checklist_delete">完成多轮验证前不要开启源图片删除</span></li></ol>
+              <button class="btn-ghost" onclick="extensionResetAdminKey()"><span data-i18n="extensions.lost_key">管理密钥丢失？重置此实例</span></button>
+            </div>
+            <section id="extSuccessBanner" class="extension-success-banner hidden"><span class="extension-success-icon" aria-hidden="true">&#10003;</span><div><span>PRIVATE LINK READY</span><h3><span data-i18n="extensions.success_title">恭喜你，GenBox 私有链路已经打通</span></h3><p><span data-i18n="extensions.success_copy">接下来，你可以让远程 AI 服务安全地把图片送入 GenBox 媒体库，享受自动归档、统一管理与跨设备访问的流畅体验。</span></p></div></section>
+            <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(4)"><span data-i18n="common.previous">上一步</span></button></div>
+          </div>
+          <div id="extensionMessage" class="extension-message" role="status" aria-live="polite"></div>
+        </section>
+        <aside class="extension-summary"><h3><span data-i18n="extensions.summary">部署摘要</span></h3><dl><dt>VPS</dt><dd id="extSummaryHost"><span data-i18n="common.not_entered">未填写</span></dd><dt><span data-i18n="extensions.service">服务</span></dt><dd id="extSummaryService"><span data-i18n="common.not_deployed">未部署</span></dd><dt><span data-i18n="extensions.primary_link">主链路</span></dt><dd id="extSummaryNetwork">Tailscale</dd><dt><span data-i18n="extensions.credential">凭证</span></dt><dd><span data-i18n="extensions.credential_session">仅在当前任务中使用</span></dd></dl></aside>
+      </div>
+      </div>
+
+      <!-- Deployed services drawer -->
+      <div id="extDrawerOverlay" class="ext-drawer-overlay hidden" onclick="if(event.target===this)extensionCloseDrawer()"></div>
+      <aside id="extDrawer" class="ext-drawer" role="dialog" aria-modal="true" aria-label="已部署服务" data-i18n-aria-label="extensions.deployed_services_label">
+        <header class="ext-drawer-head">
+          <h2><span data-i18n="extensions.deployed_services_label">已部署服务</span></h2>
+          <button type="button" class="ext-drawer-close" aria-label="关闭" onclick="extensionCloseDrawer()" data-i18n-aria-label="common.close">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+          </button>
+        </header>
+        <div class="ext-drawer-body">
+          <div class="ext-vault-toolbar"><div><b><span data-i18n="extensions.vault">本机凭证库</span></b><span id="extVaultStatus"><span data-i18n="extensions.checking">正在检查…</span></span></div><input id="extVaultPassword" type="password" autocomplete="off" placeholder="解锁密码（至少 8 位）" data-i18n-placeholder="extensions.vault_password"><button class="btn-secondary" id="extVaultUnlockBtn" onclick="extensionVaultUnlock()"><span data-i18n="extensions.setup_unlock">设置 / 解锁</span></button><button class="btn-ghost" id="extVaultLockBtn" onclick="extensionVaultLock()"><span data-i18n="extensions.lock">锁定</span></button></div>
+          <div id="extDrawerList" class="ext-bento"><span class="extension-placeholder"><span data-i18n="common.loading_ellipsis">正在加载…</span></span></div>
+        </div>
+      </aside>
+
+      <!-- Reset managed key modal -->
+      <div id="extResetKeyModal" class="ext-reset-modal hidden" role="dialog" aria-modal="true" aria-label="重置管理密钥" data-i18n-aria-label="extensions.reset_key_label">
+        <div class="ext-reset-box glass-panel">
+          <h3><span data-i18n="extensions.reset_key_label">重置管理密钥</span></h3>
+          <p class="ext-reset-hint"><span data-i18n="extensions.reset_warning">为安全起见，重置需要重新验证该实例所属 VPS 的所有权。密钥仅在本机显示一次；旧密钥立即失效。</span></p>
+          <div id="extResetInstance" class="ext-reset-instance"></div>
+          <label><span data-i18n="extensions.ssh_password">SSH 密码</span><input id="extResetPassword" type="password" autocomplete="current-password"></label>
+          <label><span data-i18n="extensions.or_private_key">或 SSH 私钥</span><textarea id="extResetKey" rows="4" spellcheck="false"></textarea></label>
+          <label><span data-i18n="extensions.sudo_password">sudo 密码（留空则复用 SSH 密码）</span><input id="extResetSudo" type="password" autocomplete="off"></label>
+          <div id="extResetKeyResult" class="ext-reset-result hidden">
+            <label><span data-i18n="extensions.new_key_once">新管理密钥（仅本次显示）</span><div class="extension-copy-row"><input id="extResetKeyNew" type="password" readonly><button class="btn-secondary" onclick="extensionRevealKey('extResetKeyNew')"><span data-i18n="common.show">显示</span></button><button class="btn-primary" onclick="extensionCopy('extResetKeyNew')"><span data-i18n="common.copy">复制</span></button></div></label>
+            <div class="ext-reset-save"><input id="extResetVaultPassword" type="password" autocomplete="off" placeholder="凭证库解锁密码（如已锁定）" data-i18n-placeholder="extensions.vault_password_locked"><button class="btn-secondary" onclick="extensionSaveResetCredential()"><span data-i18n="extensions.save_local_copy">保存 / 更新本地副本</span></button></div>
+          </div>
+          <div class="ext-reset-actions">
+            <button class="btn-ghost" onclick="extensionCloseResetModal()"><span data-i18n="common.cancel">取消</span></button>
+            <button class="btn-primary" id="extResetConfirmBtn" onclick="extensionConfirmResetKey()"><span data-i18n="extensions.confirm_reset">确认重置</span></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Local managed-instance credential modal -->
+      <div id="extCredentialModal" class="ext-reset-modal hidden" role="dialog" aria-modal="true" aria-label="本机保存的凭证" data-i18n-aria-label="extensions.saved_credential_label">
+        <div class="ext-reset-box glass-panel">
+          <h3><span data-i18n="extensions.saved_credential_label">本机保存的凭证</span></h3><div id="extCredentialInstance" class="ext-reset-instance"></div>
+           <label><span data-i18n="extensions.admin_key">管理密钥</span><input id="extCredentialAdminKey" type="password" autocomplete="off"></label>
+           <label><span data-i18n="extensions.vps_password">VPS SSH 密码</span><input id="extCredentialSshPassword" type="password" autocomplete="off"></label>
+           <label><span data-i18n="extensions.vps_private_key">VPS SSH 私钥</span><textarea id="extCredentialSshPrivateKey" rows="4" spellcheck="false"></textarea></label>
+           <label><span data-i18n="extensions.key_passphrase">SSH 私钥口令</span><input id="extCredentialSshPassphrase" type="password" autocomplete="off"></label>
+           <label><span data-i18n="extensions.vps_sudo">VPS sudo 密码</span><input id="extCredentialSudoPassword" type="password" autocomplete="off"></label>
+           <label><span data-i18n="extensions.username">用户名</span><input id="extCredentialUsername" autocomplete="off"></label>
+          <label><span data-i18n="extensions.password">密码</span><input id="extCredentialPassword" type="password" autocomplete="off"></label>
+          <label>API Key<input id="extCredentialApiKey" type="password" autocomplete="off"></label>
+          <label><span data-i18n="extensions.note">备注</span><textarea id="extCredentialNote" rows="3"></textarea></label>
+          <div class="ext-credential-tools"><button class="btn-secondary" onclick="extensionRevealCredentialFields()"><span data-i18n="extensions.reveal">显示 / 隐藏</span></button><button class="btn-secondary" onclick="extensionCopyCredential()"><span data-i18n="extensions.copy_admin_key">复制管理密钥</span></button></div>
+          <div class="ext-reset-actions"><button class="btn-ghost" onclick="extensionCloseCredentialModal()"><span data-i18n="common.cancel">取消</span></button><button class="btn-ghost ext-danger" onclick="extensionDeleteCredential()"><span data-i18n="extensions.delete_local">删除本地副本</span></button><button class="btn-primary" onclick="extensionSaveCredential()"><span data-i18n="extensions.save_changes">保存修改</span></button></div>
+        </div>
+      </div>
+
+      <!-- Status Bar -->
     <div class="status-bar">
-      <span id="statusLeft">就绪</span>
-      <span id="statusRight">GenBox · 本地服务</span>
+      <span id="statusLeft"><span data-i18n="common.ready">就绪</span></span>
+      <span id="statusRight"><span data-i18n="footer.local_service">GenBox · 本地服务</span></span>
     </div>
   </main>
 </div>
@@ -766,42 +1024,51 @@
 <!-- ═══════════════════════════════════════════════════════════════
      MAC DOCK
      ═══════════════════════════════════════════════════════════════ -->
+<div id="dockRevealZone" class="dock-reveal-zone" aria-hidden="true"></div>
+<button id="dockRevealHandle" class="dock-reveal-handle" type="button" onclick="toggleDockPinned()" aria-label="展开底部导航" aria-expanded="false" title="展开底部导航" data-i18n-aria-label="dock.expand" data-i18n-title="dock.expand"><span></span></button>
 <nav class="dock" id="macDock">
-  <div class="dock-item active" data-page="dashboard" onclick="switchNav('dashboard',document.getElementById('navDashboard'))" title="系统看板">
-    <div class="dock-icon">📊</div>
+  <div class="dock-item active" data-page="dashboard" onclick="switchNav('dashboard',document.getElementById('navDashboard'))" title="系统看板" data-i18n-title="nav.dashboard">
+    <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 16v-4m5 4V8m5 8v-6"/></svg></div>
     <div class="dock-dot"></div>
   </div>
-  <div class="dock-item" data-page="generate" onclick="switchNav('generate',document.getElementById('navGen'))" title="生图">
-    <div class="dock-icon">✨</div>
+  <div class="dock-item" data-page="generate" onclick="switchNav('generate',document.getElementById('navGen'))" title="生图" data-i18n-title="nav.images">
+    <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m5 17 5-5 4 4 2-2 3 3M17 7v4m-2-2h4"/></svg></div>
     <div class="dock-dot"></div>
   </div>
-  <div class="dock-item" data-page="video" onclick="switchNav('video',document.getElementById('navVideo'))" title="生视频">
-    <div class="dock-icon">🎬</div>
+  <div class="dock-item" data-page="video" onclick="switchNav('video',document.getElementById('navVideo'))" title="生视频" data-i18n-title="nav.video">
+    <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m9 9 4 3-4 3Zm7 1 5-3v10l-5-3"/></svg></div>
     <div class="dock-dot"></div>
   </div>
-  <div class="dock-item" data-page="gallery" onclick="switchNav('gallery',document.getElementById('navGallery'))" title="媒体库">
-    <div class="dock-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg></div>
+  <div class="dock-item" data-page="gallery" onclick="switchNav('gallery',document.getElementById('navGallery'))" title="媒体库" data-i18n-title="nav.library">
+    <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="14" height="13" rx="2"/><path d="M8 6V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2"/><circle cx="8.5" cy="10" r="1.25"/><path d="m5.5 17 4-4 2.5 2.5 2-2 3.5 3.5"/></svg></div>
     <div class="dock-dot"></div>
   </div>
-  <div class="dock-item" data-page="history" onclick="switchNav('history',document.getElementById('navHistory'))" title="历史">
-    <div class="dock-icon">📜</div>
+  <div class="dock-item" data-page="history" onclick="switchNav('history',document.getElementById('navHistory'))" title="历史" data-i18n-title="nav.history">
+    <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg></div>
     <div class="dock-dot"></div>
+  </div>
+  <div class="dock-item" data-page="extensions" onclick="switchNav('extensions',document.getElementById('navExtensions'))" title="扩展功能" data-i18n-title="nav.extensions">
+    <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 5h10M5 7v10m14-10v10M7 19h10"/></svg></div><div class="dock-dot"></div>
   </div>
   <div class="dock-sep"></div>
-  <div class="dock-item dock-action" onclick="openProviderModal()" title="模型设置">
-    <div class="dock-icon">⚙️</div>
+  <div class="dock-item dock-action" onclick="openProviderModal()" title="模型设置" data-i18n-title="nav.models">
+    <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3"/><circle cx="12" cy="12" r="3"/><path d="M9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m12 0h4M2 15h4m12 0h4"/></svg></div>
     <div class="dock-dot"></div>
   </div>
-  <div class="dock-item dock-action" onclick="openThemeModal()" title="主题设置">
-    <div class="dock-icon">🎨</div>
+  <div class="dock-item dock-action" onclick="openOnboardingGuide()" title="新手引导" data-i18n-title="nav.guide">
+    <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5Z"/><circle cx="12" cy="12" r="1"/></svg></div>
     <div class="dock-dot"></div>
   </div>
-  <div class="dock-item dock-action" onclick="openLogModal()" title="查看日志">
-    <div class="dock-icon">📋</div>
+  <div class="dock-item dock-action" onclick="openThemeModal()" title="主题设置" data-i18n-title="nav.appearance">
+    <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1.2a1.8 1.8 0 0 0 0-3.6h-.7a1.7 1.7 0 0 1 0-3.4H16a5 5 0 0 0 0-10Z"/><circle cx="7" cy="10" r=".7"/><circle cx="9" cy="6.5" r=".7"/><circle cx="14" cy="6.5" r=".7"/></svg></div>
     <div class="dock-dot"></div>
   </div>
-  <div class="dock-item dock-action" onclick="location.reload()" title="刷新页面">
-    <div class="dock-icon">🔄</div>
+  <div class="dock-item dock-action" onclick="openLogModal()" title="查看日志" data-i18n-title="nav.logs">
+    <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M8 9h8m-8 4h8m-8 4h5"/></svg></div>
+    <div class="dock-dot"></div>
+  </div>
+  <div class="dock-item dock-action" onclick="location.reload()" title="刷新页面" data-i18n-title="nav.refresh">
+    <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.2 8a7 7 0 0 1 11.6-1L20 12M4 12l2.2 5a7 7 0 0 0 11.6-1"/></svg></div>
     <div class="dock-dot"></div>
   </div>
 </nav>
@@ -810,88 +1077,115 @@
 <div id="syncModal" class="modal-overlay sync-modal" role="dialog" aria-modal="true" aria-labelledby="syncModalTitle">
   <div class="glass-panel modal-card sync-modal-card">
     <div class="modal-header">
-      <div class="modal-title" id="syncModalTitle">☁ 从远程 chatgpt2api 同步图片</div>
-      <button class="modal-close" onclick="closeSyncModal()" aria-label="关闭远程同步窗口">×</button>
+      <div class="modal-title" id="syncModalTitle"><span data-i18n="sync.title">☁ 从远程 chatgpt2api 同步图片</span></div>
+      <button class="modal-close" onclick="closeSyncModal()" aria-label="关闭远程同步窗口" data-i18n-aria-label="sync.close_label">×</button>
     </div>
 
     <div class="sync-body">
       <ol class="sync-steps">
-        <li><b>1</b> 填写并保存远程部署</li>
-        <li><b>2</b> 选择部署 → 点「扫描预览」</li>
-        <li><b>3</b> 勾选图片 → 点「同步选中」</li>
+        <li><b>1</b> <span data-i18n="sync.step_1">填写并保存远程部署</span></li>
+        <li><b>2</b> <span data-i18n="sync.step_2">选择部署 → 点「扫描预览」</span></li>
+        <li><b>3</b> <span data-i18n="sync.step_3">勾选图片 → 点「同步选中」</span></li>
       </ol>
 
       <!-- 部署配置 -->
       <div class="sync-section">
-        <div class="sync-section-title">① 添加远程部署（chatgpt2api）</div>
+        <div class="sync-section-title"><span data-i18n="sync.add_deployment">① 添加远程部署（chatgpt2api）</span></div>
         <div class="sync-deployments" id="syncDeployments"></div>
         <div class="sync-deploy-form">
-          <input id="syncDepName" class="sync-input" placeholder="名称（如 我的VPS）" />
-          <input id="syncDepUrl" class="sync-input" placeholder="Base URL（如 http://host:3000）" />
+          <input id="syncDepName" class="sync-input" placeholder="名称（如 我的VPS）"  data-i18n-placeholder="sync.name_placeholder"/>
+          <input id="syncDepUrl" class="sync-input" placeholder="Base URL（如 http://host:3000）"  data-i18n-placeholder="sync.url_placeholder"/>
           <input id="syncDepKey" class="sync-input" type="password" placeholder="Admin Bearer Token" />
-          <button class="btn-ghost" onclick="testInlineSyncDeployment()">测试连接</button>
-          <button class="btn-secondary" onclick="saveSyncDeployment()">保存部署</button>
+          <button class="btn-ghost" onclick="testInlineSyncDeployment()"><span data-i18n="extensions.test_connection">测试连接</span></button>
+          <button class="btn-secondary" onclick="saveSyncDeployment()"><span data-i18n="sync.save_deployment">保存部署</span></button>
         </div>
         <div class="sync-hint-box">
-          <div>· <b>Base URL</b>：填写 chatgpt2api「接口信息」页的 <b>基础端点</b>（例如 http://host:3000）</div>
-          <div>· <b>Admin Bearer Token</b>：填写 chatgpt2api「接口信息」页的 <b>当前调用密钥</b></div>
+          <div>· <b>Base URL</b><span data-i18n="sync.endpoint_prefix">：填写 chatgpt2api「接口信息」页的</span> <b><span data-i18n="sync.base_endpoint">基础端点</span></b><span data-i18n="sync.endpoint_example">（例如 http://host:3000）</span></div>
+          <div>· <b>Admin Bearer Token</b><span data-i18n="sync.endpoint_prefix">：填写 chatgpt2api「接口信息」页的</span> <b><span data-i18n="sync.current_key">当前调用密钥</span></b></div>
         </div>
         <div id="syncDeployStatus" class="sync-status" role="status" aria-live="polite"></div>
       </div>
 
       <!-- 预览与筛选 -->
       <div class="sync-section">
-        <div class="sync-section-title">② 扫描预览并选择图片</div>
+        <div class="sync-section-title"><span data-i18n="sync.preview_title">② 扫描预览并选择图片</span></div>
         <div class="sync-filters">
           <select id="syncDepSelect" class="media-filter-select" onchange="loadSyncPreview()">
-            <option value="">— 选择部署 —</option>
+            <option value=""><span data-i18n="sync.choose_deployment">— 选择部署 —</span></option>
           </select>
           <select id="syncDateRange" class="media-filter-select" onchange="onSyncDateRangeChange()">
-            <option value="">全部时间</option>
-            <option value="today">今天</option>
-            <option value="month">本月</option>
-            <option value="custom">自定义范围</option>
+            <option value=""><span data-i18n="sync.all_time">全部时间</span></option>
+            <option value="today"><span data-i18n="sync.today">今天</span></option>
+            <option value="month"><span data-i18n="sync.this_month">本月</span></option>
+            <option value="custom"><span data-i18n="sync.custom_range">自定义范围</span></option>
           </select>
           <input id="syncDateStart" type="date" class="media-filter-select hidden" onchange="loadSyncPreview()" />
           <input id="syncDateEnd" type="date" class="media-filter-select hidden" onchange="loadSyncPreview()" />
           <select id="syncAspect" class="media-filter-select" onchange="applySyncFilters()">
-            <option value="">比例不限</option>
-            <option value="square">正方形</option>
-            <option value="portrait">竖图</option>
-            <option value="landscape">横图</option>
+            <option value=""><span data-i18n="sync.any_ratio">比例不限</span></option>
+            <option value="square"><span data-i18n="sync.square">正方形</span></option>
+            <option value="portrait"><span data-i18n="sync.portrait">竖图</span></option>
+            <option value="landscape"><span data-i18n="sync.landscape">横图</span></option>
           </select>
           <select id="syncSize" class="media-filter-select" onchange="applySyncFilters()">
-            <option value="">大小不限</option>
+            <option value=""><span data-i18n="sync.any_size">大小不限</span></option>
             <option value="small">&lt;1MB</option>
             <option value="mid">1–5MB</option>
             <option value="large">&gt;5MB</option>
           </select>
-          <button class="btn-secondary" onclick="loadSyncPreview()">扫描预览</button>
+          <button class="btn-secondary" onclick="loadSyncPreview()"><span data-i18n="sync.scan_preview">扫描预览</span></button>
         </div>
         <div class="sync-hint-box sync-hint-inline">
-          先在上方的部署列表中选择一个部署，再点「扫描预览」拉取远端图片（自动按内容去重）。预览图加载完成后，勾选要同步的图片，最后点「同步选中」。
+          <span data-i18n="sync.instructions">先在上方的部署列表中选择一个部署，再点「扫描预览」拉取远端图片（自动按内容去重）。预览图加载完成后，勾选要同步的图片，最后点「同步选中」。</span>
         </div>
         <div class="sync-toolbar">
-          <button class="btn-ghost" onclick="syncSelectAll(true)">全选</button>
-          <button class="btn-ghost" onclick="syncSelectAll(false)">取消全选</button>
-          <span class="sync-count" id="syncSelectedCount" role="status" aria-live="polite">已选 0</span>
-          <button class="btn-primary" id="syncImportBtn" onclick="startSyncImport()" disabled>⬇️ 同步选中 (<span id="syncImportNum">0</span>)</button>
+          <button class="btn-ghost" onclick="syncSelectAll(true)"><span data-i18n="library.select_all">全选</span></button>
+          <button class="btn-ghost" onclick="syncSelectAll(false)"><span data-i18n="library.select_none">取消全选</span></button>
+          <span class="sync-count" id="syncSelectedCount" role="status" aria-live="polite"><span data-i18n="sync.selected_zero">已选 0</span></span>
+          <button class="btn-primary" id="syncImportBtn" onclick="startSyncImport()" disabled><span data-i18n="sync.sync_selected">⬇️ 同步选中 (</span><span id="syncImportNum">0</span>)</button>
         </div>
         <div class="sync-preview" id="syncPreview">
-          <div class="sync-empty">选择部署后点击「预览」以拉取远端图片并去重。</div>
+          <div class="sync-empty"><span data-i18n="sync.empty_hint">选择部署后点击「预览」以拉取远端图片并去重。</span></div>
         </div>
       </div>
     </div>
 
     <div class="sync-progress hidden" id="syncProgressBox">
       <div class="sync-progress-bar"><div class="sync-progress-fill" id="syncProgressFill"></div></div>
-      <div class="sync-progress-text" id="syncProgressText">准备中…</div>
+      <div class="sync-progress-text" id="syncProgressText"><span data-i18n="sync.preparing">准备中…</span></div>
     </div>
   </div>
 </div>
 
 <link rel="stylesheet" href="/static/css/sync.css?v=8">
-<script src="/static/js/app-all.js?v=19"></script>
+<link rel="stylesheet" href="/static/css/extensions.css?v=4">
+  <script>
+    (function () {
+      var next = 'zh-CN';
+      try {
+        var params = new URLSearchParams(window.location.search || '');
+        var queryLang = params.get('lang');
+        if (queryLang === 'en' || queryLang === 'zh-CN') {
+          next = queryLang;
+        } else if (window.localStorage) {
+          var stored = window.localStorage.getItem('igs_language');
+          if (stored === 'en' || stored === 'zh-CN') next = stored;
+        }
+      } catch (error) {}
+      window.__genboxLanguage = next;
+      try {
+        if (window.localStorage && !new URLSearchParams(window.location.search || '').get('lang')) {
+          window.localStorage.setItem('igs_language', next);
+        }
+      } catch (error2) {}
+      try {
+        document.documentElement.lang = next;
+      } catch (error3) {}
+    })();
+  </script>
+  <script src="/static/js/i18n.js?v=6"></script>
+<script src="/static/js/app-all.js?v=35"></script>
 <script src="/static/js/sync.js?v=7"></script>
+<script src="/static/js/extensions.js?v=8"></script>
 </body>
 </html>
