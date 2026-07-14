@@ -16,6 +16,21 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import quote, urlsplit
 
+from genbox_version import __version__
+
+
+def _configure_console_encoding() -> None:
+    """Keep packaged Windows startup output from failing on Unicode text."""
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (AttributeError, OSError):
+                pass
+
+
+_configure_console_encoding()
+
 # ──────────────────────────────────────────────────────────────
 # PyInstaller 路径兼容
 # ──────────────────────────────────────────────────────────────
@@ -183,9 +198,9 @@ class ProviderCreateReq(BaseModel):
 # ──────────────────────────────────────────────────────────────
 # FastAPI 实例
 # ──────────────────────────────────────────────────────────────
-app = FastAPI(title="GenBox", version="2.0.0")
+app = FastAPI(title="GenBox", version=__version__)
 app_start_time = time.time()
-GENBOX_PORT = int(os.getenv("GENBOX_PORT", "8892"))
+GENBOX_PORT = int(os.getenv("GENBOX_PORT", "8891"))
 GENBOX_LOCAL_URL = f"http://localhost:{GENBOX_PORT}"
 GENBOX_LOOPBACK_URL = f"http://127.0.0.1:{GENBOX_PORT}"
 
@@ -3814,7 +3829,7 @@ if __name__ == "__main__":
         
         print("""
 ╔══════════════════════════════════════════════════════════════╗
-║                   🎉 欢迎使用 GenBox!                       ║
+║                     欢迎使用 GenBox!                         ║
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                              ║
 ║  首次启动，请选择部署方式：                                   ║
@@ -3842,16 +3857,16 @@ if __name__ == "__main__":
                 if choice == "1":
                     # 本地开发模式
                     _write_env({"APP_MODE": "dev"})
-                    print("\n✅ 已启用本地模式（无需认证，仅限本机访问）\n")
+                    print("\n[OK] 已启用本地模式（无需认证，仅限本机访问）\n")
                     break
                 elif choice == "2":
                     # VPS 模式
                     _write_env({"APP_MODE": "prod"})
-                    print("\n✅ 已启用生产模式（需要认证）\n")
+                    print("\n[OK] 已启用生产模式（需要认证）\n")
                     
                     # 询问 CORS 配置
                     print("─" * 50)
-                    print("📡 网络配置")
+                    print("网络配置")
                     print("─" * 50)
                     print("为了让浏览器能访问 API，需要配置允许的源。")
                     print("如果有域名请输入域名，否则输入服务器 IP。")
@@ -3861,23 +3876,23 @@ if __name__ == "__main__":
                     origins_input = input("允许的源 (如 http://your-ip:8891): ").strip()
                     if origins_input:
                         _write_env({"ALLOWED_ORIGINS": origins_input})
-                        print(f"✅ 已设置 CORS: {origins_input}\n")
+                        print(f"[OK] 已设置 CORS: {origins_input}\n")
                     else:
-                        print("⏭️  跳过，使用默认配置（仅本机）\n")
+                        print("[SKIP] 使用默认配置（仅本机）\n")
                     
                     # 自动生成并显示管理密钥
                     admin_key = secrets.token_urlsafe(16)
                     _write_env({"ADMIN_KEY": admin_key})
                     print("─" * 50)
-                    print("🔐 管理员密钥已自动生成")
+                    print("管理员密钥已自动生成")
                     print("─" * 50)
                     print(f"\n   {admin_key}\n")
-                    print("⚠️  请立即保存此密钥！关闭后无法再次查看！")
+                    print("[WARN] 请立即保存此密钥！关闭后无法再次查看！")
                     print("   建议保存到密码管理器。\n")
                     break
                 elif choice == "3":
                     # Docker 模式
-                    print("\n🐳 Docker 部署指引：")
+                    print("\nDocker 部署指引：")
                     print("─" * 50)
                     print("1. 复制环境配置文件：")
                     print("   cp .env.example .env")
@@ -3886,7 +3901,7 @@ if __name__ == "__main__":
                     print("   nano .env")
                     print()
                     print("3. 启动容器：")
-                    print("   docker-compose up -d")
+                    print("   docker compose up -d")
                     print()
                     print("4. 查看日志：")
                     print("   docker-compose logs -f")
@@ -3896,14 +3911,14 @@ if __name__ == "__main__":
                     
                     # Docker 默认使用 prod 模式
                     _write_env({"APP_MODE": "prod"})
-                    print("\n✅ Docker 部署默认启用生产模式\n")
+                    print("\n[OK] Docker 部署默认启用生产模式\n")
                     break
                 else:
-                    print("❌ 请输入 1、2 或 3")
+                    print("[ERROR] 请输入 1、2 或 3")
             except (EOFError, KeyboardInterrupt):
                 # 无交互环境（如 Docker），默认使用 prod 模式
                 _write_env({"APP_MODE": "prod"})
-                print("\n✅ 无交互环境，默认启用生产模式\n")
+                print("\n[OK] 无交互环境，默认启用生产模式\n")
                 break
 
     # 执行首次启动设置
@@ -3920,15 +3935,15 @@ if __name__ == "__main__":
             key = generate_admin_key()
             print(f"""
 ╔══════════════════════════════════════════════════════════════╗
-║                    🔐 首次启动 - 安全密钥                    ║
+║                       首次启动 - 安全密钥                     ║
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                              ║
 ║  管理密钥已生成，请立即保存：                                 ║
 ║                                                              ║
 ║  {key}                                                      ║
 ║                                                              ║
-║  ⚠️  此密钥仅显示一次，关闭后无法再次查看！                    ║
-║  ⚠️  请复制保存到安全位置（如密码管理器）                      ║
+║  [WARN] 此密钥仅显示一次，关闭后无法再次查看！                  ║
+║  [WARN] 请复制保存到安全位置（如密码管理器）                    ║
 ║                                                              ║
 ║  使用方式：                                                  ║
 ║  1. 打开浏览器访问 http://localhost:8891                      ║
@@ -3940,10 +3955,10 @@ if __name__ == "__main__":
         else:
             print(f"[Security] 管理密钥已加载")
 
-    mode_str = "PRODUCTION 🔒" if is_prod_mode() else "DEVELOPMENT ⚠️"
+    mode_str = "PRODUCTION" if is_prod_mode() else "DEVELOPMENT"
     print(f"""
 ╔══════════════════════════════════════════════════════════════╗
-║                      GenBox v2.0.0                          ║
+║                      GenBox v{__version__:<31}║
 ╠══════════════════════════════════════════════════════════════╣
 ║  模式:     {mode_str:<46}║
 ║  地址:     {GENBOX_LOCAL_URL:<48}║
@@ -3960,11 +3975,13 @@ if __name__ == "__main__":
             webbrowser.open(GENBOX_LOCAL_URL)
         except Exception:
             pass  # 无头环境忽略
-    threading.Thread(target=_open_browser, daemon=True).start()
+    if os.getenv("GENBOX_NO_BROWSER", "").lower() not in {"1", "true", "yes"}:
+        threading.Thread(target=_open_browser, daemon=True).start()
 
     uvicorn.run(
         app,
         host="0.0.0.0",
         port=GENBOX_PORT,
         reload=False,
+        use_colors=False,
     )

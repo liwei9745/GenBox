@@ -1,129 +1,149 @@
 # Changelog
 
-All notable changes to GenBox will be documented in this file.
+All notable GenBox changes are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
+[Semantic Versioning](https://semver.org/).
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [Unreleased]
 
----
+### Planned
+
+- chatgpt2api sender-side per-generation Push.
+- Batch and scheduled incremental transfer with durable cursor, retry, and lease.
+- Receipt-gated source cleanup and reclaimed-space reporting.
+- Durable extension deployment-task recovery after process restart.
+- Clean GitHub redeployment acceptance and upstream delivery gates.
+
+## [2.5.0] - 2026-07-14
+
+### Added
+
+- Extension Center navigation, catalog, VPS targets, SSH host-key confirmation, read-only discovery, fixed deployment plans, isolated chatgpt2api deployment, and managed-instance delivery.
+- Tailscale local/VPS preparation, private-link verification, saved destination metadata, and multi-VPS planning controls.
+- Encrypted local credential vault with explicit setup, unlock, reveal, update, delete, and lock operations.
+- Authenticated, idempotent `POST /api/sync/push` receiver with source identity, SHA-256 validation, deduplication, metadata import, and receipts.
+- Fixed-key Chinese and English translations across primary routes and key dialogs.
+- Four-stage onboarding covering first creation, GenBox capabilities, chatgpt2api, and connection value.
+- Single-model and multi-model image/video workspaces, collapsible creator tools, task monitor, and persistent hash routes.
+- Docker Compose release bundle based on the GHCR image, derived from the approach proposed by @yukkcat in PR #4.
+- Separate runtime, development, and PyInstaller build requirements.
+- Three-platform packaged-client startup smoke tests and release SHA-256 checksums.
+- Release packaging tests and deterministic Docker bundle generation.
+- Packaged-client self-update tests covering exact release-asset selection and Windows post-exit replacement.
+
+### Changed
+
+- Unified Dashboard, Images, Video, Media Library, History, and Extensions headings.
+- Replaced runtime DOM text scanning with explicit i18n keys.
+- Curated the theme catalog to ten coordinated light and dark presets.
+- Development defaults use `8892`; desktop and Docker release defaults use `8891`.
+- Docker Compose pulls `ghcr.io/liwei9745/genbox:latest` instead of building source locally.
+- Centralized version metadata in `genbox_version.py`.
+- README and documentation were reorganized into pinned, rolling, release-frozen, and historical classes.
+- Packaged-client updates now reject archive payloads and replace the executable only after the running process exits.
+- Replaced the legacy screenshot gallery with current v2.5.0 Dashboard, image workspace, Extension Center, and onboarding captures; host-specific Dashboard values are reproducibly replaced with labeled demo data.
+
+### Security
+
+- Production chatgpt2api remains read-only; deployment uses isolated resources and generated credentials.
+- Managed-instance secrets default to show-once and require explicit opt-in for encrypted local storage.
+- GenBox administrator and Push source credentials remain separate.
+- Runtime data, local memory, raw screenshots, private environment identities, and tool output are excluded from release candidates.
+- Source cleanup remains disabled until authenticated receipt and hash gates are implemented end to end.
+
+### Fixed
+
+- Windows packaged-client first-run crash when GBK console output encountered Unicode symbols.
+- AsyncSSH privileged-command channel sequencing and sudo application for isolated clone operations.
+- Dashboard language switching with existing `?lang=` parameters.
+- Host-resource uptime rendering and Local IP visibility controls.
+- Video-provider initialization, creator action placement, and Dock auto-hide behavior.
+
+### Verification
+
+- 70 automated tests pass.
+- Fresh isolated dependency installation and tests pass.
+- Windows PyInstaller client builds and passes a real HTTP startup smoke test.
+- Chinese/English desktop, narrow, and mobile onboarding checks pass without horizontal overflow.
+
+## [2.4.1] - 2026-07-10
+
+### Changed
+
+- Reworked the cloud-sync dialog into a guided three-step chatgpt2api workflow.
+- Improved terminology, filtering, selection, and import feedback.
+
+## [2.4.0] - 2026-07-10
+
+### Added
+
+- GenBox-initiated remote image Pull from compatible chatgpt2api deployments.
+- Date filtering, content deduplication, source metadata, prompt recovery, and cloud-source tags.
+
+## [2.3.2] - 2026-07-10
+
+### Added
+
+- Theme and UI refinements following the security and update-system release.
+
+## [2.3.1] - 2026-07-09
+
+### Fixed
+
+- Follow-up packaging and update-system corrections.
 
 ## [2.3.0] - 2026-07-09
 
 ### Added
-- **Auto-update system**: version detection, GitHub CDN mirror testing, source/exe/docker update support
-- **Security hardening** (Strix audit):
-  - API Key masking: `/api/providers` no longer returns raw keys, shows `api_key_masked` instead
-  - SSRF protection: private IP blackhole (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, etc.)
-  - CSP header: `script-src 'self' 'unsafe-inline'`, `frame-ancestors 'none'`
-  - CSRF protection: Origin/Referer header validation for POST/PUT/DELETE
-- Provider modal "系统更新" section with mirror speed test
 
-### Changed
-- Authentication mode: dev mode no auth, prod mode requires ADMINKEY (unchanged, by design)
-
----
+- Automatic update checks and GitHub mirror testing.
+- API-key masking, SSRF protection, CSRF validation, and stricter CSP headers.
+- Production-mode first-run setup and administrator authentication.
+- Per-provider proxy bypass and expanded environment documentation.
 
 ## [2.2.0] - 2026-07-09
 
 ### Added
-- i2i layout: reference image (20%) + prompt (80%) side-by-side
-- Video preview placeholder cards with spinner animation (4:3 ratio)
-- Video page gallery picker with model filter dropdown
-- Gallery picker shows source model name for each image
-- Close button in provider modal (red background, more visible)
-- Video model dropdown filters out image-only models
-- Failed generations write detailed errors to logs.jsonl
 
-### Changed
-- `/api/generate` now returns `provider_states` in initial response for immediate placeholder creation
-- `/api/preview/images` returns 40 items (up from 20) with model info
-- Video preview placeholders use same style as image placeholders (`.prev-card.generating`)
+- Image-to-image reference layout, video placeholders, gallery picker, and model filtering.
+- Detailed generation failure logging.
 
 ### Fixed
-- i2i generation not showing placeholder spinner (`.hidden` class with `!important` overrode inline styles)
-- Lightbox "send to i2i" sending URL instead of base64 (backend decode failure)
-- Lightbox "send to video" sending URL instead of base64
-- Video page gallery picker only showing current model's images
-- Video generation failing immediately when using images from lightbox
 
----
+- Image/video lightbox transfer, placeholder visibility, and gallery provider filtering.
 
-## [Unreleased]
+## [2.1.0] - 2026-07-09
 
 ### Added
-- Provider capabilities system for explicit i2i/i2v support declaration
-- Capabilities UI in provider settings (image: t2i/i2i, video: t2v/i2v)
-- Dynamic capabilities section updates when changing provider type
-- Quick action buttons in lightbox (图生图/生视频)
-- Quick action buttons in gallery overlay
-- Video model fallback list for better UX
 
-### Changed
-- Capabilities checkboxes now show only relevant options per provider type
-- Improved error messages for model fetching
+- Provider capability declarations and quick image/video actions.
 
 ### Fixed
-- Dock alignment and visual consistency
-- Hover effects for dock action items
 
----
+- Dock alignment, hover behavior, and video fallback lists.
 
-## [2.0.0-test.6] - 2026-07-09
-
-### Fixed
-- macOS and Linux binary name conflict
-- Headless Linux server compatibility (no display)
-
----
-
-## [2.0.0-test.1] - 2026-07-09
+## [2.0.0] - 2026-07-09
 
 ### Added
-- Initial cross-platform desktop builds
-- Windows executable (GenBox.exe)
-- macOS executable (GenBox-macOS)
-- Linux executable (GenBox-Linux)
 
----
+- Cross-platform Windows, macOS, and Linux clients.
+- Production authentication and first-run runtime selection.
+- Headless Linux support.
 
 ## [1.0.0] - 2026-07-08
 
 ### Added
-- Frosted glass UI redesign
-- Mac-style dock navigation
-- Multi-provider parallel generation
-- Grouped previews with lightbox
-- Resizable panels
-- Docker support
-- Sanitized screenshots
-- English README
 
-### Changed
-- Complete UI overhaul from dark theme to frosted glass
-- Single HTML file architecture to modular CSS/JS
-- Provider protocol detection (URL-first)
-
-### Fixed
-- Image preview z-index issues
-- Video lightbox prompt display
-- Resize handle functionality
-- Cache versioning
-
----
+- Frosted-glass UI, Dock navigation, multi-provider generation, media management, and Docker support.
 
 ## [0.9.0] - 2026-07-07
 
 ### Added
-- Multi-provider image generation
-- Video generation support
-- Media library management
-- Dashboard with system monitoring
 
----
+- Multi-provider image generation, video generation, Media Library, and Dashboard monitoring.
 
 ## [0.1.0] - 2026-07-01
 
 ### Added
-- Initial release
-- Basic image generation
-- Provider configuration
+
+- Initial GenBox release and basic provider configuration.

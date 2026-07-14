@@ -5,17 +5,16 @@ GenBox 自动更新系统
 import os
 import sys
 import subprocess
-import shutil
-import tempfile
 import time
 import json
-import hashlib
 from pathlib import Path
-from typing import Optional, List, Dict
-from dataclasses import dataclass, asdict
+from typing import Optional, List
+from dataclasses import dataclass
 from enum import Enum
 
 import httpx
+
+from genbox_version import __version__
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -25,6 +24,7 @@ REPO_OWNER = "liwei9745"
 REPO_NAME = "GenBox"
 REPO_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
 GITHUB_API = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}"
+DOCKER_IMAGE = os.getenv("GENBOX_IMAGE", f"ghcr.io/{REPO_OWNER}/{REPO_NAME}:latest".lower())
 
 # GitHub 代理线路（国内优化）
 GITHUB_MIRRORS = [
@@ -37,7 +37,7 @@ GITHUB_MIRRORS = [
 ]
 
 # 当前版本
-CURRENT_VERSION = "2.4.1"
+CURRENT_VERSION = __version__
 
 
 class UpdateType(Enum):
@@ -176,17 +176,87 @@ def compare_versions(current: str, latest: str) -> bool:
 def get_asset_url(release: dict, platform: str) -> Optional[str]:
     """根据平台找到对应的下载资源"""
     assets = release.get("assets", [])
+    preferred_names = {
+        "win32": ["genbox.exe"],
+        "linux": ["genbox-linux-x64", "genbox-linux"],
+        "darwin": ["genbox-macos", "genbox-darwin"],
+    }
+    by_name = {
+        asset.get("name", "").lower(): asset.get("browser_download_url")
+        for asset in assets
+        if asset.get("browser_download_url")
+    }
+    for name in preferred_names.get(platform, []):
+        if name in by_name:
+            return by_name[name]
+
+    # Compatibility fallback for custom release names. Archives are never valid
+    # self-update payloads because replacing an executable with a ZIP corrupts it.
     patterns = {
         "win32": ["windows", "win", ".exe"],
         "linux": ["linux"],
         "darwin": ["macos", "mac", "darwin"],
     }
-    pats = patterns.get(platform, [])
+    archive_suffixes = (".zip", ".tar", ".tar.gz", ".tgz", ".dmg")
     for asset in assets:
-        name = asset["name"].lower()
-        if any(p in name for p in pats):
-            return asset["browser_download_url"]
+        name = asset.get("name", "").lower()
+        if not name.endswith(archive_suffixes) and any(
+            pattern in name for pattern in patterns.get(platform, [])
+        ):
+            return asset.get("browser_download_url")
     return None
+
+
+def _windows_restart_script(exe_path: Path, staged_path: Path, backup_path: Path, pid: int) -> str:
+    """Build the detached helper that replaces a locked Windows executable."""
+    return f'''@echo off
+chcp 65001 >nul
+timeout /t 2 /nobreak >nul
+taskkill /PID {pid} /T /F >nul 2>&1
+
+for /L %%I in (1,1,30) do (
+  move /Y "{exe_path}" "{backup_path}" >nul 2>&1 && goto replace
+  timeout /t 1 /nobreak >nul
+)
+goto failed
+
+:replace
+move /Y "{staged_path}" "{exe_path}" >nul 2>&1
+if errorlevel 1 (
+  move /Y "{backup_path}" "{exe_path}" >nul 2>&1
+  goto failed
+)
+start "" /D "{exe_path.parent}" "{exe_path}"
+goto cleanup
+
+:failed
+start "" /D "{exe_path.parent}" "{exe_path}"
+
+:cleanup
+del "%~f0"
+'''
+
+
+def _posix_restart_script(exe_path: Path, staged_path: Path, backup_path: Path, pid: int) -> str:
+    """Build the detached helper used by packaged Linux and macOS clients."""
+    return f'''#!/bin/sh
+sleep 2
+kill {pid} 2>/dev/null || true
+i=0
+while kill -0 {pid} 2>/dev/null && [ "$i" -lt 30 ]; do
+  sleep 1
+  i=$((i + 1))
+done
+mv -f "{exe_path}" "{backup_path}" || exit 1
+if ! mv -f "{staged_path}" "{exe_path}"; then
+  mv -f "{backup_path}" "{exe_path}"
+  exit 1
+fi
+chmod +x "{exe_path}"
+cd "{exe_path.parent}" || exit 1
+nohup "{exe_path}" >/dev/null 2>&1 &
+rm -f "$0"
+'''
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -263,7 +333,7 @@ async def apply_source_update(mirror_url: str = "") -> dict:
 
 
 async def apply_exe_update(download_url: str, mirror_url: str = "") -> dict:
-    """可执行文件更新：下载 + 替换"""
+    """可执行文件更新：下载到旁路文件，退出后替换并重启。"""
     exe_path = get_executable_path()
     if not exe_path:
         return {"success": False, "error": "无法获取可执行文件路径"}
@@ -280,33 +350,35 @@ async def apply_exe_update(download_url: str, mirror_url: str = "") -> dict:
             resp = await client.get(dl_url, headers={"User-Agent": "GenBox-Updater"})
             resp.raise_for_status()
 
-        # 备份当前版本
-        backup = exe_path.with_suffix(".exe.bak")
-        if backup.exists():
-            backup.unlink()
-        shutil.copy2(exe_path, backup)
+        payload = resp.content
+        if not payload or payload.startswith(b"PK\x03\x04"):
+            return {"success": False, "error": "下载到的不是可执行客户端，已取消更新"}
 
-        # 写入新版本
-        exe_path.write_bytes(resp.content)
+        staged = exe_path.with_name(f".{exe_path.name}.update")
+        backup = exe_path.with_name(f"{exe_path.name}.bak")
+        staged.write_bytes(payload)
 
-        # 创建重启脚本
-        restart_script = exe_path.parent / "_restart.bat"
-        restart_script.write_text(
-            f'''@echo off
-chcp 65001 >nul
-timeout /t 1 /nobreak >nul
-start "" "{exe_path}"
-del "%~f0"
-''', encoding="utf-8"
-        )
+        if sys.platform == "win32":
+            restart_script = exe_path.parent / "_genbox_update.cmd"
+            script = _windows_restart_script(exe_path, staged, backup, os.getpid())
+            restart_script.write_text(script, encoding="utf-8")
+            subprocess.Popen(
+                ["cmd", "/c", str(restart_script)],
+                cwd=exe_path.parent,
+                creationflags=0x00000008 | 0x00000200,
+            )
+        else:
+            restart_script = exe_path.parent / "_genbox_update.sh"
+            script = _posix_restart_script(exe_path, staged, backup, os.getpid())
+            restart_script.write_text(script, encoding="utf-8")
+            restart_script.chmod(0o700)
+            subprocess.Popen(
+                ["/bin/sh", str(restart_script)],
+                cwd=exe_path.parent,
+                start_new_session=True,
+            )
 
-        # 启动重启脚本（异步）
-        subprocess.Popen(
-            ["cmd", "/c", str(restart_script)],
-            creationflags=0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NO_WINDOW
-        )
-
-        return {"success": True, "message": "更新完成，正在重启..."}
+        return {"success": True, "message": "更新已下载，正在替换并重启...", "restart": True}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -316,7 +388,7 @@ async def apply_docker_update() -> dict:
     try:
         # 拉取最新镜像
         r = subprocess.run(
-            ["docker", "pull", f"{REPO_NAME.lower()}:latest"],
+            ["docker", "pull", DOCKER_IMAGE],
             capture_output=True, text=True, timeout=300
         )
         if r.returncode != 0:
@@ -324,7 +396,7 @@ async def apply_docker_update() -> dict:
 
         return {
             "success": True,
-            "message": "镜像已更新，请运行 docker-compose up -d 重启容器"
+            "message": "镜像已更新，请运行 docker compose up -d 重启容器"
         }
     except Exception as e:
         return {"success": False, "error": str(e)}

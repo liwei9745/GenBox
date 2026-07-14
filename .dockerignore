@@ -1,12 +1,14 @@
 # Git
 .git
 .gitignore
+.github
 
 # Python
 __pycache__
 *.pyc
 *.pyo
 .venv
+.release
 venv
 env
 
@@ -23,6 +25,13 @@ env
 screenshots/
 skills/
 docs/
+tests/
+.planning/
+.codex/
+.codegraph/
+memory/
+wiki-knowledge/
+artifacts/
 *.md
 
 # 存储数据（运行时挂载）

@@ -1,12 +1,21 @@
-version: "3.8"
-
 services:
   genbox:
-    build: .
-    container_name: genbox
+    image: ${GENBOX_IMAGE:-ghcr.io/liwei9745/genbox:latest}
+    container_name: ${GENBOX_CONTAINER_NAME:-genbox}
     ports:
-      - "8891:8891"
+      - "${GENBOX_PORT:-8891}:8891"
+    environment:
+      APP_MODE: ${APP_MODE:-prod}
+      GENBOX_PORT: "8891"
+      GENBOX_NO_BROWSER: "1"
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8891,http://127.0.0.1:8891}
     volumes:
       - ./storage:/app/storage
       - ./.env:/app/.env
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8891/api/setup/status', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3

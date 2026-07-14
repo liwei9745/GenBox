@@ -1,29 +1,19 @@
-# Core
-fastapi==0.135.3
-uvicorn[standard]==0.42.0
-python-multipart==0.0.9
+# Runtime dependencies. Build and test tools live in separate requirement files.
+fastapi==0.139.0
+uvicorn[standard]==0.51.0
+python-multipart==0.0.32
 
-# HTTP
 httpx==0.28.1
-aiofiles==23.2.1
-requests==2.28.2
-asyncssh>=2.21.0
+aiofiles==25.1.0
+requests==2.34.2
+asyncssh==2.24.0
 
-# Storage
-pillow==12.2.0
-cryptography>=49.0.0,<50.0.0
+pillow==12.3.0
+cryptography==49.0.0
 
-# Utils
-python-dotenv==1.0.1
-pydantic==2.12.5
-pydantic-settings==2.5.0
+python-dotenv==1.2.2
+pydantic==2.13.4
+pydantic-settings==2.14.2
 psutil==7.2.2
-
-# Typing
-typing-extensions>=4.0.0
-
-# Frontend (optional dev)
-# tailwindcss (handled separately)
-
-# Tests (dev)
-pytest>=8.0.0
+typing-extensions==4.16.0
+tzdata==2026.3

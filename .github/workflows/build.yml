@@ -14,14 +14,41 @@ on:
 
 env:
   APP_NAME: GenBox
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.12'
 
 jobs:
+  quality:
+    name: Test release source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Validate JavaScript
+        run: |
+          node --check static/js/i18n.js
+          node --check static/js/app-all.js
+          node --check static/js/extensions.js
+          node --check static/js/sync.js
+
+      - name: Run tests
+        run: python -m pytest -q
+
   # ──────────────────────────────────────────────────────────────
   # Windows Build
   # ──────────────────────────────────────────────────────────────
   build-windows:
     name: Build Windows
+    needs: quality
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -33,13 +60,13 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+        run: python -m pip install -r requirements-build.txt
 
       - name: Build with PyInstaller
         run: python build.py
+
+      - name: Smoke test packaged client
+        run: python scripts/smoke_client.py --executable dist/GenBox.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -53,6 +80,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────
   build-macos:
     name: Build macOS
+    needs: quality
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -64,13 +92,13 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+        run: python -m pip install -r requirements-build.txt
 
       - name: Build with PyInstaller
         run: python build.py
+
+      - name: Smoke test packaged client
+        run: python scripts/smoke_client.py --executable dist/GenBox
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -84,6 +112,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────
   build-linux:
     name: Build Linux
+    needs: quality
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -100,13 +129,13 @@ jobs:
           sudo apt-get install -y ffmpeg
 
       - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+        run: python -m pip install -r requirements-build.txt
 
       - name: Build with PyInstaller
         run: python build.py
+
+      - name: Smoke test packaged client
+        run: python scripts/smoke_client.py --executable dist/GenBox
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -160,32 +189,41 @@ jobs:
         run: |
           mkdir -p artifacts/release-windows
           cp "artifacts/windows/${{ env.APP_NAME }}.exe" artifacts/release-windows/
-          cp .env.example artifacts/release-windows/
-          cp requirements.txt artifacts/release-windows/
-          cp check_env.py artifacts/release-windows/
-          cp start.bat artifacts/release-windows/
-          cp README.md artifacts/release-windows/
+          cp docs/CLIENT-QUICKSTART.md artifacts/release-windows/README.md
+          cp LICENSE artifacts/release-windows/
           cd artifacts/release-windows && zip -r ../${{ env.APP_NAME }}-Windows.zip .
 
       - name: Package macOS release
         run: |
           mkdir -p artifacts/release-macos
           cp "artifacts/macos/${{ env.APP_NAME }}-macOS" artifacts/release-macos/
-          cp .env.example artifacts/release-macos/
-          cp requirements.txt artifacts/release-macos/
-          cp check_env.py artifacts/release-macos/
-          cp README.md artifacts/release-macos/
+          cp docs/CLIENT-QUICKSTART.md artifacts/release-macos/README.md
+          cp LICENSE artifacts/release-macos/
           cd artifacts/release-macos && zip -r ../${{ env.APP_NAME }}-macOS.zip .
 
       - name: Package Linux release
         run: |
           mkdir -p artifacts/release-linux
           cp "artifacts/linux/${{ env.APP_NAME }}-Linux-x64" artifacts/release-linux/
-          cp .env.example artifacts/release-linux/
-          cp requirements.txt artifacts/release-linux/
-          cp check_env.py artifacts/release-linux/
-          cp README.md artifacts/release-linux/
+          cp docs/CLIENT-QUICKSTART.md artifacts/release-linux/README.md
+          cp LICENSE artifacts/release-linux/
           cd artifacts/release-linux && zip -r ../${{ env.APP_NAME }}-Linux-x64.zip .
+
+      - name: Package Docker Compose release
+        run: python scripts/package_release.py --output artifacts --docker-only
+
+      - name: Generate release checksums
+        run: |
+          cd artifacts
+          sha256sum \
+            "${{ env.APP_NAME }}-Windows.zip" \
+            "${{ env.APP_NAME }}-macOS.zip" \
+            "${{ env.APP_NAME }}-Linux-x64.zip" \
+            "${{ env.APP_NAME }}-Docker-Compose-"*.zip \
+            windows/${{ env.APP_NAME }}.exe \
+            macos/${{ env.APP_NAME }}-macOS \
+            linux/${{ env.APP_NAME }}-Linux-x64 \
+            > SHA256SUMS.txt
 
       - name: Select release notes
         id: rn
@@ -207,14 +245,17 @@ jobs:
             --draft=false \
             --prerelease=false
           
-          # Upload zip packages (recommended for first-time users)
-          gh release upload "${{ github.ref_name }}" \
-            "artifacts/${{ env.APP_NAME }}-Windows.zip" \
-            "artifacts/${{ env.APP_NAME }}-macOS.zip" \
-            "artifacts/${{ env.APP_NAME }}-Linux-x64.zip"
-          
-          # Upload standalone executables (for advanced users)
+          # Upload standalone executables first. Legacy updaters select the first
+          # platform match, so ordering keeps them away from ZIP payloads.
           gh release upload "${{ github.ref_name }}" \
             "artifacts/windows/${{ env.APP_NAME }}.exe" \
             "artifacts/macos/${{ env.APP_NAME }}-macOS" \
             "artifacts/linux/${{ env.APP_NAME }}-Linux-x64"
+
+          # Upload zip packages (recommended for first-time users)
+          gh release upload "${{ github.ref_name }}" \
+            "artifacts/${{ env.APP_NAME }}-Windows.zip" \
+            "artifacts/${{ env.APP_NAME }}-macOS.zip" \
+            "artifacts/${{ env.APP_NAME }}-Linux-x64.zip" \
+            artifacts/${{ env.APP_NAME }}-Docker-Compose-*.zip \
+            "artifacts/SHA256SUMS.txt"
