@@ -7,9 +7,9 @@
 
 ## Immediate Objective
 
-Finish the local v2.5.0 release-preparation gate. Do not push, tag, merge PR #4,
-or create a GitHub Release without owner authorization. Do not begin
-chatgpt2api sender Push, batch transfer, scheduling, or source-cleanup work.
+Run post-release clean-install and upgrade-path acceptance against the public
+v2.5.0 artifacts. Do not begin chatgpt2api sender Push, batch transfer,
+scheduling, or source-cleanup work during this gate.
 
 ## Current Verified State
 
@@ -31,15 +31,19 @@ chatgpt2api sender Push, batch transfer, scheduling, or source-cleanup work.
   compilation, and `git diff --check` pass.
 - README screenshots were replaced with four current v2.5.0 captures from an
   isolated client. Dashboard device values are labeled synthetic demo data.
+- GitHub Release `v2.5.0` is public at tag commit `a675f8c`. Desktop Actions run
+  `29308338415` and Docker tag run `29308338400` completed successfully.
+- All seven downloadable payloads match the published `SHA256SUMS.txt`; the
+  Docker archive contains only its four documented public deployment files.
 - `.planning/STATE.md` contains pre-existing owner changes and must stay untouched.
 
-## Remaining Release Gate
+## Post-Release Gate
 
-1. Run the final secret and personal-data scan against tracked/staged release content.
-2. Generate final local archives and `SHA256SUMS.txt`, then inspect archive contents.
-3. Recheck the 8892 development preview and ensure no packaging process remains.
-4. Create a final local release-preparation commit, excluding `.planning/STATE.md`.
-5. Wait for explicit owner authorization before push, tag, PR merge, or Release creation.
+1. Install the Windows ZIP in a clean directory and verify first-run setup.
+2. Deploy the public Docker Compose bundle with new credentials and empty storage.
+3. Verify the documented one-time manual upgrade from v2.4.1 or earlier.
+4. Confirm README screenshots and quick-start links render correctly on GitHub.
+5. Record results before selecting the next pre-Push phase.
 
 ## Safety And Scope
 
@@ -61,7 +65,7 @@ python scripts/smoke_client.py --executable dist/GenBox.exe
 
 ## Resume Prompt
 
-> Finish the v2.5.0 local release gate from `HANDOFF.md`. Keep development on
-> port 8892, preserve production chatgpt2api as read-only, leave
-> `.planning/STATE.md` untouched, and do not push, tag, merge PR #4, publish a
-> Release, or enter chatgpt2api sender Push development without authorization.
+> Run the v2.5.0 post-release clean-install and upgrade acceptance from
+> `HANDOFF.md`. Keep development on port 8892, preserve production chatgpt2api
+> as read-only, leave `.planning/STATE.md` untouched, and do not enter
+> chatgpt2api sender Push development.
