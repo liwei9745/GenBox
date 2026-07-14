@@ -68,9 +68,9 @@ from sync.manifest import SyncManifest, LocalImageIndex
 from sync.ingest import authenticate_push_source, validate_image_payload
 import sync.store as sync_store
 from extensions.models import (
-    ExtensionDeployRequest, ExtensionDiscoveryRequest, ExtensionKeyResetRequest,
-    ExtensionPlanRequest, ExtensionTestRequest, ManagedCredentialUpsertRequest,
-    VaultPasswordRequest,
+    ExtensionBatchTargetsRequest, ExtensionDeployRequest, ExtensionDiscoveryRequest,
+    ExtensionKeyResetRequest, ExtensionPlanRequest, ExtensionTestRequest,
+    ManagedCredentialUpsertRequest, VaultPasswordRequest,
 )
 from extensions.orchestrator import (
     deployment_plans, extension_tasks, reset_managed_admin_key,
