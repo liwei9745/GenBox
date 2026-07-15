@@ -24,7 +24,11 @@ def test_compose_release_uses_ghcr_and_safe_internal_port():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     env_template = (ROOT / ".env.docker.example").read_text(encoding="utf-8")
 
-    assert "ghcr.io/liwei9745/genbox:latest" in compose
+    versioned_image = f"ghcr.io/liwei9745/genbox:{__version__}"
+    assert f"GENBOX_IMAGE:-{versioned_image}" in compose
+    assert f"GENBOX_IMAGE={versioned_image}" in env_template
+    assert "ghcr.io/liwei9745/genbox:latest" not in compose
+    assert "ghcr.io/liwei9745/genbox:latest" not in env_template
     assert '${GENBOX_PORT:-8891}:8891' in compose
     assert 'GENBOX_PORT: "8891"' in compose
     assert "./.env:/app/.env" in compose
