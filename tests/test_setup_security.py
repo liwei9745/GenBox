@@ -77,6 +77,21 @@ def test_setup_status_registers_exactly_one_get_route():
                 "provider_count": 2,
             },
         ),
+        (
+            "unexpected-mode",
+            [
+                SimpleNamespace(type="image", api_key="", enabled=False),
+                SimpleNamespace(type="video", api_key="", enabled=False),
+            ],
+            {
+                "app_mode": "prod",
+                "auth_required": True,
+                "needs_provider_setup": True,
+                "has_configured_provider": False,
+                "has_enabled_provider": False,
+                "provider_count": 2,
+            },
+        ),
     ],
 )
 def test_setup_status_uses_canonical_non_secret_schema_and_semantics(
@@ -84,7 +99,6 @@ def test_setup_status_uses_canonical_non_secret_schema_and_semantics(
 ):
     admin_sentinel = "existing-admin-placeholder-must-not-be-returned"
     monkeypatch.setenv("APP_MODE", app_mode)
-    monkeypatch.setattr(main, "is_prod_mode", lambda: app_mode == "prod")
     monkeypatch.setattr(main, "get_admin_key", lambda: admin_sentinel)
     monkeypatch.setattr(main.cfg_mgr, "_config", SimpleNamespace(providers=providers))
     response = TestClient(main.app).get("/api/setup/status")
@@ -94,6 +108,53 @@ def test_setup_status_uses_canonical_non_secret_schema_and_semantics(
     assert response.json() == expected
     assert all("admin" not in key.lower() for key in response.json())
     assert admin_sentinel not in response.text
+
+
+@pytest.mark.parametrize(
+    ("provider", "expected_configured"),
+    [
+        (SimpleNamespace(type="image", api_key="   ", enabled=True), False),
+        (
+            SimpleNamespace(
+                type="image",
+                api_key="",
+                api_keys=["  ", "configured-placeholder"],
+                enabled=True,
+            ),
+            True,
+        ),
+        (
+            SimpleNamespace(
+                type="video",
+                api_key="",
+                endpoints=[SimpleNamespace(key=" \t ")],
+                enabled=True,
+            ),
+            False,
+        ),
+        (
+            SimpleNamespace(
+                type="video",
+                api_key="",
+                endpoints=[SimpleNamespace(key="endpoint-placeholder")],
+                enabled=True,
+            ),
+            True,
+        ),
+    ],
+)
+def test_setup_status_strips_all_provider_key_sources(
+    monkeypatch, provider, expected_configured
+):
+    monkeypatch.setenv("APP_MODE", "dev")
+    monkeypatch.setattr(main.cfg_mgr, "_config", SimpleNamespace(providers=[provider]))
+
+    response = TestClient(main.app).get("/api/setup/status")
+
+    assert response.status_code == 200
+    assert set(response.json()) == CANONICAL_SETUP_STATUS_KEYS
+    assert response.json()["has_configured_provider"] is expected_configured
+    assert response.json()["needs_provider_setup"] is not expected_configured
 
 
 def test_existing_prod_admin_key_cannot_be_rotated_without_authentication(monkeypatch):
@@ -175,6 +236,82 @@ def test_runtime_environment_seam_prefers_executable_data_dir_immediately(
     assert main.os.environ[variable] == "executable-data"
 
 
+def test_runtime_environment_preserves_explicit_process_port(monkeypatch, tmp_path):
+    executable_data_dir = tmp_path / "executable-data"
+    bundle_dir = tmp_path / "bundle"
+    executable_data_dir.mkdir()
+    bundle_dir.mkdir()
+    (executable_data_dir / ".env").write_text(
+        "GENBOX_PORT=19001\nAPP_MODE=dev\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("GENBOX_PORT", "8891")
+    monkeypatch.setattr(config, "PROCESS_ENV_GENBOX_PORT", "8891")
+
+    main.prepare_runtime_environment(executable_data_dir, bundle_dir)
+
+    assert main.os.environ["GENBOX_PORT"] == "8891"
+    assert main.os.environ["APP_MODE"] == "dev"
+
+
+def test_explicit_process_dev_mode_skips_first_run_write_and_starts_local(
+    monkeypatch
+):
+    writes = []
+    server_calls = []
+
+    monkeypatch.setenv("APP_MODE", " DeV ")
+    monkeypatch.setenv("GENBOX_PORT", "8892")
+    monkeypatch.delenv("ADMIN_KEY", raising=False)
+    monkeypatch.setattr(main.sys, "stdin", SimpleNamespace(isatty=lambda: False))
+    monkeypatch.setattr(config, "_read_env", lambda: {})
+    monkeypatch.setattr(config, "_write_env", lambda updates: writes.append(updates))
+    monkeypatch.setattr(main, "prepare_runtime_environment", lambda *args: None)
+    monkeypatch.setattr(
+        main,
+        "run_http_server",
+        lambda *args, **kwargs: server_calls.append((args, kwargs)),
+    )
+
+    main.run_application()
+
+    assert writes == []
+    assert server_calls == [(('dev', 8892), {})]
+
+
+def test_truly_unconfigured_headless_start_selects_prod_then_fails_closed(
+    monkeypatch
+):
+    writes = []
+    server_calls = []
+
+    monkeypatch.delenv("APP_MODE", raising=False)
+    monkeypatch.delenv("ADMIN_KEY", raising=False)
+    monkeypatch.setenv("GENBOX_PORT", "8891")
+    monkeypatch.setenv("GENBOX_NO_BROWSER", "1")
+    monkeypatch.setattr(main.sys, "stdin", SimpleNamespace(isatty=lambda: False))
+    monkeypatch.setattr(config, "_read_env", lambda: {})
+    monkeypatch.setattr(config, "_write_env", lambda updates: writes.append(updates))
+    monkeypatch.setattr(main, "prepare_runtime_environment", lambda *args: None)
+    monkeypatch.setattr(
+        main,
+        "run_http_server",
+        lambda *args, **kwargs: server_calls.append((args, kwargs)),
+    )
+    monkeypatch.setattr(
+        main,
+        "generate_admin_key",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("headless startup must not generate an ADMIN_KEY")
+        ),
+    )
+
+    with pytest.raises(SystemExit, match="requires ADMIN_KEY"):
+        main.run_application()
+
+    assert writes == [{"APP_MODE": "prod"}]
+    assert server_calls == []
+
+
 def test_run_application_orders_setup_prepare_and_same_process_server(monkeypatch, tmp_path):
     events = []
     executable_data_dir = tmp_path / "executable-data"
@@ -222,6 +359,66 @@ def test_run_application_orders_setup_prepare_and_same_process_server(monkeypatc
     assert events[1][1] == (executable_data_dir, bundle_dir)
     assert events[1][2] == {}
     assert events[-1][1:3] == ("prod", 9911)
+
+
+@pytest.mark.parametrize("admin_value", [None, "", "   "])
+def test_headless_prod_without_admin_key_fails_closed_before_server(
+    monkeypatch, admin_value
+):
+    server_calls = []
+
+    def fail_if_admin_key_is_generated():
+        raise AssertionError("headless startup must not generate an ADMIN_KEY")
+
+    def fail_if_env_is_written(*args, **kwargs):
+        raise AssertionError("headless fail-closed test must not write .env")
+
+    monkeypatch.setenv("APP_MODE", "prod")
+    monkeypatch.setenv("GENBOX_PORT", "8891")
+    monkeypatch.setenv("GENBOX_NO_BROWSER", "1")
+    if admin_value is None:
+        monkeypatch.delenv("ADMIN_KEY", raising=False)
+    else:
+        monkeypatch.setenv("ADMIN_KEY", admin_value)
+    monkeypatch.setattr(main, "_first_run_setup", lambda: None)
+    monkeypatch.setattr(main, "prepare_runtime_environment", lambda *args: None)
+    monkeypatch.setattr(
+        main,
+        "run_http_server",
+        lambda *args, **kwargs: server_calls.append((args, kwargs)),
+    )
+    monkeypatch.setattr(main, "generate_admin_key", fail_if_admin_key_is_generated)
+    monkeypatch.setattr(config, "_write_env", fail_if_env_is_written)
+    monkeypatch.setattr(main, "_write_env", fail_if_env_is_written, raising=False)
+
+    with pytest.raises(SystemExit, match="requires ADMIN_KEY") as exc_info:
+        main.run_application()
+
+    assert server_calls == []
+    assert "http" not in str(exc_info.value).lower()
+
+
+@pytest.mark.parametrize(
+    ("app_mode", "expected_status"),
+    [
+        ("dev", 200),
+        (" DeV ", 200),
+        ("DEV", 200),
+        ("prod", 401),
+        ("", 401),
+        ("unexpected-mode", 401),
+    ],
+)
+def test_only_normalized_dev_bypasses_real_api_auth(
+    monkeypatch, app_mode, expected_status
+):
+    monkeypatch.setenv("APP_MODE", app_mode)
+    monkeypatch.setenv("ADMIN_KEY", "existing-admin-placeholder")
+    monkeypatch.setattr(main.cfg_mgr, "_config", SimpleNamespace(providers=[]))
+
+    response = TestClient(main.app).get("/api/providers")
+
+    assert response.status_code == expected_status
 
 
 def test_main_guard_directly_delegates_to_run_application():
@@ -381,9 +578,3 @@ def test_frontend_never_persists_admin_key_in_browser_storage():
         ]
         for pattern in unapproved_persistent_storage:
             assert not re.search(pattern, without_legacy_purge), (script, pattern)
-
-
-# Known red-test gap: headless production startup with a missing ADMIN_KEY must
-# fail closed, but the current behavior exists only inside the __main__ block.
-# Add a behavioral test when implementation introduces a safe callable
-# bootstrap seam; do not replace it with a source-spelling assertion.
