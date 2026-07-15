@@ -110,16 +110,23 @@ window.QUICK_PROMPTS = {
 /* ═══════════════════════════════════════════════════════════════════
    Authentication
    ═══════════════════════════════════════════════════════════════════ */
-var _adminKey = localStorage.getItem('igs_admin_key') || '';
+var _adminKey = '';
+var _loginAttemptGeneration = 0;
+try { localStorage.removeItem('igs_admin_key'); } catch (error) {}
 
 function _authFetch(url, opts) {
   opts = opts || {};
   if (!opts.headers) opts.headers = {};
-  if (_adminKey) opts.headers['X-Admin-Key'] = _adminKey;
+  var requestKey = _adminKey;
+  if (requestKey) opts.headers['X-Admin-Key'] = requestKey;
   if (opts.body && !opts.headers['Content-Type']) opts.headers['Content-Type'] = 'application/json';
   return fetch(url, opts).then(function(r) {
     if (r.status === 401) {
-      _showLogin();
+      if (_adminKey === requestKey) {
+        _adminKey = '';
+        try { localStorage.removeItem('igs_admin_key'); } catch (error) {}
+        _showLogin();
+      }
       throw new Error('AUTH_REQUIRED');
     }
     return r;
@@ -133,18 +140,54 @@ function _showLogin() {
 function _hideLogin() {
   document.getElementById('loginPage').style.display = 'none';
 }
+function _setLoginError(visible) {
+  var error = document.getElementById('loginError');
+  if (error) error.style.display = visible ? 'block' : 'none';
+}
+function _setLoginPending(pending) {
+  var page = document.getElementById('loginPage');
+  var button = page && page.querySelector ? page.querySelector('button') : null;
+  if (button) button.disabled = pending;
+}
+function _captureLoginAttempt(attempt) {
+  return attempt === undefined || attempt === null ? _loginAttemptGeneration : attempt;
+}
+function _isCurrentLoginAttempt(attempt) {
+  return attempt === _loginAttemptGeneration;
+}
+function _loadProvidersAfterLogin(attempt) {
+  var result;
+  if (typeof loadProviders === 'function') result = loadProviders(attempt);
+  else if (window && typeof window.loadProviders === 'function') result = window.loadProviders(attempt);
+  else result = Promise.resolve();
+  return Promise.resolve(result).then(function(value) {
+    if (!_isCurrentLoginAttempt(attempt)) return;
+    return value;
+  });
+}
 function doLogin() {
   var key = document.getElementById('loginKeyInput').value.trim();
   if (!key) return;
-  _adminKey = key;
-  fetch('/api/providers', {headers: {'X-Admin-Key': key}}).then(function(r) {
-    if (r.status === 401) {
-      document.getElementById('loginError').style.display = 'block';
-      return;
-    }
-    localStorage.setItem('igs_admin_key', key);
+  var attempt = ++_loginAttemptGeneration;
+  _adminKey = '';
+  _setLoginError(false);
+  _setLoginPending(true);
+  return fetch('/api/providers', {headers: {'X-Admin-Key': key}}).then(function(r) {
+    if (attempt !== _loginAttemptGeneration) return;
+    if (!r.ok) throw new Error('LOGIN_REJECTED');
+    _adminKey = key;
     _hideLogin();
-    window.loadProviders();
+    return _loadProvidersAfterLogin(attempt).then(function() {
+      if (attempt !== _loginAttemptGeneration) return;
+      return checkSetupWizard(attempt);
+    });
+  }).catch(function() {
+    if (attempt !== _loginAttemptGeneration) return;
+    _adminKey = '';
+    _setLoginError(true);
+    _showLogin();
+  }).finally(function() {
+    if (attempt === _loginAttemptGeneration) _setLoginPending(false);
   });
 }
 function _showWelcome(key) {
@@ -165,26 +208,40 @@ function confirmWelcome() {
 /* ═══════════════════════════════════════════════════════════════════
    Setup Wizard
    ═══════════════════════════════════════════════════════════════════ */
-function checkSetupWizard() {
-  fetch('/api/setup/status').then(function(r){ return r.json(); }).then(function(d){
-    if (d.needs_first_run) {
-      fetch('/api/setup/first-run', {method:'POST'}).then(function(r){return r.json();}).then(function(data){
-        _adminKey = data.admin_key;
-        localStorage.setItem('igs_admin_key', data.admin_key);
-        _showWelcome(data.admin_key);
-      });
-    } else if (d.prod_mode && !d.has_admin_key) {
-      _showLogin();
-    } else if (d.prod_mode && _adminKey) {
-      fetch('/api/providers', {headers: {'X-Admin-Key': _adminKey}}).then(function(r) {
-        if (r.status === 401) {
-          localStorage.removeItem('igs_admin_key');
-          _adminKey = '';
-          _showLogin();
-        }
-      });
+function checkSetupWizard(attempt) {
+  var effectiveAttempt = _captureLoginAttempt(attempt);
+  return fetch('/api/setup/status').then(function(r){
+    if (!_isCurrentLoginAttempt(effectiveAttempt)) return null;
+    if (!r.ok) throw new Error('SETUP_STATUS_UNAVAILABLE');
+    return r.json();
+  }).then(function(d){
+    if (!_isCurrentLoginAttempt(effectiveAttempt)) return;
+    if (!d || typeof d.auth_required !== 'boolean') {
+      throw new Error('SETUP_STATUS_INVALID');
     }
-  }).catch(function(){});
+    if (d.auth_required === false) {
+      _adminKey = '';
+      _hideLogin();
+      if (d.needs_provider_setup === true) document.getElementById('setupWizard').style.display = 'flex';
+      return;
+    }
+    if (!_adminKey) {
+      _showLogin();
+      return;
+    }
+    return _authFetch('/api/providers').then(function(r) {
+      if (!_isCurrentLoginAttempt(effectiveAttempt)) return;
+      if (!r.ok) {
+        _adminKey = '';
+        throw new Error('AUTH_CHECK_FAILED');
+      }
+      if (d.needs_provider_setup === true) {
+        document.getElementById('setupWizard').style.display = 'flex';
+      }
+    });
+  }).catch(function(){
+    if (_isCurrentLoginAttempt(effectiveAttempt)) _showLogin();
+  });
 }
 function closeSetupWizard() {
   document.getElementById('setupWizard').style.display = 'none';

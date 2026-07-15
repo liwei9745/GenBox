@@ -1,6 +1,6 @@
 services:
   genbox:
-    image: ${GENBOX_IMAGE:-ghcr.io/liwei9745/genbox:latest}
+    image: ${GENBOX_IMAGE:-ghcr.io/liwei9745/genbox:2.5.0}
     container_name: ${GENBOX_CONTAINER_NAME:-genbox}
     ports:
       - "${GENBOX_PORT:-8891}:8891"
