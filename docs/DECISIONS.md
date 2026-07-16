@@ -209,3 +209,32 @@ GenBox provides zero-code remote deployment by accepting structured browser
 requests and generating fixed commands in backend adapters. It does not expose a
 general web shell. One network is active at a time; verified alternatives may be
 stored for later one-click switching after fresh connectivity checks.
+
+## ADR-012: GenBox Is Licensed Under GPL-3.0-only
+
+**Status:** Accepted
+**Date:** 2026-07-16
+
+### Context
+
+GenBox is distributed as source, desktop clients, Docker Compose bundles, and
+container images. The project needs a clear copyleft rule for redistributed
+modifications while retaining its API, SSH, Docker, and network-adapter
+integrations with independently licensed external services.
+
+### Decision
+
+License GenBox under GNU General Public License version 3 only
+(`GPL-3.0-only`). This applies to GenBox source and redistributed modified
+versions. It does not alter the license of a separately deployed service merely
+because GenBox communicates with it over an API, SSH, Docker, or a network.
+
+### Consequences
+
+- A distributor of a modified GenBox must provide corresponding source under
+  GPLv3.
+- Existing MIT releases remain licensed under MIT; their granted permissions
+  are not revoked.
+- Release packages include the GPL text and `THIRD_PARTY_NOTICES.md`.
+- Bundled third-party code, assets, or service artifacts require documented
+  provenance and compatible distribution terms before release.

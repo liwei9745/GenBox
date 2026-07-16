@@ -11,6 +11,7 @@ This is the documentation hub beyond the main README. Start with usage and upgra
 | [中文 README](../README.md) / [English README](../README_EN.md) | 第一次接触 GenBox 的用户 | 项目定位、界面、下载选择、3 分钟启动 |
 | [v2.5.0 中文发布说明](../release-notes-v2.5.0-zh.md) / [English](../release-notes-v2.5.0.md) | 安装或升级用户 | 下载哪个文件、如何启动、升级风险、主要变化与修复 |
 | [CHANGELOG](../CHANGELOG.md) | 想快速查看版本变化的用户 | 按版本记录新增、改进和修复 |
+| [许可证与第三方声明](../LICENSE) / [Third-party notices](../THIRD_PARTY_NOTICES.md) | 分发者、贡献者和合规审查者 | GPLv3-only 条款、依赖与资产来源记录 |
 | [GitHub Releases](https://github.com/liwei9745/GenBox/releases) | 下载发布包的用户 | 客户端、Docker Compose 包和 SHA-256 校验文件 |
 
 ## 高级使用与部署 / Advanced Usage and Operations

@@ -1,10 +1,10 @@
 # Current Project Status
 
-**Last updated:** 2026-07-14
-**Current branch:** `dev`
-**Current phase:** Phase 1 - ACCEPTED
-**Current objective:** v2.5.0 is published and artifact-verified. The next gate is clean-install and upgrade-path acceptance from the public Release without entering chatgpt2api sender Push development.
-**Test baseline:** 76 tests collected, all passing as of 2026-07-14.
+**Last updated:** 2026-07-16
+**Current branch:** `codex/gpl-3-only`
+**Current phase:** GPL-3.0-only licensing migration
+**Current objective:** complete a standalone GPL-3.0-only migration with third-party notices and release-package coverage; keep the v2.5.1 security-release PR separate and unmerged.
+**Test baseline:** 79 tests collected, all passing as of 2026-07-16.
 ## Status Legend
 
 - `VERIFIED IN CODE/TESTS`: confirmed from current code and local tests, but not
@@ -13,6 +13,22 @@
 - `USER-CONFIRMED`: supplied by the project owner but not independently checked.
 - `UNVERIFIED`: configured, designed, or previously reported but not currently
   proven against a live environment.
+
+## GPL-3.0-only Migration
+
+- `VERIFIED 2026-07-16`: the current `LICENSE` was MIT and Git history reports
+  a single commit author. This is repository evidence, not a replacement for
+  confirming the provenance of any copied source or assets.
+- `VERIFIED 2026-07-16`: direct runtime and build dependency metadata was
+  reviewed. The recorded direct dependencies use GPL-compatible options or
+  permissive licenses; AsyncSSH is documented as dual-licensed and uses its
+  GPL-compatible option for this distribution.
+- `VERIFIED 2026-07-16`: GPLv3 text, `THIRD_PARTY_NOTICES.md`, package content,
+  README links, and ADR-012 were prepared on this branch. Existing MIT releases
+  retain their original permissions; this branch does not retroactively alter
+  them.
+- `VERIFIED 2026-07-16`: `79` tests, JavaScript syntax checks, README Lab
+  generation, and `git diff --check` passed for the migration work.
 
 ## Verified In Code And Local Tests
 
@@ -591,19 +607,18 @@
 
 ## Next Tasks
 
-1. Continue the v2.5.0 clean-install and upgrade-path acceptance gate, including
-   a final public-link and rendered-image check.
-2. Keep subsequent work in the pre-Push UI scope unless the project owner
-   explicitly authorizes entry into chatgpt2api sender Push development.
-3. Preserve the local accepted baseline: `node --check static/js/i18n.js`,
-   `node --check static/js/app-all.js`, `python -m pytest -q`, and bilingual
-   browser acceptance for both the application and README laboratory.
+1. Review and commit the GPL-3.0-only migration as a standalone change, excluding
+   the owner's `.planning/STATE.md` change.
+2. Open a separate GPL migration PR. Do not merge it with, or into, the v2.5.1
+   security-release PR without an explicit release decision.
+3. Before any public GPL release, recheck the provenance and license terms of
+   copied code, bundled assets, or third-party service artifacts added after this
+   audit.
 
 ## Resume Instructions
 
-Phase 1 remains accepted. Resume with `AGENTS.md`, `HANDOFF.md`, this file, and
-`docs/ONBOARDING-UI-CONTRACT.md`. The heading/onboarding refinement and README
-publication are accepted; resume the public-artifact clean-install and upgrade
-gate. Preserve production `chatgpt2api-warp`, leave
-`.planning/STATE.md` untouched, and do not enter sender Push unless explicitly
-redirected. The current verified baseline is 77 passing tests.
+Resume the GPL-3.0-only migration from `AGENTS.md`, `HANDOFF.md`, and this file.
+Review the standalone license diff, leave `.planning/STATE.md` untouched, and
+open a separate PR after the local checks pass. Do not merge, tag, publish a
+Release, push an image, or change production chatgpt2api while completing this
+license task.

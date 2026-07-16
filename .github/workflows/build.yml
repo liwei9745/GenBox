@@ -191,6 +191,8 @@ jobs:
           cp "artifacts/windows/${{ env.APP_NAME }}.exe" artifacts/release-windows/
           cp docs/CLIENT-QUICKSTART.md artifacts/release-windows/README.md
           cp LICENSE artifacts/release-windows/
+          cp COPYRIGHT artifacts/release-windows/
+          cp THIRD_PARTY_NOTICES.md artifacts/release-windows/
           cd artifacts/release-windows && zip -r ../${{ env.APP_NAME }}-Windows.zip .
 
       - name: Package macOS release
@@ -199,6 +201,8 @@ jobs:
           cp "artifacts/macos/${{ env.APP_NAME }}-macOS" artifacts/release-macos/
           cp docs/CLIENT-QUICKSTART.md artifacts/release-macos/README.md
           cp LICENSE artifacts/release-macos/
+          cp COPYRIGHT artifacts/release-macos/
+          cp THIRD_PARTY_NOTICES.md artifacts/release-macos/
           cd artifacts/release-macos && zip -r ../${{ env.APP_NAME }}-macOS.zip .
 
       - name: Package Linux release
@@ -207,6 +211,8 @@ jobs:
           cp "artifacts/linux/${{ env.APP_NAME }}-Linux-x64" artifacts/release-linux/
           cp docs/CLIENT-QUICKSTART.md artifacts/release-linux/README.md
           cp LICENSE artifacts/release-linux/
+          cp COPYRIGHT artifacts/release-linux/
+          cp THIRD_PARTY_NOTICES.md artifacts/release-linux/
           cd artifacts/release-linux && zip -r ../${{ env.APP_NAME }}-Linux-x64.zip .
 
       - name: Package Docker Compose release

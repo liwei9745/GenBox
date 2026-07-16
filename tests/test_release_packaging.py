@@ -39,6 +39,8 @@ def test_release_workflow_smoke_tests_clients_and_packages_compose():
     assert workflow.count("scripts/smoke_client.py") == 3
     assert "scripts/package_release.py --output artifacts --docker-only" in workflow
     assert "SHA256SUMS.txt" in workflow
+    assert workflow.count("cp COPYRIGHT") == 3
+    assert workflow.count("cp THIRD_PARTY_NOTICES.md") == 3
 
 
 def test_packaged_console_output_avoids_ansi_and_emoji_status_markers():
@@ -132,7 +134,21 @@ def test_docker_bundle_contains_only_public_deployment_files(tmp_path):
             ".env.example",
             "README.md",
             "LICENSE",
+            "COPYRIGHT",
+            "THIRD_PARTY_NOTICES.md",
         }
         env_text = archive.read(".env.example").decode("utf-8")
         assert "APP_MODE=prod" in env_text
         assert "replace-with" not in env_text
+
+
+def test_gpl_only_license_and_public_notices_are_present():
+    license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+    notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+
+    assert "GNU GENERAL PUBLIC LICENSE" in license_text[:100]
+    assert "Version 3, 29 June 2007" in license_text[:100]
+    assert "GNU General Public License" in (ROOT / "COPYRIGHT").read_text(encoding="utf-8")
+    assert "GNU GPL version 3 only" in notices
+    assert "AsyncSSH" in notices
+    assert "PyInstaller" in notices
