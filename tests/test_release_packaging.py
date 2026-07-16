@@ -3,6 +3,7 @@ import sys
 import zipfile
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from genbox_version import __version__
@@ -18,6 +19,7 @@ def test_release_version_is_consistent():
     assert main.app.version == __version__
     assert updater.CURRENT_VERSION == __version__
     assert __version__ in (ROOT / "genbox_version.py").read_text(encoding="utf-8")
+    assert __version__ == "2.5.1"
 
 
 def test_compose_release_uses_ghcr_and_safe_internal_port():
@@ -35,6 +37,28 @@ def test_compose_release_uses_ghcr_and_safe_internal_port():
     assert "build: ." not in compose
     assert "APP_MODE=prod" in env_template
     assert "GENBOX_PORT=8891" in env_template
+    assert "\nADMIN_KEY=\n" in env_template
+
+
+def test_docker_quickstart_requires_user_supplied_admin_key_without_log_delivery():
+    guide = (ROOT / "docs" / "DOCKER-QUICKSTART.md").read_text(encoding="utf-8")
+    normalized = guide.lower()
+
+    assert "defaults to production mode" in normalized
+    assert "user-supplied `admin_key`" in normalized
+    assert "missing or blank value fails closed" in normalized
+    assert "refuses to start" in normalized
+    assert "does not generate or deliver this key" in normalized
+    assert "loopback interface" in normalized
+    assert "not the docker default" in normalized
+    assert "first startup creates an administrator key" not in normalized
+    assert "generated key" not in normalized
+    assert re.search(
+        r"(?:administrator key|admin_key).{0,120}docker compose logs|"
+        r"docker compose logs.{0,120}(?:administrator key|admin_key)",
+        normalized,
+        re.DOTALL,
+    ) is None
 
 
 def test_release_workflow_smoke_tests_clients_and_packages_compose():
