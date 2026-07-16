@@ -46,6 +46,7 @@ def main() -> int:
             (ROOT / ".env.docker.example", ".env.example"),
             (ROOT / "docs" / "DOCKER-QUICKSTART.md", "README.md"),
             (ROOT / "LICENSE", "LICENSE"),
+            (ROOT / "COPYRIGHT", "COPYRIGHT"),
             (ROOT / "THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),
         ],
     )
