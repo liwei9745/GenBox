@@ -23,5 +23,20 @@
         "fallback": "- No known high-risk rollout dependencies."
       }
     ]
+  },
+  "runtime": "codex",
+  "model_profile_overrides": {
+    "codex": {
+      "opus": "gpt-5.5",
+      "sonnet": "gpt-5.4",
+      "haiku": "gpt-5.4-mini"
+    }
+  },
+  "model_policy": {
+    "provider": "openai",
+    "budget": "medium",
+    "high": "gpt-5.5",
+    "medium": "gpt-5.4",
+    "low": "gpt-5.4-mini"
   }
 }
