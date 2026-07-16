@@ -1,111 +1,106 @@
 # GenBox Development Handoff
 
 **Updated:** 2026-07-16
-**Branch:** `codex/gpl-3-only`
+
+**Branch:** `codex/v251-security-hotfix`
+
+**Candidate commit:** `b411aa0`
+
 **Local development port:** `8892`
-**Verified test baseline:** `79 passed`
+
+**Current phase:** v2.5.1 local candidate acceptance - **BLOCKED**
 
 ## Immediate Objective
 
-Complete the standalone `GPL-3.0-only` license migration. It must not be mixed
-with the open v2.5.1 security-release PR, and it must not create a Release,
-tag, image push, or VPS change.
+Resume acceptance of the existing v2.5.1 candidate. Do not begin another
+implementation pass unless acceptance exposes a new reproducible code defect.
+The remaining work is to close Windows W2 observability, build and verify the
+isolated Docker candidate, and complete the official v2.4.1 upgrade matrix.
 
-## GPL Migration Evidence
+Do not release, push an image, change the GitHub Ruleset, operate on a VPS, or
+enter chatgpt2api sender Push work while any acceptance lane remains blocked.
 
-- The repository moved from MIT to the canonical GNU GPL version 3 text only.
-- `THIRD_PARTY_NOTICES.md` records direct runtime/build dependencies and asset
-  provenance expectations.
-- Desktop and Docker release packaging now includes the notice file alongside
-  the GPL text.
-- The Git history reports one commit author; source and asset provenance still
-  require review whenever external material is introduced.
-- `79` tests, JavaScript syntax checks, README Lab generation, and
-  `git diff --check` passed on 2026-07-16.
+## Candidate Identity And Code Gates
 
-## Current Verified State
+- Exact source commit: `b411aa0`.
+- Source archive SHA-256:
+  `9493a812eccd51f900dc7219e429ab35ecb1b42458484c5bc939f557af042bbc`.
+- Windows candidate: 30,328,866 bytes; SHA-256
+  `99e105a1a753879481e8133dd3146ca00dd15b70d93c5dad1da700ce04953a67`.
+- The packaged runtime reports version `2.5.1`.
+- `VERIFIED 2026-07-16`: the full suite passed with `111 passed`; JavaScript
+  syntax checks, README Lab generation, and `git diff --check` also passed.
 
-- Snapshot commit `11dfd51` captures the Extension Center and onboarding milestone.
-- PR #4's GHCR-backed Docker Compose bundle intent is integrated and credited;
-  the GitHub PR itself remains unmerged.
-- Runtime, development, and PyInstaller dependency sets are pinned separately.
-- GitHub Actions tests source, builds three packaged clients, smoke-tests each,
-  packages desktop and Docker artifacts, and generates SHA-256 checksums.
-- Windows `dist/GenBox.exe` was rebuilt after updater changes and passed a real
-  HTTP smoke test on 2026-07-14.
-- The v2.5.0 updater now selects standalone assets, rejects archives, and replaces
-  packaged clients only after the running process exits.
-- v2.4.1 and earlier Windows EXE users need one manual upgrade to v2.5.0 because
-  the old updater selects the ZIP first and cannot overwrite its locked process.
-- Legacy Docker users must migrate to the new Compose bundle while preserving
-  `.env` and `storage/`; the old in-app update cannot rewrite host Compose config.
-- Snapshot commit `ae90ce6` preserves the prior structured README restoration
-  and laboratory before the audience-focused rewrite.
-- `python -m pytest -q` passes all 78 tests. JavaScript syntax checks, Python
-  compilation, and `git diff --check` pass.
-- README screenshots were replaced with four current v2.5.0 captures from an
-  isolated client. Dashboard device values are labeled synthetic demo data.
-- The structured Chinese and English README content has been restored without
-  removing the v2.5.0 release guidance. Acknowledged projects/authors, upstream
-  contributors, community links, configuration, troubleshooting, repository
-  structure, and the public Star History chart are present again.
-- `http://127.0.0.1:8892/static/readme-lab.html` renders the actual README source
-  in Chinese/English, desktop/narrow, and light/dark modes. Local cached public
-  contributor and Star History assets keep the lab compatible with the global
-  CSP; source hashes and asset mappings are covered by tests.
-- README structure now follows patterns verified from ComfyUI, AUTOMATIC1111,
-  Fooocus, InvokeAI, Open WebUI, and n8n: positioning and product visuals first,
-  platform download choice and the shortest startup path next, with operations
-  and developer detail folded or routed through `docs/README.md`.
-- Chinese and English README files use separate reviewed screenshot sets. The
-  English Dashboard replaces host, network, disk, and IP values with explicit
-  demo data; no temporary raw capture remains in the repository.
-- Chinese and English v2.5.0 release notes now lead with which artifact to
-  download, how to start, and the one-time legacy Windows upgrade warning, then
-  group user-visible additions, fixes, limits, and collapsed technical proof.
-- `VERIFIED PUBLIC` Owner-approved documentation was merged to `master` as
-  `029dd62` and pushed on 2026-07-14. The v2.5.0 GitHub Release body now uses
-  the reordered Chinese notes with absolute public image/document links; all
-  eight existing release assets remain attached.
-- `VERIFIED CI` GitHub Actions run `29320721741` completed the master-branch
-  Docker image workflow successfully for `029dd62`.
-- Public rendering uses the repository-hosted Star History snapshot because the
-  third-party live chart endpoint returned a broken image during publication
-  acceptance; the snapshot still links to the live Star History page.
-- GitHub Release `v2.5.0` is public at tag commit `a675f8c`. Desktop Actions run
-  `29308338415` and Docker tag run `29308338400` completed successfully.
-- All seven downloadable payloads match the published `SHA256SUMS.txt`; the
-  Docker archive contains only its four documented public deployment files.
-- `.planning/STATE.md` contains pre-existing owner changes and must stay untouched.
+## Windows Acceptance
 
-## Next Action
+- `VERIFIED W0`: explicit development-mode smoke passed.
+- `VERIFIED W1`: a fresh explicit development first run stayed in the same
+  process, bound only to loopback on port `8892`, returned the unified setup
+  schema and provider state, required no administrator key, and needed no
+  restart workaround.
+- `BLOCKED W2`: the natural interactive first-run path using choice 1 was not
+  safely observable through its console. W1 is useful behavior evidence but is
+  not a substitute for this operator-visible path.
+- `VERIFIED W3`: non-interactive production startup without an administrator
+  key failed closed before opening a listener and emitted only sanitized
+  diagnostics.
+- `VERIFIED W4`: production HTTP checks returned the expected `401`, `401`, and
+  authenticated `200` results; the setup schema was correct, the key was absent
+  from logs, and Chrome initial login and onboarding passed. After reload, the
+  login UI returned and required the administrator key to be entered again.
 
-1. Review and commit only the GPL migration files; exclude `.planning/STATE.md`.
-2. Open a standalone GPL migration PR for review.
-3. Do not merge it into the v2.5.1 release work without a separate decision.
+The exact claim is: Windows behavior is verified for W0, W1, W3, and W4. The
+full Windows acceptance and release gate remain blocked by W2. No new code
+defect currently requires repair.
 
-## Safety And Scope
+## Other Blocking Lanes
 
-- Keep local development on port `8892`; packaged desktop and Docker defaults are `8891`.
-- Treat production chatgpt2api as read-only and do not restart or reconfigure it.
-- Do not expose credentials, user prompts, account data, personal media, or raw logs.
-- Do not describe sender Push, batch/scheduled transfer, or cleanup as available.
+### Docker
 
-## Verification Commands
+- Two local candidate image builds, including the default path and a host
+  networking diagnostic, timed out during the operating-system package step.
+- The candidate image tag is absent. No v2.5.1 candidate container or Compose
+  runtime has been verified.
+- Prior public v2.5.0 Docker evidence is historical and cannot substitute for
+  v2.5.1 acceptance.
+- No candidate-owned container, network, or volume remains. Shared BuildKit
+  cache from failed builds may remain and was not globally pruned.
 
-```powershell
-node --check static/js/i18n.js
-node --check static/js/app-all.js
-node --check static/js/extensions.js
-node --check static/js/sync.js
-python -m pytest -q
-python scripts/build_readme_lab.py
-python scripts/smoke_client.py --executable dist/GenBox.exe
-```
+### v2.4.1 Upgrade
 
-## Resume Prompt
+- Official v2.4.1 metadata identifies `GenBox.exe` as 25,229,487 bytes with
+  SHA-256
+  `e6e45e81221e628c9ab14be7eeb36608cf46ef62dfc98faed0ac71fe964aa0d4`.
+- The download stopped at approximately 3.9 MB. The partial file and its empty
+  download directory were deleted.
+- No new v2.4.1 upgrade or GBK-console acceptance evidence was produced.
 
-> Review and ship only the GPL-3.0-only migration: GPL text, third-party
-> notices, release-package coverage, README links, and ADR-012. Leave
-> `.planning/STATE.md` untouched; do not merge, tag, publish, push images, or
-> operate on production chatgpt2api.
+## Safety State
+
+- `VERIFIED 2026-07-16`: the production-like chatgpt2api instance remained
+  unchanged and read-only. No VPS operation occurred.
+- No Release, image push, or Ruleset operation occurred.
+- Ports `8891` and `8892` are free; no GenBox or acceptance helper remains.
+- The acceptance-created Chrome tab was closed. Secret-bearing owned
+  directories and the candidate `.env` were deleted; the disposable synthetic
+  key no longer identifies any running candidate instance.
+- The repository `.env` remained unchanged. The only unrelated owner change is
+  `.planning/STATE.md`; leave it untouched.
+
+## Resume Plan
+
+1. Complete W2 with an observable console or a manual operator watching the
+   natural interactive choice-1 flow. Record whether the same process binds
+   loopback on `8892` without restart.
+2. Restore a working Docker apt path, user-approved mirror, or verified cache.
+   Build a local image from exact commit `b411aa0` with a unique v2.5.1
+   candidate tag, then run isolated Compose acceptance. Do not push the image.
+3. Download the official v2.4.1 executable completely and require the published
+   size and SHA-256 to match before execution. Run upgrade cases U1 and U2 and
+   label the GBK-console result explicitly.
+4. Repeat repository, port, process, container, secret, and cleanup inventory;
+   obtain independent review before any release decision.
+
+Keep source development on port `8892`. Production chatgpt2api remains
+read-only, and sender Push, batch transfer, scheduling, and source cleanup are
+still prohibited.
