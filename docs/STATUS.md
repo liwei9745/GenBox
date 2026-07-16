@@ -1,11 +1,10 @@
 # Current Project Status
 
 **Last updated:** 2026-07-16
-**Current branch:** `codex/v251-security-hotfix`
-**Candidate commit:** `b411aa0`
-**Release-preparation status:** rebased onto GPL-3.0-only master; final PR,
-tag, Release, and image verification pending.
-**Current phase:** v2.5.1 local candidate acceptance — **PASSED**
+**Current branch:** `codex/v251-release-record`
+**Release commit:** `ae2b174`
+**Release status:** v2.5.1 published under GPL-3.0-only — **VERIFIED**
+**Current phase:** Phase 3 Private Network Automation — ready to resume
 
 ## Candidate Identity
 
@@ -75,12 +74,24 @@ Windows 10 machine.
   The v2.5.1 branch was then rebased onto that GPL baseline so its source and
   release packages carry the selected license.
 
+## Published v2.5.1 Release
+
+- `VERIFIED 2026-07-16`: PR #6 merged to `master` as `ae2b174`; tag `v2.5.1`
+  points to that merged GPL-3.0-only release commit.
+- `VERIFIED 2026-07-16`: GitHub Release `GenBox v2.5.1` was published with eight
+  assets: three standalone clients, three client ZIPs, the Docker Compose ZIP,
+  and `SHA256SUMS.txt`.
+- `VERIFIED 2026-07-16`: Docker tag workflow run `29510804581` and desktop/
+  Release workflow run `29510804145` both completed successfully.
+- `VERIFIED 2026-07-16`: downloaded Docker Compose bundle SHA-256 matched
+  `SHA256SUMS.txt` and its contents include `LICENSE`, `COPYRIGHT`, and
+  `THIRD_PARTY_NOTICES.md` alongside the public deployment files.
+
 ## Safety And Scope
 
 - `VERIFIED 2026-07-16`: production-like chatgpt2api remained read-only and
   unchanged.
-- `VERIFIED 2026-07-16`: no v2.5.1 tag or GitHub Release, VPS operation, or
-  sender Push operation occurred.
+- `VERIFIED 2026-07-16`: no VPS operation or sender Push operation occurred.
 - `VERIFIED 2026-07-16`: ports `8891` and `8892` are free; acceptance processes
   and secret-bearing temporary directories were removed.
 - `VERIFIED 2026-07-16`: the repository `.env` remained unchanged. Do not
@@ -88,12 +99,10 @@ Windows 10 machine.
 
 ## Closeout
 
-Candidate acceptance is complete and release publishing is authorized. Next:
+The v2.5.1 release closeout is complete. Next:
 
-1. Run final source and package checks on the GPL-rebased v2.5.1 branch.
-2. Force-push the rebased branch, wait for PR #6 CI, then merge it to `master`.
-3. Confirm the `master` image workflow, create and push the `v2.5.1` tag, wait
-   for desktop and tag-image workflows, then verify the GitHub Release assets.
-
-Do not operate on a VPS or begin chatgpt2api sender Push work as part of this
-release closeout.
+1. Resume the current roadmap Phase 3: Private Network Automation.
+2. Begin with the topic contracts `docs/extensions-deployment-contract.md` and
+   `docs/INTEGRATION.md`; retain the production chatgpt2api read-only boundary.
+3. Keep GPL provenance review current whenever copied code, assets, or bundled
+   service artifacts are introduced.

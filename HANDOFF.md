@@ -1,19 +1,17 @@
 # GenBox Development Handoff
 
 **Updated:** 2026-07-16
-**Branch:** `codex/v251-security-hotfix`
-**Candidate commit:** `b411aa0`
-**Release-preparation status:** rebased onto GPL-3.0-only master; final PR,
-tag, Release, and image verification pending.
+**Branch:** `codex/v251-release-record`
+**Release commit:** `ae2b174`
+**Release status:** v2.5.1 published under GPL-3.0-only — **VERIFIED**
 **Development port:** `8892`
 **Current phase:** v2.5.1 local candidate acceptance — **PASSED**
 
 ## Outcome
 
-The exact v2.5.1 local candidate completed its automated, Windows, Docker, and
-official v2.4.1 upgrade acceptance. This is candidate acceptance only: no
-Release was published, no image was pushed, and no production or VPS operation
-was performed.
+The exact v2.5.1 candidate completed its automated, Windows, Docker, and
+official v2.4.1 upgrade acceptance, then published as GPL-3.0-only from merged
+commit `ae2b174`. No production or VPS operation was performed.
 
 ## Candidate Identity
 
@@ -84,13 +82,17 @@ one Windows 10 machine, which remains a platform-coverage limitation.
   private-key block, OpenAI-style key, GitHub token, or AWS access-key match.
 - `VERIFIED 2026-07-16`: GPL-3.0-only PR #7 merged to `master` as `ad802f6`.
   This v2.5.1 branch is rebased onto the GPL baseline.
+- `VERIFIED 2026-07-16`: PR #6 merged as `ae2b174`, tag `v2.5.1` was pushed,
+  and GitHub Release `GenBox v2.5.1` published eight assets.
+- `VERIFIED 2026-07-16`: Docker workflow `29510804581` and desktop/Release
+  workflow `29510804145` both succeeded. The downloaded Docker bundle checksum
+  matched `SHA256SUMS.txt` and includes GPL, copyright, and third-party notices.
 
 ## Safety State
 
 - `VERIFIED 2026-07-16`: production-like chatgpt2api remained read-only and
   unchanged.
-- `VERIFIED 2026-07-16`: no v2.5.1 tag or GitHub Release, VPS operation, or
-  sender Push operation occurred.
+- `VERIFIED 2026-07-16`: no VPS operation or sender Push operation occurred.
 - `VERIFIED 2026-07-16`: ports `8891` and `8892` are free. Acceptance processes
   and secret-bearing temporary directories were removed.
 - `VERIFIED 2026-07-16`: the repository `.env` was unchanged.
@@ -99,10 +101,7 @@ one Windows 10 machine, which remains a platform-coverage limitation.
 
 ## Next Action
 
-1. Run final source and package checks on the GPL-rebased v2.5.1 branch.
-2. Force-push the rebased branch, wait for PR #6 CI, then merge it to `master`.
-3. Confirm the `master` image workflow, create and push `v2.5.1`, then verify
-   desktop, Docker, and GitHub Release assets.
-
-Do not operate on a VPS or enter chatgpt2api sender Push work during this
-release closeout.
+1. Resume roadmap Phase 3: Private Network Automation.
+2. Start with `docs/extensions-deployment-contract.md` and `docs/INTEGRATION.md`.
+3. Keep production chatgpt2api read-only and do not enter sender Push work until
+   the roadmap phase order and acceptance evidence allow it.
