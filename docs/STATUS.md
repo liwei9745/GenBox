@@ -3,7 +3,8 @@
 **Last updated:** 2026-07-16
 **Current branch:** `codex/v251-security-hotfix`
 **Candidate commit:** `b411aa0`
-**Release-preparation status:** local gate passed; external release not started.
+**Release-preparation status:** rebased onto GPL-3.0-only master; final PR,
+tag, Release, and image verification pending.
 **Current phase:** v2.5.1 local candidate acceptance — **PASSED**
 
 ## Candidate Identity
@@ -70,15 +71,16 @@ Windows 10 machine.
   private-key block, OpenAI-style key, GitHub token, or AWS access-key match.
   This is a screening result, not a substitute for final human review of the
   release diff and generated artifacts.
-- `VERIFIED 2026-07-16`: no GitHub Ruleset, PR merge, tag, Release, image push,
-  VPS, or sender Push operation occurred during release preparation.
+- `VERIFIED 2026-07-16`: GPL-3.0-only PR #7 merged to `master` as `ad802f6`.
+  The v2.5.1 branch was then rebased onto that GPL baseline so its source and
+  release packages carry the selected license.
 
 ## Safety And Scope
 
 - `VERIFIED 2026-07-16`: production-like chatgpt2api remained read-only and
   unchanged.
-- `VERIFIED 2026-07-16`: no GitHub Ruleset, Release, image push, VPS, or sender
-  Push operation occurred.
+- `VERIFIED 2026-07-16`: no v2.5.1 tag or GitHub Release, VPS operation, or
+  sender Push operation occurred.
 - `VERIFIED 2026-07-16`: ports `8891` and `8892` are free; acceptance processes
   and secret-bearing temporary directories were removed.
 - `VERIFIED 2026-07-16`: the repository `.env` remained unchanged. Do not
@@ -86,14 +88,12 @@ Windows 10 machine.
 
 ## Closeout
 
-Candidate acceptance and local release preparation are complete, but Release
-completion is not claimed. Next:
+Candidate acceptance is complete and release publishing is authorized. Next:
 
-1. Review the release-preparation diff, including the new versioned notes and
-   generated README Lab content; exclude `.planning/STATE.md`.
-2. Commit the reviewed v2.5.1 release-preparation files and open or update a PR.
-3. Wait for explicit authorization before merging. A merge to `master` and a
-   `v2.5.1` tag have workflow side effects, including GHCR image publication.
+1. Run final source and package checks on the GPL-rebased v2.5.1 branch.
+2. Force-push the rebased branch, wait for PR #6 CI, then merge it to `master`.
+3. Confirm the `master` image workflow, create and push the `v2.5.1` tag, wait
+   for desktop and tag-image workflows, then verify the GitHub Release assets.
 
-Do not change the Ruleset, merge a PR, tag, publish a Release, push an image,
-operate on a VPS, or begin chatgpt2api sender Push work as part of this closeout.
+Do not operate on a VPS or begin chatgpt2api sender Push work as part of this
+release closeout.
