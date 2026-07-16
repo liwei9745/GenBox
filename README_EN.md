@@ -165,4 +165,6 @@ Thank you to everyone who contributes to the upstream projects whose public work
 - Maintainer: [@liwei9745](https://github.com/liwei9745)
 - Bugs and ideas: [GitHub Issues](https://github.com/liwei9745/GenBox/issues)
 - Community: [GenBox / ChatGPT2API QQ group](https://qm.qq.com/q/yegwCqJisS)
-- License: [MIT License](LICENSE)
+- License: [GNU GPL v3.0 only](LICENSE). Executables, Docker bundles, and
+  source are available from the GenBox repository; redistributing a modified
+  GenBox requires providing the corresponding source under GPLv3.

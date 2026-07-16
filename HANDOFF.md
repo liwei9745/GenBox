@@ -1,15 +1,27 @@
 # GenBox Development Handoff
 
-**Updated:** 2026-07-14
-**Branch:** `dev`
+**Updated:** 2026-07-16
+**Branch:** `codex/gpl-3-only`
 **Local development port:** `8892`
-**Verified test baseline:** `78 passed`
+**Verified test baseline:** `79 passed`
 
 ## Immediate Objective
 
-Resume post-release clean-install and upgrade-path acceptance against the public
-v2.5.0 artifacts and updated documentation. Do not begin chatgpt2api sender
-Push, batch transfer, scheduling, or source-cleanup work during this gate.
+Complete the standalone `GPL-3.0-only` license migration. It must not be mixed
+with the open v2.5.1 security-release PR, and it must not create a Release,
+tag, image push, or VPS change.
+
+## GPL Migration Evidence
+
+- The repository moved from MIT to the canonical GNU GPL version 3 text only.
+- `THIRD_PARTY_NOTICES.md` records direct runtime/build dependencies and asset
+  provenance expectations.
+- Desktop and Docker release packaging now includes the notice file alongside
+  the GPL text.
+- The Git history reports one commit author; source and asset provenance still
+  require review whenever external material is introduced.
+- `79` tests, JavaScript syntax checks, README Lab generation, and
+  `git diff --check` passed on 2026-07-16.
 
 ## Current Verified State
 
@@ -66,14 +78,11 @@ Push, batch transfer, scheduling, or source-cleanup work during this gate.
   Docker archive contains only its four documented public deployment files.
 - `.planning/STATE.md` contains pre-existing owner changes and must stay untouched.
 
-## Post-Release Gate
+## Next Action
 
-1. Install the Windows ZIP in a clean directory and verify first-run setup.
-2. Deploy the public Docker Compose bundle with new credentials and empty storage.
-3. Verify the documented one-time manual upgrade from v2.4.1 or earlier.
-4. Recheck the public README and Release links during clean-install acceptance;
-   the initial publication and API/blob verification passed on 2026-07-14.
-5. Record results before selecting the next pre-Push phase.
+1. Review and commit only the GPL migration files; exclude `.planning/STATE.md`.
+2. Open a standalone GPL migration PR for review.
+3. Do not merge it into the v2.5.1 release work without a separate decision.
 
 ## Safety And Scope
 
@@ -96,7 +105,7 @@ python scripts/smoke_client.py --executable dist/GenBox.exe
 
 ## Resume Prompt
 
-> Run the v2.5.0 post-release clean-install and upgrade acceptance from
-> `HANDOFF.md`. Keep development on port 8892, preserve production chatgpt2api
-> as read-only, leave `.planning/STATE.md` untouched, and do not enter
-> chatgpt2api sender Push development.
+> Review and ship only the GPL-3.0-only migration: GPL text, third-party
+> notices, release-package coverage, README links, and ADR-012. Leave
+> `.planning/STATE.md` untouched; do not merge, tag, publish, push images, or
+> operate on production chatgpt2api.
