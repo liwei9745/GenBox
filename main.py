@@ -12,6 +12,7 @@ import json as _json
 import time
 import uuid
 import webbrowser
+import uvicorn
 from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import quote, urlsplit
@@ -56,7 +57,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from config import (
-    cfg_mgr, GALLERY_DIR, STORAGE_DIR, ProviderConfig, ProvidersConfig,
+    cfg_mgr, BASE_DIR, GALLERY_DIR, STORAGE_DIR, ProviderConfig, ProvidersConfig,
     is_prod_mode, get_admin_key, verify_admin_key, generate_admin_key, reset_admin_key,
 )
 from providers import generate_multi, enhance_prompt_with_llm, enhance_prompt_with_llm_detailed, ImageResult, fetch_models_from_upstream, _save_image, translate_upstream_error
@@ -593,14 +594,33 @@ async def reload_providers():
 
 @app.get("/api/setup/status")
 async def setup_status():
-    """检查是否需要首次设置向导"""
-    providers = cfg_mgr.config.providers
-    has_key = any(p.api_key for p in providers if p.type in ("image", "video"))
-    has_enabled = any(p.enabled for p in providers if p.type in ("image", "video"))
+    """Return the stable, non-secret setup and provider readiness contract."""
+    configured_mode = os.getenv("APP_MODE", "prod").strip().lower()
+    app_mode = "dev" if configured_mode == "dev" else "prod"
+    providers = [
+        provider
+        for provider in cfg_mgr.config.providers
+        if provider.type in ("image", "video")
+    ]
+
+    def _provider_has_key(provider) -> bool:
+        if str(getattr(provider, "api_key", "") or "").strip():
+            return True
+        if any(str(key).strip() for key in (getattr(provider, "api_keys", []) or [])):
+            return True
+        return any(
+            bool(str(getattr(endpoint, "key", "") or "").strip())
+            for endpoint in (getattr(provider, "endpoints", []) or [])
+        )
+
+    has_configured_provider = any(_provider_has_key(provider) for provider in providers)
+    has_enabled_provider = any(bool(provider.enabled) for provider in providers)
     return {
-        "needs_setup": not has_key,
-        "has_configured_provider": has_key,
-        "has_enabled_provider": has_enabled,
+        "app_mode": app_mode,
+        "auth_required": app_mode == "prod",
+        "needs_provider_setup": not has_configured_provider,
+        "has_configured_provider": has_configured_provider,
+        "has_enabled_provider": has_enabled_provider,
         "provider_count": len(providers),
     }
 
@@ -3118,7 +3138,7 @@ async def get_update_info():
 # 安全策略：ADMINKEY 认证中间件
 # ──────────────────────────────────────────────────────────────
 AUTH_EXEMPT_PATHS = {
-    "/api/setup/status", "/api/setup/confirm", "/api/setup/first-run",
+    "/api/setup/status",
     "/api/sync/push",
     "/api/sync/push/status",
     "/favicon.ico",
@@ -3143,33 +3163,6 @@ async def admin_auth_middleware(request: Request, call_next):
     if not verify_admin_key(admin_key):
         return JSONResponse(status_code=401, content={"error": "未授权，请先登录", "code": "AUTH_REQUIRED"})
     return await call_next(request)
-
-
-@app.get("/api/setup/status")
-async def setup_status():
-    """检查是否需要首次设置"""
-    admin_key = get_admin_key()
-    providers = cfg_mgr.config.providers
-    has_provider_key = any(p.api_key for p in providers if p.type in ("image", "video"))
-    return {
-        "prod_mode": is_prod_mode(),
-        "has_admin_key": bool(admin_key),
-        "needs_first_run": is_prod_mode() and not admin_key,
-        "has_provider_key": has_provider_key,
-    }
-
-
-@app.post("/api/setup/first-run")
-async def setup_first_run():
-    """首次启动：生成 ADMINKEY 并返回"""
-    key = generate_admin_key()
-    return {"admin_key": key, "message": "请保存此密钥，关闭后无法再次查看！"}
-
-
-@app.post("/api/setup/confirm")
-async def setup_confirm():
-    """确认已保存密钥"""
-    return {"ok": True, "message": "设置完成"}
 
 
 # ──────────────────────────────────────────────────────────────
@@ -3805,183 +3798,153 @@ app.mount("/static", StaticFiles(directory=str(BASE_PATH / "static")), name="sta
 # ──────────────────────────────────────────────────────────────
 # 启动
 # ──────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    import uvicorn
+def _first_run_setup() -> None:
+    """Collect the initial deployment mode without using an HTTP bootstrap."""
+    from config import _read_env, _write_env
 
-    # 命令行参数：--reset-admin
     if "--reset-admin" in sys.argv:
         new_key = reset_admin_key()
-        print(f"[Admin Reset] 新密钥已生成: {new_key}")
-        print(f"[Admin Reset] 已写入 .env")
-        print(f"[Admin Reset] 请重启服务")
-        sys.exit(0)
+        print("[Admin Reset] A new administrator key was generated.")
+        print(new_key)
+        raise SystemExit(0)
 
-    # 首次启动：交互式选择模式
-    def _first_run_setup():
-        """首次启动时引导用户完成配置"""
-        from config import _read_env, _write_env, BASE_DIR
-        import secrets
-        
-        env = _read_env()
-        # 检查是否已配置过
-        if "APP_MODE" in env:
-            return  # 已配置，跳过
-        
-        print("""
-╔══════════════════════════════════════════════════════════════╗
-║                     欢迎使用 GenBox!                         ║
-╠══════════════════════════════════════════════════════════════╣
-║                                                              ║
-║  首次启动，请选择部署方式：                                   ║
-║                                                              ║
-║  [1] 本地使用（推荐新手）                                     ║
-║      - 无需认证，打开即用                                    ║
-║      - 仅本机可访问                                          ║
-║      - 适合个人电脑调试                                      ║
-║                                                              ║
-║  [2] VPS/云服务器部署                                         ║
-║      - 需要管理员密钥登录                                    ║
-║      - 可通过公网访问                                        ║
-║      - 安全性高                                              ║
-║                                                              ║
-║  [3] Docker 部署                                             ║
-║      - 使用 docker-compose 一键部署                          ║
-║      - 参考 .env.example 配置                                ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
-        """)
-        
-        while True:
-            try:
-                choice = input("请选择 (1/2/3): ").strip()
-                if choice == "1":
-                    # 本地开发模式
-                    _write_env({"APP_MODE": "dev"})
-                    print("\n[OK] 已启用本地模式（无需认证，仅限本机访问）\n")
-                    break
-                elif choice == "2":
-                    # VPS 模式
-                    _write_env({"APP_MODE": "prod"})
-                    print("\n[OK] 已启用生产模式（需要认证）\n")
-                    
-                    # 询问 CORS 配置
-                    print("─" * 50)
-                    print("网络配置")
-                    print("─" * 50)
-                    print("为了让浏览器能访问 API，需要配置允许的源。")
-                    print("如果有域名请输入域名，否则输入服务器 IP。")
-                    print("多个地址用逗号分隔，直接回车跳过（默认仅本机）。")
-                    print()
-                    
-                    origins_input = input("允许的源 (如 http://your-ip:8891): ").strip()
-                    if origins_input:
-                        _write_env({"ALLOWED_ORIGINS": origins_input})
-                        print(f"[OK] 已设置 CORS: {origins_input}\n")
-                    else:
-                        print("[SKIP] 使用默认配置（仅本机）\n")
-                    
-                    # 自动生成并显示管理密钥
-                    admin_key = secrets.token_urlsafe(16)
-                    _write_env({"ADMIN_KEY": admin_key})
-                    print("─" * 50)
-                    print("管理员密钥已自动生成")
-                    print("─" * 50)
-                    print(f"\n   {admin_key}\n")
-                    print("[WARN] 请立即保存此密钥！关闭后无法再次查看！")
-                    print("   建议保存到密码管理器。\n")
-                    break
-                elif choice == "3":
-                    # Docker 模式
-                    print("\nDocker 部署指引：")
-                    print("─" * 50)
-                    print("1. 复制环境配置文件：")
-                    print("   cp .env.example .env")
-                    print()
-                    print("2. 编辑 .env 文件，填入你的 API Key：")
-                    print("   nano .env")
-                    print()
-                    print("3. 启动容器：")
-                    print("   docker compose up -d")
-                    print()
-                    print("4. 查看日志：")
-                    print("   docker-compose logs -f")
-                    print()
-                    print("详细说明请参考 README.md 的 Docker 部署章节。")
-                    print("─" * 50)
-                    
-                    # Docker 默认使用 prod 模式
-                    _write_env({"APP_MODE": "prod"})
-                    print("\n[OK] Docker 部署默认启用生产模式\n")
-                    break
-                else:
-                    print("[ERROR] 请输入 1、2 或 3")
-            except (EOFError, KeyboardInterrupt):
-                # 无交互环境（如 Docker），默认使用 prod 模式
-                _write_env({"APP_MODE": "prod"})
-                print("\n[OK] 无交互环境，默认启用生产模式\n")
-                break
+    if "APP_MODE" in _read_env() or os.environ.get("APP_MODE", "").strip():
+        return
 
-    # 执行首次启动设置
-    _first_run_setup()
+    interactive = bool(
+        sys.stdin is not None
+        and hasattr(sys.stdin, "isatty")
+        and sys.stdin.isatty()
+    )
+    if not interactive:
+        _write_env({"APP_MODE": "prod"})
+        print(
+            "[Setup] Non-interactive startup selected production mode. "
+            "Configure ADMIN_KEY in the executable data .env before starting."
+        )
+        return
 
-    # 重新加载环境变量
-    from dotenv import load_dotenv
-    load_dotenv(BASE_PATH / ".env", override=True)
+    print("GenBox first-run setup")
+    print("[1] Local desktop (development mode, localhost only)")
+    print("[2] Server/VPS (production mode with authentication)")
+    print("[3] Docker/headless (production mode; configure ADMIN_KEY manually)")
 
-    # 生产模式：检查 ADMINKEY
-    if is_prod_mode():
-        admin_key = get_admin_key()
-        if not admin_key:
-            key = generate_admin_key()
-            print(f"""
-╔══════════════════════════════════════════════════════════════╗
-║                       首次启动 - 安全密钥                     ║
-╠══════════════════════════════════════════════════════════════╣
-║                                                              ║
-║  管理密钥已生成，请立即保存：                                 ║
-║                                                              ║
-║  {key}                                                      ║
-║                                                              ║
-║  [WARN] 此密钥仅显示一次，关闭后无法再次查看！                  ║
-║  [WARN] 请复制保存到安全位置（如密码管理器）                    ║
-║                                                              ║
-║  使用方式：                                                  ║
-║  1. 打开浏览器访问 http://localhost:8891                      ║
-║  2. 在登录页输入此密钥                                        ║
-║  3. 或在 API 请求头中添加: X-Admin-Key: <密钥>               ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
-            """)
-        else:
-            print(f"[Security] 管理密钥已加载")
-
-    mode_str = "PRODUCTION" if is_prod_mode() else "DEVELOPMENT"
-    print(f"""
-╔══════════════════════════════════════════════════════════════╗
-║                      GenBox v{__version__:<31}║
-╠══════════════════════════════════════════════════════════════╣
-║  模式:     {mode_str:<46}║
-║  地址:     {GENBOX_LOCAL_URL:<48}║
-║  端口:     {GENBOX_PORT:<48}║
-║  媒体库:   {str(GALLERY_DIR):<46}║
-║  配置:     {str(STORAGE_DIR / 'providers.json'):<46}║
-╚══════════════════════════════════════════════════════════════╝
-    """)
-
-    # 自动打开浏览器
-    def _open_browser():
-        time.sleep(1.5)
+    while True:
         try:
-            webbrowser.open(GENBOX_LOCAL_URL)
-        except Exception:
-            pass  # 无头环境忽略
-    if os.getenv("GENBOX_NO_BROWSER", "").lower() not in {"1", "true", "yes"}:
-        threading.Thread(target=_open_browser, daemon=True).start()
+            choice = input("Select deployment mode (1/2/3): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            _write_env({"APP_MODE": "prod"})
+            print(
+                "[Setup] Input ended; production mode selected. "
+                "Configure ADMIN_KEY before starting."
+            )
+            return
 
+        if choice == "1":
+            _write_env({"APP_MODE": "dev"})
+            print("[Setup] Local mode enabled; access is restricted to this computer.")
+            return
+
+        if choice == "2":
+            _write_env({"APP_MODE": "prod"})
+            origins = input(
+                "Allowed browser origins (comma-separated, Enter for defaults): "
+            ).strip()
+            if origins:
+                _write_env({"ALLOWED_ORIGINS": origins})
+            admin_key = generate_admin_key()
+            print("[Setup] Production mode enabled. Save this administrator key now:")
+            print(admin_key)
+            return
+
+        if choice == "3":
+            _write_env({"APP_MODE": "prod"})
+            print(
+                "[Setup] Docker/headless production mode enabled. "
+                "Set ADMIN_KEY in .env before starting the service."
+            )
+            return
+
+        print("[Setup] Enter 1, 2, or 3.")
+
+
+def prepare_runtime_environment(executable_data_dir: Path, bundle_dir: Path) -> Optional[Path]:
+    """Reload runtime environment from user data, falling back to bundle defaults."""
+    from dotenv import load_dotenv
+    from config import PROCESS_ENV_GENBOX_PORT
+
+    executable_env = Path(executable_data_dir) / ".env"
+    bundle_env = Path(bundle_dir) / ".env"
+    selected_env = executable_env if executable_env.is_file() else bundle_env
+    if selected_env.is_file():
+        load_dotenv(selected_env, override=True)
+    if PROCESS_ENV_GENBOX_PORT is not None:
+        os.environ["GENBOX_PORT"] = PROCESS_ENV_GENBOX_PORT
+
+    cfg_mgr._config = None
+    return selected_env if selected_env.is_file() else None
+
+
+def _require_production_admin_key(app_mode: str) -> None:
+    if app_mode != "prod" or get_admin_key():
+        return
+    raise SystemExit(
+        "[Security] Startup blocked: production mode requires ADMIN_KEY in the "
+        "executable data .env. Configure it before starting Docker or headless mode."
+    )
+
+
+def run_http_server(app_mode: str, port: int, host: Optional[str] = None) -> None:
+    """Run Uvicorn with loopback enforced for unauthenticated development mode."""
+    normalized_mode = app_mode.strip().lower()
+    resolved_host = "127.0.0.1" if normalized_mode == "dev" else (host or "0.0.0.0")
     uvicorn.run(
         app,
-        host="0.0.0.0",
-        port=GENBOX_PORT,
+        host=resolved_host,
+        port=port,
         reload=False,
         use_colors=False,
     )
+
+
+def run_application() -> None:
+    """Prepare first-run state, reload it in-process, enforce auth, and serve."""
+    _first_run_setup()
+    prepare_runtime_environment(BASE_DIR, BASE_PATH)
+
+    configured_mode = os.getenv("APP_MODE", "prod").strip().lower()
+    app_mode = "dev" if configured_mode == "dev" else "prod"
+    try:
+        port = int(os.getenv("GENBOX_PORT", "8891"))
+    except ValueError as exc:
+        raise SystemExit("[Startup] GENBOX_PORT must be a valid integer.") from exc
+    if not 1 <= port <= 65535:
+        raise SystemExit("[Startup] GENBOX_PORT must be between 1 and 65535.")
+
+    _require_production_admin_key(app_mode)
+
+    local_host = "127.0.0.1" if app_mode == "dev" else "localhost"
+    local_url = f"http://{local_host}:{port}"
+    mode_str = "PRODUCTION" if is_prod_mode() else "DEVELOPMENT"
+    print(f"[GenBox] v{__version__} | {mode_str} | {local_url}")
+    print(f"[GenBox] Media: {GALLERY_DIR}")
+    print(f"[GenBox] Providers: {STORAGE_DIR / 'providers.json'}")
+
+    if (
+        getattr(sys, "frozen", False)
+        and os.getenv("GENBOX_NO_BROWSER", "").lower() not in {"1", "true", "yes"}
+    ):
+        def _open_browser() -> None:
+            time.sleep(1.5)
+            try:
+                webbrowser.open(local_url)
+            except Exception:
+                pass
+
+        threading.Thread(target=_open_browser, daemon=True).start()
+
+    run_http_server(app_mode, port)
+
+
+if __name__ == "__main__":
+    run_application()

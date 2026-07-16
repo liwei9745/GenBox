@@ -3,6 +3,7 @@ import sys
 import zipfile
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from genbox_version import __version__
@@ -18,19 +19,46 @@ def test_release_version_is_consistent():
     assert main.app.version == __version__
     assert updater.CURRENT_VERSION == __version__
     assert __version__ in (ROOT / "genbox_version.py").read_text(encoding="utf-8")
+    assert __version__ == "2.5.1"
 
 
 def test_compose_release_uses_ghcr_and_safe_internal_port():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     env_template = (ROOT / ".env.docker.example").read_text(encoding="utf-8")
 
-    assert "ghcr.io/liwei9745/genbox:latest" in compose
+    versioned_image = f"ghcr.io/liwei9745/genbox:{__version__}"
+    assert f"GENBOX_IMAGE:-{versioned_image}" in compose
+    assert f"GENBOX_IMAGE={versioned_image}" in env_template
+    assert "ghcr.io/liwei9745/genbox:latest" not in compose
+    assert "ghcr.io/liwei9745/genbox:latest" not in env_template
     assert '${GENBOX_PORT:-8891}:8891' in compose
     assert 'GENBOX_PORT: "8891"' in compose
     assert "./.env:/app/.env" in compose
     assert "build: ." not in compose
     assert "APP_MODE=prod" in env_template
     assert "GENBOX_PORT=8891" in env_template
+    assert "\nADMIN_KEY=\n" in env_template
+
+
+def test_docker_quickstart_requires_user_supplied_admin_key_without_log_delivery():
+    guide = (ROOT / "docs" / "DOCKER-QUICKSTART.md").read_text(encoding="utf-8")
+    normalized = guide.lower()
+
+    assert "defaults to production mode" in normalized
+    assert "user-supplied `admin_key`" in normalized
+    assert "missing or blank value fails closed" in normalized
+    assert "refuses to start" in normalized
+    assert "does not generate or deliver this key" in normalized
+    assert "loopback interface" in normalized
+    assert "not the docker default" in normalized
+    assert "first startup creates an administrator key" not in normalized
+    assert "generated key" not in normalized
+    assert re.search(
+        r"(?:administrator key|admin_key).{0,120}docker compose logs|"
+        r"docker compose logs.{0,120}(?:administrator key|admin_key)",
+        normalized,
+        re.DOTALL,
+    ) is None
 
 
 def test_release_workflow_smoke_tests_clients_and_packages_compose():
@@ -100,17 +128,18 @@ def test_readme_lab_content_matches_source_documents():
 
     sources = {
         "readme": {"zh": "README.md", "en": "README_EN.md"},
-        "release": {"zh": "release-notes-v2.5.0-zh.md", "en": "release-notes-v2.5.0.md"},
+        "release": {"zh": "release-notes-v2.5.1-zh.md", "en": "release-notes-v2.5.1.md"},
     }
     assert 'id="document"' in lab
     assert "state.payload[state.document][state.language]" in lab
-    assert "Release v2.5.0" in lab
+    assert "Release v2.5.1" in lab
     for document, languages in sources.items():
         for language, filename in languages.items():
             source = (ROOT / filename).read_text(encoding="utf-8")
             item = payload[document][language]
             assert item["sha256"] == hashlib.sha256(source.encode("utf-8")).hexdigest()
-            assert "readme-assets" in item["markdown"]
+            if document == "readme":
+                assert "readme-assets" in item["markdown"]
 
     for language in ("zh", "en"):
         markdown = payload["readme"][language]["markdown"]

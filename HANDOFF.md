@@ -1,111 +1,108 @@
 # GenBox Development Handoff
 
 **Updated:** 2026-07-16
-**Branch:** `codex/gpl-3-only`
-**Local development port:** `8892`
-**Verified test baseline:** `79 passed`
+**Branch:** `codex/v251-security-hotfix`
+**Candidate commit:** `b411aa0`
+**Release-preparation status:** rebased onto GPL-3.0-only master; final PR,
+tag, Release, and image verification pending.
+**Development port:** `8892`
+**Current phase:** v2.5.1 local candidate acceptance — **PASSED**
 
-## Immediate Objective
+## Outcome
 
-Complete the standalone `GPL-3.0-only` license migration. It must not be mixed
-with the open v2.5.1 security-release PR, and it must not create a Release,
-tag, image push, or VPS change.
+The exact v2.5.1 local candidate completed its automated, Windows, Docker, and
+official v2.4.1 upgrade acceptance. This is candidate acceptance only: no
+Release was published, no image was pushed, and no production or VPS operation
+was performed.
 
-## GPL Migration Evidence
+## Candidate Identity
 
-- The repository moved from MIT to the canonical GNU GPL version 3 text only.
-- `THIRD_PARTY_NOTICES.md` records direct runtime/build dependencies and asset
-  provenance expectations.
-- Desktop and Docker release packaging now includes the notice file alongside
-  the GPL text.
-- The Git history reports one commit author; source and asset provenance still
-  require review whenever external material is introduced.
-- `79` tests, JavaScript syntax checks, README Lab generation, and
-  `git diff --check` passed on 2026-07-16.
+- `VERIFIED 2026-07-16`: source commit `b411aa0`; packaged runtime version
+  `2.5.1`.
+- `VERIFIED 2026-07-16`: Windows candidate size `30,328,866` bytes; SHA-256
+  `99E105A1A753879481E8133DD3146CA00DD15B70D93C5DAD1DA700CE04953A67`.
+- `VERIFIED 2026-07-16`: official v2.4.1 baseline size `25,229,487` bytes;
+  SHA-256
+  `E6E45E81221E628C9AB14BE7EEB36608CF46EF62DFC98FAED0AC71FE964AA0D4`.
 
-## Current Verified State
+## Evidence
 
-- Snapshot commit `11dfd51` captures the Extension Center and onboarding milestone.
-- PR #4's GHCR-backed Docker Compose bundle intent is integrated and credited;
-  the GitHub PR itself remains unmerged.
-- Runtime, development, and PyInstaller dependency sets are pinned separately.
-- GitHub Actions tests source, builds three packaged clients, smoke-tests each,
-  packages desktop and Docker artifacts, and generates SHA-256 checksums.
-- Windows `dist/GenBox.exe` was rebuilt after updater changes and passed a real
-  HTTP smoke test on 2026-07-14.
-- The v2.5.0 updater now selects standalone assets, rejects archives, and replaces
-  packaged clients only after the running process exits.
-- v2.4.1 and earlier Windows EXE users need one manual upgrade to v2.5.0 because
-  the old updater selects the ZIP first and cannot overwrite its locked process.
-- Legacy Docker users must migrate to the new Compose bundle while preserving
-  `.env` and `storage/`; the old in-app update cannot rewrite host Compose config.
-- Snapshot commit `ae90ce6` preserves the prior structured README restoration
-  and laboratory before the audience-focused rewrite.
-- `python -m pytest -q` passes all 78 tests. JavaScript syntax checks, Python
-  compilation, and `git diff --check` pass.
-- README screenshots were replaced with four current v2.5.0 captures from an
-  isolated client. Dashboard device values are labeled synthetic demo data.
-- The structured Chinese and English README content has been restored without
-  removing the v2.5.0 release guidance. Acknowledged projects/authors, upstream
-  contributors, community links, configuration, troubleshooting, repository
-  structure, and the public Star History chart are present again.
-- `http://127.0.0.1:8892/static/readme-lab.html` renders the actual README source
-  in Chinese/English, desktop/narrow, and light/dark modes. Local cached public
-  contributor and Star History assets keep the lab compatible with the global
-  CSP; source hashes and asset mappings are covered by tests.
-- README structure now follows patterns verified from ComfyUI, AUTOMATIC1111,
-  Fooocus, InvokeAI, Open WebUI, and n8n: positioning and product visuals first,
-  platform download choice and the shortest startup path next, with operations
-  and developer detail folded or routed through `docs/README.md`.
-- Chinese and English README files use separate reviewed screenshot sets. The
-  English Dashboard replaces host, network, disk, and IP values with explicit
-  demo data; no temporary raw capture remains in the repository.
-- Chinese and English v2.5.0 release notes now lead with which artifact to
-  download, how to start, and the one-time legacy Windows upgrade warning, then
-  group user-visible additions, fixes, limits, and collapsed technical proof.
-- `VERIFIED PUBLIC` Owner-approved documentation was merged to `master` as
-  `029dd62` and pushed on 2026-07-14. The v2.5.0 GitHub Release body now uses
-  the reordered Chinese notes with absolute public image/document links; all
-  eight existing release assets remain attached.
-- `VERIFIED CI` GitHub Actions run `29320721741` completed the master-branch
-  Docker image workflow successfully for `029dd62`.
-- Public rendering uses the repository-hosted Star History snapshot because the
-  third-party live chart endpoint returned a broken image during publication
-  acceptance; the snapshot still links to the live Star History page.
-- GitHub Release `v2.5.0` is public at tag commit `a675f8c`. Desktop Actions run
-  `29308338415` and Docker tag run `29308338400` completed successfully.
-- All seven downloadable payloads match the published `SHA256SUMS.txt`; the
-  Docker archive contains only its four documented public deployment files.
-- `.planning/STATE.md` contains pre-existing owner changes and must stay untouched.
+- `VERIFIED 2026-07-16`: automated gates passed with `111 passed`; all four
+  JavaScript syntax checks, README Lab generation, and `git diff --check`
+  passed.
+- Windows W0-W4 have combined machine and operator evidence. For W2,
+  `USER-CONFIRMED 2026-07-16` the operator saw the exact first-run prompt and
+  entered `1` exactly once. `VERIFIED 2026-07-16` port `8892` had no listener
+  before input; the PyInstaller launch used its expected two-level process
+  structure; the listener process creation time preceded the `.env` write; and
+  the same listener PID and creation time handled two HTTP checks. That process
+  ran in `dev`, listened only on `127.0.0.1:8892`, created no `ADMIN_KEY`,
+  returned the canonical six-field setup status, and allowed unauthenticated
+  provider access.
+- `VERIFIED 2026-07-16`: local Docker image
+  `genbox-v251-candidate:b411aa0` was built from exact commit `b411aa0` in about
+  8m27s and passed isolated acceptance. Its image ID was recorded in truncated
+  form as `sha256:335d4437…e69746a`; size `656,575,011` bytes. The separate
+  ffmpeg diagnostic took about 9m45s.
+  Evidence covered non-root execution, health/setup schema, expected
+  `401`/`401`/`200` authentication behavior, persistence, key-free logs, and
+  cleanup of candidate runtime resources. The local image is retained and was
+  not pushed.
+- `VERIFIED 2026-07-16` U1: the official v2.4.1 fixture passed upgrade
+  acceptance. Replacing the EXE
+  while it was running failed safely under Windows locking; replacement after
+  shutdown succeeded. Configuration, providers, and marker hashes and mtimes
+  remained unchanged, and v2.5.1 started normally.
+- U2 baseline combines observation and machine evidence.
+  `USER-CONFIRMED 2026-07-16` the official v2.4.1 natural Windows 10 console
+  displayed readable GBK Chinese, visibly exposed raw ANSI escape sequences,
+  showed the interactive prompt, accepted choice `1`, and opened its browser.
+  `VERIFIED 2026-07-16` the old process did not reload its newly written
+  `APP_MODE=dev`; it continued in production mode on `0.0.0.0:8891` and
+  generated an administrator secret. This is a confirmed v2.4.1 baseline
+  defect, not a v2.5.1 regression. The secret value is intentionally omitted
+  from repository documentation; the exact process was stopped, all
+  key-bearing temporary artifacts were deleted, and both ports were released.
+  The independent v2.5.1 W2 result proves the same-process mode-reload and
+  loopback fix.
+
+ANSI rendering was not separately re-tested on v2.5.1. Windows evidence is from
+one Windows 10 machine, which remains a platform-coverage limitation.
+
+## Release Preparation Evidence
+
+- `VERIFIED 2026-07-16`: Chinese and English v2.5.1 release notes, changelog,
+  README links, and README Lab content were prepared. They describe only the
+  verified startup-authentication, browser fail-closed, and version-pinned
+  Docker Compose changes, and retain known limitations.
+- `VERIFIED 2026-07-16`: the release-preparation working tree passed `111`
+  tests, four JavaScript syntax checks, README Lab generation, and
+  `git diff --check`. The normal system pytest temporary directory was denied
+  by the environment; the full suite passed with a disposable repository-local
+  temporary directory, removed after verification.
+- `VERIFIED 2026-07-16`: a high-confidence tracked-content scan found no
+  private-key block, OpenAI-style key, GitHub token, or AWS access-key match.
+- `VERIFIED 2026-07-16`: GPL-3.0-only PR #7 merged to `master` as `ad802f6`.
+  This v2.5.1 branch is rebased onto the GPL baseline.
+
+## Safety State
+
+- `VERIFIED 2026-07-16`: production-like chatgpt2api remained read-only and
+  unchanged.
+- `VERIFIED 2026-07-16`: no v2.5.1 tag or GitHub Release, VPS operation, or
+  sender Push operation occurred.
+- `VERIFIED 2026-07-16`: ports `8891` and `8892` are free. Acceptance processes
+  and secret-bearing temporary directories were removed.
+- `VERIFIED 2026-07-16`: the repository `.env` was unchanged.
+  `.planning/STATE.md` is an unrelated owner change and must not be modified,
+  staged, or committed.
 
 ## Next Action
 
-1. Review and commit only the GPL migration files; exclude `.planning/STATE.md`.
-2. Open a standalone GPL migration PR for review.
-3. Do not merge it into the v2.5.1 release work without a separate decision.
+1. Run final source and package checks on the GPL-rebased v2.5.1 branch.
+2. Force-push the rebased branch, wait for PR #6 CI, then merge it to `master`.
+3. Confirm the `master` image workflow, create and push `v2.5.1`, then verify
+   desktop, Docker, and GitHub Release assets.
 
-## Safety And Scope
-
-- Keep local development on port `8892`; packaged desktop and Docker defaults are `8891`.
-- Treat production chatgpt2api as read-only and do not restart or reconfigure it.
-- Do not expose credentials, user prompts, account data, personal media, or raw logs.
-- Do not describe sender Push, batch/scheduled transfer, or cleanup as available.
-
-## Verification Commands
-
-```powershell
-node --check static/js/i18n.js
-node --check static/js/app-all.js
-node --check static/js/extensions.js
-node --check static/js/sync.js
-python -m pytest -q
-python scripts/build_readme_lab.py
-python scripts/smoke_client.py --executable dist/GenBox.exe
-```
-
-## Resume Prompt
-
-> Review and ship only the GPL-3.0-only migration: GPL text, third-party
-> notices, release-package coverage, README links, and ADR-012. Leave
-> `.planning/STATE.md` untouched; do not merge, tag, publish, push images, or
-> operate on production chatgpt2api.
+Do not operate on a VPS or enter chatgpt2api sender Push work during this
+release closeout.

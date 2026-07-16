@@ -1,624 +1,99 @@
 # Current Project Status
 
 **Last updated:** 2026-07-16
-**Current branch:** `codex/gpl-3-only`
-**Current phase:** GPL-3.0-only licensing migration
-**Current objective:** complete a standalone GPL-3.0-only migration with third-party notices and release-package coverage; keep the v2.5.1 security-release PR separate and unmerged.
-**Test baseline:** 79 tests collected, all passing as of 2026-07-16.
-## Status Legend
+**Current branch:** `codex/v251-security-hotfix`
+**Candidate commit:** `b411aa0`
+**Release-preparation status:** rebased onto GPL-3.0-only master; final PR,
+tag, Release, and image verification pending.
+**Current phase:** v2.5.1 local candidate acceptance — **PASSED**
 
-- `VERIFIED IN CODE/TESTS`: confirmed from current code and local tests, but not
-  necessarily exercised against a live VPS.
-- `VERIFIED LIVE`: confirmed by a dated command against the named environment.
-- `USER-CONFIRMED`: supplied by the project owner but not independently checked.
-- `UNVERIFIED`: configured, designed, or previously reported but not currently
-  proven against a live environment.
+## Candidate Identity
 
-## GPL-3.0-only Migration
+- `VERIFIED 2026-07-16`: source commit `b411aa0`; packaged runtime version
+  `2.5.1`.
+- `VERIFIED 2026-07-16`: Windows candidate size `30,328,866` bytes; SHA-256
+  `99E105A1A753879481E8133DD3146CA00DD15B70D93C5DAD1DA700CE04953A67`.
+- `VERIFIED 2026-07-16`: official v2.4.1 size `25,229,487` bytes; SHA-256
+  `E6E45E81221E628C9AB14BE7EEB36608CF46EF62DFC98FAED0AC71FE964AA0D4`.
 
-- `VERIFIED 2026-07-16`: the current `LICENSE` was MIT and Git history reports
-  a single commit author. This is repository evidence, not a replacement for
-  confirming the provenance of any copied source or assets.
-- `VERIFIED 2026-07-16`: direct runtime and build dependency metadata was
-  reviewed. The recorded direct dependencies use GPL-compatible options or
-  permissive licenses; AsyncSSH is documented as dual-licensed and uses its
-  GPL-compatible option for this distribution.
-- `VERIFIED 2026-07-16`: GPLv3 text, `THIRD_PARTY_NOTICES.md`, package content,
-  README links, and ADR-012 were prepared on this branch. Existing MIT releases
-  retain their original permissions; this branch does not retroactively alter
-  them.
-- `VERIFIED 2026-07-16`: `79` tests, JavaScript syntax checks, README Lab
-  generation, and `git diff --check` passed for the migration work.
+## Verified Candidate State
 
-## Verified In Code And Local Tests
+- `VERIFIED 2026-07-16`: automated gates passed with `111 passed`, JavaScript
+  syntax checks, README Lab generation, and `git diff --check`.
+- Windows W0-W4 passed their candidate criteria using combined evidence. For
+  W2, `USER-CONFIRMED 2026-07-16` the operator saw the exact prompt and entered
+  `1` once. `VERIFIED 2026-07-16` there was no `8892` listener before input;
+  PyInstaller used its expected two-level process structure; listener creation
+  preceded the `.env` write; and the same listener PID and creation time handled
+  two HTTP checks. The process used `dev`, bound only to
+  `127.0.0.1:8892`, created no `ADMIN_KEY`, returned the canonical six-field
+  setup schema, and allowed unauthenticated provider access.
+- `VERIFIED 2026-07-16`: local image `genbox-v251-candidate:b411aa0` was built
+  from exact commit `b411aa0` in about 8m27s. Its truncated image ID is
+  `sha256:335d4437…e69746a`; size `656,575,011` bytes. The separate ffmpeg
+  diagnostic took about 9m45s. Isolated checks passed for
+  non-root execution, health/schema, `401`/`401`/`200` authentication,
+  persistence, logs without the key, and candidate resource cleanup. The image
+  remains local and was not pushed.
+- `VERIFIED 2026-07-16`: U1 official v2.4.1 upgrade fixture passed. Windows
+  safely rejected in-use EXE
+  replacement; replacement after shutdown preserved configuration, providers,
+  and marker hashes/mtimes, and v2.5.1 started normally.
 
-- `VERIFIED LIVE` On 2026-07-14, GitHub Release `v2.5.0` was published from tag commit `a675f8c`. Actions run `29308338415` passed source tests, Windows/macOS/Linux builds, packaged-client smoke tests, and Release creation. Docker runs `29308338400`, `29308333677`, and `29308293307` passed for tag, master, and dev.
-- `VERIFIED LIVE` All seven downloadable v2.5.0 payloads were downloaded again from GitHub and matched the published `SHA256SUMS.txt`. The Release contains Windows, macOS, Linux, Docker Compose, standalone executables, and the checksum file; the Docker archive contains only `.env.example`, `LICENSE`, `README.md`, and `docker-compose.yml`.
-- `VERIFIED IN CODE/TESTS` A clean Python 3.12.13 environment passes all 76 tests. The release process corrected a missing eager-annotation import, made updater assertions platform-independent, and initialized the Buildx container driver required by GitHub Actions cache export.
-- `VERIFIED IN CODE/TESTS` The v2.5.0 packaged-client updater selects exact standalone release assets, rejects archive payloads, and uses a detached post-exit replacement helper instead of overwriting the running executable.
-- `VERIFIED LIVE` On 2026-07-14, a running Windows `GenBox.exe` rejected direct write access with a sharing violation, confirming that v2.4.1 and earlier cannot reliably self-update to v2.5.0. Those Windows users require one manual client replacement; the limitation is prominent in both v2.5.0 release-note languages.
-- `VERIFIED IN CODE/TESTS` Legacy Docker Compose installations using local `build` configuration require manual migration to the v2.5.0 GHCR-backed Compose bundle. Pulling an image inside the old container does not migrate the host Compose definition.
-- `VERIFIED LIVE` On 2026-07-14, the published Windows v2.5.0 standalone executable is 28,792,940 bytes; both local and GitHub Actions packaged-client HTTP smoke tests passed.
-- `VERIFIED IN CODE/TESTS` `python -m pytest -q` passed all 76 tests; Python and JavaScript syntax checks and `git diff --check` also passed.
-- `VERIFIED IN CODE/UI` The public screenshot set now contains four current v2.5.0 views captured from an isolated empty-data client. Dashboard host-specific values are replaced by `scripts/sanitize_dashboard_screenshot.py` with labeled demo data; the Extension Center uses the RFC 5737 placeholder `192.0.2.10` and no screenshots contain credentials or user media.
+## v2.4.1 Baseline Finding
 
-- `VERIFIED IN CODE/TESTS` GenBox has an Extension page connected to the main navigation.
-- `VERIFIED IN CODE/TESTS` The catalog exposes chatgpt2api as deployable and keeps the other
-  listed gateways, account tools, and proxy tools non-deployable.
-- `VERIFIED IN CODE/TESTS` VPS target storage excludes SSH password, private key, and sudo
-  password values.
-- `VERIFIED IN CODE/TESTS` SSH host-key confirmation and read-only environment discovery are
-  implemented.
-- `VERIFIED IN CODE/TESTS` Discovery covers system resources, Docker/Compose/Python tooling,
-  listening ports, containers, and candidate chatgpt2api instances.
-- `VERIFIED IN CODE/TESTS` The standard Compose path has plan and remote execution code for an
-  isolated chatgpt2api instance.
-- `VERIFIED IN CODE/TESTS` Deployment delivery includes console URL, API URL, and a one-time
-  generated management key with copy controls in the web UI.
-- `VERIFIED IN CODE/TESTS` Network command adapters exist for Tailscale, NetBird, and
-  Cloudflare Tunnel. Windows local Tailscale preparation is implemented.
-- `VERIFIED IN CODE/TESTS` GenBox supports existing server-side Pull import from a compatible
-  chatgpt2api deployment.
-- `VERIFIED IN CODE/TESTS` GenBox implements `POST /api/sync/push` with per-source auth, image
-  validation, SHA-256, idempotency, local deduplication, and an import receipt.
-- `VERIFIED IN CODE/TESTS` On 2026-07-12, the pre-fix baseline collected 47 tests and all
-   47 passed on Windows with Python 3.14.3.
-- `VERIFIED IN CODE/TESTS` `extensions/orchestrator.py` elevates privileged remote commands
-   (clone copy of `/root` data, scrub, config copy, Compose up) with sudo whenever the
-   non-root user can elevate, independent of Docker-group access. This fixes the first
-   deploy failure where `cp -a /root/chatgpt2api/data` ran without sudo and reported
-   `澶嶅埗婧愬疄渚嬫暟鎹け璐.
-- `VERIFIED LIVE` On 2026-07-12, the local GenBox server was restarted from this
-  checkout after the orchestrator sudo fix. The listener changed from PID 57104 to
-  PID 58056 on `0.0.0.0:8891`, and `GET http://127.0.0.1:8891/` returned HTTP 200.
-- `VERIFIED LIVE` On 2026-07-12, the local GenBox server was restarted again after
-  the AsyncSSH sudo channel-race fix. The listener changed from PID 58056 to PID
-  19792 on `0.0.0.0:8891`, and `GET http://127.0.0.1:8891/` returned HTTP 200.
-- `VERIFIED IN CODE/TESTS` Deployment completion now opens the step-5 delivery panel
-  so console/API URLs and the one-time management key are visible; the full suite
-  passes with 50 tests.
-- `VERIFIED IN CODE/TESTS` A read-only "宸查儴缃叉湇鍔? list was added to the Extension
-  page. It loads `GET /api/extensions/instances` and shows each managed instance's
-  id, console/API URLs, port, and deploy time with open/copy actions. It shows no
-  secret fields; the management key is recovered via the existing reset flow.
-  Full suite passes with 52 tests.
-- `VERIFIED IN CODE/TESTS` The "宸查儴缃叉湇鍔? panel was redesigned as a light
-  glassmorphism Bento layout: instances grouped into API 浠ｇ悊涓庢ā鍨嬬綉鍏?/ 璐﹀彿绠＄悊 /
-  浠ｇ悊缃戠粶, each group collapsible with a chevron and count, 3-col responsive grid
-  (1 col mobile), and color-coded status tags (running=green, deployed=blue,
-  planned=amber, unavailable=gray). A per-card "閲嶇疆瀵嗛挜" button opens a credential
-  modal that re-verifies VPS ownership and calls the existing reset-admin-key
-  endpoint. Full suite passes with 53 tests.
-- `VERIFIED IN CODE/TESTS` The deployed-services trigger is now one enterprise-style
-  header control with a circuit/hexagon mark and the label "鏌ョ湅宸查儴缃叉湇鍔?; the old
-  floating grid button and duplicate inline action were removed. The right-side glass
-  drawer retains overlay/ESC close behavior and the 5-step wizard is unchanged. Its
-  async response handling was fixed so the persisted `chatgpt2api-dev` instance renders
-  with running status, port, console/API actions, and key reset; planned services render
-  as subordinate rows. Full suite passes with 53 tests.
-- `VERIFIED IN CODE/TESTS` The service trigger was moved from the title bar into the
-  collapsed service strip, replacing its duplicate text action. Only the explicit
-  logo/"鏌ョ湅宸查儴缃叉湇鍔? button opens the drawer; clicking the surrounding strip does
-  nothing. The desktop drawer is now up to 1180px wide with three parallel collapsible
-  columns: API 浠ｇ悊涓庢ā鍨嬬綉鍏? 璐﹀彿娉ㄥ唽涓?Token 绠＄悊, and 浠ｇ悊缃戠粶涓庤妭鐐瑰伐鍏? it
-  becomes one column below 900px. Full suite passes with 53 tests.
-- `VERIFIED IN CODE/TESTS` The desktop deployed-services drawer now spans 87vw so
-  its left edge sits near the requested 13%-from-left guide on wide screens. The
-  three category columns use equal `1fr` tracks with no fixed maximum width;
-  below 900px the drawer remains single-column. Full suite passes with 53 tests.
-- `VERIFIED IN CODE/TESTS` Managed extension instances now have an opt-in local
-  encrypted credential vault. PBKDF2-SHA256 derives a Fernet key from a user
-  password; only salt/KDF metadata, field metadata, and ciphertext are persisted
-  under `storage/`. The password and derived key are process-memory-only and the
-  vault has an explicit lock action. Authenticated APIs cover status, setup,
-  unlock, lock, metadata listing, explicit per-instance reveal, upsert, and
-  delete, with writes restricted to registered GenBox-managed instances.
-- `VERIFIED IN CODE/TESTS` Deployment delivery defaults to show-once and offers
-  explicit encrypted local save with a warning. The deployed-services drawer
-  shows saved/not-saved state and supports unlock, reveal, copy, edit, and local
-  deletion. Remote admin-key reset remains separate and its one-time result can
-  update the saved local copy. `node --check static/js/extensions.js` passed and
-  `python -m pytest -q` passed all 58 tests on 2026-07-12.
-- `VERIFIED LIVE` On 2026-07-12, local GenBox was restarted after the credential
-  vault implementation (PID 19792 -> 18436). `GET /api/extensions/vault/status`
-  returned HTTP 200 with an unconfigured, locked, zero-entry vault. Vault writes
-  explicitly apply owner-only `0600` permissions. No VPS operation was performed.
-- `VERIFIED IN CODE/TESTS` Fixed the missing card controls: every managed service
-  now shows `淇濆瓨鐧诲綍淇℃伅` when no local entry exists, or `鏌ョ湅鍑瘉` / edit / delete
-  through the unlocked vault when saved. The credential editor includes optional
-  VPS SSH password, private key, passphrase, sudo password, service username,
-  password, API key, management key, and note. User-selected VPS SSH credentials
-  are now explicitly permitted in the encrypted vault; enrollment tokens, Push
-  keys, and the GenBox administrator key remain prohibited. Full suite remains
-  58 tests passing.
-- `VERIFIED LIVE` On 2026-07-12, local GenBox was restarted again after the
-  credential-control fix (PID 18436 -> 29624). The vault status endpoint returned
-  HTTP 200 with the existing vault configured and locked. No VPS operation was
-  performed.
+U2 uses combined evidence. `USER-CONFIRMED 2026-07-16` a real Windows 10
+console showed readable GBK Chinese, visible raw ANSI escape sequences, the
+interactive prompt and choice `1`, and a browser opening. `VERIFIED 2026-07-16`
+v2.4.1 wrote `APP_MODE=dev` but did not reload it in the existing process; that
+process continued as production on `0.0.0.0:8891` and generated an
+administrator secret. The secret value is intentionally omitted from repository
+documentation. The exact process was stopped, all key-bearing temporary
+artifacts were deleted, and the ports were released.
 
-## User-Confirmed Requirements
+This is a confirmed old-version baseline defect. It is not a candidate
+regression: the independent v2.5.1 W2 acceptance proves immediate same-process
+dev mode, loopback binding, and no administrator key. ANSI behavior has not been
+separately accepted on v2.5.1, and the Windows evidence is limited to one
+Windows 10 machine.
 
-- `USER-CONFIRMED` Existing VPS chatgpt2api is a production source and must not
-  be used directly for feature development.
-- `USER-CONFIRMED` Development must occur on an isolated clone.
-- `USER-CONFIRMED` Completed code must be sanitized, pushed to the owner's
-  GitHub repository, and deployed fresh for a second verification.
-- `USER-CONFIRMED` Only after clean redeployment may the work be proposed to the
-  original author as PRs or an AI-oriented extension proposal.
-- `USER-CONFIRMED` The Phase 1 target identity is redacted from distributable
-  documentation; discovery used the user-confirmed SSH account and port.
-  Credentials remain session-only and are not documented here.
+## Release Preparation
 
-## Phase 1 Acceptance Evidence
+- `VERIFIED 2026-07-16`: prepared Chinese and English v2.5.1 release notes,
+  changelog entry, README links, and README Lab content. The notes accurately
+  retain the sender Push, network-adapter, and Windows-coverage limitations.
+- `VERIFIED 2026-07-16`: release-preparation working tree passed `111` tests,
+  four JavaScript syntax checks, README Lab generation, and `git diff --check`.
+  Pytest's default system temporary directory was inaccessible in this session;
+  the same suite passed with a disposable repository-local `--basetemp`, which
+  was removed after the run.
+- `VERIFIED 2026-07-16`: a high-confidence scan of tracked content found no
+  private-key block, OpenAI-style key, GitHub token, or AWS access-key match.
+  This is a screening result, not a substitute for final human review of the
+  release diff and generated artifacts.
+- `VERIFIED 2026-07-16`: GPL-3.0-only PR #7 merged to `master` as `ad802f6`.
+  The v2.5.1 branch was then rebased onto that GPL baseline so its source and
+  release packages carry the selected license.
 
-- `VERIFIED LIVE` On 2026-07-12, GenBox read-only discovery against the
-  user-confirmed redacted target reported Ubuntu 24.04,
-  Docker 29.6.0, Compose 5.2.0, Python 3.12.3, ~31 GB free disk, and one
-  running Compose chatgpt2api instance named `chatgpt2api-warp` with data dir
-  `/root/chatgpt2api/data` (`136 MB`). Source image baseline is the container
-  image ID tagged `genbox-chatgpt2api-source:<12-char-container-id>`.
-- `VERIFIED LIVE` On 2026-07-12, the user deployed an isolated development clone
-  (instance `chatgpt2api-dev`, port `33010`, working-copy scope). The clone is
-  running and healthy: the isolated clone version endpoint returned HTTP 200.
-  Its console and API URLs were verified but are redacted from distributable documentation.
-  Instance record persisted in `storage/extensions.json` with status `running`.
-- `VERIFIED LIVE` On 2026-07-12, production `chatgpt2api-warp` remains unchanged
-  (same container ID, up-time, health). Production non-mutation confirmed.
-- `VERIFIED IN CODE/TESTS` Clone configuration scrubbing removes inherited
-  management credentials and known GenBox Push destination, identity, and key
-  fields; the clone remains Push-disabled until Phase 4 provisions a separate
-  destination identity.
-- Phase 1 acceptance criteria met: discovery is read-only and host-key verified;
-  development clone starts and passes health checks on a non-production port;
-  source and clone data/configuration targets are demonstrably different;
-  production container identity, configuration, start time, and health remain
-  unchanged; clone failure left the production source operational.
+## Safety And Scope
 
-## In Progress
+- `VERIFIED 2026-07-16`: production-like chatgpt2api remained read-only and
+  unchanged.
+- `VERIFIED 2026-07-16`: no v2.5.1 tag or GitHub Release, VPS operation, or
+  sender Push operation occurred.
+- `VERIFIED 2026-07-16`: ports `8891` and `8892` are free; acceptance processes
+  and secret-bearing temporary directories were removed.
+- `VERIFIED 2026-07-16`: the repository `.env` remained unchanged. Do not
+  modify, stage, or commit the owner's `.planning/STATE.md` change.
 
-- `VERIFIED IN CODE/TESTS` The SPA now uses fixed-key bilingual strings for the
-  core navigation, dashboard, image generation, video generation, media library,
-  history, extension center, and major runtime status/error copy. Route-level
-  language selection now honors `?lang=en` / `?lang=zh-CN` before localStorage,
-  which made deterministic browser acceptance possible.
-- `VERIFIED LIVE` On 2026-07-13, `GET http://127.0.0.1:8892/` returned HTTP 200.
-- `VERIFIED LIVE` On 2026-07-13, browser acceptance using deterministic
-  `?lang=` routes confirmed the main routes in both languages:
-  `#/dashboard`, `#/generate`, `#/video`, `#/gallery`, `#/history`,
-  and `#/extensions`.
-- `VERIFIED LIVE` On 2026-07-13, browser interaction confirmed key modals in
-  both languages:
-  theme / appearance, system logs, Provider management, and remote sync. The
-  final cleanup in this loop moved gallery sort labels, theme/workspace preset
-  labels, and provider-modal runtime labels onto fixed translation keys so
-  English no longer showed mixed Chinese status text in those verified areas.
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, the old first-run quick-setup
-  modal was upgraded into a bilingual beginner onboarding page that keeps the
-  existing quick-key inputs but adds a recommended first-run path, direct
-  navigation actions, and explicit separation between core creation tasks and
-  later Extensions / remote-sync work.
-- `VERIFIED LIVE` On 2026-07-13, local browser automation against
-  `http://127.0.0.1:8892/?lang=en#/dashboard` and
-  `http://127.0.0.1:8892/?lang=zh-CN#/dashboard` forced the onboarding layer
-  open and confirmed the new page title, badges, action buttons, and guide copy
-  render in both languages.
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, the onboarding layer gained a
-  repeatable `新手引导 / Getting Started` entry in both the desktop sidebar and
-  bottom Dock. The entry is required in workspace personalization so it remains
-  reachable after first run.
-- `VERIFIED LIVE` On 2026-07-13,
-  `http://127.0.0.1:8892/static/onboarding-lab.html` returned HTTP 200. The lab
-  reads the production i18n table, switches Chinese/English and desktop/mobile
-  preview modes, and links to the live application without weakening GenBox's
-  `X-Frame-Options: DENY` / `frame-ancestors 'none'` protection. Browser checks
-  confirmed both languages, a 390px mobile viewport, and no horizontal or
-  button-text overflow.
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, the image prompt editor was aligned
-  with the video prompt design language: title and hint precede the textarea,
-  while the full-width primary action sits below it. Browser geometry confirmed
-  both image and video buttons are 917px wide in the same viewport and remain
-  below their textareas; generation handlers and element IDs are unchanged.
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, onboarding was redesigned as a
-  full-screen, single-surface workflow. It includes a synchronized language
-  selector, dynamically rendered Provider names from Model settings, a dedicated
-  chatgpt2api integration band, and a five-step post-dismissal tab tour. The old
-  badges, asymmetric path card, nested cards, and visible hard-coded endpoint
-  inputs were removed. Browser switching preserved the open guide across
-  `zh-CN -> en`, and completing it highlighted Dashboard as step 1/5.
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, Dashboard, image, and video headings
-  were consolidated onto one 18px title / 8px kicker / 8px gap system. The
-  final mark is a 34px transparent linear icon with no border,
-  radius, or card background, removing the visual separation between icon and
-  text. Browser measurements matched across all three pages. The full suite
-  remains 66 tests passing.
-- `VERIFIED IN CODE/TESTS` `node --check static/js/i18n.js`,
-  `node --check static/js/app-all.js`, and `python -m pytest -q` all passed on
-  2026-07-13 with 66 passing tests after the final bilingual cleanup.
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, the dashboard language selector
-  was fixed for URLs that already contain `?lang=`. `setLanguage()` now updates
-  the query parameter with `location.replace()` before reloading, so a stored
-  English choice is no longer overwritten by a stale `?lang=zh-CN` URL. Browser
-  verification switched `zh-CN -> en -> zh-CN` while preserving `#/dashboard`;
-  the URL, `<html lang>`, selected option, title, and subtitle matched each
-  language. The full suite remains 66 tests passing.
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, the Local IP visibility control
-  was repaired after its former eye glyph had degraded to `??`. It now uses a
-  code-defined eye / slashed-eye SVG with fixed translation keys for `显示 IP /
-  隐藏 IP` and `Show IP / Hide IP`. Browser interaction verified masking,
-  restoration, both icon states, and bilingual accessible labels. The full
-  suite remains 66 tests passing.
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, the Host resources card was fixed
-  after successful `/api/dashboard/resources` responses triggered a frontend
-  `ReferenceError`: uptime text used `upDays` and `upMins` before declaration.
-  Uptime calculation order, duplicated labels, and corrupted separators were
-  corrected. The endpoint returned HTTP 200 with CPU and uptime data, and
-  browser checks confirmed Chinese and English cards render CPU, memory, disk,
-  network I/O, uptime, and top processes without the failure state. The full
-  suite remains 66 tests passing.
-- Documentation source-of-truth migration from stale `.planning` milestone
-  files to the `docs/` documents referenced by `AGENTS.md`.
-- Working-tree changes for the extension and Push receiver initiative are not
-  yet represented as a clean release candidate.
-- Phase 2/3 network automation prep: Tailscale Serve port correction, VPS
-  reachability verification, and Push probe readiness.
-- `VERIFIED IN CODE` The network configuration page includes an optional mobile
-  onboarding QR code that opens Tailscale's official download page. It never
-  embeds an Auth Key; the phone joins by signing in with the same Tailscale account.
-- `VERIFIED IN CODE/TESTS` The network connection page separates first-time enrollment
-  from existing-network verification. Existing verification hides the enrollment token,
-  skips installation/enrollment, and checks peer reachability plus VPS-to-GenBox access.
-- `VERIFIED IN CODE/TESTS` Existing-network verification no longer sends input to the
-  read-only remote detection command, uses the connectivity-check stage for that command,
-  and applies a 30-second detection timeout. This fixes the AsyncSSH `Channel not open for sending` failure.
+## Closeout
 
-## Not Yet Complete
+Candidate acceptance is complete and release publishing is authorized. Next:
 
-- Durable deployment task recovery after process or browser restart.
-- Full retry behavior and failure rollback for extension deployment.
-- Correction of Tailscale Serve so its Tailnet-facing port proxies the actual
-  GenBox listener instead of assuming both ports are identical.
-- Application-level GenBox Push probes for every supported network adapter.
-- Resolution of duplicate catalog IDs for two `gemini2api` repositories.
-- chatgpt2api-side Push destination settings and shared sender service.
-- Per-generation Push option in chatgpt2api.
-- Gallery batch Push, date-range Push, scheduling, cursor, lease, and retry.
-- Verified source cleanup and reclaimed-space reporting.
-- Sanitized personal GitHub push and clean redeployment.
-- Upstream PR or final Vibe Coding proposal.
-- Live end-to-end testing across a real private network.
-- Browser interaction testing of the new local credential-vault controls; local
-  API, encryption-at-rest, wrong-password, CRUD, model, and wiring tests pass.
+1. Run final source and package checks on the GPL-rebased v2.5.1 branch.
+2. Force-push the rebased branch, wait for PR #6 CI, then merge it to `master`.
+3. Confirm the `master` image workflow, create and push the `v2.5.1` tag, wait
+   for desktop and tag-image workflows, then verify the GitHub Release assets.
 
-## Environment Matrix
-
-| Environment | Purpose | Mutability | Status | Last Verified |
-|---|---|---|---|---|
-| Existing VPS chatgpt2api | Production source | Read-only | `VERIFIED` unchanged | 2026-07-12 |
-| VPS development clone | Development and UAT | Mutable and isolated | `VERIFIED` running/healthy | 2026-07-12 |
-| Local GenBox checkout | Implementation and unit tests | Mutable | `VERIFIED` tests and bilingual browser acceptance pass | 2026-07-13 |
-| Personal GitHub clean deployment | Release verification | Recreate only | Not started | Never |
-| Upstream contribution | PR or proposal | Review only | Not started | Never |
-
-- `VERIFIED LIVE` On 2026-07-13, the Tailscale network workflow completed end to end: the local node reached the VPS, the VPS successfully accessed GenBox through the Tailscale Serve DNS URL, and the verified private URL was saved. The URL uses the node DNS name because Tailscale Serve host routing returns 404 when accessed by raw Tailscale IP.
-- `USER-CONFIRMED` On 2026-07-13, the project owner temporarily allowed VPS public ports 8892 and 8893 before the successful retry. These public openings are not part of the intended private-network architecture and should be removed after confirming they are unnecessary.
-
-## Runtime Facts
-
-- `VERIFIED IN CODE/TESTS` Current Git branch is `dev` as of 2026-07-12.
-- `VERIFIED IN CODE/TESTS` Application startup code listens on `0.0.0.0:8891`.
-- `VERIFIED IN CODE/TESTS` Port configuration is environment-based. Development uses Tailscale Serve `8893 -> 127.0.0.1:8892`; production delivery uses `8892 -> 127.0.0.1:8891`.
-- `VERIFIED IN CODE/TESTS` The current target record in `storage/extensions.json` contains a
-  VPS host, SSH port, and chatgpt2api port. These values are intentionally not
-  repeated here because a stored target is not evidence of a live service.
-- `VERIFIED LIVE` On 2026-07-12, the redacted development VPS was reachable; running
-  containers include `chatgpt2api-warp` (production, unchanged) and
-  `chatgpt2api-dev` (development clone, healthy on port `33010`).
-- `USER-CONFIRMED` On 2026-07-12, screenshots supplied by the project owner show
-  the `chatgpt2api-dev` console accessible on port `33010`, with the image
-  management page loaded and 55 images reported.
-- `USER-CONFIRMED` On 2026-07-12, the Extension discovery screenshot shows both
-  the managed development clone and `chatgpt2api-warp` running. The project owner
-  reports that the production container ID, start time, and health state did not
-  change during development-clone verification. This screenshot evidence is not
-  an independent command-level comparison of the production container metadata.
-- `VERIFIED LIVE` On 2026-07-12, read-only local commands found Tailscale
-  `1.98.8`, `BackendState=Running`, and the Windows node online. Account identity,
-  Tailnet DNS name, node keys, and overlay addresses are intentionally omitted.
-- `VERIFIED LIVE` On 2026-07-12, `tailscale serve status --json` returned an empty
-  configuration and local Tailscale status reported no peer device. The GenBox
-  Serve mapping and VPS enrollment therefore remain pending.
-
-## Known Documentation Debt
-
-- `.planning/PROJECT.md` and `.planning/ROADMAP.md` cover the earlier Pull-only
-  milestone and contain stale scope and environment examples.
-- `.planning/STATE.md` reports 8 tests; the verified current result is 41 tests.
-- `.planning/codebase/TESTING.md` predates the current `tests/` suite.
-- These files remain historical artifacts and must not override this document.
-
-- The per-card "閲嶇疆瀵嗛挜" reuses the wizard VPS form for host/port/user and the
-  host key (`target()`); if the page was refreshed after deployment, re-enter the
-  VPS connection info in step 1 first, then use reset. A cleaner per-instance stored
-  target is a future improvement.
-
-## Recently Changed Security Policy
-
-- `USER-CHOICE` Secret delivery is no longer hardcoded as show-once-only. The
-  default remains show-once with rotation-based recovery, but the user may opt in
-  to saving a managed instance secret locally for later viewing. Local save is
-  off by default, requires an explicit per-secret choice, and warns before
-  enabling. User-selected VPS SSH credentials may be saved in the encrypted
-  local vault; enrollment tokens, Push keys, and the GenBox administrator key are
-  never saved to browser storage. Recorded as ADR-010 and
-  reflected in `AGENTS.md` and `docs/extensions-deployment-contract.md`.
-
-## Priority 1 Verification
-
-- `VERIFIED IN CODE/TESTS` On 2026-07-12, `extensions/local_tailscale.py` separates the Tailnet-facing Serve port (`8892`) from the fixed GenBox upstream port (`8891`).
-- `VERIFIED IN CODE/TESTS` `python -m pytest -q tests/test_local_tailscale.py tests/test_network_adapters.py` completed with 8 passing tests.
-- `VERIFIED IN CODE/TESTS` `python -m pytest -q --basetemp=.planning/tmp/pytest-tailscale-port-fix` completed with 61 passing tests. The default pytest temp location was inaccessible in the managed sandbox, so the successful run used a repository-local writable base temp.
-- `UNVERIFIED` The corrected Serve configuration has not yet been applied to or probed across a live Tailnet.
-- `VERIFIED LIVE` Local Tailscale installation and login are complete; the next
-  network action is to enable the corrected local Serve mapping, then enroll the
-  isolated VPS development target into the same Tailnet through the fixed
-  server-side SSH command plan.
-
-## Network Wizard Development Update
-
-- `VERIFIED IN CODE/TESTS` Development defaults now run GenBox at
-  `http://localhost:8892` and reserve Tailscale Serve port `8893`. Production
-  delivery can set `GENBOX_PORT=8891` and `TAILSCALE_SERVE_PORT=8892`.
-- `VERIFIED IN CODE/TESTS` The network wizard now shows separate GenBox-local and
-  remote-VPS endpoint panels. The VPS panel currently enables the fully automatic
-  install-and-connect path; existing-install and manual paths are visibly deferred.
-- `VERIFIED IN CODE/TESTS` Network tasks now expose eight plain-language stages
-  from local detection through saved destination URL. Successful Tailscale checks
-  persist only provider, available-network list, destination URL, and verification
-  time. Enrollment tokens are not persisted.
-- `VERIFIED LIVE` On 2026-07-12, the development server listened on port `8892`.
-  Browser inspection confirmed the network step displayed GenBox `8892`, planned
-  private entry `8893`, and separate local/VPS panels without missing controls.
-- `VERIFIED IN CODE/TESTS` Python compilation, JavaScript syntax checking, and the
-  complete pytest suite passed with 61 tests.
-
-- `VERIFIED LIVE` The Tailscale wizard now includes a direct link to the official
-  Keys page, three plain-language key-generation steps, and an Auth Key field
-  explicitly labeled to accept `tskey-auth-...`. Browser inspection confirmed
-  both the step-3 guide and step-4 paste prompt render correctly.
-
-
-- `VERIFIED IN CODE/TESTS/UI` The extension page now uses the "Extension Feature Service Management Console" header, supports mouse and keyboard navigation across steps 1-5, shows a completion banner only after successful link verification, provides a Tailscale admin-console shortcut, and persists non-secret multi-VPS deployment batch target IDs on the GenBox backend. Multi-VPS execution remains sequentially gated by per-target SSH verification and deployment planning.
-
-## Navigation Icon And Theme UI Update
-
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, the formal sidebar and bottom Dock
-  replaced their remaining Emoji/text symbols with a unified monoline SVG icon
-  language, including image generation, model settings, extensions, themes,
-  logs, and refresh actions.
-- `VERIFIED IN CODE/TESTS/UI` The theme dialog now fits within the browser
-  viewport, keeps its footer visible, scrolls only its content area, and shows
-  all 10 presets in two desktop columns or one mobile column without horizontal
-  clipping.
-- `VERIFIED IN CODE/TESTS/UI` Preview scheme C now renders the selected horizontal
-  GenBox cube wordmark in blue on a translucent glass surface with cyan/purple
-  flowing-light treatment; the icon and wordmark no longer disappear against a
-  white background.
-- `VERIFIED IN CODE/TESTS` `python -m pytest -q --basetemp=.planning/tmp/icons-theme-modal-20260713`
-  completed with 65 passing tests.
-
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, theme switching now derives the full page gradient, glass surfaces, elevated cards, inputs, borders, overlays, shadows, sidebar, and Dock from each preset. Browser checks confirmed the dashboard, generation, gallery, and extension pages contain no white primary surfaces under the Deep Space theme, while Apple Mono still renders as a coordinated light theme.
-- `VERIFIED IN CODE/TESTS` `python -m pytest -q --basetemp=.planning/tmp/theme-system-v10` completed with 65 passing tests.
-- `VERIFIED IN CODE/TESTS/UI` Deep-theme Dock styling now applies to every navigation preset, not only Soft Glass. Circular icon plates, borders, and per-icon shadows are removed; Dock and sidebar share the same 1.65px monoline SVG treatment, with selection shown by text color and a small accent dot.
-- `VERIFIED IN CODE/TESTS` `python -m pytest -q --basetemp=.planning/tmp/dark-dock-v11` completed with 65 passing tests.
-
-## Fixed-Key Bilingual Refactor
-
-- `VERIFIED IN CODE/TESTS` On 2026-07-13, the UI language system was refactored from Chinese-text scanning plus DOM replacement to a fixed-key translation table in `static/js/i18n.js`. The previous `TreeWalker` and `MutationObserver` text-swap path was removed from `static/js/app-all.js`.
-- `VERIFIED IN CODE/TESTS` `static/index.html` now loads the dedicated i18n module and uses explicit `data-i18n`, `data-i18n-title`, `data-i18n-placeholder`, and `data-i18n-aria-label` markers for static UI content instead of relying on runtime text detection.
-- `VERIFIED IN CODE/TESTS` The extension center and remote sync scripts now render user-facing dynamic text through fixed translation keys. Runtime task-step labels map from backend `step.id` values to frontend translation keys rather than reusing raw Chinese labels.
-- `VERIFIED IN CODE/TESTS` The main app script was repaired after an interrupted bulk replacement pass. JavaScript syntax checks now pass for `static/js/i18n.js`, `static/js/app-all.js`, `static/js/extensions.js`, and `static/js/sync.js`.
-- `VERIFIED IN CODE/TESTS` `python -m pytest -q tests/test_extensions.py tests/test_credential_vault.py` completed with 28 passing tests, including coverage that the dedicated i18n module is loaded and page-level i18n markers exist.
-- `VERIFIED IN CODE/TESTS` `python -m pytest -q` completed with 66 passing tests.
-- `VERIFIED IN CODE/TESTS` On 2026-07-13, `static/js/app-all.js` migrated the remaining visible quick-prompt categories, video-provider card headings, workbench copy, provider-editor text, and history/dashboard runtime labels onto fixed i18n keys. `node --check static/js/app-all.js` and `node --check static/js/i18n.js` both pass after the changes.
-- `VERIFIED IN CODE/TESTS` On 2026-07-13, the translation table was further repaired for Chinese-side corrupted values in update status text, proxy/provider dialogs, gallery actions, creator rail/task-monitor copy, and dashboard network/IP labels. The full local suite still passes with 66 tests.
-- `VERIFIED UI` On 2026-07-13, in-app browser sweeps on `http://127.0.0.1:8892/` showed the English primary routes are substantially translated: Dashboard, image creation, video creation, Media Library, History, and Extensions all render their fixed-key headings and primary controls in English. User prompts, provider/model names, and remote-instance names remain intentionally untranslated.
-- `VERIFIED LIVE` On 2026-07-13, deterministic `?lang=en` / `?lang=zh-CN` route sweeps and follow-up modal checks completed the Chinese and English runtime proof for the existing pages. That acceptance gate is no longer blocking onboarding work.
-- `VERIFIED IN CODE/TESTS/UI` The theme catalog was curated to 10 restrained presets. Apple Mono, Deep Space Console, Graphite Workbench, and Cloud Whiteboard remain; six new presets add Gilded Night, Champagne Gold, Mist Gray, Titanium Console, Classic Book Yellow, and Ink Wash Paper. Removed preset IDs now fall back to Apple Mono instead of leaving stale mixed colors.
-- `VERIFIED UI` Browser switching confirmed all 10 presets render with the correct light/dark classification. Primary text contrast ranges from 10.38:1 to 17.74:1 and secondary text contrast from 4.97:1 to 8.04:1 against their card surfaces.
-- `VERIFIED IN CODE/TESTS` `python -m pytest -q --basetemp=.planning/tmp/curated-themes-v12` completed with 65 passing tests.
-## Creator Workbench And Continuous Record Update
-
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, image and video creation now provide separate multi-model comparison and single-model workbench modes. The single-model image workbench uses a larger prompt area, one selected provider, and a single-screen layout without page scrolling.
-- `VERIFIED IN CODE/TESTS/UI` Video provider loading no longer fails when the provider-selection list initializes after the UI. Browser verification loaded the configured `Agnes` and `ark` video providers and left the video generate button available.
-- `VERIFIED IN CODE/TESTS/UI` The former continuous-generation control is now presented as `每次独立生成` by default and `保留最近创作记录` when enabled. It does not automatically repeat generation and does not resend historical prompts or images to providers.
-- `VERIFIED IN CODE/TESTS` Continuous records are bounded in memory to the latest 3 prompts and 12 image paths. This prevents unbounded session metadata growth while preserving lightweight grouping.
-- `VERIFIED RESEARCH/CODE` Longer model context can add latency only when older tokens or media are actually included in a new provider request. Current GenBox provider payloads send only the current prompt and current reference image, so truncating the local continuous record does not change provider inference speed.
-- `VERIFIED IN CODE/TESTS` Tailscale development routing remains separate from public exposure: GenBox defaults to application port `8892`, and the private Serve entry defaults to `8893 -> 127.0.0.1:8892`.
-- `VERIFIED IN CODE/TESTS` `node --check static/js/app-all.js` and `python -m py_compile main.py` completed successfully.
-- `VERIFIED IN CODE/TESTS` `python -m pytest -q tests/test_local_tailscale.py tests/test_network_adapters.py --basetemp=.planning/tmp/pytest-creator-v18-network` completed with 11 passing tests.
-- `VERIFIED IN CODE/TESTS` `python -m pytest -q --basetemp=.planning/tmp/pytest-creator-v18-full` completed with 65 passing tests.
-## Creator Layout And Task Monitor Update
-
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, the image workbench was reorganized into three clear zones: a central real-time preview, a collapsible right-side creation tool rail, and a collapsible bottom task monitor.
-- `VERIFIED IN CODE/TESTS/UI` Low-frequency controls now live in the right tool rail: text/image/variation modes, beginner/pro prompt mode, prompt enhancement, independent/recorded generation, local upscale, and quick prompts. Existing control IDs and click handlers were preserved.
-- `VERIFIED IN CODE/TESTS/UI` The prompt editor keeps the primary `生成图片` action beside it. Browser measurement at 1280x720 confirmed preview, task bar, prompt editor, and generation button are simultaneously visible with no page scrolling.
-- `VERIFIED IN CODE/TESTS/UI` The task monitor reuses the existing overall progress, per-provider task status, and real-time log elements. It stays as a compact status strip while idle and expands automatically when image generation or variation starts.
-- `VERIFIED IN CODE/TESTS/UI` Multi-model task status uses responsive auto-fit columns; single-model mode forces one concentrated status and log column. The right tool rail can collapse from 250-330px to 48px so the preview gains the released width.
-- `VERIFIED UI` At a 943x920 viewport, the expanded tool rail measured 250px, the preview retained about 591px, and the page had no horizontal overflow. In collapsed mode, the preview expanded to about 793px.
-- `VERIFIED IN CODE/TESTS` `node --check static/js/app-all.js`, `python -m py_compile main.py`, and `python -m pytest -q --basetemp=.planning/tmp/pytest-creator-layout-v20` completed successfully; the full suite passed with 65 tests.
-## Creator Primary Action Merge
-
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, the separate prompt-action card was removed. The primary generation action now sits directly at the top of the active editor card.
-- `VERIFIED IN CODE/TESTS/UI` In text-to-image mode the integrated header reads `提示词 PROMPT`; in image-to-image and variation modes the same action bar moves to the active card and updates its title, hint, and button label.
-- `VERIFIED UI` Browser checks confirmed the old standalone `.creator-primary-action` card count is zero, the action bar is the first child of the active editor panel, and all three image modes retain a visible working generation button.
-- `VERIFIED IN CODE/TESTS` `node --check static/js/app-all.js`, `python -m py_compile main.py`, and `python -m pytest -q --basetemp=.planning/tmp/pytest-creator-action-v21` completed successfully; the full suite passed with 65 tests.
-## Global Dock Auto-Hide Update
-
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, the bottom Dock now auto-hides on every primary page: Dashboard, image creation, video creation, Media Library, History, and Extensions.
-- `VERIFIED IN CODE/TESTS/UI` Hidden mode leaves a 15px bottom reveal handle and a 24px pointer-sensitive edge. Hovering near the bottom reveals the Dock; clicking the handle pins it open, and clicking again returns it to auto-hide.
-- `VERIFIED IN CODE/TESTS/UI` The Dock remains accessible by keyboard focus. Switching pages clears a temporary pin and returns the new page to automatic hiding.
-- `VERIFIED UI` Browser checks across all six routes confirmed hidden mode uses opacity zero and disabled pointer interaction. Hovering the reveal handle restored pointer interaction; clicking it pinned the Dock with `aria-expanded=true`.
-- `VERIFIED IN CODE/TESTS` `node --check static/js/app-all.js`, `python -m py_compile main.py`, and `python -m pytest -q --basetemp=.planning/tmp/pytest-global-dock-v26` completed successfully; the full suite passed with 65 tests.
-## Navigation Routing, Language, And Icon Update
-
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, primary pages now expose stable hash
-  routes. Image and video routes also retain the active creation type and
-  single/multi-model mode, for example `#/generate/i2i/single`.
-- `VERIFIED UI` Direct navigation, refresh, browser Back, and browser Forward
-  restored the matching page and workbench state without route-update loops.
-- `VERIFIED IN CODE/TESTS/UI` The dashboard now provides a persistent global
-  Simplified Chinese / English selector. English translation covers primary
-  navigation, dashboard controls, workbench controls, and common dynamic labels;
-  prompts, credentials, provider/model names, and raw logs are excluded.
-- `VERIFIED UI` The collapsed creator-tool rail now renders a 48px-wide,
-  full-height accent handle with icon, vertical label, arrow, and a short
-  attention pulse. Browser checks confirmed it remains visible and clickable.
-- `VERIFIED UI` Dashboard, sidebar, and Dock now use the same stacked-image SVG
-  for Media Library. DOM comparison confirmed all three SVG definitions match.
-- `VERIFIED UI` At `1280x720` and `943x920`, the image workbench had no page or
-  horizontal overflow. The prompt action remained visible and the hidden Dock
-  retained disabled pointer interaction.
-- `VERIFIED IN CODE/TESTS` `node --check static/js/app-all.js`,
-  `python -m py_compile main.py`, and
-  `python -m pytest -q --basetemp=.planning/tmp/pytest-i18n-routing-v24`
-  completed successfully; the full suite passed with 65 tests.
-
-## Enterprise Page Heading Update
-
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-13, Dashboard, image creation,
-  video creation, Media Library, and History now share one compact enterprise
-  heading system: theme-colored monoline mark, product-area label, primary
-  title, and supporting description. Emoji were removed from these headings.
-- `VERIFIED UI` Apple Mono and Deep Space themes both derive heading surfaces,
-  icon color, border, and accent treatment from the active theme variables.
-- `VERIFIED UI` At `943x920`, all five routes rendered without page or
-  horizontal overflow. At `1280x720`, the single-model image heading remained
-  about 66px high and the prompt editor stayed fully visible.
-- `VERIFIED IN CODE/TESTS` `node --check static/js/app-all.js`,
-  `python -m py_compile main.py`, and
-  `python -m pytest -q --basetemp=.planning/tmp/pytest-enterprise-headings-v25`
-  completed successfully; the full suite passed with 65 tests.
-
-## Shared Heading And Onboarding Refinement
-
-- `USER-CONFIRMED` On 2026-07-14, the owner-approved refinement plan was
-  recorded in `docs/ONBOARDING-UI-CONTRACT.md`.
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-14, Dashboard, Images, Video, Media
-  Library, History, and Extensions now use one shared three-line heading rhythm
-  for kicker, title, and supporting description, with aligned spacing and no
-  separate decorative icon card.
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-14, onboarding replaced the Provider
-  name strip with a six-card capability overview that summarizes image creation,
-  planned local inpainting, video creation, media organization, prompt
-  assistance, and no-code extension management without exposing Provider names,
-  endpoints, or keys.
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-14, onboarding now reuses the live
-  GenBox sidebar logo SVG and removes the temporary `GX` monogram from the
-  guide surface.
-- `VERIFIED RESEARCH/CODE/TESTS/UI` On 2026-07-14, onboarding now follows four
-  explicit stages: three-minute first creation, GenBox capability overview,
-  chatgpt2api introduction, and a plain-language explanation of why the two
-  products connect. The chatgpt2api introduction is distilled from the public
-  `yukkcat/chatgpt2api` README and covers its OpenAI-compatible gateway,
-  conversation/image workspace, account/proxy diagnostics, and self-hosted
-  storage, with a visible third-party reverse-engineering risk note.
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-14, the GenBox connection section uses
-  the beginner-facing model of a remote creation station plus a local media
-  library, while still separating currently available deployment/private
-  networking/Pull/receiver foundations from planned sender Push, batch and
-  scheduled transfer, verified cleanup, and release-gate work.
-- `VERIFIED IN CODE/TESTS/UI` On 2026-07-14, `static/onboarding-lab.html` was
-  updated to mirror the live capability-matrix and integration-overview design.
-- `VERIFIED IN CODE/TESTS` On 2026-07-14, `node --check static/js/i18n.js`,
-  `node --check static/js/app-all.js`, and `python -m pytest -q` all passed;
-  the suite remains 66 passing tests.
-- `VERIFIED LIVE` On 2026-07-14, local browser acceptance against
-  `http://127.0.0.1:8892/` passed in both `zh-CN` and `en` at `1280x720`,
-  `1033x1074`, and `390x844`, covering the six primary routes, onboarding, and
-  `static/onboarding-lab.html`, with no horizontal overflow and no regression
-  to Provider-name onboarding content.
-
-## README Restoration And Laboratory
-
-- `VERIFIED IN CODE/UI` On 2026-07-14, the Chinese and English README files
-  regained their structured navigation, first-run guidance, troubleshooting,
-  capability/configuration sections, technology and repository overview,
-  acknowledged projects and authors, upstream contributor wall, community
-  links, and Star History while retaining the v2.5.0 release scope and explicit
-  sender-Push limitations.
-- `VERIFIED IN CODE/TESTS` `scripts/build_readme_lab.py` now builds deterministic
-  source-hashed Chinese and English preview data and copies sanitized product
-  screenshots plus public cached contributor and Star History assets into
-  `static/readme-assets/`. Tests fail when README source and preview data diverge
-  or the restored visual assets disappear.
-- `VERIFIED LIVE` `http://127.0.0.1:8892/static/readme-lab.html` passed Chinese
-  and English rendering, desktop/narrow controls, light/dark themes, table and
-  image rendering, and horizontal-overflow checks. The Chinese title was
-  shortened to avoid an orphaned final character at narrow widths.
-- `VERIFIED IN CODE/TESTS` `python -m pytest -q` completed with 77 passing tests;
-  `python -m py_compile scripts/build_readme_lab.py` and `git diff --check` pass.
-- `VERIFIED PUBLIC` The restored README foundation was committed and pushed as
-  part of the documentation publication completed on 2026-07-14.
-
-## Audience-Focused README And Release Information Architecture
-
-- `VERIFIED RESEARCH` On 2026-07-14, README and latest-Release structure was
-  compared across ComfyUI, AUTOMATIC1111 Stable Diffusion WebUI, Fooocus,
-  InvokeAI, Open WebUI, and n8n. The consistent high-value pattern is a short
-  product promise, visible product imagery, a small capability set, and the
-  shortest installation path before long feature or operator detail. Mature
-  Release notes prioritize artifact choice, startup/upgrade action, user-visible
-  additions, fixes, and known limits before generated changelogs or proof.
-- `VERIFIED IN CODE/UI` Chinese and English README files now lead with GenBox's
-  origin as a multi-model image comparison tool, explain the current local-first
-  media workspace in beginner language, present four screenshots as a labeled
-  two-by-two product board, and place platform downloads plus
-  `http://localhost:8891` before technical configuration.
-- `VERIFIED IN CODE/UI` Docker/source setup, chatgpt2api sender boundaries, and
-  upstream contributor imagery are collapsed by default. A new bilingual
-  `docs/README.md` routes users, operators, integration developers, contributors,
-  and maintainers to the correct stable or rolling document.
-- `VERIFIED IN CODE/UI` Four English screenshots were captured from an isolated
-  empty client. The English Dashboard sanitizer replaces host, network, disk,
-  and public-IP values with explicit demo data; Extension Center uses the RFC
-  5737 address `192.0.2.10` and a fictional account name.
-- `VERIFIED IN CODE` The Chinese and English v2.5.0 notes now put platform
-  download selection, startup steps, and the legacy Windows upgrade warning at
-  the top; additions, fixes, deployment, limitations, checksums, and developer
-  references follow in user-priority order with advanced evidence collapsed.
-- `VERIFIED IN TESTS/UI` The README lab passes Chinese/English, desktop/narrow,
-  image-language separation, local cached image loading, zero open details by
-  default, and horizontal-overflow checks. `python -m pytest -q` passes 78 tests;
-  local link, text safety, Python compilation, and `git diff --check` pass.
-- `VERIFIED IN CODE/TESTS/UI` The documentation laboratory now also previews
-  the source-hashed Chinese and English v2.5.0 Release Notes through the
-  `README / Release v2.5.0` selector and shareable `?document=release` URL.
-- `VERIFIED PUBLIC` The owner-approved rewrite was merged to `master` at
-  `029dd62` and pushed on 2026-07-14. GitHub's README blob matches the local
-  `README.md` blob exactly. The public v2.5.0 Release body now uses the reordered
-  Chinese notes with absolute public screenshot and documentation links while
-  retaining all eight published assets.
-- `VERIFIED CI` Master-branch Docker workflow run `29320721741` completed
-  successfully for `029dd62`.
-- `VERIFIED PUBLIC/FIXED` GitHub rendering showed the third-party live Star
-  History endpoint as a broken image while all other README and Release images
-  loaded. README now uses the reviewed repository snapshot and keeps the chart
-  linked to the live Star History page.
-
-## Next Tasks
-
-1. Review and commit the GPL-3.0-only migration as a standalone change, excluding
-   the owner's `.planning/STATE.md` change.
-2. Open a separate GPL migration PR. Do not merge it with, or into, the v2.5.1
-   security-release PR without an explicit release decision.
-3. Before any public GPL release, recheck the provenance and license terms of
-   copied code, bundled assets, or third-party service artifacts added after this
-   audit.
-
-## Resume Instructions
-
-Resume the GPL-3.0-only migration from `AGENTS.md`, `HANDOFF.md`, and this file.
-Review the standalone license diff, leave `.planning/STATE.md` untouched, and
-open a separate PR after the local checks pass. Do not merge, tag, publish a
-Release, push an image, or change production chatgpt2api while completing this
-license task.
+Do not operate on a VPS or begin chatgpt2api sender Push work as part of this
+release closeout.

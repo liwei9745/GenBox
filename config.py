@@ -12,6 +12,13 @@ from pydantic import BaseModel
 
 from dotenv import load_dotenv
 
+# Capture trusted process injection before any dotenv file can mutate os.environ.
+# Runtime reloads may override other values, but an orchestrator-provided
+# container port must remain authoritative over a host-facing .env value.
+PROCESS_ENV_GENBOX_PORT = (
+    os.environ["GENBOX_PORT"] if "GENBOX_PORT" in os.environ else None
+)
+
 # ──────────────────────────────────────────────────────────────
 # PyInstaller 路径兼容
 # ──────────────────────────────────────────────────────────────
@@ -577,7 +584,7 @@ def _hash_admin_key(key: str) -> str:
 
 def get_admin_key() -> str:
     """获取当前 ADMIN_KEY（从 .env）"""
-    return os.getenv("ADMIN_KEY", "")
+    return os.getenv("ADMIN_KEY", "").strip()
 
 def get_admin_key_hash() -> str:
     """获取当前 ADMIN_KEY 的哈希值"""
@@ -588,7 +595,7 @@ def get_admin_key_hash() -> str:
 
 def is_prod_mode() -> bool:
     """是否生产模式（启用认证）"""
-    return os.getenv("APP_MODE", "prod") == "prod"
+    return os.getenv("APP_MODE", "prod").strip().lower() != "dev"
 
 def verify_admin_key(key: str) -> bool:
     """校验管理密钥（使用哈希比对）"""
