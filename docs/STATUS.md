@@ -3,6 +3,7 @@
 **Last updated:** 2026-07-16
 **Current branch:** `codex/v251-security-hotfix`
 **Candidate commit:** `b411aa0`
+**Release-preparation status:** local gate passed; external release not started.
 **Current phase:** v2.5.1 local candidate acceptance — **PASSED**
 
 ## Candidate Identity
@@ -55,6 +56,23 @@ dev mode, loopback binding, and no administrator key. ANSI behavior has not been
 separately accepted on v2.5.1, and the Windows evidence is limited to one
 Windows 10 machine.
 
+## Release Preparation
+
+- `VERIFIED 2026-07-16`: prepared Chinese and English v2.5.1 release notes,
+  changelog entry, README links, and README Lab content. The notes accurately
+  retain the sender Push, network-adapter, and Windows-coverage limitations.
+- `VERIFIED 2026-07-16`: release-preparation working tree passed `111` tests,
+  four JavaScript syntax checks, README Lab generation, and `git diff --check`.
+  Pytest's default system temporary directory was inaccessible in this session;
+  the same suite passed with a disposable repository-local `--basetemp`, which
+  was removed after the run.
+- `VERIFIED 2026-07-16`: a high-confidence scan of tracked content found no
+  private-key block, OpenAI-style key, GitHub token, or AWS access-key match.
+  This is a screening result, not a substitute for final human review of the
+  release diff and generated artifacts.
+- `VERIFIED 2026-07-16`: no GitHub Ruleset, PR merge, tag, Release, image push,
+  VPS, or sender Push operation occurred during release preparation.
+
 ## Safety And Scope
 
 - `VERIFIED 2026-07-16`: production-like chatgpt2api remained read-only and
@@ -68,11 +86,14 @@ Windows 10 machine.
 
 ## Closeout
 
-Candidate acceptance is complete, but Release completion is not claimed. Next:
+Candidate acceptance and local release preparation are complete, but Release
+completion is not claimed. Next:
 
-1. Independently review these acceptance statements.
-2. Run final Git inventory and secret/personal-data checks.
-3. Commit only `HANDOFF.md` and `docs/STATUS.md` if review passes.
+1. Review the release-preparation diff, including the new versioned notes and
+   generated README Lab content; exclude `.planning/STATE.md`.
+2. Commit the reviewed v2.5.1 release-preparation files and open or update a PR.
+3. Wait for explicit authorization before merging. A merge to `master` and a
+   `v2.5.1` tag have workflow side effects, including GHCR image publication.
 
-Do not change the Ruleset, publish a Release, push the local image, operate on a
-VPS, or begin chatgpt2api sender Push work as part of this closeout.
+Do not change the Ruleset, merge a PR, tag, publish a Release, push an image,
+operate on a VPS, or begin chatgpt2api sender Push work as part of this closeout.

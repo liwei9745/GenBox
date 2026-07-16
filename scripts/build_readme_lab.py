@@ -59,8 +59,8 @@ def main() -> None:
     documents = {
         "readme": {"zh": ROOT / "README.md", "en": ROOT / "README_EN.md"},
         "release": {
-            "zh": ROOT / "release-notes-v2.5.0-zh.md",
-            "en": ROOT / "release-notes-v2.5.0.md",
+            "zh": ROOT / "release-notes-v2.5.1-zh.md",
+            "en": ROOT / "release-notes-v2.5.1.md",
         },
     }
     payload = {}

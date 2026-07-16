@@ -14,6 +14,22 @@ All notable GenBox changes are recorded here. The format follows
 - Durable extension deployment-task recovery after process restart.
 - Clean GitHub redeployment acceptance and upstream delivery gates.
 
+## [2.5.1] - 2026-07-16
+
+### Security
+
+- Removed unauthenticated HTTP first-run setup actions and made production
+  startup fail closed when `ADMIN_KEY` is missing.
+- Made setup-status handling and login recovery fail closed in the browser;
+  stale asynchronous authentication responses cannot replace newer state.
+
+### Fixed
+
+- Applied local desktop first-run mode in the current process, with loopback
+  binding and no generated administrator key.
+- Pinned the Docker Compose default image to `ghcr.io/liwei9745/genbox:2.5.1`
+  instead of a moving `latest` tag.
+
 ## [2.5.0] - 2026-07-14
 
 ### Added

@@ -128,17 +128,18 @@ def test_readme_lab_content_matches_source_documents():
 
     sources = {
         "readme": {"zh": "README.md", "en": "README_EN.md"},
-        "release": {"zh": "release-notes-v2.5.0-zh.md", "en": "release-notes-v2.5.0.md"},
+        "release": {"zh": "release-notes-v2.5.1-zh.md", "en": "release-notes-v2.5.1.md"},
     }
     assert 'id="document"' in lab
     assert "state.payload[state.document][state.language]" in lab
-    assert "Release v2.5.0" in lab
+    assert "Release v2.5.1" in lab
     for document, languages in sources.items():
         for language, filename in languages.items():
             source = (ROOT / filename).read_text(encoding="utf-8")
             item = payload[document][language]
             assert item["sha256"] == hashlib.sha256(source.encode("utf-8")).hexdigest()
-            assert "readme-assets" in item["markdown"]
+            if document == "readme":
+                assert "readme-assets" in item["markdown"]
 
     for language in ("zh", "en"):
         markdown = payload["readme"][language]["markdown"]

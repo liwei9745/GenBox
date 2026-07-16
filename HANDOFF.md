@@ -3,6 +3,7 @@
 **Updated:** 2026-07-16
 **Branch:** `codex/v251-security-hotfix`
 **Candidate commit:** `b411aa0`
+**Release-preparation status:** local gate passed; external release not started.
 **Development port:** `8892`
 **Current phase:** v2.5.1 local candidate acceptance — **PASSED**
 
@@ -67,6 +68,22 @@ was performed.
 ANSI rendering was not separately re-tested on v2.5.1. Windows evidence is from
 one Windows 10 machine, which remains a platform-coverage limitation.
 
+## Release Preparation Evidence
+
+- `VERIFIED 2026-07-16`: Chinese and English v2.5.1 release notes, changelog,
+  README links, and README Lab content were prepared. They describe only the
+  verified startup-authentication, browser fail-closed, and version-pinned
+  Docker Compose changes, and retain known limitations.
+- `VERIFIED 2026-07-16`: the release-preparation working tree passed `111`
+  tests, four JavaScript syntax checks, README Lab generation, and
+  `git diff --check`. The normal system pytest temporary directory was denied
+  by the environment; the full suite passed with a disposable repository-local
+  temporary directory, removed after verification.
+- `VERIFIED 2026-07-16`: a high-confidence tracked-content scan found no
+  private-key block, OpenAI-style key, GitHub token, or AWS access-key match.
+- `VERIFIED 2026-07-16`: no Ruleset, PR merge, tag, Release, image push, VPS,
+  or sender Push operation occurred.
+
 ## Safety State
 
 - `VERIFIED 2026-07-16`: production-like chatgpt2api remained read-only and
@@ -81,10 +98,12 @@ one Windows 10 machine, which remains a platform-coverage limitation.
 
 ## Next Action
 
-1. Independently review `HANDOFF.md` and `docs/STATUS.md` against the recorded
-   evidence.
-2. Run a final Git inventory and secret/personal-data check.
-3. Commit only these two documentation files if review passes.
+1. Review the release-preparation diff, especially the new release notes and
+   generated README Lab content. Exclude the owner's `.planning/STATE.md`.
+2. Commit the reviewed v2.5.1 release-preparation files and open or update a PR.
+3. Do not merge until explicitly authorized. Merging to `master` and pushing a
+   `v2.5.1` tag trigger workflows with image-publication and Release side effects.
 
-Do not change the GitHub Ruleset, publish a Release, push the retained image,
-operate on a VPS, or enter chatgpt2api sender Push work during this closeout.
+Do not change the GitHub Ruleset, merge a PR, tag, publish a Release, push an
+image, operate on a VPS, or enter chatgpt2api sender Push work during this
+closeout.

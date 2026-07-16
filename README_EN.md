@@ -20,7 +20,7 @@ The project began as a multi-model image comparison workspace and grew with real
 GenBox is built for visual AI enthusiasts, model evaluators, self-hosting hobbyists, and anyone who wants one interface for OpenAI-compatible services, Gemini, Qwen, Agnes, and other configurable model endpoints.
 
 > [!IMPORTANT]
-> **v2.5.0 is a major experience update.** It introduces the Extension Center, bilingual UI, four-stage onboarding, unified workspaces, an encrypted credential vault, and a release pipeline that starts every packaged client before publishing. [Read the release notes](release-notes-v2.5.0.md)
+> **v2.5.1 is a focused security and reliability update.** It hardens startup authentication, makes browser sign-in fail closed when status is unclear, and pins the Docker Compose image to the release version. [Read the release notes](release-notes-v2.5.1.md)
 
 ## Main Interface Screenshots
 
@@ -68,7 +68,7 @@ Desktop packages include their runtime. **You do not need to install Python.**
 - GenBox does not include commercial model credits. You need access to the model service you configure.
 - Keep API keys inside your own GenBox. Never post them in issues, screenshots, chat logs, or public diagnostics.
 - Release clients use `http://localhost:8891`; source development uses `8892` by default.
-- Windows clients from v2.4.1 or earlier need one manual ZIP upgrade to v2.5.0. See the [upgrade notes](release-notes-v2.5.0.md#upgrading-from-an-older-version).
+- Windows clients from v2.4.1 or earlier need one manual ZIP upgrade to v2.5.1. See the [upgrade notes](release-notes-v2.5.1.md#upgrade-safely).
 - chatgpt2api is a third-party reverse-engineering research project. Do not test it with important accounts.
 
 <details>
@@ -126,7 +126,7 @@ The README stays focused on the first successful run. Advanced usage, operations
 
 | I want to learn about | Start here |
 |---|---|
-| Installation, upgrades, and known issues | [v2.5.0 release notes](release-notes-v2.5.0.md) · [Changelog](CHANGELOG.md) |
+| Installation, upgrades, and known issues | [v2.5.1 release notes](release-notes-v2.5.1.md) · [Changelog](CHANGELOG.md) |
 | Product direction and current boundaries | [Product definition](docs/PRODUCT.md) · [Current status](docs/STATUS.md) |
 | NAS, VPS, Docker, and safe releases | [Development and release lifecycle](docs/DEVELOPMENT-LIFECYCLE.md) |
 | How GenBox connects to chatgpt2api | [Integration contract](docs/INTEGRATION.md) |
