@@ -63,7 +63,14 @@ ambiguous.
 
 ## Current Position
 
-Loops 1-4 have passed focused tests and independent security review. Loop 5 is
-in progress: route-level validation found and fixed a FastAPI 422 request-body
-credential echo. The next gate is full regression and final review; no VPS
-action is authorized yet.
+Loops 1-5 and the local release gate have passed. The current branch includes
+Tailscale/existing-only UI, structured failure/recovery rendering, route
+redaction, and a real loopback AsyncSSH fingerprint-mismatch test proving that
+user authentication is not entered. Focused verification passed with
+`41 passed`; the full suite passed with `120 passed`; final explicit-model
+security and UI/contract reviews approved the result.
+
+The next gate is isolated VPS acceptance. It remains blocked until the user
+identifies an isolated development clone and separately authorizes remote work.
+No VPS, Tailnet enrollment, sender Push, or production operation occurred in
+the completed local loops.

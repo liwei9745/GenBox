@@ -11,16 +11,29 @@
 - `VERIFIED 2026-07-17`: checkpoint commit `1e0803f` preserves the completed
   local Phase 3 security loops and the resume point. See
   `docs/PHASE3-SNAPSHOT-2026-07-17.md`.
-- `VERIFIED 2026-07-17`: focused Phase 3 suite passed with `39 passed`; the full
-  local suite passed with `118 passed`; Python compilation, JavaScript syntax,
-  and `git diff --check` passed before the checkpoint.
+- `VERIFIED 2026-07-17`: commits `6bbad36` and `01bbb49` complete the local
+  Phase 3 UI truthfulness loop. Tailscale/existing is the only active path;
+  unavailable providers are disabled; structured failure/recovery information
+  is displayed; and SSH fingerprint mismatch is tested with a real loopback
+  AsyncSSH handshake before user authentication.
+- `VERIFIED 2026-07-17`: the post-integration focused suite passed with
+  `41 passed`; the full local suite passed with `120 passed`; Python
+  compilation, JavaScript syntax, and `git diff --check` passed.
+- `VERIFIED 2026-07-17`: explicit-model reviews used `gpt-5.6-sol` for
+  security/phase-order judgment, `gpt-5.6-luna` for acceptance/UI contracts,
+  and `gpt-5.6-terra` as the isolated-worktree writer. Initial P2 test-quality
+  findings were fixed and both final reviews approved commit `01bbb49`.
 - `VERIFIED 2026-07-17`: no VPS command, Tailnet enrollment, sender Push, or
   production mutation occurred.
 - Phase 3 is the only active objective. Phase 2 is incomplete and blocked until
   the first truthful private-network path is accepted.
-- The next implementation loop is UI truthfulness: Tailscale/existing-only,
-  disabled not-ready providers, failed-stage/recovery rendering, and UI/static
-  regression tests.
+- The next Phase 3 gate is isolated VPS acceptance. It requires a separately
+  identified development clone and fresh user authorization; no remote action
+  is currently authorized.
+- Phase 2 still has independent local debt to resume later: unique catalog IDs,
+  durable deployment-task recovery, and structured deployment failure/recovery
+  state. These were audited and do not invalidate the completed Phase 3 local
+  loop.
 - `.planning/STATE.md` remains owner-controlled and must not be modified,
   staged, discarded, or committed.
 
