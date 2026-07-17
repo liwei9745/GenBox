@@ -25,9 +25,11 @@ def test_catalog_ids_are_unique_and_non_gemini_ids_are_unchanged():
     ids = [item["id"] for item in items]
     assert all(isinstance(item_id, str) and item_id.strip() for item_id in ids)
     assert len(ids) == len(set(ids))
+    non_gemini = [item for item in items if item["repository"] not in GEMINI_REPOSITORY_IDS]
+    assert len(non_gemini) == len(NON_GEMINI_REPOSITORY_IDS)
+    assert {item["repository"] for item in non_gemini} == set(NON_GEMINI_REPOSITORY_IDS)
     assert {
-        item["repository"]: item["id"] for item in items
-        if item["repository"] not in GEMINI_REPOSITORY_IDS
+        item["repository"]: item["id"] for item in non_gemini
     } == NON_GEMINI_REPOSITORY_IDS
 
 
