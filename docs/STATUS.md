@@ -16,8 +16,8 @@
   restart interruption behavior remain covered.
 - `VERIFIED 2026-07-17`: Phase 2 Loop 3A backend capability enforcement is
   complete. Frozen implementation commit `9effee7` received two independent
-  read-only final approvals and was cherry-picked to the main branch as
-  `30e5e28`.
+  read-only final approvals and was cherry-picked to the current integration
+  branch as `30e5e28`.
 - `VERIFIED 2026-07-17`: the backend capability registry is the execution source
   of truth. Only the supported `chatgpt2api` Compose combinations can plan or
   deploy; planned or unknown projects and unsupported modes fail closed before
@@ -25,7 +25,8 @@
 - `VERIFIED 2026-07-17`: main-worktree Loop 3A verification passed: focused
   checks `62 passed`; full suite `160 passed`; Python compilation and
   `git diff --check` passed; the incremental high-confidence secret-pattern scan
-  found `0` matches; the repository-local temporary test directory was cleaned.
+  found `0` matches; the repository-local temporary test directories were
+  cleaned.
 - `VERIFIED 2026-07-17`: no network, VPS, production, push, or release operation
   occurred.
 - `.planning/STATE.md` remains owner-controlled and was not modified, staged,
