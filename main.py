@@ -79,6 +79,7 @@ from extensions.orchestrator import (
     test_connection as test_extension_connection,
 )
 from extensions.discovery import discover_environment
+from extensions.capabilities import validate_deployment_capability
 import extensions.store as extensions_store
 from extensions.credential_vault import credential_vault
 from extensions.catalog import public_catalog
@@ -3617,6 +3618,7 @@ async def extension_test_ssh(body: ExtensionTestRequest):
 @app.post("/api/extensions/deploy")
 async def extension_start_deploy(body: ExtensionDeployRequest):
     try:
+        validate_deployment_capability(body.project_id, body.strategy, body.deployment_mode)
         task_id = extension_tasks.create(body)
         return {"task_id": task_id}
     except ValueError as exc:
@@ -3634,6 +3636,7 @@ async def extension_discover(body: ExtensionDiscoveryRequest):
 @app.post("/api/extensions/deploy/plan")
 async def extension_deploy_plan(body: ExtensionPlanRequest):
     try:
+        validate_deployment_capability(body.project_id, body.strategy, body.deployment_mode)
         discovery = await discover_environment(body)
         return {"plan": deployment_plans.create(body, discovery), "discovery": discovery}
     except Exception as exc:

@@ -280,7 +280,7 @@ def test_done_runner_reference_is_removed_after_task_finishes(tmp_path, monkeypa
             credential=SSHCredential(password="test-only"), confirmed_plan_id="runner-cleanup",
         )
         deployment_plans.plans["runner-cleanup"] = {
-            "id": "runner-cleanup", "target_id": "t", "instance_id": request.instance_id,
+            "id": "runner-cleanup", "project_id": "chatgpt2api", "target_id": "t", "instance_id": request.instance_id,
             "strategy": "isolated", "deployment_mode": "compose", "service_port": 33010,
             "image": request.image, "compose_project": "runner-cleanup", "expires_at": 9999999999,
         }
@@ -425,7 +425,7 @@ def test_cancelled_runner_cannot_overwrite_persisted_cancelled_state(tmp_path, m
             instance_id="chatgpt2api-dev", confirmed_plan_id="cancel-race",
         )
         deployment_plans.plans["cancel-race"] = {
-            "id": "cancel-race", "target_id": "t", "instance_id": "chatgpt2api-dev",
+            "id": "cancel-race", "project_id": "chatgpt2api", "target_id": "t", "instance_id": "chatgpt2api-dev",
             "strategy": "isolated", "deployment_mode": "compose", "service_port": 33010,
             "image": request.image, "compose_project": "genbox-chatgpt2api-chatgpt2api-dev", "expires_at": 9999999999,
         }

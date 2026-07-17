@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from extensions.models import ExtensionDeployRequest, ExtensionKeyResetRequest, ExtensionPlanRequest, ExtensionTestRequest
+from extensions.capabilities import validate_deployment_capability
 import extensions.store as extensions_store
 from extensions.task_store import TaskStore
 
@@ -212,6 +213,7 @@ class ExtensionTaskManager:
                 self.store.save(list(self.tasks.values()))
 
     def create(self, request: ExtensionDeployRequest) -> str:
+        validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
         plan = deployment_plans.take(request.confirmed_plan_id, request)
         task_id = uuid.uuid4().hex[:12]
         with self.lock:
@@ -304,6 +306,7 @@ class ExtensionTaskManager:
                 state["updated_at"] = self._now()
                 self._persist()
             step(0, "running", "正在建立安全 SSH 连接")
+            validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
             connection, fingerprint = await _connect(request)
             state["host_key"] = fingerprint
             if connection is None:
@@ -344,7 +347,7 @@ class ExtensionTaskManager:
                     step(index, "success", "接入已有实例：未执行远程变更")
                 console_url = f"http://{request.target.host}:{plan['service_port']}"
                 instance = extensions_store.upsert_instance({
-                    "id": plan["instance_id"], "target_id": request.target.id, "strategy": "existing",
+                    "id": plan["instance_id"], "target_id": request.target.id, "project": plan["project_id"], "strategy": "existing",
                     "deployment_mode": "compose", "compose_project": plan.get("compose_project", ""),
                     "service_port": plan["service_port"], "install_dir": plan.get("install_dir", ""),
                     "data_dir": "", "image": plan["image"], "status": "detected",
@@ -363,7 +366,7 @@ class ExtensionTaskManager:
                     self._persist()
                 return
 
-            install_dir = f"{home_dir}/genbox-apps/chatgpt2api/{plan['instance_id']}"
+            install_dir = f"{home_dir}/genbox-apps/{plan['project_id']}/{plan['instance_id']}"
             compose_project = plan["compose_project"]
             admin_key = f"gbx-{secrets.token_urlsafe(32)}"
             compose_content = """services:
@@ -381,7 +384,7 @@ class ExtensionTaskManager:
       TZ: Asia/Shanghai
     labels:
       com.genbox.managed: "true"
-      com.genbox.project: "chatgpt2api"
+      com.genbox.project: "${GENBOX_PROJECT_ID}"
       com.genbox.instance: ${GENBOX_INSTANCE_ID}
 """
             env_content = "\n".join([
@@ -389,6 +392,7 @@ class ExtensionTaskManager:
                 f"CHATGPT2API_PORT={plan['service_port']}",
                 f"CHATGPT2API_AUTH_KEY={admin_key}",
                 f"GENBOX_INSTANCE_ID={plan['instance_id']}",
+                f"GENBOX_PROJECT_ID={plan['project_id']}",
                 "",
             ])
             config_content = "{}\n"
@@ -497,7 +501,7 @@ class ExtensionTaskManager:
             step(5, "success", "等待服务就绪完成")
             console_url = f"http://{request.target.host}:{plan['service_port']}"
             instance = extensions_store.upsert_instance({
-                "id": plan["instance_id"], "target_id": request.target.id, "strategy": plan["strategy"],
+                "id": plan["instance_id"], "target_id": request.target.id, "project": plan["project_id"], "strategy": plan["strategy"],
                 "deployment_mode": "compose", "compose_project": compose_project,
                 "service_port": plan["service_port"], "install_dir": install_dir,
                 "data_dir": f"{install_dir}/data", "image": plan["image"], "status": "running",
@@ -542,6 +546,7 @@ class DeploymentPlanManager:
         self.plans: dict[str, dict] = {}
 
     def create(self, request: ExtensionPlanRequest, discovery: dict) -> dict:
+        validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
         if not request.target.id:
             raise ValueError("请先保存 VPS 配置，再生成部署计划")
         if request.strategy == "existing":
@@ -550,7 +555,7 @@ class DeploymentPlanManager:
                 raise ValueError("请选择检测到的已有实例")
             plan_id = uuid.uuid4().hex[:16]
             plan = {
-                "id": plan_id, "target_id": request.target.id, "instance_id": request.instance_id,
+                "id": plan_id, "project_id": request.project_id, "target_id": request.target.id, "instance_id": request.instance_id,
                 "strategy": "existing", "deployment_mode": "compose", "service_port": request.service_port,
                 "image": existing.get("image") or request.image,
                 "compose_project": existing.get("compose_project") or "",
@@ -596,7 +601,7 @@ class DeploymentPlanManager:
         } if clone_source else {}
         plan_id = uuid.uuid4().hex[:16]
         plan = {
-            "id": plan_id, "target_id": request.target.id, "instance_id": request.instance_id,
+            "id": plan_id, "project_id": request.project_id, "target_id": request.target.id, "instance_id": request.instance_id,
             "strategy": request.strategy, "deployment_mode": request.deployment_mode,
             "service_port": request.service_port, "image": request.image,
             "compose_project": f"genbox-chatgpt2api-{request.instance_id}",
@@ -622,15 +627,23 @@ class DeploymentPlanManager:
         return {key: value for key, value in plan.items() if key != "expires_at"}
 
     def take(self, plan_id: str, request: ExtensionDeployRequest) -> dict:
-        plan = self.plans.pop(plan_id, None)
+        validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
+        plan = self.plans.get(plan_id)
         if not plan or plan["expires_at"] < time.time():
             raise ValueError("部署计划不存在或已过期，请重新检测")
-        if plan["target_id"] != request.target.id or plan["instance_id"] != request.instance_id:
+        if (
+            plan.get("project_id") != request.project_id
+            or plan["target_id"] != request.target.id
+            or plan["instance_id"] != request.instance_id
+            or plan["strategy"] != request.strategy
+            or plan["deployment_mode"] != request.deployment_mode
+        ):
             raise ValueError("部署请求与已确认计划不一致")
         if plan["image"] != request.image or plan["service_port"] != request.target.chatgpt2api_port:
             raise ValueError("端口或镜像已变更，请重新生成计划")
         if plan.get("clone_source_id", "") != request.clone_source_id or plan.get("clone_scope", "empty") != request.clone_scope:
             raise ValueError("克隆范围已变更，请重新生成计划")
+        self.plans.pop(plan_id)
         return plan
 
 

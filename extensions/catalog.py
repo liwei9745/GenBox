@@ -1,4 +1,6 @@
-"""Extension catalog metadata. Only enabled entries may be deployed."""
+"""Extension catalog metadata. Executability is derived from capabilities."""
+
+from extensions.capabilities import catalog_item_is_deployable
 
 CATALOG = [
     {
@@ -7,7 +9,6 @@ CATALOG = [
         "repository": "yukkcat/chatgpt2api",
         "category": "api_gateway",
         "status": "available",
-        "deployable": True,
         "integrates_proxy": True,
     },
     *[
@@ -20,7 +21,6 @@ CATALOG = [
             "repository": repository,
             "category": "api_gateway",
             "status": "planned",
-            "deployable": False,
             "integrates_proxy": True,
         }
         for repository in [
@@ -38,7 +38,6 @@ CATALOG = [
         "repository": "luohui1/kiro2api",
         "category": "api_gateway",
         "status": "repository_unverified",
-        "deployable": False,
         "integrates_proxy": True,
     },
     {
@@ -47,7 +46,6 @@ CATALOG = [
         "repository": "",
         "category": "account_token",
         "status": "planned",
-        "deployable": False,
         "integrates_proxy": True,
     },
     *[
@@ -57,7 +55,6 @@ CATALOG = [
             "repository": repository,
             "category": "proxy_network",
             "status": "planned",
-            "deployable": False,
             "provides_proxy": True,
         }
         for repository in [
@@ -76,5 +73,11 @@ def public_catalog() -> dict:
             {"id": "account_token", "name": "账号注册与 Token 管理"},
             {"id": "proxy_network", "name": "代理网络与节点工具"},
         ],
-        "items": CATALOG,
+        "items": [
+            {
+                **item,
+                "deployable": catalog_item_is_deployable(item["id"], item["repository"]),
+            }
+            for item in CATALOG
+        ],
     }

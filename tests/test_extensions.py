@@ -254,7 +254,7 @@ def test_deploy_task_reports_success(tmp_path, monkeypatch):
             instance_id="chatgpt2api-dev", confirmed_plan_id="plan-test",
         )
         deployment_plans.plans["plan-test"] = {
-            "id": "plan-test", "target_id": "t", "instance_id": "chatgpt2api-dev",
+            "id": "plan-test", "project_id": "chatgpt2api", "target_id": "t", "instance_id": "chatgpt2api-dev",
             "strategy": "isolated", "deployment_mode": "compose", "service_port": 33010,
             "image": request.image, "compose_project": "genbox-chatgpt2api-chatgpt2api-dev",
             "expires_at": 9999999999,
@@ -327,7 +327,7 @@ def test_working_copy_password_sudo_waits_for_ssh_input(tmp_path, monkeypatch):
             clone_source_id="chatgpt2api-warp", clone_scope="working-copy",
         )
         deployment_plans.plans["plan-working-copy"] = {
-            "id": "plan-working-copy", "target_id": "t", "instance_id": "chatgpt2api-dev",
+            "id": "plan-working-copy", "project_id": "chatgpt2api", "target_id": "t", "instance_id": "chatgpt2api-dev",
             "strategy": "isolated", "deployment_mode": "compose", "service_port": 33010,
             "image": request.image, "compose_project": "genbox-chatgpt2api-chatgpt2api-dev",
             "clone_scope": "working-copy", "clone_source_id": "chatgpt2api-warp",

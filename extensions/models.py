@@ -59,6 +59,7 @@ class SSHCredential(BaseModel):
 
 
 class ExtensionDeployRequest(BaseModel):
+    project_id: str = Field(default="chatgpt2api", pattern=r"^[a-z0-9][a-z0-9-]*$")
     target: ExtensionTarget
     credential: SSHCredential
     trust_host_key: bool = False
@@ -80,6 +81,7 @@ class ExtensionDiscoveryRequest(BaseModel):
 
 
 class ExtensionPlanRequest(ExtensionDiscoveryRequest):
+    project_id: str = Field(default="chatgpt2api", pattern=r"^[a-z0-9][a-z0-9-]*$")
     instance_id: str = Field(default="chatgpt2api-dev", pattern=r"^[a-z0-9][a-z0-9-]{1,39}$")
     strategy: Literal["existing", "isolated", "new"] = "isolated"
     deployment_mode: Literal["compose", "warp", "python"] = "compose"
