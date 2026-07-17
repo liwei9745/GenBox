@@ -36,6 +36,11 @@ source code and command-line instructions.
 6. Present deployed service URLs, API endpoints, login information, and
    one-time credentials with clear open and copy actions.
 7. Establish a reusable deployment-adapter model for additional services.
+8. After the core integration is verified, evolve the catalog into a GenBox
+   Store with Installed, Recommended, and All views backed by honest capability,
+   environment, license, and risk metadata.
+9. Provide an advisory-first Repair Copilot that explains sanitized diagnoses
+   and offers only user-authorized, adapter-allowlisted repair actions.
 
 ## Primary User Journeys
 
@@ -68,6 +73,13 @@ receipt contains a matching SHA-256 and explicitly permits source deletion.
 The user selects an available catalog item, follows environment discovery and
 network steps, reviews a deployment plan, deploys an isolated service, and
 receives its status, console URL, API URL, login guidance, and one-time secrets.
+
+### Find And Repair A Compatible Service
+
+After the core delivery phases, the user can see installed apps, environment-
+appropriate recommendations, and the full catalog. When a managed app fails,
+deterministic checks run first; Repair Copilot may then explain sanitized
+evidence and propose a bounded action for explicit approval and health recheck.
 
 ## Service Catalog Scope
 
@@ -115,6 +127,12 @@ health checks, delivery information, rollback, and tests are implemented.
 - Public exposure of GenBox without an authenticated private network or a
   properly secured HTTPS endpoint.
 - Treating a UI placeholder or command plan as a completed provider adapter.
+- Letting a catalog manifest, recommendation, or AI response grant deployment or
+  repair capability without a verified backend adapter.
+- Training on raw operational logs or sending secrets, personal data, user media,
+  prompts, host identities, or credentials to a diagnostic model.
+- Giving AI arbitrary shell access, direct root control, or permission to mutate
+  an external instance without verified ownership and explicit authorization.
 
 ## Terms
 

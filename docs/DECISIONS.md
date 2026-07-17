@@ -238,3 +238,36 @@ because GenBox communicates with it over an API, SSH, Docker, or a network.
 - Release packages include the GPL text and `THIRD_PARTY_NOTICES.md`.
 - Bundled third-party code, assets, or service artifacts require documented
   provenance and compatible distribution terms before release.
+
+## ADR-013: AI Repair Is Advisory-First And Deterministically Bounded
+
+**Status:** Accepted
+**Date:** 2026-07-17
+
+### Context
+
+Future Store apps need useful diagnosis and repair guidance without exposing
+credentials, turning model output into shell, or allowing unreviewed operational
+history to become trusted automation.
+
+### Decision
+
+Run deterministic checks and fallback guidance before AI diagnosis. Send only
+minimal sanitized evidence to a dedicated user-selected diagnostic model. AI
+returns a structured proposal and cannot execute arbitrary shell or obtain direct
+root access. Any mutation requires explicit authorization for the exact owned
+target and an adapter-defined allowlisted action, followed by rollback-aware
+deterministic health verification.
+
+Sanitized experience records progress through `draft`, `reviewed`, `verified`,
+and `deprecated`. Human review and reproducible evidence are required before an
+experience becomes `verified`; raw logs are never used for self-training or
+automatic promotion.
+
+### Consequences
+
+- Model unavailability or low confidence falls back to deterministic guidance.
+- External instances remain advisory/read-only until ownership and adoption are
+  explicitly verified.
+- Repair automation grows through reviewed adapter capabilities, not free-form
+  model commands or accumulated raw logs.

@@ -270,19 +270,97 @@ Offer the chatgpt2api changes to the original author in a reviewable form.
 - Each PR has a narrow purpose and independent tests.
 - Proposal examples contain no environment-specific or sensitive values.
 
-## Phase 9: Additional Service Adapters
+## Phase 9: GenBox Store Foundation
 
 **Status:** Planned
 
-**Topic contract:** `docs/extensions-deployment-contract.md`
+**Topic contract:** `docs/GENBOX-STORE-REPAIR-COPILOT.md`
 
 ### Goal
 
-Extend the guided deployment model to additional catalog services one adapter
-at a time.
+Turn the catalog into a trustworthy Store without making planned apps executable.
+
+### Deliverables
+
+- Installed, Recommended, and All views.
+- Separate versioned app manifests and executable adapters.
+- Environment compatibility recommendations with explanations and confidence.
+- Managed/external ownership boundaries plus license, provenance, security, and
+  operational-risk labels.
+
+### Acceptance Criteria
+
+- Every visible action is derived from backend adapter capability, not manifest
+  metadata or recommendation output.
+- Unknown environment facts and unavailable apps remain explicit and fail closed.
+- External instances remain advisory/read-only without a verified adoption flow.
+- Store metadata identifies source, license, permissions, exposure, and risk.
+
+## Phase 10: Advisory Repair Copilot
+
+**Status:** Planned
+
+**Topic contract:** `docs/GENBOX-STORE-REPAIR-COPILOT.md`
+
+### Goal
+
+Explain failures safely before any AI-assisted mutation is permitted.
+
+### Deliverables
+
+- Deterministic diagnostic fallback and minimum-evidence collection.
+- Redaction boundary and dedicated user-selected diagnostic model configuration.
+- Structured diagnoses with facts, confidence, risk, rollback, and verification.
+- Explicit authorization UI with advisory-only output.
+
+### Acceptance Criteria
+
+- Raw logs, secrets, personal data, host identities, and credentials never enter
+  model prompts or experience records.
+- Unknown or unavailable models fall back to deterministic guidance.
+- AI cannot submit shell, obtain root, or directly mutate a target.
+- Advice clearly distinguishes observed facts from inference.
+
+## Phase 11: Additional Service Adapters
+
+**Status:** Planned
+
+**Topic contracts:** `docs/extensions-deployment-contract.md`,
+`docs/GENBOX-STORE-REPAIR-COPILOT.md`
+
+### Goal
+
+Extend the guided deployment model one independently verified adapter at a time.
 
 ### Acceptance Criteria
 
 Each service must independently define source repository identity, license,
 configuration, secrets, ports, persistence, health check, delivery information,
 upgrade, backup, rollback, uninstall, and tests before becoming deployable.
+
+## Phase 12: Verified Repair Experience Flywheel And Allowlisted Assisted Repair
+
+**Status:** Planned
+
+**Topic contract:** `docs/GENBOX-STORE-REPAIR-COPILOT.md`
+
+### Goal
+
+Reuse reviewed operational knowledge and execute bounded repairs without turning
+AI advice into general remote administration.
+
+### Deliverables
+
+- Sanitized experience records with `draft`, `reviewed`, `verified`, and
+  `deprecated` lifecycle states.
+- Human review and reproducibility gates for experience promotion.
+- Adapter-owned repair allowlists, exact-target authorization, rollback, and
+  deterministic post-repair health verification.
+
+### Acceptance Criteria
+
+- Raw logs are never used for self-training or automatic experience promotion.
+- Only `verified` experience may influence reusable repair recommendations.
+- Every mutation is user-authorized, ownership-scoped, allowlisted, auditable,
+  rollback-aware, and followed by a deterministic health check.
+- Failed verification stops the workflow and presents a safe recovery state.

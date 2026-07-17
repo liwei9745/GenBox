@@ -29,14 +29,18 @@
   cleaned.
 - `VERIFIED 2026-07-17`: no network, VPS, production, push, or release operation
   occurred.
+- `USER-CONFIRMED 2026-07-17`: future Store and Repair Copilot direction is
+  captured in `docs/GENBOX-STORE-REPAIR-COPILOT.md` and Roadmap Phases 9-12.
+  This planning does not change the priority of the core Phase 3-8 chain and is
+  not evidence that Store or AI repair features are implemented.
 - `.planning/STATE.md` remains owner-controlled and was not modified, staged,
   discarded, or committed.
 
 ## Next Objective
 
-Phase 2 Loop 3B is the sole next objective: structured deployment
-failure/recovery. Do not begin Phase 3 work until the current Phase 2 acceptance
-criteria have sufficient evidence.
+Phase 2 Loop 3B integration and independent final review remain the sole next
+objective. Do not begin Phase 3 or future Store/Repair work until the current
+Phase 2 acceptance criteria have sufficient evidence.
 
 ## Phase 3 Gate
 
