@@ -3648,6 +3648,11 @@ async def extension_task_status(task_id: str):
     return state
 
 
+@app.get("/api/extensions/tasks")
+async def extension_task_list():
+    return extension_tasks.list_summary()
+
+
 @app.post("/api/extensions/tasks/{task_id}/delivery")
 async def extension_task_delivery(task_id: str):
     key = extension_tasks.take_delivery(task_id)

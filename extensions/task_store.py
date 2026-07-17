@@ -1,0 +1,106 @@
+"""Versioned, public-only persistence for extension deployment task snapshots."""
+
+from __future__ import annotations
+
+import copy
+import json
+import os
+import threading
+import uuid
+from pathlib import Path
+from typing import Any
+
+from config import STORAGE_DIR
+
+
+TASK_STORE_SCHEMA_VERSION = 1
+EXTENSION_TASKS_FILE = STORAGE_DIR / "extension_tasks.json"
+
+_TASK_FIELDS = {
+    "id", "status", "phase", "progress", "steps", "logs", "error", "host_key",
+    "result", "created_at", "updated_at", "recovery_action",
+}
+_INSTANCE_FIELDS = {
+    "id", "target_id", "project", "strategy", "deployment_mode", "compose_project",
+    "service_port", "install_dir", "data_dir", "image", "version", "status",
+    "console_url", "api_url", "managed", "clone_source_id", "clone_scope",
+    "created_at", "updated_at",
+}
+
+
+class TaskStore:
+    """Persist task state without retaining deployment requests or credentials."""
+
+    def __init__(self, path: Path | None = None):
+        self.path = Path(path or EXTENSION_TASKS_FILE)
+        self.lock = threading.RLock()
+        self.warning: str | None = None
+
+    def load(self) -> list[dict[str, Any]]:
+        with self.lock:
+            if not self.path.exists():
+                return []
+            try:
+                payload = json.loads(self.path.read_text(encoding="utf-8"))
+                if not isinstance(payload, dict) or payload.get("schema_version") != TASK_STORE_SCHEMA_VERSION:
+                    raise ValueError("unsupported task store schema")
+                tasks = payload.get("tasks")
+                if not isinstance(tasks, list) or not all(isinstance(task, dict) for task in tasks):
+                    raise ValueError("invalid task store payload")
+                return [self._public_task(task) for task in tasks]
+            except Exception:
+                self._quarantine_invalid_file()
+                self.warning = "Previous deployment task state could not be read and was preserved safely."
+                return []
+
+    def save(self, tasks: list[dict[str, Any]]) -> None:
+        with self.lock:
+            payload = {
+                "schema_version": TASK_STORE_SCHEMA_VERSION,
+                "tasks": [self._public_task(task) for task in tasks],
+            }
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.path.with_name(f".{self.path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+            try:
+                temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+                os.replace(temporary, self.path)
+            finally:
+                if temporary.exists():
+                    temporary.unlink()
+
+    def _quarantine_invalid_file(self) -> None:
+        if not self.path.exists():
+            return
+        quarantine = self.path.with_name(f"{self.path.name}.invalid.{uuid.uuid4().hex}.json")
+        try:
+            os.replace(self.path, quarantine)
+        except OSError:
+            # The source remains untouched if it cannot be isolated.
+            pass
+
+    @staticmethod
+    def _public_task(task: dict[str, Any]) -> dict[str, Any]:
+        public = {key: copy.deepcopy(task[key]) for key in _TASK_FIELDS if key in task}
+        if isinstance(public.get("steps"), list):
+            public["steps"] = [
+                {key: copy.deepcopy(step[key]) for key in ("id", "label", "status") if key in step}
+                for step in public["steps"] if isinstance(step, dict)
+            ]
+        if isinstance(public.get("logs"), list):
+            public["logs"] = [
+                {key: copy.deepcopy(log[key]) for key in ("time", "message") if key in log}
+                for log in public["logs"] if isinstance(log, dict)
+            ]
+        result = public.get("result")
+        if isinstance(result, dict):
+            public["result"] = {
+                key: copy.deepcopy(result[key])
+                for key in ("url", "api_url", "admin_key_available", "credential_recovery_required")
+                if key in result
+            }
+            instance = result.get("instance")
+            if isinstance(instance, dict):
+                public["result"]["instance"] = {
+                    key: copy.deepcopy(instance[key]) for key in _INSTANCE_FIELDS if key in instance
+                }
+        return public
