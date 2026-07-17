@@ -66,11 +66,14 @@ and create a fully isolated development clone.
 
 ## Phase 2: Extension Center Deployment Experience
 
-**Status:** In Progress
+**Status:** Blocked
 
-**Current local closure:** resolve unique catalog identities, durable deployment
-task recovery, backend capability enforcement, and structured deployment
-failure/recovery before isolated VPS acceptance.
+**Local acceptance:** Complete on 2026-07-17. All five criteria below have local
+code, automated-test, and independent-review evidence. This does not prove a
+real VPS deployment.
+
+**Resume condition:** the user identifies an isolated VPS development clone and
+separately authorizes Phase 2 remote acceptance. Production remains read-only.
 
 **Topic contract:** `docs/extensions-deployment-contract.md`
 

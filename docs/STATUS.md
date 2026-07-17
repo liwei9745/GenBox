@@ -1,8 +1,8 @@
 # Current Project Status
 
 **Last updated:** 2026-07-17
-**Current branch:** `codex/phase3-private-network` (Loop 3B closure through `6fa1728`)
-**Current phase:** Phase 2 Extension Center Deployment Experience — **In Progress**
+**Current branch:** `codex/phase3-private-network` (Phase 2 local closure through `1659d50`)
+**Current phase:** Phase 2 Extension Center Deployment Experience — **Blocked (Local Complete)**
 
 ## Current Development Snapshot
 
@@ -39,6 +39,20 @@
   `static/js/extensions.js` and `static/js/i18n.js`, Python compilation,
   `git diff --check`, and temporary-directory cleanup passed; the incremental
   high-confidence secret-pattern scan found `0` matches.
+- `VERIFIED 2026-07-17`: the deployed-service delivery UI gap was fixed in
+  frozen commit `0cb7f07` and integrated on the current branch as `1659d50`.
+  Independent API/UI and security reviews both approved the correction.
+- `VERIFIED 2026-07-17`: Phase 2 local acceptance passed all five Roadmap
+  criteria: unique catalog identity, refresh recovery, backend capability
+  enforcement, safe delivery/open/copy behavior, and structured sanitized
+  failure recovery.
+- `VERIFIED 2026-07-17`: final main-worktree checks passed: focused `92 passed`,
+  full suite `178 passed`, both extension JavaScript syntax checks, Python
+  compilation, `git diff --check`, high-confidence sensitive-pattern scan
+  `0` matches, and temporary-directory cleanup.
+- `UNVERIFIED 2026-07-17`: Phase 2 isolated-VPS deployment, delivery, and failure
+  acceptance has not run. Local mocks and DOM tests are not live-deployment
+  evidence.
 - `VERIFIED 2026-07-17`: no network, VPS, production, push, or release operation
   occurred.
 - `USER-CONFIRMED 2026-07-17`: future Store and Repair Copilot direction is
@@ -50,12 +64,13 @@
 
 ## Next Objective
 
-Phase 2 local total acceptance audit is the sole next objective. Reconcile every
-Phase 2 acceptance criterion with code, tests, review results, and recorded
-evidence before considering Phase 3 or future Store/Repair work.
+Wait for the user to identify an isolated VPS development clone and separately
+authorize Phase 2 remote acceptance. After authorization, verify deployment,
+delivery, failure recovery, isolation, and production non-mutation on that clone.
 
 ## Phase 3 Gate
 
 Phase 3 remains **Blocked**. Resume only after the user separately identifies
 an isolated VPS development clone and authorizes isolated-VPS acceptance.
-Production remains read-only; no remote action is currently authorized.
+Production remains read-only; no remote action is currently authorized. Future
+Store and Repair Copilot work must not start while this gate remains open.
