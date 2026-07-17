@@ -2,6 +2,7 @@ import asyncio
 import json
 import subprocess
 import sys
+from html.parser import HTMLParser
 from types import SimpleNamespace
 from pathlib import Path
 
@@ -65,65 +66,113 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
     asyncio.run(run())
 
 
-def test_mismatched_ssh_host_key_is_rejected_before_authentication(monkeypatch):
-    class Key:
-        def export_public_key(self, format_name):
-            return "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA test"
+def test_mismatched_ssh_host_key_is_rejected_before_authentication():
+    import asyncssh
 
-    class HostKeyNotVerifiable(Exception):
-        pass
+    authentication_callbacks = []
 
-    calls = []
-    authentication_attempted = False
+    class LoopbackServer(asyncssh.SSHServer):
+        def begin_auth(self, username):
+            authentication_callbacks.append("begin_auth")
+            return True
 
-    async def connect(**kwargs):
-        nonlocal authentication_attempted
-        calls.append(kwargs)
-        client = kwargs["client_factory"]()
-        if not client.validate_host_public_key("vps.example", "203.0.113.10", 22, Key()):
-            raise HostKeyNotVerifiable("host key rejected before authentication")
-        authentication_attempted = True
-        raise AssertionError("authentication must not run after a fingerprint mismatch")
+        def password_auth_supported(self):
+            authentication_callbacks.append("password_auth_supported")
+            return True
 
-    fake_asyncssh = SimpleNamespace(SSHClient=object, HostKeyNotVerifiable=HostKeyNotVerifiable, connect=connect)
-    monkeypatch.setitem(sys.modules, "asyncssh", fake_asyncssh)
-    request = ExtensionTestRequest(
-        target=ExtensionTarget(id="vps", name="VPS", host="vps.example", username="ubuntu"),
-        credential=SSHCredential(password="ssh-secret"),
-        expected_host_key="SHA256:not-the-server-key",
-    )
+        def validate_password(self, username, password):
+            authentication_callbacks.append("validate_password")
+            return False
 
     async def run():
+        server = await asyncssh.listen(
+            "127.0.0.1",
+            0,
+            server_factory=LoopbackServer,
+            server_host_keys=[asyncssh.generate_private_key("ssh-ed25519")],
+        )
         try:
-            await _connect(request)
-        except HostKeyNotVerifiable:
-            pass
-        else:
-            raise AssertionError("mismatched host key was accepted")
+            request = ExtensionTestRequest(
+                target=ExtensionTarget(
+                    id="loopback",
+                    name="Loopback",
+                    host="127.0.0.1",
+                    port=server.get_port(),
+                    username="test-user",
+                ),
+                credential=SSHCredential(password="test-password"),
+                expected_host_key="SHA256:not-the-loopback-server-key",
+            )
+            try:
+                await _connect(request)
+            except asyncssh.HostKeyNotVerifiable:
+                pass
+            else:
+                raise AssertionError("mismatched host key was accepted")
+        finally:
+            server.close()
+            await server.wait_closed()
 
     asyncio.run(run())
-    assert calls[0]["password"] == "ssh-secret"
-    assert not authentication_attempted
+    assert authentication_callbacks == []
 
 
 def test_network_ui_is_tailscale_and_existing_only_with_failure_recovery_contract():
+    class ExtensionNetworkParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.inputs = []
+            self.options_by_select = {}
+            self.elements_by_id = {}
+            self._active_select = None
+
+        def handle_starttag(self, tag, attrs):
+            attributes = dict(attrs)
+            if attributes.get("id"):
+                self.elements_by_id[attributes["id"]] = attributes
+            if tag == "input":
+                self.inputs.append(attributes)
+            elif tag == "select":
+                self._active_select = attributes.get("id")
+                self.options_by_select.setdefault(self._active_select, [])
+            elif tag == "option" and self._active_select:
+                self.options_by_select[self._active_select].append(attributes)
+
+        def handle_endtag(self, tag):
+            if tag == "select":
+                self._active_select = None
+
     root = Path(__file__).parents[1]
     html = (root / "static" / "index.html").read_text(encoding="utf-8")
     script = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
     translations = (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+    parser = ExtensionNetworkParser()
+    parser.feed(html)
 
-    assert 'value="tailscale" checked onchange="extensionSelectNetwork(this)"' in html
-    assert 'value="netbird" disabled' in html
-    assert 'value="cloudflare" disabled' in html
-    assert 'value="auto"' not in html
-    assert 'id="extNetworkToken"' not in html
-    assert 'id="extTailscaleKeyGuide" class="extension-key-guide hidden"' in html
-    assert 'input[name="extNetwork"][value="tailscale"]' in script
-    assert "provider:'tailscale',enrollment_token:'',operation_mode:'existing'" in script
-    assert "remote_network_detect:'task.network.remote_network_detect'" in script
-    assert "t.failed_phase" in script
-    assert "t.recovery_action" in script
-    assert '"task.network.remote_network_detect":{"zh-CN":"确认 VPS Tailscale 地址","en":"Confirm VPS Tailscale address"}' in translations
+    providers = {item["value"]: item for item in parser.inputs if item.get("name") == "extNetwork"}
+    assert "checked" in providers["tailscale"]
+    assert "disabled" not in providers["tailscale"]
+    assert "disabled" in providers["netbird"]
+    assert "disabled" in providers["cloudflare"]
+
+    operation_modes = [item["value"] for item in parser.inputs if item.get("name") == "extNetworkOperation"]
+    assert operation_modes == ["existing"]
+    assert [item["value"] for item in parser.options_by_select["extRemoteNetworkMode"]] == ["existing"]
+    assert not any(item.get("id") == "extNetworkToken" for item in parser.inputs)
+    assert parser.elements_by_id["extTailscaleKeyGuide"]["aria-hidden"] == "true"
+
+    connect_handler = script.partition("window.extensionConnectNetwork")[2].partition("function renderLocalTailscale")[0]
+    render_handler = script.partition("function renderNetworkTask")[2].partition("window.extensionRetryNetworkCheck")[0]
+    assert "provider:'tailscale'" in connect_handler
+    assert "enrollment_token:''" in connect_handler
+    assert "operation_mode:'existing'" in connect_handler
+    assert "t.failed_phase" in render_handler
+    assert "t.recovery_action" in render_handler
+    assert "extNetworkRecoveryDetail" in render_handler
+
+    translation_entry = translations.partition('"task.network.remote_network_detect"')[2].splitlines()[0]
+    assert "确认 VPS Tailscale 地址" in translation_entry
+    assert "Confirm VPS Tailscale address" in translation_entry
 
 
 def test_deploy_completion_opens_delivery_pane():
