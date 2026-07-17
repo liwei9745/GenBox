@@ -1,7 +1,7 @@
 # Current Project Status
 
 **Last updated:** 2026-07-17
-**Current branch:** `codex/phase3-private-network` (Loop 3A implementation `30e5e28`)
+**Current branch:** `codex/phase3-private-network` (Loop 3B closure through `6fa1728`)
 **Current phase:** Phase 2 Extension Center Deployment Experience — **In Progress**
 
 ## Current Development Snapshot
@@ -27,6 +27,18 @@
   `git diff --check` passed; the incremental high-confidence secret-pattern scan
   found `0` matches; the repository-local temporary test directories were
   cleaned.
+- `VERIFIED 2026-07-17`: Phase 2 Loop 3B structured deployment failure and
+  recovery is complete. Frozen implementation `0ce7b4f`, future Store/Repair
+  planning `d3fb82f`, and persistence hardening `f01f66c` were integrated on the
+  current branch as `291c6fc`, `d70ec59`, and `6fa1728`.
+- `VERIFIED 2026-07-17`: API/UI final review approved Loop 3B. Security review
+  initially blocked persistence validation, then approved after the corrective
+  commit enforced recovery-action state contracts and pre-replace validation.
+- `VERIFIED 2026-07-17`: main-worktree Loop 3B verification passed: focused
+  checks `78 passed`; full suite `176 passed`; Node syntax checks for
+  `static/js/extensions.js` and `static/js/i18n.js`, Python compilation,
+  `git diff --check`, and temporary-directory cleanup passed; the incremental
+  high-confidence secret-pattern scan found `0` matches.
 - `VERIFIED 2026-07-17`: no network, VPS, production, push, or release operation
   occurred.
 - `USER-CONFIRMED 2026-07-17`: future Store and Repair Copilot direction is
@@ -38,9 +50,9 @@
 
 ## Next Objective
 
-Phase 2 Loop 3B integration and independent final review remain the sole next
-objective. Do not begin Phase 3 or future Store/Repair work until the current
-Phase 2 acceptance criteria have sufficient evidence.
+Phase 2 local total acceptance audit is the sole next objective. Reconcile every
+Phase 2 acceptance criterion with code, tests, review results, and recorded
+evidence before considering Phase 3 or future Store/Repair work.
 
 ## Phase 3 Gate
 
