@@ -4,7 +4,7 @@
 **Current branch:** `codex/phase3-private-network`
 **Release commit:** `ae2b174`
 **Release status:** v2.5.1 published under GPL-3.0-only — **VERIFIED**
-**Current phase:** Phase 3 Private Network Automation — **In Progress**
+**Current phase:** Phase 2 Extension Center Deployment Experience — **In Progress**
 
 ## Current Development Snapshot
 
@@ -25,15 +25,15 @@
   findings were fixed and both final reviews approved commit `01bbb49`.
 - `VERIFIED 2026-07-17`: no VPS command, Tailnet enrollment, sender Push, or
   production mutation occurred.
-- Phase 3 is the only active objective. Phase 2 is incomplete and blocked until
-  the first truthful private-network path is accepted.
+- Phase 2 local closure is the only active objective. Phase 3 local work is
+  preserved and blocked only on a separately authorized isolated-VPS acceptance
+  gate.
 - The next Phase 3 gate is isolated VPS acceptance. It requires a separately
   identified development clone and fresh user authorization; no remote action
   is currently authorized.
-- Phase 2 still has independent local debt to resume later: unique catalog IDs,
-  durable deployment-task recovery, and structured deployment failure/recovery
-  state. These were audited and do not invalidate the completed Phase 3 local
-  loop.
+- Phase 2 local debt is ordered as small loops: unique catalog IDs first,
+  durable deployment-task recovery second, backend capability enforcement and
+  structured deployment failure/recovery third, then local acceptance review.
 - `.planning/STATE.md` remains owner-controlled and must not be modified,
   staged, discarded, or committed.
 
@@ -130,9 +130,9 @@ Windows 10 machine.
 
 ## Release Closeout And Resume
 
-The v2.5.1 release closeout remains complete. Resume the active Phase 3 UI
-truthfulness loop: Tailscale existing-only UI, disabled unavailable providers,
-failed-stage/recovery rendering, and UI/static regression tests. Continue using
-`docs/extensions-deployment-contract.md` and `docs/INTEGRATION.md`, retain the
-production chatgpt2api read-only boundary, and keep GPL provenance review
-current for copied code, assets, or bundled service artifacts.
+The v2.5.1 release closeout remains complete. Resume Phase 2 local closure with
+the catalog identity loop. Phase 3 returns only after an isolated development
+clone is identified and remote acceptance is separately authorized. Continue
+using `docs/extensions-deployment-contract.md`, retain the production
+chatgpt2api read-only boundary, and keep GPL provenance review current for
+copied code, assets, or bundled service artifacts.

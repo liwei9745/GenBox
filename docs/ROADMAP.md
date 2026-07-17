@@ -66,11 +66,11 @@ and create a fully isolated development clone.
 
 ## Phase 2: Extension Center Deployment Experience
 
-**Status:** Blocked
+**Status:** In Progress
 
-**Resume condition:** Phase 3 completes the first truthful, verified private
-network path. Phase 2 remains incomplete; it is paused so Phase 3 is the only
-active objective.
+**Current local closure:** resolve unique catalog identities, durable deployment
+task recovery, backend capability enforcement, and structured deployment
+failure/recovery before isolated VPS acceptance.
 
 **Topic contract:** `docs/extensions-deployment-contract.md`
 
@@ -98,7 +98,11 @@ isolated chatgpt2api deployment.
 
 ## Phase 3: Private Network Automation
 
-**Status:** In Progress
+**Status:** Blocked
+
+**Resume condition:** the user identifies an isolated VPS development clone and
+separately authorizes remote acceptance. Local implementation, tests, and
+independent review are complete; production remains read-only.
 
 **Topic contracts:** `docs/extensions-deployment-contract.md`,
 `docs/INTEGRATION.md`
