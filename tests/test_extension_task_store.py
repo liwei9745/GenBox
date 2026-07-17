@@ -1,4 +1,5 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import subprocess
@@ -150,6 +151,69 @@ def test_delivery_is_once_only_and_restart_requires_credential_recovery(tmp_path
     assert rebuilt.take_delivery("restart") is None
 
 
+def test_delivery_route_is_once_only_and_persists_consumption(tmp_path, monkeypatch):
+    path = tmp_path / "extension_tasks.json"
+    manager = ExtensionTaskManager(store_path=path)
+    manager.tasks["delivery"] = task("delivery", result={
+        "url": "http://service.example", "api_url": "http://service.example/v1",
+        "admin_key_available": True, "instance": {"id": "instance-a", "managed": True},
+    })
+    manager.deliveries["delivery"] = "route-delivery-key"
+    manager._persist()
+    monkeypatch.setattr(main, "extension_tasks", manager)
+    client = TestClient(main.app, base_url="http://testserver")
+
+    first = client.post("/api/extensions/tasks/delivery/delivery")
+    assert first.status_code == 200
+    assert first.json() == {"admin_key": "route-delivery-key", "shown_once": True}
+    assert client.post("/api/extensions/tasks/delivery/delivery").status_code == 404
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    assert persisted["tasks"][0]["result"]["admin_key_available"] is False
+
+
+def test_cancel_route_persists_state_and_rejects_second_cancel(tmp_path, monkeypatch):
+    class Runner:
+        def __init__(self):
+            self.cancelled = False
+
+        def done(self):
+            return self.cancelled
+
+        def cancel(self):
+            self.cancelled = True
+
+    path = tmp_path / "extension_tasks.json"
+    manager = ExtensionTaskManager(store_path=path)
+    manager.tasks["cancel"] = task("cancel", "running")
+    manager.runners["cancel"] = Runner()
+    manager._persist()
+    monkeypatch.setattr(main, "extension_tasks", manager)
+    client = TestClient(main.app, base_url="http://testserver")
+
+    assert client.post("/api/extensions/tasks/cancel/cancel").json() == {"cancelled": True}
+    assert manager.get("cancel")["status"] == "cancelled"
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    assert persisted["tasks"][0]["status"] == "cancelled"
+    assert client.post("/api/extensions/tasks/cancel/cancel").status_code == 409
+
+
+def test_concurrent_delivery_consumption_has_one_winner(tmp_path):
+    manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
+    manager.tasks["delivery"] = task("delivery", result={
+        "url": "http://service.example", "api_url": "http://service.example/v1",
+        "admin_key_available": True, "instance": {"id": "instance-a", "managed": True},
+    })
+    manager.deliveries["delivery"] = "thread-safe-delivery"
+    manager._persist()
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(lambda _: manager.take_delivery("delivery"), range(8)))
+
+    assert results.count("thread-safe-delivery") == 1
+    assert results.count(None) == 7
+    assert manager.get("delivery")["result"]["admin_key_available"] is False
+
+
 def test_task_list_route_is_sorted_and_reports_active_latest_and_404(tmp_path, monkeypatch):
     manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
     manager.tasks = {
@@ -267,29 +331,38 @@ global.extensionNext = () => {};
 global.setCheck = () => {};
 global.setInterval = (fn, ms) => { const timer = {fn, ms}; timers.push(timer); return timer; };
 global.clearInterval = timer => { if (timer) cleared.push(timer); };
+const details = {};
 global._authFetch = async url => {
   calls.push(url);
-  return { ok: true, text: async () => JSON.stringify(url === '/api/extensions/tasks' ? summary : {}) };
+  let body = {};
+  if (url === '/api/extensions/targets') body = {targets:[]};
+  else if (url === '/api/extensions/catalog') body = {categories:[],items:[]};
+  else if (url === '/api/extensions/targets/batch') body = {target_ids:[]};
+  else if (url === '/api/extensions/tasks') body = summary;
+  else if (details[url]) body = details[url];
+  return { ok: true, text: async () => JSON.stringify(body) };
 };
 eval(source);
-const hook = window.__extensionTaskRecovery;
-if (!hook) throw new Error('recovery hook missing');
-const base = (id, status, result) => ({ id, status, progress: 10, steps: [], logs: [], result, recovery_action: 'regenerate_plan_and_reprovide_credentials' });
-let selection = hook.select({ active_task_id: 'active', latest_task_id: 'latest', tasks: [base('latest', 'completed', {instance:{id:'latest',managed:true},url:'http://latest',api_url:'http://latest/v1',admin_key_available:false}), base('active', 'running', null)] });
-if (selection.taskId !== 'active') throw new Error('active task was not preferred');
-selection = hook.select({ active_task_id: null, latest_task_id: 'latest', tasks: [base('latest', 'completed', {instance:{id:'latest',managed:true},url:'http://latest',api_url:'http://latest/v1',admin_key_available:false})] });
-if (selection.taskId !== 'latest') throw new Error('latest task fallback was not selected');
-summary = { active_task_id: 'active', latest_task_id: 'latest', tasks: [base('latest', 'completed', {instance:{id:'latest',managed:true},url:'http://latest',api_url:'http://latest/v1',admin_key_available:false}), base('active', 'running', null)] };
-await hook.restore();
+window.extensionLoadServices = async () => {};
+const fullTask = (id, status, result, recovery_action='regenerate_plan_and_reprovide_credentials') => ({id,status,phase:'verify',progress:10,steps:[{id:'connect',label:'Connect',status:'success'}],logs:[{time:'00:00:00',message:'Public'}],error:null,host_key:'SHA256:public',result,created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action});
+const active = fullTask('active', 'running', null);
+const latest = fullTask('latest', 'completed', {instance:{id:'latest',managed:true},url:'http://latest',api_url:'http://latest/v1',admin_key_available:false});
+summary = { active_task_id: 'active', latest_task_id: 'latest', tasks: [latest, active] };
+details['/api/extensions/tasks/active'] = active;
+await window.loadExtensions();
 if (timers.length !== 1 || timers[0].ms !== 800) throw new Error('active polling was not started');
 await timers[0].fn();
 if (!calls.includes('/api/extensions/tasks/active')) throw new Error('active task was not polled');
-summary = { active_task_id: null, latest_task_id: 'interrupted', tasks: [base('interrupted', 'interrupted', null)] };
-await hook.restore();
-if (!cleared.length || !element('extensionMessage').textContent.includes('extensions.recovery_regenerate_plan')) throw new Error('interrupted recovery was not rendered');
+if (cleared.includes(timers[0])) throw new Error('active polling callback failed');
+const timerCount = timers.length;
+const interrupted = fullTask('interrupted', 'interrupted', null);
+summary = { active_task_id: null, latest_task_id: 'interrupted', tasks: [interrupted] };
+await window.loadExtensions();
+if (timers.length !== timerCount || !cleared.includes(timers[0]) || !element('extensionMessage').textContent.includes('extensions.recovery_regenerate_plan')) throw new Error('interrupted recovery was not rendered');
 calls.length = 0;
-summary = { active_task_id: null, latest_task_id: 'completed', tasks: [{...base('completed', 'completed', {instance:{id:'completed',managed:true},url:'http://done',api_url:'http://done/v1',admin_key_available:false,credential_recovery_required:true}), recovery_action:'reverify_ownership_and_rotate_admin_key'}] };
-await hook.restore();
+const completed = fullTask('completed', 'completed', {instance:{id:'completed',managed:true},url:'http://done',api_url:'http://done/v1',admin_key_available:false,credential_recovery_required:true}, 'reverify_ownership_and_rotate_admin_key');
+summary = { active_task_id: null, latest_task_id: 'completed', tasks: [completed] };
+await window.loadExtensions();
 if (calls.some(url => url.includes('/delivery'))) throw new Error('unavailable delivery was requested');
 if (!element('extensionMessage').textContent.includes('extensions.recovery_rotate_admin_key')) throw new Error('credential recovery was not rendered');
 if (source.includes('localStorage')) throw new Error('extension task recovery uses localStorage');

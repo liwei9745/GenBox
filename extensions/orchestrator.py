@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import copy
 import hmac
 import hashlib
 import io
@@ -9,6 +10,7 @@ import re
 import secrets
 import shlex
 import time
+import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -161,6 +163,7 @@ async def test_connection(request: ExtensionTestRequest) -> dict:
 class ExtensionTaskManager:
     def __init__(self, store: TaskStore | None = None, store_path=None):
         self.store = store or TaskStore(store_path)
+        self.lock = threading.RLock()
         self.tasks: dict[str, dict] = {task["id"]: task for task in self.store.load() if task.get("id")}
         self.runners: dict[str, asyncio.Task] = {}
         self.deliveries: dict[str, str] = {}
@@ -171,8 +174,9 @@ class ExtensionTaskManager:
         return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
     def _persist(self) -> None:
-        self._trim_terminal_tasks()
-        self.store.save(list(self.tasks.values()))
+        with self.lock:
+            self._trim_terminal_tasks()
+            self.store.save(list(self.tasks.values()))
 
     def _trim_terminal_tasks(self) -> None:
         terminal = [task for task in self.tasks.values() if task.get("status") not in {"queued", "running"}]
@@ -181,90 +185,100 @@ class ExtensionTaskManager:
             self.tasks.pop(task["id"], None)
 
     def _recover_tasks(self) -> None:
-        changed = False
-        for state in self.tasks.values():
-            if state.get("status") in {"queued", "running"}:
-                state["status"] = "interrupted"
-                state["recovery_action"] = "regenerate_plan_and_reprovide_credentials"
-                state["updated_at"] = self._now()
-                changed = True
-            result = state.get("result")
-            if isinstance(result, dict) and result.get("admin_key_available"):
-                result["admin_key_available"] = False
-                result["credential_recovery_required"] = True
-                state["recovery_action"] = "reverify_ownership_and_rotate_admin_key"
-                state["updated_at"] = self._now()
-                changed = True
-        before = len(self.tasks)
-        self._trim_terminal_tasks()
-        if changed or len(self.tasks) != before:
-            self.store.save(list(self.tasks.values()))
+        with self.lock:
+            changed = False
+            for state in self.tasks.values():
+                if state.get("status") in {"queued", "running"}:
+                    state["status"] = "interrupted"
+                    state["recovery_action"] = "regenerate_plan_and_reprovide_credentials"
+                    state["updated_at"] = self._now()
+                    changed = True
+                result = state.get("result")
+                if isinstance(result, dict) and result.get("admin_key_available"):
+                    result["admin_key_available"] = False
+                    result["credential_recovery_required"] = True
+                    state["recovery_action"] = "reverify_ownership_and_rotate_admin_key"
+                    state["updated_at"] = self._now()
+                    changed = True
+            before = len(self.tasks)
+            self._trim_terminal_tasks()
+            if changed or len(self.tasks) != before:
+                self.store.save(list(self.tasks.values()))
 
     def create(self, request: ExtensionDeployRequest) -> str:
         plan = deployment_plans.take(request.confirmed_plan_id, request)
         task_id = uuid.uuid4().hex[:12]
-        self.tasks[task_id] = {
-            "id": task_id, "status": "queued", "phase": "connect", "progress": 0,
-            "steps": [{"id": key, "label": label, "status": "pending"} for key, label in DEPLOY_STEPS],
-            "logs": [], "error": None, "host_key": "", "result": None,
-            "created_at": self._now(), "updated_at": self._now(), "recovery_action": None,
-        }
-        self._persist()
-        self.runners[task_id] = asyncio.create_task(self._run(task_id, request, plan))
+        with self.lock:
+            self.tasks[task_id] = {
+                "id": task_id, "status": "queued", "phase": "connect", "progress": 0,
+                "steps": [{"id": key, "label": label, "status": "pending"} for key, label in DEPLOY_STEPS],
+                "logs": [], "error": None, "host_key": "", "result": None,
+                "created_at": self._now(), "updated_at": self._now(), "recovery_action": None,
+            }
+            self._persist()
+            self.runners[task_id] = asyncio.create_task(self._run(task_id, request, plan))
         return task_id
 
     def get(self, task_id: str) -> dict | None:
-        return self.tasks.get(task_id)
+        with self.lock:
+            state = self.tasks.get(task_id)
+            return copy.deepcopy(state) if state else None
 
     def cancel(self, task_id: str) -> bool:
-        runner = self.runners.get(task_id)
-        if not runner or runner.done():
-            return False
-        state = self.tasks[task_id]
-        state["status"] = "cancelled"
-        state["error"] = "任务已取消"
-        state["updated_at"] = self._now()
-        self._persist()
-        runner.cancel()
-        return True
+        with self.lock:
+            runner = self.runners.get(task_id)
+            if not runner or runner.done():
+                return False
+            state = self.tasks[task_id]
+            state["status"] = "cancelled"
+            state["error"] = "任务已取消"
+            state["updated_at"] = self._now()
+            self._persist()
+            runner.cancel()
+            return True
 
     def take_delivery(self, task_id: str) -> str | None:
-        key = self.deliveries.pop(task_id, None)
-        if key:
-            state = self.tasks.get(task_id)
-            if state and isinstance(state.get("result"), dict):
-                state["result"]["admin_key_available"] = False
-                state["updated_at"] = self._now()
-                self._persist()
-        return key
+        with self.lock:
+            key = self.deliveries.pop(task_id, None)
+            if key:
+                state = self.tasks.get(task_id)
+                if state and isinstance(state.get("result"), dict):
+                    state["result"]["admin_key_available"] = False
+                    state["updated_at"] = self._now()
+                    self._persist()
+            return key
 
     def list_summary(self) -> dict:
-        tasks = sorted(self.tasks.values(), key=lambda task: (task.get("updated_at", ""), task.get("id", "")), reverse=True)
-        active = next((task["id"] for task in tasks if task.get("status") in {"queued", "running"}), None)
-        return {
-            "tasks": tasks,
-            "active_task_id": active,
-            "latest_task_id": tasks[0]["id"] if tasks else None,
-            "store_warning": self.store.warning,
-        }
+        with self.lock:
+            tasks = sorted(self.tasks.values(), key=lambda task: (task.get("updated_at", ""), task.get("id", "")), reverse=True)
+            active = next((task["id"] for task in tasks if task.get("status") in {"queued", "running"}), None)
+            return {
+                "tasks": copy.deepcopy(tasks),
+                "active_task_id": active,
+                "latest_task_id": tasks[0]["id"] if tasks else None,
+                "store_warning": self.store.warning,
+            }
 
     async def _run(self, task_id: str, request: ExtensionDeployRequest, plan: dict) -> None:
-        state = self.tasks[task_id]
+        with self.lock:
+            state = self.tasks[task_id]
         connection = None
 
         def step(index: int, status: str, log: str = ""):
-            state["phase"] = DEPLOY_STEPS[index][0]
-            state["steps"][index]["status"] = status
-            state["progress"] = int(index / len(DEPLOY_STEPS) * 100)
-            if log:
-                state["logs"].append({"time": time.strftime("%H:%M:%S"), "message": log})
-            state["updated_at"] = self._now()
-            self._persist()
+            with self.lock:
+                state["phase"] = DEPLOY_STEPS[index][0]
+                state["steps"][index]["status"] = status
+                state["progress"] = int(index / len(DEPLOY_STEPS) * 100)
+                if log:
+                    state["logs"].append({"time": time.strftime("%H:%M:%S"), "message": log})
+                state["updated_at"] = self._now()
+                self._persist()
 
         try:
-            state["status"] = "running"
-            state["updated_at"] = self._now()
-            self._persist()
+            with self.lock:
+                state["status"] = "running"
+                state["updated_at"] = self._now()
+                self._persist()
             step(0, "running", "正在建立安全 SSH 连接")
             connection, fingerprint = await _connect(request)
             state["host_key"] = fingerprint
@@ -312,14 +326,17 @@ class ExtensionTaskManager:
                     "data_dir": "", "image": plan["image"], "status": "detected",
                     "console_url": console_url, "api_url": f"{console_url}/v1", "managed": False,
                 })
-                state["progress"] = 100
-                state["status"] = "completed"
-                state["result"] = {
-                    "url": console_url, "api_url": f"{console_url}/v1", "instance": instance.model_dump(),
-                    "admin_key_available": False,
-                }
-                state["updated_at"] = self._now()
-                self._persist()
+                with self.lock:
+                    if state.get("status") == "cancelled":
+                        raise asyncio.CancelledError
+                    state["progress"] = 100
+                    state["status"] = "completed"
+                    state["result"] = {
+                        "url": console_url, "api_url": f"{console_url}/v1", "instance": instance.model_dump(),
+                        "admin_key_available": False,
+                    }
+                    state["updated_at"] = self._now()
+                    self._persist()
                 return
 
             install_dir = f"{home_dir}/genbox-apps/chatgpt2api/{plan['instance_id']}"
@@ -454,8 +471,6 @@ class ExtensionTaskManager:
                 )
                 raise RuntimeError("等待服务就绪失败，新实例已停止")
             step(5, "success", "等待服务就绪完成")
-            state["progress"] = 100
-            state["status"] = "completed"
             console_url = f"http://{request.target.host}:{plan['service_port']}"
             instance = extensions_store.upsert_instance({
                 "id": plan["instance_id"], "target_id": request.target.id, "strategy": plan["strategy"],
@@ -465,23 +480,30 @@ class ExtensionTaskManager:
                 "console_url": console_url, "api_url": f"{console_url}/v1", "managed": True,
                 "clone_source_id": plan.get("clone_source_id", ""), "clone_scope": plan.get("clone_scope", "empty"),
             })
-            self.deliveries[task_id] = admin_key
-            state["result"] = {
-                "url": console_url, "api_url": f"{console_url}/v1", "instance": instance.model_dump(),
-                "admin_key_available": True,
-            }
-            state["updated_at"] = self._now()
-            self._persist()
+            with self.lock:
+                if state.get("status") == "cancelled":
+                    raise asyncio.CancelledError
+                state["progress"] = 100
+                state["status"] = "completed"
+                self.deliveries[task_id] = admin_key
+                state["result"] = {
+                    "url": console_url, "api_url": f"{console_url}/v1", "instance": instance.model_dump(),
+                    "admin_key_available": True,
+                }
+                state["updated_at"] = self._now()
+                self._persist()
         except asyncio.CancelledError:
-            state["status"] = "cancelled"
-            state["error"] = "任务已取消"
-            state["updated_at"] = self._now()
-            self._persist()
+            with self.lock:
+                state["status"] = "cancelled"
+                state["error"] = "任务已取消"
+                state["updated_at"] = self._now()
+                self._persist()
         except Exception:
-            state["status"] = "failed"
-            state["error"] = "部署失败。请重新生成计划并重新提供凭证后重试。"
-            state["updated_at"] = self._now()
-            self._persist()
+            with self.lock:
+                state["status"] = "failed"
+                state["error"] = "部署失败。请重新生成计划并重新提供凭证后重试。"
+                state["updated_at"] = self._now()
+                self._persist()
         finally:
             if connection is not None:
                 connection.close()

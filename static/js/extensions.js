@@ -90,5 +90,4 @@
   async function extensionRestoreTask(){var summary=await json(_authFetch('/api/extensions/tasks'));var selected=selectRecoveredTask(summary),taskId=selected.taskId,task=selected.task;if(summary.store_warning)message(summary.store_warning,true);if(!task)return;await renderTask(task,taskId);if(task.status==='interrupted'){clearInterval(taskPoll);message(i18nText('extensions.task_interrupted')+' '+extensionRecoveryText(task.recovery_action),true);return}if(task.status==='completed'&&task.result&&task.result.credential_recovery_required){message(extensionRecoveryText(task.recovery_action),true)}if(summary.active_task_id)startTaskPolling(taskId)}
   var loadExtensionsWithoutTasks=window.loadExtensions;
   window.loadExtensions=async function(){await loadExtensionsWithoutTasks();try{await extensionRestoreTask()}catch(e){message(i18nText('extensions.load_config_failed')+extensionError(e),true)}};
-  window.__extensionTaskRecovery={restore:extensionRestoreTask,select:selectRecoveredTask};
 })();
