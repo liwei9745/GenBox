@@ -832,9 +832,9 @@
                 <button type="button" class="active" data-auth="password" onclick="extensionSetAuth('password')"><span data-i18n="extensions.password">密码</span></button>
                 <button type="button" data-auth="key" onclick="extensionSetAuth('key')"><span data-i18n="extensions.private_key">SSH 私钥</span></button>
               </div>
-              <label id="extPasswordWrap"><span data-i18n="extensions.ssh_password">SSH 密码</span><input id="extPassword" type="password" autocomplete="current-password"></label>
+              <label id="extPasswordWrap"><span data-i18n="extensions.ssh_password">SSH 密码</span><div class="extension-copy-row"><input id="extPassword" type="password" autocomplete="off"><button type="button" class="btn-secondary" aria-label="显示 SSH 密码" aria-pressed="false" title="显示 SSH 密码" onclick="extensionTogglePassword('extPassword',this)">👁</button></div></label>
               <label id="extKeyWrap" class="hidden"><span data-i18n="extensions.private_key">SSH 私钥</span><textarea id="extPrivateKey" rows="6" spellcheck="false"></textarea></label>
-              <label><span data-i18n="extensions.sudo_password">sudo 密码（留空则复用 SSH 密码）</span><input id="extSudoPassword" type="password" autocomplete="off" placeholder="仅非 root 且需要提权时使用" data-i18n-placeholder="extensions.sudo_placeholder"></label>
+              <label><span data-i18n="extensions.sudo_password">sudo 密码（留空则复用 SSH 密码）</span><div class="extension-copy-row"><input id="extSudoPassword" type="password" autocomplete="off" placeholder="仅非 root 且需要提权时使用" data-i18n-placeholder="extensions.sudo_placeholder"><button type="button" class="btn-secondary" aria-label="显示 sudo 密码" aria-pressed="false" title="显示 sudo 密码" onclick="extensionTogglePassword('extSudoPassword',this)">👁</button></div></label>
             </fieldset>
             <div id="extHostKeyConfirm" class="extension-confirm hidden" role="alert"></div>
             <div class="extension-actions"><button class="btn-secondary" onclick="extensionTestSSH(false)"><span data-i18n="extensions.test_connection">测试连接</span></button><button class="btn-primary" onclick="extensionNext(2)"><span data-i18n="common.next">下一步</span></button></div>

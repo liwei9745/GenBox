@@ -633,3 +633,17 @@ def test_i18n_module_and_page_markers_exist():
     assert 'startOnboardingTour' in app_js
     assert 'TreeWalker' not in app_js
     assert 'MutationObserver' not in app_js
+
+
+def test_vps_password_fields_support_explicit_visibility_toggle_without_autofill():
+    root = Path(__file__).parents[1]
+    html = (root / "static" / "index.html").read_text(encoding="utf-8")
+    extensions_js = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+
+    assert 'id="extPassword" type="password" autocomplete="off"' in html
+    assert 'id="extSudoPassword" type="password" autocomplete="off"' in html
+    assert "extensionTogglePassword('extPassword',this)" in html
+    assert "extensionTogglePassword('extSudoPassword',this)" in html
+    assert "window.extensionTogglePassword=function" in extensions_js
+    assert "input.type=visible?'text':'password'" in extensions_js
+    assert "button.setAttribute('aria-pressed',String(visible))" in extensions_js
