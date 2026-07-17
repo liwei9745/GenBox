@@ -159,6 +159,55 @@ def test_structured_failure_store_accepts_legacy_and_quarantines_invalid_enums(t
         assert len(list(tmp_path.glob(f"invalid-structured-{index}.json.invalid.*.json"))) == 1
 
 
+def test_recovery_action_contract_rejects_legacy_failed_and_nonfailed_unknown_actions(tmp_path):
+    invalid_records = [
+        task("legacy-failed-action", "failed", recovery_action="arbitrary_legacy_retry"),
+        *(task(f"unknown-{status}", status, recovery_action="arbitrary_action") for status in (
+            "queued", "running", "completed", "cancelled", "interrupted",
+        )),
+    ]
+    for index, record in enumerate(invalid_records):
+        path = tmp_path / f"invalid-recovery-{index}.json"
+        original = json.dumps({"schema_version": TASK_STORE_SCHEMA_VERSION, "tasks": [record]})
+        path.write_text(original, encoding="utf-8")
+        store = TaskStore(path)
+
+        assert store.load() == []
+        assert store.warning
+        quarantined = list(tmp_path.glob(f"invalid-recovery-{index}.json.invalid.*.json"))
+        assert len(quarantined) == 1
+        assert quarantined[0].read_text(encoding="utf-8") == original
+
+
+def test_task_store_save_rejects_invalid_recovery_without_overwriting_existing_file(tmp_path):
+    path = tmp_path / "extension_tasks.json"
+    store = TaskStore(path)
+    store.save([task("original")])
+    original = path.read_bytes()
+
+    with pytest.raises(ValueError, match="invalid task store record"):
+        store.save([task("invalid", "running", recovery_action="unknown_action")])
+
+    assert path.read_bytes() == original
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_task_store_accepts_only_legal_interrupted_and_completed_recovery_actions(tmp_path):
+    path = tmp_path / "extension_tasks.json"
+    records = [
+        task("interrupted", "interrupted", recovery_action="regenerate_plan_and_reprovide_credentials"),
+        task("completed-none", "completed", recovery_action=None),
+        task("completed-rotate", "completed", recovery_action="reverify_ownership_and_rotate_admin_key"),
+    ]
+    store = TaskStore(path)
+    store.save(records)
+
+    loaded = {record["id"]: record for record in store.load()}
+    assert loaded["interrupted"]["recovery_action"] == "regenerate_plan_and_reprovide_credentials"
+    assert loaded["completed-none"]["recovery_action"] is None
+    assert loaded["completed-rotate"]["recovery_action"] == "reverify_ownership_and_rotate_admin_key"
+
+
 def test_deployment_failure_registry_contains_only_exact_public_contract():
     assert VALID_FAILURE_COMBINATIONS == {
         ("connect", "host_key_confirmation_required", "confirm_host_key"),

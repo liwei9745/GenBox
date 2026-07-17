@@ -66,9 +66,12 @@ class TaskStore:
 
     def save(self, tasks: list[dict[str, Any]]) -> None:
         with self.lock:
+            public_tasks = [self._public_task(task) for task in tasks]
+            if not all(self._valid_task(task) for task in public_tasks):
+                raise ValueError("invalid task store record")
             payload = {
                 "schema_version": TASK_STORE_SCHEMA_VERSION,
-                "tasks": [self._public_task(task) for task in tasks],
+                "tasks": public_tasks,
             }
             self.path.parent.mkdir(parents=True, exist_ok=True)
             temporary = self.path.with_name(f".{self.path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
@@ -147,10 +150,22 @@ class TaskStore:
             # Schema v1 records written before structured failures had neither
             # field. Keep those readable so the UI can render a safe fallback.
             legacy_failure = "failed_phase" not in task and "error_code" not in task
+            if legacy_failure and recovery_action is not None:
+                return False
             if not legacy_failure and (failed_phase, error_code, recovery_action) not in VALID_FAILURE_COMBINATIONS:
                 return False
-        elif failed_phase is not None or error_code is not None:
-            return False
+        else:
+            if failed_phase is not None or error_code is not None:
+                return False
+            allowed_actions = {
+                "interrupted": {"regenerate_plan_and_reprovide_credentials"},
+                "completed": {None, "reverify_ownership_and_rotate_admin_key"},
+                "queued": {None},
+                "running": {None},
+                "cancelled": {None},
+            }
+            if recovery_action not in allowed_actions[task["status"]]:
+                return False
         for field in ("host_key", "created_at", "updated_at"):
             if not isinstance(task.get(field), str):
                 return False
