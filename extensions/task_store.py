@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 import threading
 import uuid
 from pathlib import Path
@@ -26,6 +27,12 @@ _INSTANCE_FIELDS = {
     "console_url", "api_url", "managed", "clone_source_id", "clone_scope",
     "created_at", "updated_at",
 }
+_SENSITIVE_TEXT = re.compile(
+    r"(?:password|private[ _-]?key|passphrase|sudo|admin[ _-]?key|bearer|"
+    r"-----begin(?: [a-z0-9]+)? private key-----|key[ _-]?block)",
+    re.IGNORECASE,
+)
+_REDACTED_DETAIL = "Sensitive task detail redacted."
 
 
 class TaskStore:
@@ -81,6 +88,8 @@ class TaskStore:
     @staticmethod
     def _public_task(task: dict[str, Any]) -> dict[str, Any]:
         public = {key: copy.deepcopy(task[key]) for key in _TASK_FIELDS if key in task}
+        if "error" in public:
+            public["error"] = TaskStore._safe_text(public["error"])
         if isinstance(public.get("steps"), list):
             public["steps"] = [
                 {key: copy.deepcopy(step[key]) for key in ("id", "label", "status") if key in step}
@@ -88,7 +97,10 @@ class TaskStore:
             ]
         if isinstance(public.get("logs"), list):
             public["logs"] = [
-                {key: copy.deepcopy(log[key]) for key in ("time", "message") if key in log}
+                {
+                    key: (TaskStore._safe_text(log[key]) if key == "message" else copy.deepcopy(log[key]))
+                    for key in ("time", "message") if key in log
+                }
                 for log in public["logs"] if isinstance(log, dict)
             ]
         result = public.get("result")
@@ -104,3 +116,9 @@ class TaskStore:
                     key: copy.deepcopy(instance[key]) for key in _INSTANCE_FIELDS if key in instance
                 }
         return public
+
+    @staticmethod
+    def _safe_text(value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        return _REDACTED_DETAIL if _SENSITIVE_TEXT.search(value) else value

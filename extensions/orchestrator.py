@@ -477,9 +477,9 @@ class ExtensionTaskManager:
             state["error"] = "任务已取消"
             state["updated_at"] = self._now()
             self._persist()
-        except Exception as exc:
+        except Exception:
             state["status"] = "failed"
-            state["error"] = str(exc)[:240]
+            state["error"] = "部署失败。请重新生成计划并重新提供凭证后重试。"
             state["updated_at"] = self._now()
             self._persist()
         finally:

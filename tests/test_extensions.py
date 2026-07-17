@@ -247,7 +247,7 @@ def test_deploy_task_reports_success(tmp_path, monkeypatch):
     async def run():
         monkeypatch.setattr("extensions.orchestrator._connect", fake_connect)
         monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
-        manager = ExtensionTaskManager()
+        manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
         request = ExtensionDeployRequest(
             target=ExtensionTarget(id="t", name="VPS", host="host.example", username="ubuntu", chatgpt2api_port=33010),
             credential=SSHCredential(password="secret"), trust_host_key=True,
@@ -267,6 +267,15 @@ def test_deploy_task_reports_success(tmp_path, monkeypatch):
         assert all(step["status"] == "success" for step in state["steps"])
         assert "secret" not in json.dumps(state)
         assert state["result"]["admin_key_available"] is True
+        persisted = (tmp_path / "extension_tasks.json").read_text(encoding="utf-8")
+        assert "secret" not in persisted
+        rebuilt = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
+        recovered = rebuilt.get(task_id)
+        assert recovered["status"] == "completed"
+        assert recovered["result"]["url"] == "http://host.example:33010"
+        assert recovered["result"]["admin_key_available"] is False
+        assert recovered["result"]["credential_recovery_required"] is True
+        assert rebuilt.take_delivery(task_id) is None
         delivered = manager.take_delivery(task_id)
         assert delivered.startswith("gbx-")
         assert manager.take_delivery(task_id) is None
@@ -310,7 +319,7 @@ def test_working_copy_password_sudo_waits_for_ssh_input(tmp_path, monkeypatch):
     async def run():
         monkeypatch.setattr("extensions.orchestrator._connect", fake_connect)
         monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
-        manager = ExtensionTaskManager()
+        manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
         request = ExtensionDeployRequest(
             target=ExtensionTarget(id="t", name="VPS", host="host.example", username="ubuntu", chatgpt2api_port=33010),
             credential=SSHCredential(password="secret", sudo_password="sudo-secret"), trust_host_key=True,
