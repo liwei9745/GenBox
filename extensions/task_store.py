@@ -15,7 +15,8 @@ from config import STORAGE_DIR
 
 
 TASK_STORE_SCHEMA_VERSION = 1
-EXTENSION_TASKS_FILE = STORAGE_DIR / "extension_tasks.json"
+EXTENSION_TASKS_FILE = Path(os.environ.get("GENBOX_EXTENSION_TASKS_FILE", STORAGE_DIR / "extension_tasks.json"))
+TASK_STATUSES = {"queued", "running", "completed", "failed", "cancelled", "interrupted"}
 
 _TASK_FIELDS = {
     "id", "status", "phase", "progress", "steps", "logs", "error", "host_key",
@@ -54,6 +55,8 @@ class TaskStore:
                 tasks = payload.get("tasks")
                 if not isinstance(tasks, list) or not all(isinstance(task, dict) for task in tasks):
                     raise ValueError("invalid task store payload")
+                if not all(self._valid_task(task) for task in tasks):
+                    raise ValueError("invalid task store record")
                 return [self._public_task(task) for task in tasks]
             except Exception:
                 self._quarantine_invalid_file()
@@ -116,6 +119,44 @@ class TaskStore:
                     key: copy.deepcopy(instance[key]) for key in _INSTANCE_FIELDS if key in instance
                 }
         return public
+
+    @staticmethod
+    def _valid_task(task: dict[str, Any]) -> bool:
+        if not isinstance(task.get("id"), str) or not task["id"].strip():
+            return False
+        if task.get("status") not in TASK_STATUSES:
+            return False
+        if not isinstance(task.get("phase"), str):
+            return False
+        if isinstance(task.get("progress"), bool) or not isinstance(task.get("progress"), int):
+            return False
+        if not 0 <= task["progress"] <= 100:
+            return False
+        if not isinstance(task.get("steps"), list) or not isinstance(task.get("logs"), list):
+            return False
+        if task.get("result") is not None and not isinstance(task["result"], dict):
+            return False
+        for field in ("error", "recovery_action"):
+            if task.get(field) is not None and not isinstance(task[field], str):
+                return False
+        for field in ("host_key", "created_at", "updated_at"):
+            if not isinstance(task.get(field), str):
+                return False
+        for step in task["steps"]:
+            if not isinstance(step, dict) or not all(isinstance(step.get(field), str) for field in ("id", "label", "status")):
+                return False
+        for log in task["logs"]:
+            if not isinstance(log, dict) or not all(isinstance(log.get(field), str) for field in ("time", "message")):
+                return False
+        result = task.get("result")
+        if isinstance(result, dict):
+            if any(key in result and not isinstance(result[key], str) for key in ("url", "api_url")):
+                return False
+            if any(key in result and not isinstance(result[key], bool) for key in ("admin_key_available", "credential_recovery_required")):
+                return False
+            if "instance" in result and not isinstance(result["instance"], dict):
+                return False
+        return True
 
     @staticmethod
     def _safe_text(value: Any) -> Any:

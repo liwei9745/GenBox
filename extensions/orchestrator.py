@@ -182,7 +182,13 @@ class ExtensionTaskManager:
         terminal = [task for task in self.tasks.values() if task.get("status") not in {"queued", "running"}]
         terminal.sort(key=lambda task: (task.get("updated_at", ""), task.get("id", "")), reverse=True)
         for task in terminal[50:]:
-            self.tasks.pop(task["id"], None)
+            task_id = task["id"]
+            self.tasks.pop(task_id, None)
+            self.deliveries.pop(task_id, None)
+            self.runners.pop(task_id, None)
+        for task_id, runner in list(self.runners.items()):
+            if runner.done():
+                self.runners.pop(task_id, None)
 
     def _recover_tasks(self) -> None:
         with self.lock:
@@ -216,8 +222,15 @@ class ExtensionTaskManager:
                 "created_at": self._now(), "updated_at": self._now(), "recovery_action": None,
             }
             self._persist()
-            self.runners[task_id] = asyncio.create_task(self._run(task_id, request, plan))
+            runner = asyncio.create_task(self._run(task_id, request, plan))
+            self.runners[task_id] = runner
+            runner.add_done_callback(lambda completed: self._discard_done_runner(task_id, completed))
         return task_id
+
+    def _discard_done_runner(self, task_id: str, runner: asyncio.Task) -> None:
+        with self.lock:
+            if self.runners.get(task_id) is runner and runner.done():
+                self.runners.pop(task_id, None)
 
     def get(self, task_id: str) -> dict | None:
         with self.lock:
@@ -226,10 +239,12 @@ class ExtensionTaskManager:
 
     def cancel(self, task_id: str) -> bool:
         with self.lock:
+            state = self.tasks.get(task_id)
+            if not state or state.get("status") not in {"queued", "running"}:
+                return False
             runner = self.runners.get(task_id)
             if not runner or runner.done():
                 return False
-            state = self.tasks[task_id]
             state["status"] = "cancelled"
             state["error"] = "任务已取消"
             state["updated_at"] = self._now()
@@ -239,13 +254,22 @@ class ExtensionTaskManager:
 
     def take_delivery(self, task_id: str) -> str | None:
         with self.lock:
+            state = self.tasks.get(task_id)
+            result = state.get("result") if state else None
+            if (
+                not state
+                or state.get("status") != "completed"
+                or not isinstance(result, dict)
+                or result.get("admin_key_available") is not True
+            ):
+                self.deliveries.pop(task_id, None)
+                return None
             key = self.deliveries.pop(task_id, None)
-            if key:
-                state = self.tasks.get(task_id)
-                if state and isinstance(state.get("result"), dict):
-                    state["result"]["admin_key_available"] = False
-                    state["updated_at"] = self._now()
-                    self._persist()
+            if not key:
+                return None
+            result["admin_key_available"] = False
+            state["updated_at"] = self._now()
+            self._persist()
             return key
 
     def list_summary(self) -> dict:

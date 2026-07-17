@@ -99,6 +99,37 @@ def test_corrupt_or_unknown_schema_is_quarantined_without_overwriting_original(t
         assert quarantined[0].read_text(encoding="utf-8") == content
 
 
+def test_known_schema_field_corruption_quarantines_entire_task_store(tmp_path):
+    invalid_values = {
+        "id": [], "status": [], "steps": {}, "logs": {}, "result": [],
+        "error": {}, "recovery_action": [], "phase": None, "progress": "10",
+    }
+    for field, value in invalid_values.items():
+        path = tmp_path / f"invalid-{field}.json"
+        record = task("invalid")
+        record[field] = value
+        original = json.dumps({"schema_version": TASK_STORE_SCHEMA_VERSION, "tasks": [record]})
+        path.write_text(original, encoding="utf-8")
+
+        manager = ExtensionTaskManager(store_path=path)
+
+        assert manager.tasks == {}
+        assert manager.runners == {}
+        assert manager.store.warning
+        quarantined = list(tmp_path.glob(f"invalid-{field}.json.invalid.*.json"))
+        assert len(quarantined) == 1
+        assert quarantined[0].read_text(encoding="utf-8") == original
+        assert not path.exists()
+
+    path = tmp_path / "invalid-status-value.json"
+    record = task("invalid", status="not-a-task-status")
+    original = json.dumps({"schema_version": TASK_STORE_SCHEMA_VERSION, "tasks": [record]})
+    path.write_text(original, encoding="utf-8")
+    manager = ExtensionTaskManager(store_path=path)
+    assert manager.tasks == {}
+    assert list(tmp_path.glob("invalid-status-value.json.invalid.*.json"))[0].read_text(encoding="utf-8") == original
+
+
 def test_task_store_defensively_redacts_all_deployment_secret_sentinels(tmp_path):
     path = tmp_path / "extension_tasks.json"
     manager = ExtensionTaskManager(store_path=path)
@@ -212,6 +243,114 @@ def test_concurrent_delivery_consumption_has_one_winner(tmp_path):
     assert results.count("thread-safe-delivery") == 1
     assert results.count(None) == 7
     assert manager.get("delivery")["result"]["admin_key_available"] is False
+
+
+def test_retention_prunes_delivery_and_runner_orphans(tmp_path):
+    class Runner:
+        def done(self):
+            return False
+
+    manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
+    manager.tasks = {
+        f"done-{index:02d}": task(
+            f"done-{index:02d}", "completed", f"2026-07-17T00:00:00.{index:03d}Z",
+            result={"admin_key_available": True, "instance": {"id": f"instance-{index}", "managed": True}},
+        )
+        for index in range(51)
+    }
+    manager.deliveries["done-00"] = "pruned-delivery"
+    manager.runners["done-00"] = Runner()
+    manager._persist()
+
+    assert "done-00" not in manager.tasks
+    assert "done-00" not in manager.deliveries
+    assert "done-00" not in manager.runners
+    assert manager.take_delivery("done-00") is None
+
+
+def test_done_runner_reference_is_removed_after_task_finishes(tmp_path, monkeypatch):
+    async def fake_run(_task_id, _request, _plan):
+        return None
+
+    async def run():
+        manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
+        monkeypatch.setattr(manager, "_run", fake_run)
+        request = ExtensionDeployRequest(
+            target=ExtensionTarget(id="t", name="VPS", host="host.example", username="ubuntu", chatgpt2api_port=33010),
+            credential=SSHCredential(password="test-only"), confirmed_plan_id="runner-cleanup",
+        )
+        deployment_plans.plans["runner-cleanup"] = {
+            "id": "runner-cleanup", "target_id": "t", "instance_id": request.instance_id,
+            "strategy": "isolated", "deployment_mode": "compose", "service_port": 33010,
+            "image": request.image, "compose_project": "runner-cleanup", "expires_at": 9999999999,
+        }
+        task_id = manager.create(request)
+        runner = manager.runners[task_id]
+        await runner
+        await asyncio.sleep(0)
+        assert task_id not in manager.runners
+
+    asyncio.run(run())
+
+
+def test_completed_task_cannot_cancel_but_can_take_its_available_delivery(tmp_path, monkeypatch):
+    class WaitingRunner:
+        def done(self):
+            return False
+
+        def cancel(self):
+            raise AssertionError("completed task must not cancel its runner")
+
+    path = tmp_path / "extension_tasks.json"
+    manager = ExtensionTaskManager(store_path=path)
+    manager.tasks["completed"] = task("completed", "completed", result={
+        "url": "http://service.example", "api_url": "http://service.example/v1",
+        "admin_key_available": True, "instance": {"id": "instance-a", "managed": True},
+    })
+    manager.runners["completed"] = WaitingRunner()
+    manager.deliveries["completed"] = "completed-delivery"
+    manager._persist()
+    monkeypatch.setattr(main, "extension_tasks", manager)
+    client = TestClient(main.app, base_url="http://testserver")
+
+    assert client.post("/api/extensions/tasks/completed/cancel").status_code == 409
+    assert manager.get("completed")["status"] == "completed"
+    delivery = client.post("/api/extensions/tasks/completed/delivery")
+    assert delivery.status_code == 200
+    assert delivery.json()["admin_key"] == "completed-delivery"
+
+
+def test_cancelled_task_never_delivers_even_if_key_was_injected(tmp_path):
+    manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
+    manager.tasks["cancelled"] = task("cancelled", "cancelled", result={
+        "admin_key_available": True, "instance": {"id": "instance-a", "managed": True},
+    })
+    manager.deliveries["cancelled"] = "injected-delivery"
+    manager._persist()
+
+    assert manager.take_delivery("cancelled") is None
+    assert "cancelled" not in manager.deliveries
+
+
+def test_main_import_uses_preconfigured_task_store_without_touching_developer_sentinel(tmp_path):
+    developer_file = tmp_path / "developer-storage" / "extension_tasks.json"
+    developer_file.parent.mkdir()
+    developer_file.write_text("developer sentinel", encoding="utf-8")
+    isolated_file = tmp_path / "isolated" / "extension_tasks.json"
+    env = os.environ.copy()
+    env["APP_MODE"] = "dev"
+    env["GENBOX_EXTENSION_TASKS_FILE"] = str(isolated_file)
+    root = Path(__file__).parents[1]
+
+    result = subprocess.run(
+        ["python", "-c", "import main; from extensions.orchestrator import extension_tasks; print(extension_tasks.store.path)"],
+        cwd=root, env=env, text=True, capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert str(isolated_file) in result.stdout
+    assert developer_file.read_text(encoding="utf-8") == "developer sentinel"
+    assert not isolated_file.exists()
 
 
 def test_task_list_route_is_sorted_and_reports_active_latest_and_404(tmp_path, monkeypatch):

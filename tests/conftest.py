@@ -1,11 +1,15 @@
 """Make the test suite independent from developer-local .env files."""
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
 
 os.environ["APP_MODE"] = "dev"
+# Conftest is imported before test modules; task_store reads this before main's
+# process-global manager is imported during collection.
+os.environ["GENBOX_EXTENSION_TASKS_FILE"] = str(Path.cwd() / f".pytest-extension-tasks-{os.getpid()}.json")
 
 
 @pytest.fixture(autouse=True)
