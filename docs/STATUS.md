@@ -1,10 +1,28 @@
 # Current Project Status
 
-**Last updated:** 2026-07-16
-**Current branch:** `codex/v251-release-record`
+**Last updated:** 2026-07-17
+**Current branch:** `codex/phase3-private-network`
 **Release commit:** `ae2b174`
 **Release status:** v2.5.1 published under GPL-3.0-only — **VERIFIED**
-**Current phase:** Phase 3 Private Network Automation — ready to resume
+**Current phase:** Phase 3 Private Network Automation — **In Progress**
+
+## Current Development Snapshot
+
+- `VERIFIED 2026-07-17`: checkpoint commit `1e0803f` preserves the completed
+  local Phase 3 security loops and the resume point. See
+  `docs/PHASE3-SNAPSHOT-2026-07-17.md`.
+- `VERIFIED 2026-07-17`: focused Phase 3 suite passed with `39 passed`; the full
+  local suite passed with `118 passed`; Python compilation, JavaScript syntax,
+  and `git diff --check` passed before the checkpoint.
+- `VERIFIED 2026-07-17`: no VPS command, Tailnet enrollment, sender Push, or
+  production mutation occurred.
+- Phase 3 is the only active objective. Phase 2 is incomplete and blocked until
+  the first truthful private-network path is accepted.
+- The next implementation loop is UI truthfulness: Tailscale/existing-only,
+  disabled not-ready providers, failed-stage/recovery rendering, and UI/static
+  regression tests.
+- `.planning/STATE.md` remains owner-controlled and must not be modified,
+  staged, discarded, or committed.
 
 ## Candidate Identity
 
@@ -97,12 +115,11 @@ Windows 10 machine.
 - `VERIFIED 2026-07-16`: the repository `.env` remained unchanged. Do not
   modify, stage, or commit the owner's `.planning/STATE.md` change.
 
-## Closeout
+## Release Closeout And Resume
 
-The v2.5.1 release closeout is complete. Next:
-
-1. Resume the current roadmap Phase 3: Private Network Automation.
-2. Begin with the topic contracts `docs/extensions-deployment-contract.md` and
-   `docs/INTEGRATION.md`; retain the production chatgpt2api read-only boundary.
-3. Keep GPL provenance review current whenever copied code, assets, or bundled
-   service artifacts are introduced.
+The v2.5.1 release closeout remains complete. Resume the active Phase 3 UI
+truthfulness loop: Tailscale existing-only UI, disabled unavailable providers,
+failed-stage/recovery rendering, and UI/static regression tests. Continue using
+`docs/extensions-deployment-contract.md` and `docs/INTEGRATION.md`, retain the
+production chatgpt2api read-only boundary, and keep GPL provenance review
+current for copied code, assets, or bundled service artifacts.

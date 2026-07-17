@@ -2,131 +2,230 @@
 
 ## Purpose
 
-Use multiple agents to improve safety and throughput without allowing concurrent
-writers, stale planning metadata, or model assumptions to damage verified work.
-`docs/PRODUCT.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, and
-`docs/STATUS.md` remain the sources of truth.
+Use role-specialized agents to improve safety and review quality without
+allowing concurrent writers, stale planning metadata, model assumptions, or
+external automation to damage verified work. `docs/PRODUCT.md`,
+`docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, and `docs/STATUS.md` remain the
+sources of truth. Files under `.planning/` are historical or tool-local input
+when they conflict with those documents.
 
-## Stable Model Routing
+## Mandatory Preservation Gate
 
-The currently configured GSD profile uses these known tiers:
+Before every non-trivial task, the orchestrator records a sanitized task
+snapshot containing:
 
-| Tier | Model | GenBox responsibilities |
+- current branch and full HEAD commit;
+- `git status --short`, tracked/untracked inventory, and diff/stat identity;
+- focused or full test baseline appropriate to the task;
+- the one active objective and its explicit non-goals;
+- owner exclusions that no agent may modify, stage, discard, or commit.
+
+For the current Phase 3 work, `.planning/STATE.md` is an owner exclusion. A
+dirty worktree is not cleaned automatically. Recovery uses a new corrective
+commit or `git revert` of a known agent commit; agents never use reset or
+checkout to erase owner changes.
+
+Reviewers inspect a fixed commit, fixed diff, or explicit file snapshot. The
+builder stops before review starts, the review range stays frozen, all review
+results are collected, and only then may the single writer resume fixes.
+
+## Single Active Objective Ledger
+
+Only one primary product slice may be `In Progress`. The current slice is
+Phase 3 Private Network Automation, starting with truthful Tailscale-only UI
+and recovery output. Phase 2 remains incomplete but is blocked/deferred while
+Phase 3 is the active dependency slice. A later phase cannot be started merely
+to avoid an unresolved acceptance criterion.
+
+Each loop records:
+
+1. objective and non-goals;
+2. frozen input commit or diff;
+3. writer and read-only reviewers;
+4. tests and evidence type (mocked, local runtime, isolated VPS, or clean
+   GitHub deployment);
+5. accepted findings, remaining risks, and the next resume point.
+
+## Configured Target Routing
+
+The GSD configuration expresses the following desired routing:
+
+| Tier | Configured target | GenBox responsibilities |
 |---|---|---|
-| Heavy | `gpt-5.5` | orchestration, architecture, SSH/network security, release decisions, final review |
-| Standard | `gpt-5.4` | FastAPI implementation, static UI work, unit/route tests, focused debugging |
-| Light | `gpt-5.4-mini` | file inventory, test matrices, documentation checks, syntax and packaging checklists |
+| Heavy | `gpt-5.5` | orchestration, architecture, SSH/network security, release judgment, final review |
+| Standard | `gpt-5.4` | FastAPI implementation, static UI work, tests, focused debugging |
+| Light | `gpt-5.4-mini` | inventories, test matrices, documentation and deterministic checklists |
 
-`gpt-5.3-codex-spark` may replace the light tier for mechanical code tasks after
-a small regression benchmark. `codex-auto-review` is a secondary code-review
-signal, never the only security or release approver. `gpt-image-1.5` and
-`gpt-image-2` are reserved for bitmap assets and do not participate in code,
-security, or planning decisions.
+This table is a target configuration, not proof of runtime model selection.
+At the start of every multi-agent run, inspect the available dispatch schema:
 
-The aliases `gpt-5.6-terra`, `gpt-5.6-luna`, and `gpt-5.6-sol` are treated as
-unclassified candidates. Their names are not evidence of capability. Before
-assigning them a production role, run the same sanitized tasks through each:
+- If dispatch exposes typed `agent_type` and supported reasoning controls,
+  typed GSD role routing may be used and the resolved routing must be recorded.
+- If dispatch is generic, collaboration is labelled **generic role
+  collaboration, opaque model**. Role prompts may be applied, but no result may
+  claim that a particular model actually ran.
+- If correctness depends on typed dispatch or worktree isolation, fail closed
+  instead of silently degrading.
 
-1. Phase-plan critique with scope-fence detection.
-2. Security review containing planted SSH, SSRF, and secret-handling defects.
-3. FastAPI implementation plus tests.
-4. Release-diff review for false completion and secret leakage.
+`gpt-image-2` is invoked only through image-generation tooling for bitmap
+assets; it is never a code, security, planning, or release agent.
+`codex-auto-review` is a secondary signal and never the sole approval source.
 
-Score correctness, missed P1 issues, invented facts, test quality, latency, and
-cost. Promote a candidate only when it beats the current tier on two repeated
-runs without weakening safety.
+## Model Calibration And Fallback
 
-## GenBox Roles
+Candidate aliases such as `gpt-5.6-terra`, `gpt-5.6-luna`,
+`gpt-5.6-sol`, or a mechanical Codex Spark model are unclassified until they
+pass a versioned, sanitized benchmark for a specific role.
 
-### Orchestrator — Heavy
+Calibration rules:
 
-- Reads authoritative project documents and owns the active objective.
-- Splits work into one narrow Loop Engineering slice.
-- Is the only role allowed to accept review findings, change scope, stage,
-  commit, access external systems, or request VPS authorization.
+- baseline and candidate receive identical prompts, files, hidden checks, and
+  scope fences;
+- run each role benchmark at least three times;
+- record model ID, date, runtime, supported reasoning level, latency, and usage
+  only when reliable usage data exists;
+- security candidates must find 100% of planted P1 SSH, SSRF, secret, deletion,
+  and production-isolation defects and propose no unsafe fix;
+- planning candidates must identify every scope fence and invent no runtime
+  fact;
+- builder candidates must pass hidden tests and preserve a minimal diff;
+- promotion is per role, never global.
 
-### Backend/Integration Builder — Standard
+A promoted model is demoted after a missed P1, invented environment fact,
+unsafe external action, repeated hidden-test regression, or material quality
+loss. Immediate fallback is the configured `gpt-5.5`, `gpt-5.4`, or
+`gpt-5.4-mini` target for that role.
 
-- Implements FastAPI, storage, adapters, and fixed SSH/network command plans.
-- Writes focused tests with the change.
-- Never approves its own work and never touches a live VPS.
+## GenBox Roles And Repository Boundaries
 
-### Frontend Builder — Standard
+### Orchestrator
 
-- Maintains the static UI, readiness states, progress, and recovery messaging.
-- Must keep UI claims aligned with backend capability.
-- Does not change protocol or security decisions without orchestration review.
+- Owns the preservation gate, active objective, scope, task state, and evidence
+  classification.
+- Is the only role that accepts findings, resumes the writer, stages, commits,
+  or requests external authorization.
+- Technical approval never substitutes for the user's authorization to push,
+  tag, publish a Release or image, or mutate VPS resources.
 
-### Security Reviewer — Heavy
+### GenBox Receiver/Deployment Builder
 
-- Read-only by default.
-- Reviews authentication ordering, host-key trust, secret lifetime, SSRF,
+- Is the only writer during its build window.
+- Implements GenBox FastAPI, storage, static UI, deployment adapters, and fixed
+  SSH/network plans with focused tests.
+- Does not implement chatgpt2api sender behavior in this repository and never
+  touches a live VPS.
+
+### Future chatgpt2api Sender Builder
+
+- Operates only in the separately identified chatgpt2api repository and an
+  isolated worktree/development clone.
+- Owns generation Push, batch/schedule state, cursor/lease, receipt persistence,
+  and optional cleanup logic when their phases become active.
+- Is not dispatched during Phase 3.
+
+### Security Reviewer
+
+- Is read-only and reviews a frozen snapshot.
+- Checks authentication ordering, host-key trust, secret lifetime, SSRF,
   destination validation, remote commands, source deletion, and production
   isolation.
-- Any P1 returns the task to Build; it cannot be overridden by a passing test.
+- Any P1 returns the task to Build and cannot be overridden by passing tests.
 
-### Test/Contract Reviewer — Standard or Heavy
+### Transfer Integrity Reviewer
 
-- Reviews unit, route, failure, persistence, UI/static, and regression coverage.
-- Distinguishes mocked evidence from live isolated-clone evidence.
-- Checks that failures identify the exact stage and recovery action.
+- Reviews the cross-project contract independently of either builder.
+- Covers SHA-256 matching, idempotency, authenticated receipts, metadata,
+  source retention, cleanup permission, cursor/lease durability, and Push/Pull
+  regression.
+- Becomes mandatory for Phases 4-6; Phase 3 may consult it only on destination
+  contract compatibility.
 
-### Release/Ops Verifier — Light for mechanics, Heavy for approval
+### Test/Contract Reviewer
 
-- Light model runs deterministic syntax, packaging, checksum, and diff checks.
-- Heavy model reviews release claims, licensing, secret scans, rollback, and
-  clean-deployment evidence.
+- Checks unit, route, UI/static, failure, persistence, and regression coverage.
+- Separates mocked evidence from local runtime, isolated VPS, and clean
+  redeployment evidence.
+- Verifies that UI availability and recovery text match backend behavior.
 
-## Task Routing by Domain
+### Release/Ops Verifier
 
-| Work | Builder | Mandatory reviewer |
-|---|---|---|
-| SSH, credentials, network routing | `gpt-5.4` | `gpt-5.5` security reviewer |
-| FastAPI/storage behavior | `gpt-5.4` | test reviewer; security reviewer if secrets/SSRF involved |
-| Static UI/readiness | `gpt-5.4` | contract reviewer |
-| Tests/docs/checklists | `gpt-5.4-mini` or Codex Spark candidate | `gpt-5.4` |
-| Release/license/production gates | mechanical light tier | `gpt-5.5` final approval |
-| Bitmap design assets | `gpt-image-2` | frontend/brand review |
+- Runs deterministic syntax, packaging, checksum, diff, and inventory checks.
+- A heavy reviewer separately judges licensing, secrets, rollback, release
+  claims, and clean-deployment evidence.
+- Neither role may perform an external publication without explicit user
+  authorization for that action.
 
-## Collaboration Rules
+## Safe Collaboration Lifecycle
 
-- Maximum active team: orchestrator plus two read-only reviewers and one builder.
-- Only one agent may edit the shared worktree at a time.
-- Parallel agents receive non-overlapping, read-only review questions.
-- Every handoff states changed files, verification command, known gaps, and next
-  action.
-- Every non-trivial change follows:
-  `Scope -> Build -> Focused tests -> Independent review -> Fix -> Full tests -> Commit`.
-- A commit contains one accepted loop and never stages `.planning/STATE.md`,
-  runtime storage, credentials, images, logs, or unrelated user changes.
+For one shared worktree, the only allowed concurrency shapes are:
+
+- one active writer and no reviewer reading a changing review range; or
+- up to three parallel read-only reviewers inspecting the same frozen snapshot.
+
+The default loop is:
+
+`Preserve -> Scope -> Single-writer build -> Focused tests -> Freeze -> Parallel read-only reviews -> Collect -> Single-writer fix -> Full tests -> Commit`
+
+Every handoff includes changed files, frozen commit/diff, verification commands,
+evidence classification, known gaps, owner exclusions, and the next action. A
+commit contains one accepted loop and never stages `.planning/STATE.md`, runtime
+storage, credentials, media, logs, or unrelated owner changes.
 
 ## Smart GSD Policy
 
-GSD is a workflow tool, not a replacement for the GenBox sources of truth.
+GSD is optional workflow support, not a replacement for GenBox's authoritative
+documents or Loop Engineering.
 
-Use GSD when:
+Before invoking any GSD skill:
 
-- model-tier configuration or deterministic workflow settings are needed;
-- an already aligned phase needs plan review, execution waves, code review,
-  security review, validation, or conversational UAT;
-- the workflow can run without overwriting user-owned state.
+1. read its complete `SKILL.md` and every required workflow/reference;
+2. inspect its dispatch requirements and complete write set;
+3. reject it if it may modify protected `.planning/STATE.md`, historical
+   `.planning/ROADMAP.md`, unrelated phase directories, create unsafe worktrees,
+   auto-commit, or start parallel writers;
+4. declare whether execution is typed GSD routing or the generic opaque-model
+   workaround;
+5. declare allowed artifact paths and whether commits are forbidden.
 
-Do not use GSD phase/milestone/pause/resume writers while `.planning/ROADMAP.md`
-still describes the historical External Image Sync milestone and
-`.planning/STATE.md` contains owner changes. Until those are isolated or
-reconciled, use the authoritative `docs/` contracts plus this Loop Engineering
-protocol. Generic Codex subagents must be labelled as a workaround; do not claim
-that per-agent model overrides were honored unless the runtime exposes typed
-agent/model routing.
+Currently safe uses include configuration through GSD's merge-aware setter and
+read-only review workflows whose write set has been explicitly constrained.
+Current unsafe/default-denied uses include milestone/phase/pause/resume writers,
+automatic documentation commits, and execute-phase parallel waves without
+verified typed dispatch plus explicit worktree isolation.
 
-## External-System Gate
+The project GSD defaults are intentionally conservative:
 
-No agent may connect to or mutate a VPS until the orchestrator records:
+- parallel execution off;
+- planning-document auto-commit off;
+- plan checker on;
+- execution verifier on;
+- source grounding on.
 
-- explicit user authorization;
-- isolated development-clone identity;
-- verified host key and ownership boundary;
-- separate directory, container, Compose project, volume, port, and credentials;
-- rollback limited to GenBox-owned development resources.
+## Separate Completion And Authority Gates
 
-Production chatgpt2api remains read-only throughout development.
+Passing one gate never implies the next:
+
+1. **Local technical gate:** accepted commit, focused/full tests, frozen-diff
+   reviews.
+2. **Isolated VPS gate:** explicitly identified development clone, verified
+   host key and ownership, separate resources, application probe, rollback, and
+   production non-mutation evidence.
+3. **Sanitization gate:** secret, personal-data, generated-artifact, and Git
+   history review.
+4. **Personal GitHub clean-deployment gate:** sanitized push followed by a
+   deployment built only from that repository and repeated acceptance checks.
+5. **Upstream/release gate:** separately authorized PR, merge, tag, Release, or
+   image publication.
+
+Model or reviewer approval is technical evidence only. External mutation and
+publication always require the applicable user authorization and environment
+identity.
+
+## External-System Stop Conditions
+
+No agent may connect to or mutate a VPS until the orchestrator records explicit
+authorization, the isolated clone identity, verified host key, separate
+directory/container/Compose project/volume/port/credentials, and rollback
+limited to owned development resources. Production chatgpt2api remains
+read-only. Ambiguous identity, overlapping resources, leaked secrets, changed
+production health, or an unbounded rollback stops the task immediately.

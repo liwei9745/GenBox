@@ -66,7 +66,11 @@ and create a fully isolated development clone.
 
 ## Phase 2: Extension Center Deployment Experience
 
-**Status:** In Progress
+**Status:** Blocked
+
+**Resume condition:** Phase 3 completes the first truthful, verified private
+network path. Phase 2 remains incomplete; it is paused so Phase 3 is the only
+active objective.
 
 **Topic contract:** `docs/extensions-deployment-contract.md`
 
