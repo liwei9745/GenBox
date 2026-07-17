@@ -1,7 +1,7 @@
 # Current Project Status
 
 **Last updated:** 2026-07-17
-**Current worktree:** detached HEAD (Loop 2 baseline `306a600`)
+**Current branch:** `codex/phase3-private-network` at `30e5e28`
 **Current phase:** Phase 2 Extension Center Deployment Experience — **In Progress**
 
 ## Current Development Snapshot
@@ -12,31 +12,30 @@
   commits `445d004`, `c7cce88`, and `5cb1c13`; `chatgpt2api` remains the only
   deployable catalog item.
 - `VERIFIED 2026-07-17`: Phase 2 Loop 2 durable task recovery is merged through
-  commits `852d1f2`, `ae1796b`, `b7c22bf`, and `306a600`.
-- `VERIFIED 2026-07-17`: browser refresh recovers the active/latest deployment
-  task. On process restart, queued or running tasks become `interrupted` and are
-  never replayed.
-- `VERIFIED 2026-07-17`: public task status is atomic, versioned JSON; malformed
-  task schemas are isolated; retention, cancellation, and concurrency gates are
-  covered.
-- `VERIFIED 2026-07-17`: task records do not persist secrets; delivery remains
-  one-time by default, with credential recovery by ownership-verified rotation.
-- `VERIFIED 2026-07-17`: main-worktree verification passed: focused checks
-  `43 passed`; full suite `141 passed`; Node.js syntax, Python compilation, and
-  `git diff --check` passed. An initial `C:\tmp` basetemp permission failure was
-  test infrastructure only; rerunning with a repository-local basetemp passed.
-- `VERIFIED 2026-07-17`: final independent reviews approved the Loop 2 result:
-  `gpt-5.6-sol` xhigh and `gpt-5.6-luna` high.
-- `VERIFIED 2026-07-17`: no VPS, network, production, push, release, or external
-  operation occurred.
+  commits `852d1f2`, `ae1796b`, `b7c22bf`, and `306a600`; browser refresh and
+  restart interruption behavior remain covered.
+- `VERIFIED 2026-07-17`: Phase 2 Loop 3A backend capability enforcement is
+  complete. Frozen implementation commit `9effee7` received two independent
+  read-only final approvals and was cherry-picked to the main branch as
+  `30e5e28`.
+- `VERIFIED 2026-07-17`: the backend capability registry is the execution source
+  of truth. Only the supported `chatgpt2api` Compose combinations can plan or
+  deploy; planned or unknown projects and unsupported modes fail closed before
+  discovery, task creation, or SSH side effects.
+- `VERIFIED 2026-07-17`: main-worktree Loop 3A verification passed: focused
+  checks `62 passed`; full suite `160 passed`; Python compilation and
+  `git diff --check` passed; the incremental high-confidence secret-pattern scan
+  found `0` matches; the repository-local temporary test directory was cleaned.
+- `VERIFIED 2026-07-17`: no network, VPS, production, push, or release operation
+  occurred.
 - `.planning/STATE.md` remains owner-controlled and was not modified, staged,
   discarded, or committed.
 
 ## Next Objective
 
-Phase 2 Loop 3 is the sole next objective: backend capability enforcement and
-structured deployment failure/recovery. Do not begin Phase 3 work until the
-current Phase 2 acceptance criteria have sufficient evidence.
+Phase 2 Loop 3B is the sole next objective: structured deployment
+failure/recovery. Do not begin Phase 3 work until the current Phase 2 acceptance
+criteria have sufficient evidence.
 
 ## Phase 3 Gate
 
