@@ -38,6 +38,24 @@ def test_cross_origin_mutation_is_rejected(tmp_path, monkeypatch):
     assert not (tmp_path / "sync.json").exists()
 
 
+def test_network_connect_route_rejects_unverified_provider_without_leaking_credentials():
+    client = TestClient(main.app, base_url="http://testserver")
+    response = client.post(
+        "/api/extensions/network/connect",
+        headers={"Origin": "http://testserver"},
+        json={
+            "target": {"id": "vps", "name": "VPS", "host": "vps.example", "username": "ubuntu"},
+            "credential": {"password": "ssh-secret"},
+            "provider": "netbird",
+            "operation_mode": "existing",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "Tailscale" in response.text
+    assert "ssh-secret" not in response.text
+
+
 def test_thumbnail_proxy_is_same_origin_and_cached(tmp_path, monkeypatch):
     monkeypatch.setattr(sync_store, "SYNC_FILE", tmp_path / "sync.json")
     monkeypatch.setattr(main, "STORAGE_DIR", tmp_path)

@@ -51,6 +51,7 @@ if getattr(sys, 'frozen', False):
     os.chdir(Path(sys.executable).parent)
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -213,6 +214,20 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_response(_request: Request, exc: RequestValidationError):
+    """Do not echo invalid request bodies, which may contain credentials."""
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": [
+                {"type": item.get("type", "validation_error"), "loc": item.get("loc", ()), "msg": item.get("msg", "输入无效")}
+                for item in exc.errors()
+            ]
+        },
+    )
 
 # ──────────────────────────────────────────────────────────────
 # 安全 Headers 中间件

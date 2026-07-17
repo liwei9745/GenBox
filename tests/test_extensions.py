@@ -2,18 +2,67 @@ import asyncio
 import json
 import subprocess
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
-from extensions.models import ExtensionDeployRequest, ExtensionPlanRequest, ExtensionTarget, SSHCredential
+from extensions.models import ExtensionDeployRequest, ExtensionPlanRequest, ExtensionTarget, ExtensionTestRequest, SSHCredential
 import extensions.store as store
 from extensions.orchestrator import (
     CLONE_SCRUB_KEYS,
     DeploymentPlanManager,
     ExtensionTaskManager,
     _clone_config_scrub_script,
+    _connect,
     _password_sudo_command,
     deployment_plans,
 )
+
+
+def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
+    class Key:
+        def export_public_key(self, format_name):
+            return "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA test"
+
+    class Connection:
+        def get_server_host_key(self):
+            return Key()
+
+    calls = []
+
+    class HostKeyNotVerifiable(Exception):
+        pass
+
+    async def connect(**kwargs):
+        calls.append(kwargs)
+        client = kwargs["client_factory"]()
+        trusted = client.validate_host_public_key("vps.example", "203.0.113.10", 22, Key())
+        if not trusted:
+            raise HostKeyNotVerifiable("host key rejected before authentication")
+        return Connection()
+
+    fake_asyncssh = SimpleNamespace(SSHClient=object, HostKeyNotVerifiable=HostKeyNotVerifiable, connect=connect)
+    monkeypatch.setitem(sys.modules, "asyncssh", fake_asyncssh)
+    request = ExtensionTestRequest(
+        target=ExtensionTarget(id="vps", name="VPS", host="vps.example", username="ubuntu"),
+        credential=SSHCredential(password="ssh-secret"),
+    )
+
+    async def run():
+        connection, fingerprint = await _connect(request)
+        assert connection is None
+        assert fingerprint.startswith("SHA256:")
+        assert "password" not in calls[0]
+        assert calls[0]["client_keys"] is None
+        assert calls[0]["agent_path"] is None
+        assert calls[0]["config"] == []
+
+        request.expected_host_key = fingerprint
+        connection, trusted_fingerprint = await _connect(request)
+        assert connection is not None
+        assert trusted_fingerprint == fingerprint
+        assert calls[1]["password"] == "ssh-secret"
+
+    asyncio.run(run())
 
 
 def test_deploy_completion_opens_delivery_pane():

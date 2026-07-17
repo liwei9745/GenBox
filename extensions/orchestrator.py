@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import hmac
 import hashlib
 import io
 import json
@@ -71,13 +72,45 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
         import asyncssh
     except ImportError as exc:
         raise RuntimeError("缺少 asyncssh 依赖，请重新安装 requirements.txt") from exc
-    kwargs: dict[str, Any] = {
+    expected = request.expected_host_key or request.target.host_key
+
+    class _FingerprintClient(asyncssh.SSHClient):
+        def __init__(self, expected_fingerprint: str = ""):
+            self.expected_fingerprint = expected_fingerprint
+            self.fingerprint = ""
+
+        def validate_host_public_key(self, host: str, addr: str, port: int, key: Any) -> bool:
+            self.fingerprint = _fingerprint(key)
+            return bool(self.expected_fingerprint) and hmac.compare_digest(
+                self.expected_fingerprint, self.fingerprint,
+            )
+
+    base_kwargs: dict[str, Any] = {
         "host": request.target.host,
         "port": request.target.port,
         "username": request.target.username,
-        "known_hosts": None,
+        # An empty known-hosts list deliberately invokes our fingerprint callback.
+        # `known_hosts=None` disables host-key validation entirely.
+        "known_hosts": b"",
         "connect_timeout": 15,
+        "config": [],
+        "agent_path": None,
+        # None disables AsyncSSH's fallback to ~/.ssh keys and SSH agents.
+        "client_keys": None,
     }
+
+    if not expected:
+        probe_client = _FingerprintClient()
+        try:
+            await asyncssh.connect(**base_kwargs, client_factory=lambda: probe_client)
+        except asyncssh.HostKeyNotVerifiable:
+            if probe_client.fingerprint:
+                return None, probe_client.fingerprint
+            raise
+        raise RuntimeError("未能在不使用凭据的情况下确认 VPS 主机指纹")
+
+    trusted_client = _FingerprintClient(expected)
+    kwargs = {**base_kwargs, "client_factory": lambda: trusted_client}
     if request.credential.private_key:
         kwargs["client_keys"] = [asyncssh.import_private_key(
             request.credential.private_key,
@@ -86,17 +119,7 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
     else:
         kwargs["password"] = request.credential.password
     connection = await asyncssh.connect(**kwargs)
-    fingerprint = _fingerprint(connection.get_server_host_key())
-    expected = request.expected_host_key or request.target.host_key
-    if expected and expected != fingerprint:
-        connection.close()
-        await connection.wait_closed()
-        raise PermissionError("VPS 主机指纹与已保存值不一致")
-    if not expected and not request.trust_host_key:
-        connection.close()
-        await connection.wait_closed()
-        return None, fingerprint
-    return connection, fingerprint
+    return connection, trusted_client.fingerprint
 
 
 async def test_connection(request: ExtensionTestRequest) -> dict:

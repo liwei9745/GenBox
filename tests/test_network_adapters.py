@@ -2,7 +2,7 @@ import asyncio
 import json
 
 from extensions.models import ExtensionTarget, NetworkConnectRequest, SSHCredential
-from extensions.network_adapters import NetworkTaskManager, command_plan
+from extensions.network_adapters import NetworkTaskManager, command_plan, validate_tailscale_destination
 
 
 def request(provider: str = "tailscale") -> NetworkConnectRequest:
@@ -13,15 +13,27 @@ def request(provider: str = "tailscale") -> NetworkConnectRequest:
         expected_host_key="SHA256:test",
         provider=provider,
         enrollment_token="enrollment-secret-token",
+        operation_mode="existing",
         device_name="genbox-vps",
     )
 
 
-def test_each_provider_has_fixed_install_enroll_verify_plan():
-    for provider in ("tailscale", "netbird", "cloudflare"):
-        plan = command_plan(request(provider))
-        assert [phase for phase, _ in plan] == ["remote_install", "remote_enroll", "remote_detect"]
-        assert len(plan) == 3
+def test_tailscale_has_a_fixed_install_enroll_verify_plan():
+    plan = command_plan(request())
+    assert [phase for phase, _ in plan] == ["remote_detect"]
+    assert "enrollment-secret-token" not in plan[0][1]
+
+
+def test_unverified_network_providers_are_rejected_server_side():
+    for provider in ("netbird", "cloudflare"):
+        payload = request().model_dump()
+        payload["provider"] = provider
+        try:
+            NetworkConnectRequest(**payload)
+        except ValueError as exc:
+            assert "Tailscale" in str(exc)
+        else:
+            raise AssertionError(f"{provider} was accepted before it has an equivalent verification chain")
 
 
 def test_device_name_rejects_shell_metacharacters():
@@ -43,7 +55,12 @@ def test_network_task_state_never_exposes_tokens(monkeypatch):
     class Connection:
         async def run(self, command, **kwargs):
             if "curl -fsS --max-time" in command:
-                return Result()
+                result = Result()
+                result.stdout = json.dumps({
+                    "app_mode": "dev", "auth_required": False, "needs_provider_setup": True,
+                    "has_configured_provider": False, "has_enabled_provider": False, "provider_count": 0,
+                })
+                return result
             if command == "id -u":
                 result = Result()
                 result.stdout = "0\n"
@@ -61,7 +78,7 @@ def test_network_task_state_never_exposes_tokens(monkeypatch):
 
     async def run():
         monkeypatch.setattr("extensions.network_adapters._connect", fake_connect)
-        monkeypatch.setattr("extensions.network_adapters.local_status", lambda: {"online": True})
+        monkeypatch.setattr("extensions.network_adapters.local_status", lambda: {"online": True, "dns_name": "genbox.example.ts.net", "serve_port": 8893, "app_port": 8892})
         monkeypatch.setattr("extensions.network_adapters.enable_genbox_serve", lambda: {
             "address": "100.64.0.20", "url": "http://100.64.0.20:8893",
         })
@@ -78,7 +95,7 @@ def test_network_task_state_never_exposes_tokens(monkeypatch):
         assert "ssh-secret" not in serialized
         assert state["result"]["peer_reachable"] is True
         assert state["result"]["genbox_reachable"] is True
-        assert len(state["steps"]) == 8
+        assert len(state["steps"]) == 9
         assert saved_targets[0]["primary_network"] == "tailscale"
         assert saved_targets[0]["network_url"] == "http://100.64.0.20:8893"
         assert "enrollment-secret-token" not in json.dumps(saved_targets)
@@ -97,6 +114,13 @@ def test_existing_mode_detect_does_not_send_input_or_use_sudo(monkeypatch):
 
         async def run(self, command, **kwargs):
             self.calls.append((command, kwargs))
+            if "curl -fsS --max-time" in command:
+                result = Result()
+                result.stdout = json.dumps({
+                    "app_mode": "dev", "auth_required": False, "needs_provider_setup": True,
+                    "has_configured_provider": False, "has_enabled_provider": False, "provider_count": 0,
+                })
+                return result
             if command == "id -u":
                 result = Result()
                 result.stdout = "1000\n"
@@ -120,7 +144,7 @@ def test_existing_mode_detect_does_not_send_input_or_use_sudo(monkeypatch):
         payload["enrollment_token"] = ""
         payload["credential"]["sudo_password"] = "sudo-secret"
         monkeypatch.setattr("extensions.network_adapters._connect", fake_connect)
-        monkeypatch.setattr("extensions.network_adapters.local_status", lambda: {"online": True})
+        monkeypatch.setattr("extensions.network_adapters.local_status", lambda: {"online": True, "dns_name": "genbox.example.ts.net", "serve_port": 8893, "app_port": 8892})
         monkeypatch.setattr("extensions.network_adapters.enable_genbox_serve", lambda: {
             "address": "100.64.0.20", "url": "http://100.64.0.20:8893",
         })
@@ -150,10 +174,57 @@ def test_existing_mode_does_not_require_enrollment_token():
 
 def test_auto_mode_requires_enrollment_token():
     payload = request().model_dump()
+    payload["operation_mode"] = "auto"
     payload["enrollment_token"] = ""
     try:
         NetworkConnectRequest(**payload)
-    except ValueError:
-        pass
+    except ValueError as exc:
+        assert "自动加入 Tailnet" in str(exc)
     else:
         raise AssertionError("auto mode accepted an empty enrollment token")
+
+
+def test_tailscale_destination_validator_accepts_only_the_verified_private_route():
+    assert validate_tailscale_destination(
+        "http://100.64.0.20:8893",
+        address="100.64.0.20",
+        serve_port=8893,
+        app_port=8892,
+    ) == "http://100.64.0.20:8893"
+
+
+def test_tailscale_destination_validator_rejects_loopback_public_and_unsafe_urls():
+    unsafe = (
+        "http://127.0.0.1:8893",
+        "http://192.0.2.10:8893",
+        "http://genbox.example.ts.net:8893",
+        "http://user:password@genbox.example.ts.net:8893",
+        "http://genbox.example.ts.net:8893/#fragment",
+        "http://genbox.example.ts.net:8892",
+    )
+    for url in unsafe:
+        try:
+            validate_tailscale_destination(url, address="100.64.0.20", serve_port=8893, app_port=8892)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"unsafe destination was accepted: {url}")
+
+
+def test_network_task_failure_marks_the_active_phase_and_provides_recovery(monkeypatch):
+    async def run():
+        monkeypatch.setattr("extensions.network_adapters.local_status", lambda: {"online": False})
+        manager = NetworkTaskManager()
+        task_id = manager.create(request())
+        await manager.runners[task_id]
+        state = manager.get(task_id)
+
+        assert state["status"] == "failed"
+        assert state["failed_phase"] == "local_detect"
+        assert state["steps"][0]["status"] == "failed"
+        assert state["recovery_code"] == "TAILSCALE_LOCAL_OFFLINE"
+        assert state["recovery_action"]
+        assert "enrollment-secret-token" not in json.dumps(state)
+        assert "ssh-secret" not in json.dumps(state)
+
+    asyncio.run(run())
