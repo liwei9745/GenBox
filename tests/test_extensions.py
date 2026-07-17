@@ -65,6 +65,67 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
     asyncio.run(run())
 
 
+def test_mismatched_ssh_host_key_is_rejected_before_authentication(monkeypatch):
+    class Key:
+        def export_public_key(self, format_name):
+            return "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA test"
+
+    class HostKeyNotVerifiable(Exception):
+        pass
+
+    calls = []
+    authentication_attempted = False
+
+    async def connect(**kwargs):
+        nonlocal authentication_attempted
+        calls.append(kwargs)
+        client = kwargs["client_factory"]()
+        if not client.validate_host_public_key("vps.example", "203.0.113.10", 22, Key()):
+            raise HostKeyNotVerifiable("host key rejected before authentication")
+        authentication_attempted = True
+        raise AssertionError("authentication must not run after a fingerprint mismatch")
+
+    fake_asyncssh = SimpleNamespace(SSHClient=object, HostKeyNotVerifiable=HostKeyNotVerifiable, connect=connect)
+    monkeypatch.setitem(sys.modules, "asyncssh", fake_asyncssh)
+    request = ExtensionTestRequest(
+        target=ExtensionTarget(id="vps", name="VPS", host="vps.example", username="ubuntu"),
+        credential=SSHCredential(password="ssh-secret"),
+        expected_host_key="SHA256:not-the-server-key",
+    )
+
+    async def run():
+        try:
+            await _connect(request)
+        except HostKeyNotVerifiable:
+            pass
+        else:
+            raise AssertionError("mismatched host key was accepted")
+
+    asyncio.run(run())
+    assert calls[0]["password"] == "ssh-secret"
+    assert not authentication_attempted
+
+
+def test_network_ui_is_tailscale_and_existing_only_with_failure_recovery_contract():
+    root = Path(__file__).parents[1]
+    html = (root / "static" / "index.html").read_text(encoding="utf-8")
+    script = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    translations = (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+
+    assert 'value="tailscale" checked onchange="extensionSelectNetwork(this)"' in html
+    assert 'value="netbird" disabled' in html
+    assert 'value="cloudflare" disabled' in html
+    assert 'value="auto"' not in html
+    assert 'id="extNetworkToken"' not in html
+    assert 'id="extTailscaleKeyGuide" class="extension-key-guide hidden"' in html
+    assert 'input[name="extNetwork"][value="tailscale"]' in script
+    assert "provider:'tailscale',enrollment_token:'',operation_mode:'existing'" in script
+    assert "remote_network_detect:'task.network.remote_network_detect'" in script
+    assert "t.failed_phase" in script
+    assert "t.recovery_action" in script
+    assert '"task.network.remote_network_detect":{"zh-CN":"确认 VPS Tailscale 地址","en":"Confirm VPS Tailscale address"}' in translations
+
+
 def test_deploy_completion_opens_delivery_pane():
     script = (Path(__file__).parents[1] / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
     completed_handler = script.split("async function renderTask", 1)[1].split("window.extensionStartDeploy", 1)[0]
