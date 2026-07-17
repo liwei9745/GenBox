@@ -2,137 +2,37 @@
 
 **Last updated:** 2026-07-17
 **Current branch:** `codex/phase3-private-network`
-**Release commit:** `ae2b174`
-**Release status:** v2.5.1 published under GPL-3.0-only — **VERIFIED**
 **Current phase:** Phase 2 Extension Center Deployment Experience — **In Progress**
 
 ## Current Development Snapshot
 
-- `VERIFIED 2026-07-17`: checkpoint commit `1e0803f` preserves the completed
-  local Phase 3 security loops and the resume point. See
-  `docs/PHASE3-SNAPSHOT-2026-07-17.md`.
-- `VERIFIED 2026-07-17`: commits `6bbad36` and `01bbb49` complete the local
-  Phase 3 UI truthfulness loop. Tailscale/existing is the only active path;
-  unavailable providers are disabled; structured failure/recovery information
-  is displayed; and SSH fingerprint mismatch is tested with a real loopback
-  AsyncSSH handshake before user authentication.
-- `VERIFIED 2026-07-17`: the post-integration focused suite passed with
-  `41 passed`; the full local suite passed with `120 passed`; Python
-  compilation, JavaScript syntax, and `git diff --check` passed.
-- `VERIFIED 2026-07-17`: explicit-model reviews used `gpt-5.6-sol` for
-  security/phase-order judgment, `gpt-5.6-luna` for acceptance/UI contracts,
-  and `gpt-5.6-terra` as the isolated-worktree writer. Initial P2 test-quality
-  findings were fixed and both final reviews approved commit `01bbb49`.
-- `VERIFIED 2026-07-17`: no VPS command, Tailnet enrollment, sender Push, or
-  production mutation occurred.
-- Phase 2 local closure is the only active objective. Phase 3 local work is
-  preserved and blocked only on a separately authorized isolated-VPS acceptance
-  gate.
-- The next Phase 3 gate is isolated VPS acceptance. It requires a separately
-  identified development clone and fresh user authorization; no remote action
-  is currently authorized.
-- Phase 2 local debt is ordered as small loops: unique catalog IDs first,
-  durable deployment-task recovery second, backend capability enforcement and
-  structured deployment failure/recovery third, then local acceptance review.
+- `VERIFIED 2026-07-17`: Phase 2 catalog-identity Loop 1 is merged through
+  commits `445d004`, `c7cce88`, and `5cb1c13`.
+- `VERIFIED 2026-07-17`: `liwei9745/gemini2api` and
+  `xwteam/gemini2api` have the fixed, unique canonical IDs
+  `gemini2api-liwei9745` and `gemini2api-xwteam`.
+- `VERIFIED 2026-07-17`: both Gemini projects remain planned and
+  `deployable=false`; `chatgpt2api` remains the only deployable catalog item.
+- `VERIFIED 2026-07-17`: the main-worktree checks passed: catalog `5 passed`;
+  extension-focused `50 passed`; full suite `122 passed`; Python compilation
+  and `git diff --check` also passed.
+- `VERIFIED 2026-07-17`: two `gpt-5.6-sol` xhigh architecture-review rounds
+  and the final `gpt-5.6-luna` high test review approved the Loop 1 result.
+- `VERIFIED 2026-07-17`: no VPS, Tailnet, network, production, push, release,
+  or image operation occurred.
 - `.planning/STATE.md` remains owner-controlled and must not be modified,
   staged, discarded, or committed.
 
-## Candidate Identity
+## Next Objective
 
-- `VERIFIED 2026-07-16`: source commit `b411aa0`; packaged runtime version
-  `2.5.1`.
-- `VERIFIED 2026-07-16`: Windows candidate size `30,328,866` bytes; SHA-256
-  `99E105A1A753879481E8133DD3146CA00DD15B70D93C5DAD1DA700CE04953A67`.
-- `VERIFIED 2026-07-16`: official v2.4.1 size `25,229,487` bytes; SHA-256
-  `E6E45E81221E628C9AB14BE7EEB36608CF46EF62DFC98FAED0AC71FE964AA0D4`.
+Phase 2 Loop 2 is the sole next objective: durable deployment-task recovery
+across browser refresh and process restart. It is not implemented yet; do not
+begin its design or code until separately tasked. The later Phase 2 loops remain
+backend capability enforcement, structured deployment failure/recovery, and
+local acceptance review.
 
-## Verified Candidate State
+## Phase 3 Gate
 
-- `VERIFIED 2026-07-16`: automated gates passed with `111 passed`, JavaScript
-  syntax checks, README Lab generation, and `git diff --check`.
-- Windows W0-W4 passed their candidate criteria using combined evidence. For
-  W2, `USER-CONFIRMED 2026-07-16` the operator saw the exact prompt and entered
-  `1` once. `VERIFIED 2026-07-16` there was no `8892` listener before input;
-  PyInstaller used its expected two-level process structure; listener creation
-  preceded the `.env` write; and the same listener PID and creation time handled
-  two HTTP checks. The process used `dev`, bound only to
-  `127.0.0.1:8892`, created no `ADMIN_KEY`, returned the canonical six-field
-  setup schema, and allowed unauthenticated provider access.
-- `VERIFIED 2026-07-16`: local image `genbox-v251-candidate:b411aa0` was built
-  from exact commit `b411aa0` in about 8m27s. Its truncated image ID is
-  `sha256:335d4437…e69746a`; size `656,575,011` bytes. The separate ffmpeg
-  diagnostic took about 9m45s. Isolated checks passed for
-  non-root execution, health/schema, `401`/`401`/`200` authentication,
-  persistence, logs without the key, and candidate resource cleanup. The image
-  remains local and was not pushed.
-- `VERIFIED 2026-07-16`: U1 official v2.4.1 upgrade fixture passed. Windows
-  safely rejected in-use EXE
-  replacement; replacement after shutdown preserved configuration, providers,
-  and marker hashes/mtimes, and v2.5.1 started normally.
-
-## v2.4.1 Baseline Finding
-
-U2 uses combined evidence. `USER-CONFIRMED 2026-07-16` a real Windows 10
-console showed readable GBK Chinese, visible raw ANSI escape sequences, the
-interactive prompt and choice `1`, and a browser opening. `VERIFIED 2026-07-16`
-v2.4.1 wrote `APP_MODE=dev` but did not reload it in the existing process; that
-process continued as production on `0.0.0.0:8891` and generated an
-administrator secret. The secret value is intentionally omitted from repository
-documentation. The exact process was stopped, all key-bearing temporary
-artifacts were deleted, and the ports were released.
-
-This is a confirmed old-version baseline defect. It is not a candidate
-regression: the independent v2.5.1 W2 acceptance proves immediate same-process
-dev mode, loopback binding, and no administrator key. ANSI behavior has not been
-separately accepted on v2.5.1, and the Windows evidence is limited to one
-Windows 10 machine.
-
-## Release Preparation
-
-- `VERIFIED 2026-07-16`: prepared Chinese and English v2.5.1 release notes,
-  changelog entry, README links, and README Lab content. The notes accurately
-  retain the sender Push, network-adapter, and Windows-coverage limitations.
-- `VERIFIED 2026-07-16`: release-preparation working tree passed `111` tests,
-  four JavaScript syntax checks, README Lab generation, and `git diff --check`.
-  Pytest's default system temporary directory was inaccessible in this session;
-  the same suite passed with a disposable repository-local `--basetemp`, which
-  was removed after the run.
-- `VERIFIED 2026-07-16`: a high-confidence scan of tracked content found no
-  private-key block, OpenAI-style key, GitHub token, or AWS access-key match.
-  This is a screening result, not a substitute for final human review of the
-  release diff and generated artifacts.
-- `VERIFIED 2026-07-16`: GPL-3.0-only PR #7 merged to `master` as `ad802f6`.
-  The v2.5.1 branch was then rebased onto that GPL baseline so its source and
-  release packages carry the selected license.
-
-## Published v2.5.1 Release
-
-- `VERIFIED 2026-07-16`: PR #6 merged to `master` as `ae2b174`; tag `v2.5.1`
-  points to that merged GPL-3.0-only release commit.
-- `VERIFIED 2026-07-16`: GitHub Release `GenBox v2.5.1` was published with eight
-  assets: three standalone clients, three client ZIPs, the Docker Compose ZIP,
-  and `SHA256SUMS.txt`.
-- `VERIFIED 2026-07-16`: Docker tag workflow run `29510804581` and desktop/
-  Release workflow run `29510804145` both completed successfully.
-- `VERIFIED 2026-07-16`: downloaded Docker Compose bundle SHA-256 matched
-  `SHA256SUMS.txt` and its contents include `LICENSE`, `COPYRIGHT`, and
-  `THIRD_PARTY_NOTICES.md` alongside the public deployment files.
-
-## Safety And Scope
-
-- `VERIFIED 2026-07-16`: production-like chatgpt2api remained read-only and
-  unchanged.
-- `VERIFIED 2026-07-16`: no VPS operation or sender Push operation occurred.
-- `VERIFIED 2026-07-16`: ports `8891` and `8892` are free; acceptance processes
-  and secret-bearing temporary directories were removed.
-- `VERIFIED 2026-07-16`: the repository `.env` remained unchanged. Do not
-  modify, stage, or commit the owner's `.planning/STATE.md` change.
-
-## Release Closeout And Resume
-
-The v2.5.1 release closeout remains complete. Resume Phase 2 local closure with
-the catalog identity loop. Phase 3 returns only after an isolated development
-clone is identified and remote acceptance is separately authorized. Continue
-using `docs/extensions-deployment-contract.md`, retain the production
-chatgpt2api read-only boundary, and keep GPL provenance review current for
-copied code, assets, or bundled service artifacts.
+Phase 3 remains **Blocked**. Resume only after the user separately identifies
+an isolated VPS development clone and authorizes isolated-VPS acceptance.
+Production remains read-only; no remote action is currently authorized.
