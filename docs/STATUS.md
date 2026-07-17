@@ -6,6 +6,8 @@
 
 ## Current Development Snapshot
 
+- `VERIFIED 2026-07-16`: v2.5.1 was published under GPL-3.0-only at release
+  commit `ae2b174`.
 - `VERIFIED 2026-07-17`: Phase 2 catalog-identity Loop 1 is merged through
   commits `445d004`, `c7cce88`, and `5cb1c13`.
 - `VERIFIED 2026-07-17`: `liwei9745/gemini2api` and
