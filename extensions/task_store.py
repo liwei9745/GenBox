@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from config import STORAGE_DIR
+from extensions.deployment_failures import VALID_FAILURE_COMBINATIONS
 
 
 TASK_STORE_SCHEMA_VERSION = 1
@@ -20,7 +21,7 @@ TASK_STATUSES = {"queued", "running", "completed", "failed", "cancelled", "inter
 
 _TASK_FIELDS = {
     "id", "status", "phase", "progress", "steps", "logs", "error", "host_key",
-    "result", "created_at", "updated_at", "recovery_action",
+    "result", "created_at", "updated_at", "recovery_action", "failed_phase", "error_code",
 }
 _INSTANCE_FIELDS = {
     "id", "target_id", "project", "strategy", "deployment_mode", "compose_project",
@@ -136,9 +137,20 @@ class TaskStore:
             return False
         if task.get("result") is not None and not isinstance(task["result"], dict):
             return False
-        for field in ("error", "recovery_action"):
+        for field in ("error", "recovery_action", "failed_phase", "error_code"):
             if task.get(field) is not None and not isinstance(task[field], str):
                 return False
+        failed_phase = task.get("failed_phase")
+        error_code = task.get("error_code")
+        recovery_action = task.get("recovery_action")
+        if task["status"] == "failed":
+            # Schema v1 records written before structured failures had neither
+            # field. Keep those readable so the UI can render a safe fallback.
+            legacy_failure = "failed_phase" not in task and "error_code" not in task
+            if not legacy_failure and (failed_phase, error_code, recovery_action) not in VALID_FAILURE_COMBINATIONS:
+                return False
+        elif failed_phase is not None or error_code is not None:
+            return False
         for field in ("host_key", "created_at", "updated_at"):
             if not isinstance(task.get(field), str):
                 return False

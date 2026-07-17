@@ -17,6 +17,7 @@ from typing import Any
 
 from extensions.models import ExtensionDeployRequest, ExtensionKeyResetRequest, ExtensionPlanRequest, ExtensionTestRequest
 from extensions.capabilities import validate_deployment_capability
+from extensions.deployment_failures import deployment_failure
 import extensions.store as extensions_store
 from extensions.task_store import TaskStore
 
@@ -222,6 +223,7 @@ class ExtensionTaskManager:
                 "steps": [{"id": key, "label": label, "status": "pending"} for key, label in DEPLOY_STEPS],
                 "logs": [], "error": None, "host_key": "", "result": None,
                 "created_at": self._now(), "updated_at": self._now(), "recovery_action": None,
+                "failed_phase": None, "error_code": None,
             }
             self._persist()
             runner = asyncio.create_task(self._run(task_id, request, plan))
@@ -249,6 +251,11 @@ class ExtensionTaskManager:
                 return False
             state["status"] = "cancelled"
             state["error"] = "任务已取消"
+            state["result"] = None
+            state["failed_phase"] = None
+            state["error_code"] = None
+            state["recovery_action"] = None
+            self.deliveries.pop(task_id, None)
             state["updated_at"] = self._now()
             self._persist()
             runner.cancel()
@@ -289,6 +296,7 @@ class ExtensionTaskManager:
         with self.lock:
             state = self.tasks[task_id]
         connection = None
+        failure_key = "connection_failed"
 
         def step(index: int, status: str, log: str = ""):
             with self.lock:
@@ -310,11 +318,13 @@ class ExtensionTaskManager:
             connection, fingerprint = await _connect(request)
             state["host_key"] = fingerprint
             if connection is None:
+                failure_key = "host_key_confirmation_required"
                 raise PermissionError("需要先确认 VPS 主机指纹")
             step(0, "success", "SSH 连接成功")
 
             user_id = (await connection.run("id -u", check=True)).stdout.strip()
             home_dir = (await connection.run("printf %s \"$HOME\"", check=True)).stdout.strip()
+            failure_key = "docker_unavailable"
             docker_probe = await connection.run("docker version >/dev/null 2>&1", check=False)
             sudo_probe = await connection.run("sudo -n true >/dev/null 2>&1", check=False)
             sudo_password = request.credential.sudo_password or request.credential.password
@@ -346,6 +356,7 @@ class ExtensionTaskManager:
                 for index in range(1, len(DEPLOY_STEPS)):
                     step(index, "success", "接入已有实例：未执行远程变更")
                 console_url = f"http://{request.target.host}:{plan['service_port']}"
+                failure_key = "instance_registration_failed"
                 instance = extensions_store.upsert_instance({
                     "id": plan["instance_id"], "target_id": request.target.id, "project": plan["project_id"], "strategy": "existing",
                     "deployment_mode": "compose", "compose_project": plan.get("compose_project", ""),
@@ -419,6 +430,7 @@ class ExtensionTaskManager:
                 (image_prepare, True),
             ]
             for offset, (command, privileged) in enumerate(commands, start=1):
+                failure_key = {1: "docker_unavailable", 2: "preparation_failed", 3: "image_prepare_failed"}[offset]
                 step(offset, "running", DEPLOY_STEPS[offset][1])
                 result = await run_command(command, privileged)
                 if result.exit_status != 0:
@@ -431,6 +443,7 @@ class ExtensionTaskManager:
                     )
                 step(offset, "success", done_log)
             cloned_config = False
+            failure_key = "preparation_failed"
             if plan.get("clone_scope") in {"media", "working-copy"}:
                 source_data = plan["clone_source_data_dir"]
                 target_data = f"{install_dir}/data"
@@ -478,6 +491,7 @@ class ExtensionTaskManager:
             await write_remote(f"{install_dir}/.genbox-instance", json.dumps({
                 "id": plan["instance_id"], "project": compose_project, "managed": True,
             }))
+            failure_key = "service_start_failed"
             step(4, "running", DEPLOY_STEPS[4][1])
             start = await run_command(
                 f"cd {shlex.quote(install_dir)} && docker compose -p {shlex.quote(compose_project)} -f compose.yml up -d",
@@ -486,6 +500,7 @@ class ExtensionTaskManager:
             if start.exit_status != 0:
                 raise RuntimeError("启动服务失败")
             step(4, "success", "启动服务完成")
+            failure_key = "service_verification_failed"
             step(5, "running", DEPLOY_STEPS[5][1])
             verify = await connection.run(
                 "for i in 1 2 3 4 5 6 7 8 9 10; do "
@@ -493,13 +508,21 @@ class ExtensionTaskManager:
                 check=False,
             )
             if verify.exit_status != 0:
-                await run_command(
-                    f"cd {shlex.quote(install_dir)} && docker compose -p {shlex.quote(compose_project)} -f compose.yml down",
-                    True,
-                )
+                try:
+                    stopped = await run_command(
+                        f"cd {shlex.quote(install_dir)} && docker compose -p {shlex.quote(compose_project)} -f compose.yml down",
+                        True,
+                    )
+                    if stopped.exit_status != 0:
+                        failure_key = "service_verification_stop_unconfirmed"
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    failure_key = "service_verification_stop_unconfirmed"
                 raise RuntimeError("等待服务就绪失败，新实例已停止")
             step(5, "success", "等待服务就绪完成")
             console_url = f"http://{request.target.host}:{plan['service_port']}"
+            failure_key = "instance_registration_failed"
             instance = extensions_store.upsert_instance({
                 "id": plan["instance_id"], "target_id": request.target.id, "project": plan["project_id"], "strategy": plan["strategy"],
                 "deployment_mode": "compose", "compose_project": compose_project,
@@ -524,18 +547,40 @@ class ExtensionTaskManager:
             with self.lock:
                 state["status"] = "cancelled"
                 state["error"] = "任务已取消"
+                state["result"] = None
+                state["failed_phase"] = None
+                state["error_code"] = None
+                state["recovery_action"] = None
+                self.deliveries.pop(task_id, None)
                 state["updated_at"] = self._now()
                 self._persist()
         except Exception:
             with self.lock:
-                state["status"] = "failed"
-                state["error"] = "部署失败。请重新生成计划并重新提供凭证后重试。"
-                state["updated_at"] = self._now()
-                self._persist()
+                if state.get("status") != "cancelled":
+                    failure = deployment_failure(failure_key)
+                    state["status"] = "failed"
+                    state["phase"] = failure.failed_phase
+                    for failed_step in state["steps"]:
+                        if failed_step.get("id") == failure.failed_phase:
+                            failed_step["status"] = "failed"
+                    state["failed_phase"] = failure.failed_phase
+                    state["error_code"] = failure.error_code
+                    state["recovery_action"] = failure.recovery_action
+                    state["error"] = failure.public_message
+                    state["result"] = None
+                    self.deliveries.pop(task_id, None)
+                    state["updated_at"] = self._now()
+                    self._persist()
         finally:
             if connection is not None:
-                connection.close()
-                await connection.wait_closed()
+                try:
+                    connection.close()
+                except Exception:
+                    pass
+                try:
+                    await connection.wait_closed()
+                except Exception:
+                    pass
 
 
 extension_tasks = ExtensionTaskManager()
