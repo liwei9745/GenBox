@@ -12,7 +12,10 @@ CATALOG = [
     },
     *[
         {
-            "id": repository.rsplit("/", 1)[-1].lower(),
+            "id": {
+                "liwei9745/gemini2api": "gemini2api-liwei9745",
+                "xwteam/gemini2api": "gemini2api-xwteam",
+            }.get(repository, repository.rsplit("/", 1)[-1].lower()),
             "name": repository.rsplit("/", 1)[-1],
             "repository": repository,
             "category": "api_gateway",
