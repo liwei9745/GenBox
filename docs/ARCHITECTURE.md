@@ -3,10 +3,13 @@
 ## System Context
 
 GenBox is a single-process FastAPI application that serves a static browser UI
-and stores configuration and media on the filesystem. Current background task
-state is process-local memory and is not durable across a restart. The extension
-initiative connects GenBox to independently deployed services. The first
-integration target is `yukkcat/chatgpt2api`.
+and stores configuration and media on the filesystem. Extension deployment tasks
+use a versioned, atomic, public-only TaskStore. Browser refresh restores the
+active or latest task; after a process restart, queued or running tasks become
+`interrupted` and are never replayed automatically. Credentials and one-time
+delivery keys are not persisted in task records. The extension initiative
+connects GenBox to independently deployed services, beginning with
+`yukkcat/chatgpt2api`.
 
 ```mermaid
 flowchart LR

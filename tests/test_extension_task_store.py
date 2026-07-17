@@ -695,6 +695,127 @@ def test_connection_close_errors_do_not_overwrite_failed_terminal_state(tmp_path
     asyncio.run(run())
 
 
+def test_deployed_service_vault_controls_mount_and_bind_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+(async () => {
+const created = [];
+const calls = [];
+let opened = '';
+function basicNode(tag='div') {
+  return {tagName:tag.toUpperCase(),className:'',textContent:'',innerHTML:'',disabled:false,
+    classList:{toggle(){},add(){},remove(){}},appendChild(){},insertBefore(){},insertAdjacentHTML(){},
+    querySelector(){return basicNode();},querySelectorAll(){return []},setAttribute(){},getAttribute(){return null}};
+}
+const name = basicNode(); name.textContent = 'managed-one';
+const top = basicNode(); top.appended = []; top.appendChild = item => top.appended.push(item);
+const reset = basicNode('button');
+const actions = basicNode(); actions.inserted = []; actions.querySelector = selector => selector === '.ext-reset-btn' ? reset : null; actions.insertBefore = item => actions.inserted.push(item);
+const card = basicNode(); card.querySelector = selector => ({'.ext-service-name':name,'.ext-service-card-top':top,'.ext-service-actions':actions}[selector] || null);
+const groupBody = basicNode();
+const groupCount = basicNode();
+const drawer = basicNode();
+drawer.querySelectorAll = selector => selector === '.ext-service-card' ? [card] : [];
+drawer.querySelector = selector => selector.includes('.ext-bento-group-count') ? groupCount : (selector.includes('.ext-bento-group-body') ? groupBody : null);
+const elements = new Map([['extDrawerList',drawer]]);
+function element(id){if(!elements.has(id))elements.set(id,basicNode());return elements.get(id)}
+global.window = global;
+global.document = {
+  getElementById: element,
+  querySelector(){return basicNode()}, querySelectorAll(){return []}, addEventListener(){}, removeEventListener(){},
+  createElement(tag){const item=basicNode(tag);created.push(item);return item;},
+};
+global.i18nText = key => key;
+global.getUiLanguage = () => 'en';
+global.escHtml = value => String(value || '');
+global._authFetch = async url => {
+  calls.push(url);
+  let body = {};
+  if(url === '/api/extensions/vault/status') body = {configured:true,unlocked:true,entry_count:1};
+  else if(url === '/api/extensions/vault/credentials') body = {credentials:[{instance_id:'managed-one'}]};
+  else if(url === '/api/extensions/instances') body = {instances:[{id:'managed-one',project:'chatgpt2api',managed:true,status:'running',service_port:33010,console_url:'http://console.example',api_url:'http://console.example/v1',admin_key:'raw-admin-secret',raw_secret:'raw-secret'}]};
+  return {ok:true,text:async()=>JSON.stringify(body)};
+};
+eval(source);
+window.extensionOpenCredential = id => {opened=id};
+await window.extensionLoadServices();
+const state = created.find(item => item.tagName === 'SPAN');
+const button = created.find(item => item.tagName === 'BUTTON');
+if(!state || state.textContent !== 'vault.saved' || !top.appended.includes(state)) throw new Error('vault state was not mounted');
+if(!button || button.textContent !== 'vault.view' || !actions.inserted.includes(button)) throw new Error('credential button was not mounted');
+if(typeof button.onclick !== 'function') throw new Error('credential button was not bound');
+button.onclick();
+if(opened !== 'managed-one') throw new Error('credential button binding was not callable');
+if(drawer.innerHTML.includes('raw-admin-secret') || drawer.innerHTML.includes('raw-secret')) throw new Error('raw secret was rendered in service drawer');
+if(source.includes('localStorage')) throw new Error('service drawer uses localStorage');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_completed_delivery_renders_once_and_does_not_refetch_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+(async () => {
+const elements = new Map();
+function element(id){
+  if(!elements.has(id)){
+    const classes=new Set(id==='extHandoff'?['hidden']:[]);
+    const item={style:{},value:'',textContent:'',innerHTML:'',href:'',readOnly:false,placeholder:'',dataset:{},
+      classList:{toggle(name,on){if(on)classes.add(name);else classes.delete(name)},add(name){classes.add(name)},remove(name){classes.delete(name)},contains(name){return classes.has(name)}},
+      querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){}};
+    elements.set(id,item);
+  }
+  return elements.get(id);
+}
+let nextStep = 0;
+let deliveryCalls = 0;
+const completed={id:'delivery-task',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',label:'Verify',status:'success'}],logs:[],error:null,host_key:'SHA256:public',created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action:null,failed_phase:null,error_code:null,result:{instance:{id:'managed-one',managed:true},url:'http://console.example',api_url:'http://console.example/v1',admin_key_available:true}};
+const summary={active_task_id:null,latest_task_id:'delivery-task',tasks:[completed]};
+global.window=global;
+global.document={getElementById:element,querySelector(){return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};
+global.i18nText=key=>key;
+global.getUiLanguage=()=> 'en';
+global.escHtml=value=>String(value||'');
+global.extensionNext=step=>{nextStep=step};
+global.clearInterval=()=>{};
+global.setInterval=()=>({});
+global._authFetch=async url=>{
+  let body={};
+  if(url==='/api/extensions/targets')body={targets:[]};
+  else if(url==='/api/extensions/catalog')body={categories:[],items:[]};
+  else if(url==='/api/extensions/targets/batch')body={target_ids:[]};
+  else if(url==='/api/extensions/tasks')body=summary;
+  else if(url==='/api/extensions/tasks/delivery-task/delivery'){
+    deliveryCalls+=1;
+    completed.result.admin_key_available=false;
+    body={admin_key:'one-time-key',shown_once:true};
+  }
+  return {ok:true,text:async()=>JSON.stringify(body)};
+};
+eval(source);
+window.extensionLoadServices=async()=>{};
+window.extensionNext=step=>{nextStep=step};
+await window.loadExtensions();
+if(deliveryCalls!==1)throw new Error('delivery endpoint was not requested exactly once');
+if(element('extConsoleUrl').value!=='http://console.example' || element('extApiUrl').value!=='http://console.example/v1')throw new Error('delivery URLs were not filled');
+if(element('extAdminKey').value!=='one-time-key')throw new Error('one-time key was not filled');
+if(element('extOpenConsole').href!=='http://console.example')throw new Error('console link was not filled');
+if(element('extHandoff').classList.contains('hidden') || nextStep!==5)throw new Error('handoff was not displayed hidden='+element('extHandoff').classList.contains('hidden')+' step='+nextStep);
+await window.loadExtensions();
+if(deliveryCalls!==1)throw new Error('delivery endpoint was requested more than once');
+if(source.includes('localStorage'))throw new Error('delivery flow uses localStorage');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_extensions_ui_recovery_contract_executes_in_node():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''
