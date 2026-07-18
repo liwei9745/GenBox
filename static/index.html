@@ -817,27 +817,28 @@
             <h2 tabindex="-1"><span data-i18n="extensions.connect_vps">连接 VPS</span></h2>
             <div class="extension-target-bar">
               <label><span data-i18n="extensions.saved_vps">已保存 VPS</span><select id="extTargetSelect" onchange="extensionLoadTarget(this.value)"><option value=""><span data-i18n="extensions.current_unsaved">当前未保存</span></option></select></label>
-              <button type="button" class="btn-ghost" onclick="extensionNewTarget()"><span data-i18n="extensions.new_vps">新增 VPS</span></button>
-              <button type="button" class="btn-secondary" onclick="extensionSaveTarget()"><span data-i18n="common.save">保存</span></button>
+              <button type="button" class="btn-ghost" id="extNewTargetBtn" onclick="extensionNewTarget()"><span data-i18n="extensions.new_vps">新增 VPS</span></button>
+              <button type="button" class="btn-secondary" id="extSaveTargetBtn" onclick="extensionSaveTarget()"><span data-i18n="common.save">保存</span></button>
               <button type="button" class="btn-ghost extension-delete-target" id="extDeleteTarget" onclick="extensionDeleteTarget()" disabled><span data-i18n="common.delete">删除</span></button>
             </div>
             <div class="extension-form-grid">
               <label><span data-i18n="extensions.name">名称</span><input id="extName" value="我的 VPS" autocomplete="off"></label>
-              <label><span data-i18n="extensions.host">IP 地址或域名</span><input id="extHost" placeholder="192.0.2.10" autocomplete="off"></label>
-              <label><span data-i18n="extensions.ssh_port">SSH 端口</span><input id="extPort" type="number" value="22" min="1" max="65535"></label>
-              <label><span data-i18n="extensions.ssh_username">SSH 用户名</span><input id="extUsername" value="ubuntu" autocomplete="username"></label>
+              <label><span data-i18n="extensions.host">IP 地址或域名</span><input id="extHost" placeholder="192.0.2.10" autocomplete="off" oninput="extensionConnectionChanged()"></label>
+              <label><span data-i18n="extensions.ssh_port">SSH 端口</span><input id="extPort" type="number" value="22" min="1" max="65535" oninput="extensionConnectionChanged()"></label>
+              <label><span data-i18n="extensions.ssh_username">SSH 用户名</span><input id="extUsername" value="ubuntu" autocomplete="username" oninput="extensionConnectionChanged()"></label>
             </div>
             <fieldset class="extension-auth"><legend><span data-i18n="extensions.auth_method">鉴权方式</span></legend>
               <div class="extension-segments">
                 <button type="button" class="active" data-auth="password" onclick="extensionSetAuth('password')"><span data-i18n="extensions.password">密码</span></button>
                 <button type="button" data-auth="key" onclick="extensionSetAuth('key')"><span data-i18n="extensions.private_key">SSH 私钥</span></button>
               </div>
-              <label id="extPasswordWrap"><span data-i18n="extensions.ssh_password">SSH 密码</span><div class="extension-copy-row"><input id="extPassword" type="password" autocomplete="off"><button type="button" class="btn-secondary" aria-label="显示 SSH 密码" aria-pressed="false" title="显示 SSH 密码" onclick="extensionTogglePassword('extPassword',this)">👁</button></div></label>
-              <label id="extKeyWrap" class="hidden"><span data-i18n="extensions.private_key">SSH 私钥</span><textarea id="extPrivateKey" rows="6" spellcheck="false"></textarea></label>
-              <label><span data-i18n="extensions.sudo_password">sudo 密码（留空则复用 SSH 密码）</span><div class="extension-copy-row"><input id="extSudoPassword" type="password" autocomplete="off" placeholder="仅非 root 且需要提权时使用" data-i18n-placeholder="extensions.sudo_placeholder"><button type="button" class="btn-secondary" aria-label="显示 sudo 密码" aria-pressed="false" title="显示 sudo 密码" onclick="extensionTogglePassword('extSudoPassword',this)">👁</button></div></label>
+              <label id="extPasswordWrap"><span data-i18n="extensions.ssh_password">SSH 密码</span><div class="extension-copy-row"><input id="extPassword" type="password" autocomplete="off" oninput="extensionCredentialChanged()"><button type="button" class="btn-secondary" aria-label="显示 SSH 密码" aria-pressed="false" title="显示 SSH 密码" onclick="extensionTogglePassword('extPassword',this)">👁</button></div></label>
+              <label id="extKeyWrap" class="hidden"><span data-i18n="extensions.private_key">SSH 私钥</span><textarea id="extPrivateKey" rows="6" spellcheck="false" oninput="extensionCredentialChanged()"></textarea></label>
+              <label><span data-i18n="extensions.sudo_password">sudo 密码（留空则复用 SSH 密码）</span><div class="extension-copy-row"><input id="extSudoPassword" type="password" autocomplete="off" placeholder="仅非 root 且需要提权时使用" data-i18n-placeholder="extensions.sudo_placeholder" oninput="extensionCredentialChanged()"><button type="button" class="btn-secondary" aria-label="显示 sudo 密码" aria-pressed="false" title="显示 sudo 密码" onclick="extensionTogglePassword('extSudoPassword',this)">👁</button></div></label>
             </fieldset>
+            <p id="extCredentialNotice" class="extension-credential-notice" role="status"><span data-i18n="extensions.ssh_not_saved_notice">保存 VPS 连接信息，但不保存 SSH 密码、私钥或 sudo 密码；关闭页面或重启后需要重新输入。</span></p>
             <div id="extHostKeyConfirm" class="extension-confirm hidden" role="alert"></div>
-            <div class="extension-actions"><button class="btn-secondary" onclick="extensionTestSSH(false)"><span data-i18n="extensions.test_connection">测试连接</span></button><button class="btn-primary" onclick="extensionNext(2)"><span data-i18n="common.next">下一步</span></button></div>
+            <div class="extension-actions"><button class="btn-secondary" id="extTestSshBtn" onclick="extensionTestSSH(false)" disabled><span data-i18n="extensions.test_connection">测试连接</span></button><button class="btn-primary" id="extSshNextBtn" onclick="extensionNext(2)" disabled><span data-i18n="common.next">下一步</span></button></div>
           </div>
           <div class="extension-pane hidden" data-pane="2">
             <h2 tabindex="-1"><span data-i18n="extensions.deploy_chatgpt2api">部署 chatgpt2api</span></h2>
@@ -929,7 +930,7 @@
               <pre id="extNetworkLogs" class="extension-logs" aria-live="polite"></pre>
               <div id="extNetworkRecovery" class="extension-network-recovery hidden"><p id="extNetworkRecoveryDetail"></p><button class="btn-secondary" onclick="extensionRetryNetworkCheck()"><span data-i18n="extensions.recheck_link">重新检查链路</span></button></div>
             </div>
-            <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(3)"><span data-i18n="common.previous">上一步</span></button><button class="btn-primary" id="extNetworkConnectBtn" onclick="extensionConnectNetwork()"><span data-i18n="extensions.recheck_connection">重新检测连接</span></button></div>
+            <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(3)"><span data-i18n="common.previous">上一步</span></button><button class="btn-primary" id="extNetworkConnectBtn" onclick="extensionConnectNetwork()"><span data-i18n="extensions.start_network_check">开始检测私网链路</span></button></div>
           </div>
           <div class="extension-pane hidden" data-pane="5">
             <h2 tabindex="-1"><span data-i18n="extensions.verify_finish">验证并完成</span></h2>

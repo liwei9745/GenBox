@@ -271,3 +271,44 @@ automatic promotion.
   explicitly verified.
 - Repair automation grows through reviewed adapter capabilities, not free-form
   model commands or accumulated raw logs.
+
+## ADR-014: Deployment, SSH Session, And Private-Network Completion Are Separate States
+
+**Status:** Accepted
+**Date:** 2026-07-18
+
+### Context
+
+A deployed remote service can be healthy while the VPS-to-GenBox private route
+is still incomplete. SSH credentials are session secrets and may be cleared or
+lost across refresh and restart, while the confirmed public host fingerprint is
+safe target metadata. Treating these facts as one wizard step caused false
+completion, repeated SSH tests, concurrent authentication attempts, and unsafe
+one-time credential delivery.
+
+### Decision
+
+Track service deployment, SSH session verification, and private-network
+verification independently. A historical completed deployment resumes at
+network selection unless an unclaimed one-time service credential must first be
+shown visibly. The final step requires a completed network task and its
+application-level probe; a service console URL can never satisfy the GenBox
+private-URL check.
+
+SSH and sudo credentials remain session-only unless a future explicit encrypted
+target-vault flow is separately accepted. Exactly one SSH authentication method
+is required before any SSH or network-task side effect. Confirmed public host
+fingerprints may be persisted with target metadata. A Phase 3 network task may
+perform the credential-bearing SSH connection directly, so a separate SSH test
+is needed only to establish or change the host fingerprint or to diagnose SSH.
+
+### Consequences
+
+- Browser actions use single-flight locks and discard stale authentication
+  responses after target, account, port, authentication mode, or credential
+  changes.
+- Restart recovery cannot infer private-network success from deployment history.
+- Credentials cleared after task creation must be re-entered, with explicit UI
+  notice; they do not enter target files, task stores, URLs, or browser storage.
+- Network-task persistence remains a follow-up requirement so an interrupted
+  Phase 3 task can be restored independently of deployment history.

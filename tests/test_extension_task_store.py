@@ -806,9 +806,10 @@ if(deliveryCalls!==1)throw new Error('delivery endpoint was not requested exactl
 if(element('extConsoleUrl').value!=='http://console.example' || element('extApiUrl').value!=='http://console.example/v1')throw new Error('delivery URLs were not filled');
 if(element('extAdminKey').value!=='one-time-key')throw new Error('one-time key was not filled');
 if(element('extOpenConsole').href!=='http://console.example')throw new Error('console link was not filled');
-if(element('extHandoff').classList.contains('hidden') || nextStep!==5)throw new Error('handoff was not displayed hidden='+element('extHandoff').classList.contains('hidden')+' step='+nextStep);
+if(element('extHandoff').classList.contains('hidden') || nextStep!==5)throw new Error('unclaimed delivery was not displayed hidden='+element('extHandoff').classList.contains('hidden')+' step='+nextStep);
 await window.loadExtensions();
 if(deliveryCalls!==1)throw new Error('delivery endpoint was requested more than once');
+if(nextStep!==3)throw new Error('claimed historical deployment did not resume at network selection step='+nextStep);
 if(source.includes('localStorage'))throw new Error('delivery flow uses localStorage');
 })();
 '''
@@ -896,6 +897,193 @@ await window.loadExtensions();
 if (calls.some(url => url.includes('/delivery'))) throw new Error('unavailable delivery was requested');
 if (!element('extensionMessage').textContent.includes('extensions.recovery_rotate_admin_key')) throw new Error('credential recovery was not rendered');
 if (source.includes('localStorage')) throw new Error('extension task recovery uses localStorage');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_ssh_ui_blocks_empty_credentials_and_deduplicates_requests_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+(async () => {
+const elements = new Map();
+function element(id){
+  if(!elements.has(id)){
+    const classes=new Set(['extHostKeyConfirm'].includes(id)?['hidden']:[]);
+    elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,readOnly:false,placeholder:'',dataset:{},
+      classList:{toggle(name,on){if(on)classes.add(name);else classes.delete(name)},add(name){classes.add(name)},remove(name){classes.delete(name)},contains(name){return classes.has(name)}},
+      querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){}});
+  }
+  return elements.get(id);
+}
+const networkRadio={value:'tailscale',checked:true};
+global.window=global;
+global.document={
+  getElementById:element,
+  querySelector(selector){if(selector.includes('extNetwork'))return networkRadio;return element('query')},
+  querySelectorAll(){return []},addEventListener(){},removeEventListener(){}
+};
+global.i18nText=key=>key;
+global.getUiLanguage=()=> 'en';
+global.escHtml=value=>String(value||'');
+global.clearInterval=()=>{};
+global.setInterval=()=>({});
+let sshCalls=0;
+let releaseSsh;
+global._authFetch=async (url,options={})=>{
+  let body={};
+  if(url==='/api/extensions/targets'&&options.method==='POST')body={target:{id:'saved',name:'Saved VPS',host:'vps.example',port:22,username:'root',host_key:'SHA256:test',chatgpt2api_port:33010}};
+  else if(url==='/api/extensions/targets')body={targets:[{id:'saved',name:'Saved VPS',host:'vps.example',port:22,username:'root',host_key:'SHA256:test',chatgpt2api_port:33010}]};
+  else if(url==='/api/extensions/catalog')body={categories:[],items:[]};
+  else if(url==='/api/extensions/targets/batch')body={target_ids:[]};
+  else if(url==='/api/extensions/tasks')body={active_task_id:null,latest_task_id:null,tasks:[]};
+  else if(url==='/api/extensions/ssh/test'){
+    sshCalls+=1;
+    return await new Promise(resolve=>{releaseSsh=()=>resolve({ok:true,text:async()=>JSON.stringify({ok:true,host_key:'SHA256:test',privileges:{is_root:true,can_deploy:true}})})});
+  }
+  return {ok:true,text:async()=>JSON.stringify(body)};
+};
+eval(source);
+window.extensionLoadServices=async()=>{};
+await window.loadExtensions();
+window.extensionLoadTarget('saved');
+if(!element('extTestSshBtn').disabled)throw new Error('SSH test enabled without credentials');
+await window.extensionTestSSH(false);
+if(sshCalls!==0)throw new Error('empty credentials sent an SSH request');
+element('extPassword').value='test-only-secret';
+window.extensionCredentialChanged();
+if(element('extTestSshBtn').disabled)throw new Error('SSH test stayed disabled after credentials were entered');
+const first=window.extensionTestSSH(false);
+const second=window.extensionTestSSH(false);
+await Promise.resolve();
+if(sshCalls!==1)throw new Error('duplicate SSH requests were created');
+if(!element('extTestSshBtn').disabled)throw new Error('SSH test button was not locked in flight');
+releaseSsh();
+await Promise.all([first,second]);
+if(sshCalls!==1)throw new Error('duplicate SSH request completed');
+if(element('extSshNextBtn').disabled)throw new Error('successful SSH test did not unlock the next step');
+if(element('extTestSshBtn').disabled)throw new Error('SSH test button did not unlock after completion');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_fresh_completed_poll_displays_and_claims_delivery_once_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+(async()=>{
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(id==='extHandoff'?['hidden']:[]);elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,readOnly:false,placeholder:'',dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){}})}return elements.get(id)}
+global.window=global;global.document={getElementById:element,querySelector(){return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'en';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};
+const timers=[];global.setInterval=fn=>{timers.push(fn);return fn};let nextStep=0,deliveryCalls=0;
+const running={id:'task-one',status:'running',progress:10,steps:[{id:'connect',status:'running'}],logs:[],result:null};const completed={id:'task-one',status:'completed',progress:100,steps:[{id:'verify',status:'success'}],logs:[],result:{instance:{id:'managed',managed:true},url:'http://console.example',api_url:'http://console.example/v1',admin_key_available:true}};let task=running;
+global._authFetch=async url=>{let body={};if(url==='/api/extensions/targets')body={targets:[]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={active_task_id:'task-one',latest_task_id:'task-one',tasks:[running]};else if(url==='/api/extensions/tasks/task-one')body=task;else if(url==='/api/extensions/tasks/task-one/delivery'){deliveryCalls+=1;body={admin_key:'one-time-key'}}return {ok:true,text:async()=>JSON.stringify(body)}};
+eval(source);window.extensionLoadServices=async()=>{};window.extensionNext=step=>{nextStep=step};await window.loadExtensions();if(timers.length!==1)throw new Error('active poller missing');task=completed;await Promise.all([timers[0](),timers[0]()]);if(deliveryCalls!==1)throw new Error('delivery was not claimed exactly once');if(nextStep!==5)throw new Error('fresh delivery was not shown');if(element('extAdminKey').value!=='one-time-key'||element('extHandoff').classList.contains('hidden'))throw new Error('fresh delivery content was not visible');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_delivery_failure_is_not_overwritten_by_deploy_success_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+(async()=>{
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(id==='extHandoff'?['hidden']:[]);elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,readOnly:false,placeholder:'',dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){}})}return elements.get(id)}
+global.window=global;global.document={getElementById:element,querySelector(){return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});
+const completed={id:'task-one',status:'completed',progress:100,steps:[{id:'verify',status:'success'}],logs:[],result:{instance:{id:'managed',managed:true},url:'http://console.example',api_url:'http://console.example/v1',admin_key_available:true}};
+global._authFetch=async url=>{let body={};if(url==='/api/extensions/targets')body={targets:[]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={active_task_id:null,latest_task_id:'task-one',tasks:[completed]};else if(url==='/api/extensions/tasks/task-one/delivery')return {ok:false,text:async()=>JSON.stringify({detail:'delivery unavailable'})};return {ok:true,text:async()=>JSON.stringify(body)}};
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();const output=element('extensionMessage').textContent;if(!output.includes('extensions.delivery_failed_prefix'))throw new Error('delivery failure was not shown');if(output.includes('extensions.deploy_complete'))throw new Error('deploy success overwrote delivery failure');if(element('extAdminKey').value)throw new Error('failed delivery populated a key');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_inflight_ssh_result_cannot_verify_changed_credentials_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+(async () => {
+const elements=new Map();
+function element(id){if(!elements.has(id)){const classes=new Set();elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',disabled:false,dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){}})}return elements.get(id)}
+const networkRadio={value:'tailscale',checked:true};
+global.window=global;
+global.document={getElementById:element,querySelector(selector){if(selector.includes('extNetwork'))return networkRadio;return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};
+global.i18nText=key=>key;global.getUiLanguage=()=> 'en';global.escHtml=value=>String(value||'');global.clearInterval=()=>{};global.setInterval=()=>({});
+let releaseSsh,targetSaves=0;
+global._authFetch=async (url,options={})=>{
+  let body={};
+  if(url==='/api/extensions/targets'&&options.method==='POST'){targetSaves+=1;body={target:{id:'saved',name:'Saved VPS',host:'vps.example',port:22,username:'root',host_key:'SHA256:old',chatgpt2api_port:33010}}}
+  else if(url==='/api/extensions/targets')body={targets:[{id:'saved',name:'Saved VPS',host:'vps.example',port:22,username:'root',host_key:'SHA256:old',chatgpt2api_port:33010}]};
+  else if(url==='/api/extensions/catalog')body={categories:[],items:[]};
+  else if(url==='/api/extensions/targets/batch')body={target_ids:[]};
+  else if(url==='/api/extensions/tasks')body={active_task_id:null,latest_task_id:null,tasks:[]};
+  else if(url==='/api/extensions/ssh/test')return await new Promise(resolve=>{releaseSsh=()=>resolve({ok:true,text:async()=>JSON.stringify({ok:true,host_key:'SHA256:new',privileges:{is_root:true,can_deploy:true}})})});
+  return {ok:true,text:async()=>JSON.stringify(body)};
+};
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');
+element('extPassword').value='first-secret';window.extensionCredentialChanged();
+const pending=window.extensionTestSSH(false);await Promise.resolve();
+element('extPassword').value='changed-secret';window.extensionCredentialChanged();
+releaseSsh();await pending;
+if(!element('extSshNextBtn').disabled)throw new Error('stale SSH response unlocked the next step');
+if(targetSaves!==0)throw new Error('stale SSH response persisted a new host key');
+if(element('extTestSshBtn').disabled)throw new Error('SSH test button stayed locked after stale request completed');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_ssh_metadata_save_keeps_inputs_locked_and_ignores_stale_state_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+(async()=>{
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set();elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',disabled:false,dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){}})}return elements.get(id)}
+const networkRadio={value:'tailscale',checked:true};global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('extNetwork'))return networkRadio;return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'en';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});let releaseSave;
+global._authFetch=async (url,options={})=>{let body={};if(url==='/api/extensions/targets'&&options.method==='POST')return await new Promise(resolve=>{releaseSave=()=>resolve({ok:true,text:async()=>JSON.stringify({target:{id:'saved',name:'Saved',host:'old.example',port:22,username:'root',host_key:'SHA256:new',chatgpt2api_port:33010}})})});else if(url==='/api/extensions/targets')body={targets:[{id:'saved',name:'Saved',host:'old.example',port:22,username:'root',host_key:'SHA256:old',chatgpt2api_port:33010}]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:'SHA256:new',privileges:{is_root:true,can_deploy:true}};return {ok:true,text:async()=>JSON.stringify(body)}};
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='test-only-secret';window.extensionCredentialChanged();const pending=window.extensionTestSSH(false);for(let i=0;i<20&&!releaseSave;i++)await Promise.resolve();if(typeof releaseSave!=='function')throw new Error('metadata save was not reached');if(!element('extHost').disabled||!element('extPassword').disabled||!element('extTargetSelect').disabled)throw new Error('SSH inputs were not locked through metadata save');element('extHost').value='changed.example';window.extensionConnectionChanged();releaseSave();await pending;if(!element('extSshNextBtn').disabled)throw new Error('stale metadata save unlocked next');if(!element('extTestSshBtn').disabled)throw new Error('stale metadata save marked changed target as saved');if(element('extHost').disabled||element('extPassword').disabled)throw new Error('SSH inputs stayed locked after request');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_network_connect_is_single_flight_until_terminal_task_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+(async()=>{
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(['extNetworkRecovery'].includes(id)?['hidden']:[]);elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',disabled:false,dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){}})}return elements.get(id)}
+const networkRadio={value:'tailscale',checked:true};global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('extNetwork'))return networkRadio;return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};
+global.i18nText=k=>k;global.getUiLanguage=()=> 'en';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};
+const timers=[];global.setInterval=fn=>{timers.push(fn);return fn};let connectCalls=0,releaseConnect;
+global._authFetch=async (url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[{id:'saved',name:'Saved',host:'vps.example',port:22,username:'root',host_key:'SHA256:test',chatgpt2api_port:33010}]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/network/connect'){connectCalls+=1;return await new Promise(resolve=>{releaseConnect=()=>resolve({ok:true,text:async()=>JSON.stringify({task_id:'network-one'})})})}else if(url==='/api/extensions/network/tasks/network-one')body={status:'failed',progress:20,failed_phase:'remote_connect',recovery_action:'re-enter credentials',steps:[{id:'remote_connect',status:'failed'}],logs:[],error:'safe failure'};return {ok:true,text:async()=>JSON.stringify(body)}};
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='test-only-secret';window.extensionCredentialChanged();
+const first=window.extensionConnectNetwork();const second=window.extensionConnectNetwork();await Promise.resolve();if(connectCalls!==1)throw new Error('duplicate network connect requests were created');if(!element('extNetworkConnectBtn').disabled)throw new Error('network button was not locked');releaseConnect();await Promise.all([first,second]);if(!element('extNetworkConnectBtn').disabled)throw new Error('network button unlocked before terminal task');if(timers.length!==1)throw new Error('network poller was not created exactly once');await timers[0]();if(element('extNetworkConnectBtn').disabled)throw new Error('network button did not unlock after failure');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_structured_ssh_diagnostic_is_rendered_without_sensitive_fields_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+(async()=>{
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set();elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',disabled:false,dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){}})}return elements.get(id)}
+const networkRadio={value:'tailscale',checked:true};global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('extNetwork'))return networkRadio;return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});
+global._authFetch=async (url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[{id:'saved',name:'Saved',host:'vps.example',port:22,username:'root',host_key:'SHA256:test',chatgpt2api_port:33010}]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/test')return {ok:false,text:async()=>JSON.stringify({detail:{error:'安全认证提示',diagnostic:{code:'ssh_auth_rejected',stage:'password_requested',password_requested:true,retry_safe:false},host:'must-not-render',user:'must-not-render',raw:'must-not-render'}})};return {ok:true,text:async()=>JSON.stringify(body)}};
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='test-only-secret';window.extensionCredentialChanged();await window.extensionTestSSH(false);const output=element('extensionMessage').textContent;if(!output.includes('安全认证提示')||!output.includes('extensions.ssh_diag_password_requested'))throw new Error('structured diagnostic stage was not rendered');if(output.includes('must-not-render')||output.includes('test-only-secret')||output.includes('vps.example')||output.includes('root'))throw new Error('sensitive diagnostic fields were rendered');
 })();
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)

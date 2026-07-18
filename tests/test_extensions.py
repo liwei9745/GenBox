@@ -200,6 +200,45 @@ def test_password_callback_authenticates_against_real_asyncssh_server():
     assert accepted_passwords == ["test-password"]
 
 
+def test_ssh_connection_rejects_missing_or_ambiguous_credentials_before_connect():
+    async def run():
+        for values in (
+            {},
+            {"password": "password-secret", "private_key": "private-key-secret"},
+        ):
+            try:
+                SSHCredential(**values)
+            except ValueError as exc:
+                assert "且只选择一种 SSH 凭据" in str(exc)
+            else:
+                raise AssertionError("invalid SSH credential combination passed model validation")
+            credential = SSHCredential.model_construct(
+                password=values.get("password", ""),
+                private_key=values.get("private_key", ""),
+                passphrase="",
+                sudo_password="",
+            )
+            request = ExtensionTestRequest.model_construct(
+                target=ExtensionTarget(
+                    id="vps", name="VPS", host="vps.example", username="root",
+                ),
+                credential=credential,
+                trust_host_key=False,
+                expected_host_key="SHA256:test",
+            )
+            try:
+                await _connect(request)
+            except ValueError as exc:
+                message = str(exc)
+                assert "且只选择一种 SSH 凭据" in message
+                assert "password-secret" not in message
+                assert "private-key-secret" not in message
+            else:
+                raise AssertionError("invalid SSH credential combination reached AsyncSSH")
+
+    asyncio.run(run())
+
+
 def test_password_auth_rejection_is_sanitized_and_does_not_claim_password_is_wrong(monkeypatch):
     class Key:
         def export_public_key(self, format_name):
@@ -422,8 +461,10 @@ def test_deploy_completion_opens_delivery_pane():
     completed_handler = script.split("async function renderTask", 1)[1].split("window.extensionStartDeploy", 1)[0]
 
     assert "el('extHandoff').classList.remove('hidden')" in completed_handler
-    assert "extensionNext(5)" in completed_handler
-    assert completed_handler.index("extensionNext(5)") > completed_handler.index("/delivery")
+    assert "if(deliveryAvailable){extensionNext(5)" in completed_handler
+    assert "else{extensionNext(restoring?3:5)}" in completed_handler
+    assert "setCheck('url',true,t.result.url)" not in completed_handler
+    assert completed_handler.index("extensionNext(5)") < completed_handler.index("claimTaskDelivery(taskId)")
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):
@@ -884,8 +925,14 @@ def test_vps_password_fields_support_explicit_visibility_toggle_without_autofill
 
     assert 'id="extPassword" type="password" autocomplete="off"' in html
     assert 'id="extSudoPassword" type="password" autocomplete="off"' in html
+    assert 'id="extTestSshBtn"' in html
+    assert 'id="extSshNextBtn"' in html
+    assert 'id="extCredentialNotice"' in html
+    assert 'data-i18n="extensions.ssh_not_saved_notice"' in html
     assert "extensionTogglePassword('extPassword',this)" in html
     assert "extensionTogglePassword('extSudoPassword',this)" in html
     assert "window.extensionTogglePassword=function" in extensions_js
     assert "input.type=visible?'text':'password'" in extensions_js
     assert "button.setAttribute('aria-pressed',String(visible))" in extensions_js
+    assert "sshTestInFlight||!requireCredential()" in extensions_js
+    assert "extensionNext(restoring?3:5)" in extensions_js

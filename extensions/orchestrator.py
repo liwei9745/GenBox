@@ -90,6 +90,10 @@ def _password_sudo_command(command: str) -> str:
 
 
 async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
+    has_password = bool(request.credential.password)
+    has_private_key = bool(request.credential.private_key)
+    if has_password == has_private_key:
+        raise ValueError("请选择且只选择一种 SSH 凭据：密码或私钥")
     try:
         import asyncssh
     except ImportError as exc:

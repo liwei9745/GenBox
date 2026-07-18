@@ -57,6 +57,12 @@ class SSHCredential(BaseModel):
     passphrase: str = ""
     sudo_password: str = ""
 
+    @model_validator(mode="after")
+    def require_exactly_one_authentication_method(self):
+        if bool(self.password) == bool(self.private_key):
+            raise ValueError("请选择且只选择一种 SSH 凭据：密码或私钥")
+        return self
+
 
 class ExtensionDeployRequest(BaseModel):
     project_id: str = Field(default="chatgpt2api", pattern=r"^[a-z0-9][a-z0-9-]*$")

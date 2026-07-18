@@ -1,10 +1,33 @@
 # Current Project Status
 
 **Last updated:** 2026-07-18
-**Current branch:** `codex/phase3-private-network` (Phase 3 SSH diagnostic loop)
-**Current phase:** Phase 3 Private Network Automation — **Remote authentication diagnosis in progress**
+**Current branch:** `codex/phase3-private-network` (Phase 3 connection-state Loop 1)
+**Current phase:** Phase 3 Private Network Automation — **Local workflow corrected; runtime acceptance pending**
 
 ## Current Development Snapshot
+
+- `VERIFIED 2026-07-18`: Phase 3 connection-state Loop 1 separates deployed
+  service state from private-network completion. Restoring a historical
+  completed deployment now resumes at network selection instead of marking the
+  GenBox private URL complete or forcing the final step.
+- `VERIFIED 2026-07-18`: SSH actions now fail closed unless the VPS target is
+  saved and exactly one session credential is present. SSH testing and network
+  connection creation are single-flight; stale SSH responses cannot verify a
+  changed target or credential.
+- `VERIFIED 2026-07-18`: confirmed public SSH host fingerprints are written
+  back to target metadata without saving SSH or sudo credentials. A restored
+  Phase 3 flow may therefore re-enter a session credential and start the
+  network task directly; a separate SSH test is required only when the host
+  fingerprint is missing or changed.
+- `VERIFIED 2026-07-18`: one-time managed-service delivery cannot be consumed in
+  a hidden pane. An unclaimed key opens the visible delivery pane first and is
+  claimed at most once; an already-claimed historical deployment resumes at
+  network selection.
+- `VERIFIED 2026-07-18`: Loop 1 focused regression passed (`103 passed`), full
+  suite passed (`191 passed`), JavaScript syntax checks, Python compilation,
+  and `git diff --check` passed. Independent UX, security, and test reviews
+  initially blocked three race/delivery/model-validation gaps; all three were
+  corrected before this verification.
 
 - `VERIFIED 2026-07-18`: the isolated `chatgpt2api-dev` test instance was
   deployed successfully. Existing production resources remain outside the
@@ -76,11 +99,6 @@
   full suite `178 passed`, both extension JavaScript syntax checks, Python
   compilation, `git diff --check`, high-confidence sensitive-pattern scan
   `0` matches, and temporary-directory cleanup.
-- `UNVERIFIED 2026-07-17`: Phase 2 isolated-VPS deployment, delivery, and failure
-  acceptance has not run. Local mocks and DOM tests are not live-deployment
-  evidence.
-- `VERIFIED 2026-07-17`: no network, VPS, production, push, or release operation
-  occurred.
 - `USER-CONFIRMED 2026-07-17`: future Store and Repair Copilot direction is
   captured in `docs/GENBOX-STORE-REPAIR-COPILOT.md` and Roadmap Phases 9-12.
   This planning does not change the priority of the core Phase 3-8 chain and is
@@ -90,11 +108,12 @@
 
 ## Next Objective
 
-Load the diagnostic build in the administrator laboratory, perform exactly one
-password-mode SSH test against the isolated development target, and inspect the
-returned diagnostic stage. If `password_requested=false`, continue debugging the
-client/authentication path. If `password_requested=true`, correlate that single
-timestamp with a minimal VPS sshd/PAM journal extract; do not repeatedly retry.
+Restart the administrator laboratory on the Loop 1 build. Load the saved VPS.
+If its confirmed host fingerprint is present, enter one fresh session credential
+and start the Phase 3 private-network check directly from steps 3-4; do not run a
+separate SSH test. If the fingerprint is missing, perform exactly one SSH test
+to confirm and persist it, then run the network check. Record the sanitized task
+stage and VPS-to-GenBox probe result without repeated retries.
 
 ## Phase 3 Gate
 

@@ -120,6 +120,8 @@ Establish and verify a secure route from chatgpt2api to GenBox.
 - NetBird and Cloudflare adapters retained behind accurate readiness states.
 - Local and VPS enrollment, service exposure, and application-level probes.
 - Final stable GenBox Push URL stored as non-secret destination metadata.
+- Credential-gated, single-flight SSH and network checks with deployment state
+  kept separate from private-network completion and restart recovery.
 
 ### Acceptance Criteria
 
@@ -127,6 +129,12 @@ Establish and verify a secure route from chatgpt2api to GenBox.
 - The final Push URL does not use `127.0.0.1` or an unintended public endpoint.
 - Enrollment tokens are absent from persisted target records and logs.
 - Failure identifies the exact failed network stage and recovery action.
+- A completed service deployment cannot mark the private network complete,
+  populate the GenBox private URL with a service console URL, or force the final
+  step after restart.
+- Missing or ambiguous SSH credentials fail closed before SSH or network-task
+  side effects, and stale or duplicate browser requests cannot unlock later
+  steps.
 
 ## Phase 4: Single-Image Push End To End
 

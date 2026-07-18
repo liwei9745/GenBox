@@ -43,12 +43,12 @@ def request_payload(project_id="chatgpt2api", **overrides):
 
 def test_project_id_defaults_and_has_a_safe_format():
     target = ExtensionTarget(**target_payload())
-    deploy = ExtensionDeployRequest(target=target, credential=SSHCredential())
-    plan = ExtensionPlanRequest(target=target, credential=SSHCredential())
+    deploy = ExtensionDeployRequest(target=target, credential=SSHCredential(password="test-only"))
+    plan = ExtensionPlanRequest(target=target, credential=SSHCredential(password="test-only"))
 
     assert deploy.project_id == plan.project_id == "chatgpt2api"
     with pytest.raises(ValueError):
-        ExtensionDeployRequest(project_id="Not Safe", target=target, credential=SSHCredential())
+        ExtensionDeployRequest(project_id="Not Safe", target=target, credential=SSHCredential(password="test-only"))
 
 
 def test_catalog_deployability_is_derived_from_capability_registry():
@@ -186,7 +186,7 @@ def test_manager_calls_fail_closed_before_task_or_connection(monkeypatch):
     plan_manager = DeploymentPlanManager()
     with pytest.raises(ValueError):
         plan_manager.create(
-            ExtensionPlanRequest(project_id="grok2api", target=target, credential=SSHCredential()),
+            ExtensionPlanRequest(project_id="grok2api", target=target, credential=SSHCredential(password="test-only")),
             {"environment": {}, "instances": []},
         )
 
@@ -194,7 +194,7 @@ def test_manager_calls_fail_closed_before_task_or_connection(monkeypatch):
         task_manager = ExtensionTaskManager()
         with pytest.raises(ValueError):
             task_manager.create(ExtensionDeployRequest(
-                project_id="grok2api", target=target, credential=SSHCredential(), confirmed_plan_id="missing",
+                project_id="grok2api", target=target, credential=SSHCredential(password="test-only"), confirmed_plan_id="missing",
             ))
         assert task_manager.tasks == {}
         assert task_manager.runners == {}

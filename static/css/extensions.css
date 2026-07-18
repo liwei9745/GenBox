@@ -122,3 +122,18 @@
     padding: 12px 16px 10px;
   }
 }
+
+.extension-credential-notice {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--warning);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.extension-credential-notice.success {
+  border-left-color: var(--success);
+  color: var(--success);
+}

@@ -15,10 +15,10 @@ updated: 2026-07-18
 
 ## Current Focus
 
-- hypothesis: AsyncSSH does not complete password authentication, but current evidence cannot distinguish a pre-password close from a close after AsyncSSH requests the password.
-- test: Load the secret-free per-attempt tracker and perform exactly one isolated-target connection test.
-- expecting: The diagnostic distinguishes pre-password termination from rejection after password selection without logging credentials, host identity, or raw protocol traffic.
-- next_action: Restart the administrator laboratory on the diagnostic build, run one password test, and record only the returned diagnostic stage and timestamp.
+- hypothesis: The remote compatibility issue may remain, but the repeated development blocker was amplified by a confirmed UI/state-machine defect: deployment completion, SSH verification, and private-network completion were coupled incorrectly.
+- test: Load the Loop 1 build and run one credential-bearing network task against the isolated target, using the saved host fingerprint when available.
+- expecting: Historical deployment resumes at network selection; empty credentials create no request; one network task reports an exact sanitized stage and does not mark completion until the VPS-to-GenBox probe passes.
+- next_action: Restart the administrator laboratory, load the saved target, enter a fresh session credential, and run the private-network check once.
 - reasoning_checkpoint: VPS sshd recorded `Accepted password` for the system OpenSSH attempt at 12:03:29, while the likely GenBox attempt at 11:56:31 recorded only `Connection closed ... [preauth]` and no `Failed password`.
 
 ## Evidence
@@ -31,6 +31,8 @@ updated: 2026-07-18
   fact: AsyncSSH 2.24.0 consumes a supplied `password` before invoking the optional client callback.
 - timestamp: 2026-07-18
   fact: The diagnostic uses the official `SSHClient.password_auth_requested()` callback, persists no attempt data, and passed 29 focused plus 183 full tests, including a real local AsyncSSH password-authentication server.
+- timestamp: 2026-07-18
+  fact: State-machine Loop 1 passed 103 focused and 191 full tests. It separates deployment and network completion, rejects missing or ambiguous credentials before side effects, prevents duplicate/stale requests, persists only the confirmed public host fingerprint, and protects visible one-time delivery.
 
 ## Eliminated
 
@@ -45,7 +47,7 @@ updated: 2026-07-18
 
 ## Resolution
 
-- root_cause:
-- fix: Added non-persistent, allowlisted authentication-stage diagnostics; root cause is not yet determined.
-- verification: Local automated verification passed; one isolated-target runtime attempt remains.
-- files_changed: extensions/orchestrator.py, main.py, tests/test_extensions.py, docs/STATUS.md
+- root_cause: A still-unverified AsyncSSH/VPS compatibility issue was compounded by incorrect UI recovery, empty-credential requests, duplicate-request races, non-persisted confirmed host fingerprints, and hidden consumption of one-time delivery.
+- fix: Added allowlisted authentication diagnostics plus credential-gated single-flight state handling, safe recovery navigation, public host-fingerprint persistence, and visible delivery protection.
+- verification: 103 focused and 191 full local tests passed; one isolated-target runtime network attempt remains.
+- files_changed: extensions/models.py, extensions/orchestrator.py, static/index.html, static/css/extensions.css, static/js/extensions.js, static/js/i18n.js, tests/test_extension_capabilities.py, tests/test_extension_task_store.py, tests/test_extensions.py, docs/STATUS.md, docs/ROADMAP.md, docs/DECISIONS.md
