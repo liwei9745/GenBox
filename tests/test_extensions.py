@@ -927,6 +927,8 @@ def test_vps_password_fields_support_explicit_visibility_toggle_without_autofill
     assert 'id="extSudoPassword" type="password" autocomplete="off"' in html
     assert 'id="extTestSshBtn"' in html
     assert 'id="extSshNextBtn"' in html
+    assert 'onclick="extensionSshNext()"' in html
+    assert 'id="extSshNextLabel"' in html
     assert 'id="extCredentialNotice"' in html
     assert 'data-i18n="extensions.ssh_not_saved_notice"' in html
     assert "extensionTogglePassword('extPassword',this)" in html

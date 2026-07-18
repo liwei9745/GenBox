@@ -775,6 +775,7 @@ function element(id){
 }
 let nextStep = 0;
 let deliveryCalls = 0;
+let sshCalls = 0;
 const completed={id:'delivery-task',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',label:'Verify',status:'success'}],logs:[],error:null,host_key:'SHA256:public',created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action:null,failed_phase:null,error_code:null,result:{instance:{id:'managed-one',managed:true},url:'http://console.example',api_url:'http://console.example/v1',admin_key_available:true}};
 const summary={active_task_id:null,latest_task_id:'delivery-task',tasks:[completed]};
 global.window=global;
@@ -787,7 +788,7 @@ global.clearInterval=()=>{};
 global.setInterval=()=>({});
 global._authFetch=async url=>{
   let body={};
-  if(url==='/api/extensions/targets')body={targets:[]};
+  if(url==='/api/extensions/targets')body={targets:[{id:'saved',name:'Saved VPS',host:'vps.example',port:22,username:'root',host_key:'SHA256:test',chatgpt2api_port:33010}]};
   else if(url==='/api/extensions/catalog')body={categories:[],items:[]};
   else if(url==='/api/extensions/targets/batch')body={target_ids:[]};
   else if(url==='/api/extensions/tasks')body=summary;
@@ -796,6 +797,7 @@ global._authFetch=async url=>{
     completed.result.admin_key_available=false;
     body={admin_key:'one-time-key',shown_once:true};
   }
+  else if(url==='/api/extensions/ssh/test')sshCalls+=1;
   return {ok:true,text:async()=>JSON.stringify(body)};
 };
 eval(source);
@@ -810,6 +812,12 @@ if(element('extHandoff').classList.contains('hidden') || nextStep!==5)throw new 
 await window.loadExtensions();
 if(deliveryCalls!==1)throw new Error('delivery endpoint was requested more than once');
 if(nextStep!==3)throw new Error('claimed historical deployment did not resume at network selection step='+nextStep);
+window.extensionLoadTarget('saved');
+element('extPassword').value='test-only-secret';
+window.extensionCredentialChanged();
+if(element('extSshNextBtn').disabled||element('extSshNextLabel').textContent!=='extensions.return_network_check')throw new Error('network resume action was not enabled after re-entering credentials');
+window.extensionSshNext();
+if(nextStep!==4||sshCalls!==0)throw new Error('network resume required an unnecessary SSH test or went to the wrong step');
 if(source.includes('localStorage'))throw new Error('delivery flow uses localStorage');
 })();
 '''

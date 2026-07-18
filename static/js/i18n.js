@@ -590,6 +590,7 @@
     "extensions.ssh_verified_notice":{"zh-CN":"本次会话的 SSH 已验证。修改地址、账号、端口或凭据后需要重新验证。","en":"SSH is verified for this session. Changing the address, account, port, or credentials requires verification again."},
     "extensions.deploy_ready_network_pending":{"zh-CN":"服务已经部署完成，私网链路尚未完成。现在从“选择链路”继续，不会重复部署。","en":"The service is deployed, but the private network is not complete. Continue from Choose Network without redeploying."},
     "extensions.start_network_check":{"zh-CN":"开始检测私网链路","en":"Start private-network check"},
+    "extensions.return_network_check":{"zh-CN":"返回链路检测","en":"Return to network check"},
     "extensions.ssh_diag_password_requested":{"zh-CN":"诊断阶段：客户端已取得会话凭据，但认证尚未完成；请勿连续重试。","en":"Diagnostic stage: the client obtained the session credential, but authentication did not complete. Do not retry repeatedly."},
     "extensions.ssh_diag_auth_started":{"zh-CN":"诊断阶段：SSH 认证已开始，但客户端尚未取得密码。","en":"Diagnostic stage: SSH authentication started before the client obtained a password."},
     "extensions.ssh_diag_host_verified":{"zh-CN":"诊断阶段：主机指纹已确认，连接在认证开始前结束。","en":"Diagnostic stage: the host key was verified, but the connection ended before authentication started."},
