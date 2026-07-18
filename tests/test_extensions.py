@@ -12,6 +12,7 @@ from extensions.orchestrator import (
     CLONE_SCRUB_KEYS,
     DeploymentPlanManager,
     ExtensionTaskManager,
+    SSHAuthenticationError,
     _clone_config_scrub_script,
     _connect,
     _password_sudo_command,
@@ -144,6 +145,63 @@ def test_mismatched_ssh_host_key_is_rejected_before_authentication():
 
     asyncio.run(run())
     assert authentication_callbacks == []
+
+
+def test_password_auth_rejection_is_sanitized_and_does_not_claim_password_is_wrong(monkeypatch):
+    class Key:
+        def export_public_key(self, format_name):
+            return "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA test"
+
+    class PermissionDenied(Exception):
+        pass
+
+    class Client:
+        def __init__(self, expected_fingerprint=""):
+            self.expected_fingerprint = expected_fingerprint
+            self.fingerprint = ""
+
+        def validate_host_public_key(self, host, addr, port, key):
+            from extensions.orchestrator import _fingerprint
+
+            self.fingerprint = _fingerprint(key)
+            return self.expected_fingerprint == self.fingerprint
+
+    async def connect(**kwargs):
+        client = kwargs["client_factory"]()
+        assert client.validate_host_public_key("vps.example", "203.0.113.10", 22, Key())
+        raise PermissionDenied("rejected ssh-secret sentinel")
+
+    fake_asyncssh = SimpleNamespace(
+        SSHClient=Client,
+        HostKeyNotVerifiable=Exception,
+        PermissionDenied=PermissionDenied,
+        connect=connect,
+    )
+    monkeypatch.setitem(sys.modules, "asyncssh", fake_asyncssh)
+    request = ExtensionTestRequest(
+        target=ExtensionTarget(
+            id="vps", name="VPS", host="vps.example", username="root",
+            host_key="SHA256:ignored",
+        ),
+        credential=SSHCredential(password="ssh-secret"),
+    )
+
+    async def run():
+        from extensions.orchestrator import _fingerprint
+
+        request.expected_host_key = _fingerprint(Key())
+        try:
+            await _connect(request)
+        except SSHAuthenticationError as exc:
+            message = str(exc)
+            assert "不能单独证明密码错误" in message
+            assert "请勿连续重试" in message
+            assert "ssh-secret" not in message
+            assert "sentinel" not in message
+        else:
+            raise AssertionError("authentication rejection was not classified")
+
+    asyncio.run(run())
 
 
 def test_network_ui_is_tailscale_and_existing_only_with_failure_recovery_contract():

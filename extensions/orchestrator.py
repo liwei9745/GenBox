@@ -30,6 +30,12 @@ DEPLOY_STEPS = [
     ("start", "启动服务"),
     ("verify", "等待服务就绪"),
 ]
+
+
+class SSHAuthenticationError(PermissionError):
+    """A sanitized authentication failure safe to return to the browser."""
+
+
 IMAGE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/:@-]{2,255}$")
 CLONE_SCRUB_KEYS = {
     "auth-key",
@@ -130,7 +136,22 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
         kwargs["preferred_auth"] = ["password"]
         kwargs["kbdint_auth"] = False
         kwargs["password_auth"] = True
-    connection = await asyncssh.connect(**kwargs)
+    try:
+        connection = await asyncssh.connect(**kwargs)
+    except asyncssh.PermissionDenied as exc:
+        if request.credential.private_key:
+            detail = (
+                "VPS 拒绝了本次 SSH 私钥认证。请确认公钥已加入目标账号、私钥与口令匹配，"
+                "并避免连续重试。"
+            )
+        else:
+            detail = (
+                "VPS 拒绝了本次 SSH 密码认证，但这条结果不能单独证明密码错误。"
+                "也可能是账号或 PAM 策略、登录限制，或 SSH 客户端兼容问题。"
+                "如果同一账号和密码能通过系统 ssh 登录，请查看 VPS 的 sshd/PAM 日志，"
+                "或改用 GenBox 专用 SSH 私钥；请勿连续重试。"
+            )
+        raise SSHAuthenticationError(detail) from exc
     return connection, trusted_client.fingerprint
 
 
