@@ -35,6 +35,16 @@ DEPLOY_STEPS = [
 class SSHAuthenticationError(PermissionError):
     """A sanitized authentication failure safe to return to the browser."""
 
+    def __init__(self, message: str, *, stage: str, auth_mode: str, facts: dict[str, bool] | None = None):
+        super().__init__(message)
+        self.diagnostic = {
+            "code": "ssh_auth_rejected",
+            "stage": stage,
+            "auth_mode": auth_mode,
+            "retry_safe": False,
+            **(facts or {}),
+        }
+
 
 IMAGE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/:@-]{2,255}$")
 CLONE_SCRUB_KEYS = {
@@ -87,15 +97,41 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
     expected = request.expected_host_key or request.target.host_key
 
     class _FingerprintClient(asyncssh.SSHClient):
-        def __init__(self, expected_fingerprint: str = ""):
+        def __init__(self, expected_fingerprint: str = "", password: str = ""):
             self.expected_fingerprint = expected_fingerprint
+            self._password = password
             self.fingerprint = ""
+            self.transport_connected = False
+            self.host_key_verified = False
+            self.authentication_started = False
+            self.authentication_completed = False
+            self.connection_lost_during_auth = False
+            self.password_requested = False
+
+        def connection_made(self, conn: Any) -> None:
+            self.transport_connected = True
+
+        def begin_auth(self, username: str) -> None:
+            self.authentication_started = True
+
+        def auth_completed(self) -> None:
+            self.authentication_completed = True
+
+        def connection_lost(self, exc: Exception | None) -> None:
+            self.connection_lost_during_auth = bool(exc) and not self.authentication_completed
+
+        def password_auth_requested(self) -> str | None:
+            if self.password_requested or not self._password:
+                return None
+            self.password_requested = True
+            return self._password
 
         def validate_host_public_key(self, host: str, addr: str, port: int, key: Any) -> bool:
             self.fingerprint = _fingerprint(key)
-            return bool(self.expected_fingerprint) and hmac.compare_digest(
+            self.host_key_verified = bool(self.expected_fingerprint) and hmac.compare_digest(
                 self.expected_fingerprint, self.fingerprint,
             )
+            return self.host_key_verified
 
     base_kwargs: dict[str, Any] = {
         "host": request.target.host,
@@ -121,7 +157,10 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
             raise
         raise RuntimeError("未能在不使用凭据的情况下确认 VPS 主机指纹")
 
-    trusted_client = _FingerprintClient(expected)
+    trusted_client = _FingerprintClient(
+        expected,
+        request.credential.password if not request.credential.private_key else "",
+    )
     kwargs = {**base_kwargs, "client_factory": lambda: trusted_client}
     if request.credential.private_key:
         kwargs["client_keys"] = [asyncssh.import_private_key(
@@ -132,26 +171,52 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
         kwargs["kbdint_auth"] = False
         kwargs["password_auth"] = False
     else:
-        kwargs["password"] = request.credential.password
         kwargs["preferred_auth"] = ["password"]
         kwargs["kbdint_auth"] = False
         kwargs["password_auth"] = True
     try:
         connection = await asyncssh.connect(**kwargs)
     except asyncssh.PermissionDenied as exc:
+        if trusted_client.authentication_completed:
+            stage = "authentication_completed"
+        elif trusted_client.password_requested:
+            stage = "password_requested"
+        elif trusted_client.authentication_started:
+            stage = "authentication_started"
+        elif trusted_client.host_key_verified:
+            stage = "host_key_verified"
+        elif trusted_client.transport_connected:
+            stage = "transport_connected"
+        else:
+            stage = "connection_started"
         if request.credential.private_key:
             detail = (
                 "VPS 拒绝了本次 SSH 私钥认证。请确认公钥已加入目标账号、私钥与口令匹配，"
                 "并避免连续重试。"
             )
         else:
+            stage_detail = (
+                "本次诊断显示 AsyncSSH 已请求并取得你输入的密码，但这不等于服务器已经收到或完成校验。"
+                if trusted_client.password_requested else
+                "本次诊断显示连接在 AsyncSSH 取用密码前结束。"
+            )
             detail = (
                 "VPS 拒绝了本次 SSH 密码认证，但这条结果不能单独证明密码错误。"
                 "也可能是账号或 PAM 策略、登录限制，或 SSH 客户端兼容问题。"
+                f"{stage_detail}"
                 "如果同一账号和密码能通过系统 ssh 登录，请查看 VPS 的 sshd/PAM 日志，"
                 "或改用 GenBox 专用 SSH 私钥；请勿连续重试。"
             )
-        raise SSHAuthenticationError(detail) from exc
+        raise SSHAuthenticationError(
+            detail,
+            stage=stage,
+            auth_mode="publickey" if request.credential.private_key else "password",
+            facts={
+                "host_key_verified": trusted_client.host_key_verified,
+                "password_requested": trusted_client.password_requested,
+                "connection_lost_during_auth": trusted_client.connection_lost_during_auth,
+            },
+        ) from exc
     return connection, trusted_client.fingerprint
 
 

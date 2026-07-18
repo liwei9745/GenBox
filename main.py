@@ -75,6 +75,7 @@ from extensions.models import (
     ManagedCredentialUpsertRequest, VaultPasswordRequest,
 )
 from extensions.orchestrator import (
+    SSHAuthenticationError,
     deployment_plans, extension_tasks, reset_managed_admin_key,
     test_connection as test_extension_connection,
 )
@@ -3611,6 +3612,11 @@ async def extension_delete_target(target_id: str):
 async def extension_test_ssh(body: ExtensionTestRequest):
     try:
         return await test_extension_connection(body)
+    except SSHAuthenticationError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        ) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
 

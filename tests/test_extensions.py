@@ -40,6 +40,8 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
         trusted = client.validate_host_public_key("vps.example", "203.0.113.10", 22, Key())
         if not trusted:
             raise HostKeyNotVerifiable("host key rejected before authentication")
+        if kwargs.get("preferred_auth") == ["password"]:
+            calls[-1]["provided_password"] = client.password_auth_requested()
         return Connection()
 
     imported_keys = []
@@ -73,7 +75,8 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
         connection, trusted_fingerprint = await _connect(request)
         assert connection is not None
         assert trusted_fingerprint == fingerprint
-        assert calls[1]["password"] == "ssh-secret"
+        assert "password" not in calls[1]
+        assert calls[1]["provided_password"] == "ssh-secret"
         assert calls[1]["preferred_auth"] == ["password"]
         assert calls[1]["kbdint_auth"] is False
         assert calls[1]["password_auth"] is True
@@ -147,6 +150,56 @@ def test_mismatched_ssh_host_key_is_rejected_before_authentication():
     assert authentication_callbacks == []
 
 
+def test_password_callback_authenticates_against_real_asyncssh_server():
+    import asyncssh
+    from extensions.orchestrator import _fingerprint
+
+    accepted_passwords = []
+    server_key = asyncssh.generate_private_key("ssh-ed25519")
+
+    class LoopbackServer(asyncssh.SSHServer):
+        def begin_auth(self, username):
+            return True
+
+        def password_auth_supported(self):
+            return True
+
+        def validate_password(self, username, password):
+            accepted_passwords.append(password)
+            return username == "test-user" and password == "test-password"
+
+    async def run():
+        server = await asyncssh.listen(
+            "127.0.0.1",
+            0,
+            server_factory=LoopbackServer,
+            server_host_keys=[server_key],
+        )
+        try:
+            request = ExtensionTestRequest(
+                target=ExtensionTarget(
+                    id="loopback",
+                    name="Loopback",
+                    host="127.0.0.1",
+                    port=server.get_port(),
+                    username="test-user",
+                ),
+                credential=SSHCredential(password="test-password"),
+                expected_host_key=_fingerprint(server_key),
+            )
+            connection, fingerprint = await _connect(request)
+            assert connection is not None
+            assert fingerprint == _fingerprint(server_key)
+            connection.close()
+            await connection.wait_closed()
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    asyncio.run(run())
+    assert accepted_passwords == ["test-password"]
+
+
 def test_password_auth_rejection_is_sanitized_and_does_not_claim_password_is_wrong(monkeypatch):
     class Key:
         def export_public_key(self, format_name):
@@ -169,6 +222,9 @@ def test_password_auth_rejection_is_sanitized_and_does_not_claim_password_is_wro
     async def connect(**kwargs):
         client = kwargs["client_factory"]()
         assert client.validate_host_public_key("vps.example", "203.0.113.10", 22, Key())
+        assert "password" not in kwargs
+        assert client.password_auth_requested() == "ssh-secret"
+        assert client.password_auth_requested() is None
         raise PermissionDenied("rejected ssh-secret sentinel")
 
     fake_asyncssh = SimpleNamespace(
@@ -198,8 +254,107 @@ def test_password_auth_rejection_is_sanitized_and_does_not_claim_password_is_wro
             assert "请勿连续重试" in message
             assert "ssh-secret" not in message
             assert "sentinel" not in message
+            assert "已请求并取得你输入的密码" in message
+            assert exc.diagnostic == {
+                "code": "ssh_auth_rejected",
+                "stage": "password_requested",
+                "auth_mode": "password",
+                "retry_safe": False,
+                "host_key_verified": True,
+                "password_requested": True,
+                "connection_lost_during_auth": False,
+            }
         else:
             raise AssertionError("authentication rejection was not classified")
+
+    asyncio.run(run())
+
+
+def test_password_auth_rejection_reports_when_password_was_not_selected(monkeypatch):
+    class PermissionDenied(Exception):
+        pass
+
+    class Client:
+        def __init__(self, expected_fingerprint=""):
+            self.expected_fingerprint = expected_fingerprint
+            self.fingerprint = "SHA256:test"
+
+    async def connect(**kwargs):
+        client = kwargs["client_factory"]()
+        client.transport_connected = True
+        client.authentication_started = True
+        raise PermissionDenied("connection closed before password callback")
+
+    fake_asyncssh = SimpleNamespace(
+        SSHClient=Client,
+        HostKeyNotVerifiable=Exception,
+        PermissionDenied=PermissionDenied,
+        connect=connect,
+    )
+    monkeypatch.setitem(sys.modules, "asyncssh", fake_asyncssh)
+    request = ExtensionTestRequest(
+        target=ExtensionTarget(
+            id="vps", name="VPS", host="vps.example", username="root",
+            host_key="SHA256:test",
+        ),
+        credential=SSHCredential(password="ssh-secret"),
+        expected_host_key="SHA256:test",
+    )
+
+    async def run():
+        try:
+            await _connect(request)
+        except SSHAuthenticationError as exc:
+            assert "取用密码前结束" in str(exc)
+            assert "ssh-secret" not in str(exc)
+            assert exc.diagnostic["stage"] == "authentication_started"
+            assert exc.diagnostic["password_requested"] is False
+            assert exc.diagnostic["retry_safe"] is False
+        else:
+            raise AssertionError("pre-password authentication close was not classified")
+
+    asyncio.run(run())
+
+
+def test_extension_ssh_route_returns_structured_sanitized_auth_diagnostic(monkeypatch):
+    import main
+    from fastapi import HTTPException
+
+    async def reject(_request):
+        raise SSHAuthenticationError(
+            "safe authentication message",
+            stage="password_requested",
+            auth_mode="password",
+            facts={
+                "host_key_verified": True,
+                "password_requested": True,
+                "connection_lost_during_auth": True,
+            },
+        )
+
+    monkeypatch.setattr(main, "test_extension_connection", reject)
+    request = ExtensionTestRequest(
+        target=ExtensionTarget(
+            id="vps", name="VPS", host="vps.example", username="root",
+            host_key="SHA256:test",
+        ),
+        credential=SSHCredential(password="ssh-secret"),
+        expected_host_key="SHA256:test",
+    )
+
+    async def run():
+        try:
+            await main.extension_test_ssh(request)
+        except HTTPException as exc:
+            assert exc.status_code == 401
+            assert exc.detail["error"] == "safe authentication message"
+            assert exc.detail["diagnostic"]["code"] == "ssh_auth_rejected"
+            assert exc.detail["diagnostic"]["password_requested"] is True
+            assert "ssh-secret" not in json.dumps(exc.detail)
+            assert "vps.example" not in json.dumps(exc.detail)
+            assert "root" not in json.dumps(exc.detail)
+        else:
+            raise AssertionError("route did not return the structured SSH diagnostic")
 
     asyncio.run(run())
 

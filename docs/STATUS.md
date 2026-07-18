@@ -1,10 +1,36 @@
 # Current Project Status
 
-**Last updated:** 2026-07-17
-**Current branch:** `codex/phase3-private-network` (Phase 2 local closure through `1659d50`)
-**Current phase:** Phase 2 Extension Center Deployment Experience — **Blocked (Local Complete)**
+**Last updated:** 2026-07-18
+**Current branch:** `codex/phase3-private-network` (Phase 3 SSH diagnostic loop)
+**Current phase:** Phase 3 Private Network Automation — **Remote authentication diagnosis in progress**
 
 ## Current Development Snapshot
+
+- `VERIFIED 2026-07-18`: the isolated `chatgpt2api-dev` test instance was
+  deployed successfully. Existing production resources remain outside the
+  current mutation scope.
+- `VERIFIED 2026-07-18`: local Tailscale is online and the private GenBox entry
+  is served on port `8893`. This is local network evidence, not yet the complete
+  VPS-to-GenBox application probe required by Phase 3.
+- `VERIFIED 2026-07-18`: SSH password and sudo-password inputs now have explicit
+  visibility controls, password and public-key modes are mutually exclusive,
+  and authentication rejection messages no longer claim that the password is
+  necessarily wrong. These changes are committed through `0550d8d`.
+- `VERIFIED 2026-07-18`: the VPS sshd journal shows that the user's system
+  OpenSSH session was accepted with password authentication. A nearby
+  `Connection closed ... [preauth]` record cannot be reliably attributed to the
+  credential-bearing GenBox attempt because the host-key probe also opens a
+  credential-free SSH connection.
+- `UNVERIFIED 2026-07-18`: the exact reason AsyncSSH does not complete password
+  authentication remains unknown. No current evidence justifies changing VPS
+  SSH policy, enabling keyboard-interactive authentication, or treating the
+  password as invalid.
+- `VERIFIED 2026-07-18`: a secret-free diagnostic change records
+  only whether the host key was verified, AsyncSSH requested the password, and
+  the connection was lost during authentication. Focused checks passed
+  (`29 passed`), full suite passed (`183 passed`), Python compilation and
+  `git diff --check` passed. The diagnostic does not persist credentials,
+  usernames, hosts, IPs, fingerprints, or raw AsyncSSH exceptions.
 
 - `VERIFIED 2026-07-16`: v2.5.1 was published under GPL-3.0-only at release
   commit `ae2b174`.
@@ -64,13 +90,14 @@
 
 ## Next Objective
 
-Wait for the user to identify an isolated VPS development clone and separately
-authorize Phase 2 remote acceptance. After authorization, verify deployment,
-delivery, failure recovery, isolation, and production non-mutation on that clone.
+Load the diagnostic build in the administrator laboratory, perform exactly one
+password-mode SSH test against the isolated development target, and inspect the
+returned diagnostic stage. If `password_requested=false`, continue debugging the
+client/authentication path. If `password_requested=true`, correlate that single
+timestamp with a minimal VPS sshd/PAM journal extract; do not repeatedly retry.
 
 ## Phase 3 Gate
 
-Phase 3 remains **Blocked**. Resume only after the user separately identifies
-an isolated VPS development clone and authorizes isolated-VPS acceptance.
-Production remains read-only; no remote action is currently authorized. Future
-Store and Repair Copilot work must not start while this gate remains open.
+Phase 3 remote acceptance remains open until the isolated VPS can authenticate
+and complete the VPS-to-GenBox HTTP probe. Production remains read-only. The
+current diagnostic authorizes no VPS mutation and stores no SSH credential.
