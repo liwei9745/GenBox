@@ -102,6 +102,7 @@ var QUICK_PROMPTS = {
 // 初始化
 // ═══════════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
+  startRuntimeHeartbeat();
   loadProviders().then(function(){
     checkSetupWizard();
   });
@@ -3394,6 +3395,10 @@ function copyGenBoxQQGroup() {
 }
 
 function serverControl(action) {
+  if (action === 'stop' || action === 'restart') {
+    alert(i18nText('server.use_lab_launcher'));
+    return;
+  }
   if (action === 'stop') {
     if (!confirm(i18nText('server.confirm_stop'))) return;
   }
@@ -3864,7 +3869,59 @@ function closeProviderModal() {
 // ══ 认证与安全策略 ══
 var _adminKey = '';
 var _loginAttemptGeneration = 0;
+var _backendOnline = null;
+var _backendFailureCount = 0;
+var _runtimeHeartbeatTimer = null;
 try { localStorage.removeItem('igs_admin_key'); } catch (error) {}
+
+function _setBackendState(online, runtime) {
+  if (_backendOnline === online && (!online || (runtime && window._genboxRuntimeId === runtime.runtime_id))) return;
+  _backendOnline = online;
+  var left = document.getElementById('statusLeft');
+  var right = document.getElementById('statusRight');
+  var banner = document.getElementById('backendOfflineBanner');
+  if (online && runtime) {
+    window._genboxRuntimeId = runtime.runtime_id;
+    if (left) left.textContent = i18nText('runtime.online');
+    if (right) right.textContent = 'GenBox' + (runtime.version ? ' v' + runtime.version : '') + ' · ' + runtime.mode.toUpperCase() + ' · ' + runtime.port;
+    if (banner) banner.classList.add('hidden');
+  } else {
+    if (left) left.textContent = i18nText('runtime.offline');
+    if (right) right.textContent = i18nText('runtime.offline_detail');
+    if (banner) banner.classList.remove('hidden');
+  }
+  if (typeof window.setExtensionsBackendOnline === 'function') window.setExtensionsBackendOnline(online, runtime || null);
+}
+
+function checkRuntimeStatus(immediate) {
+  return fetch('/api/setup/status', {cache: 'no-store'}).then(function(response) {
+    if (!response.ok) throw new Error('SETUP_STATUS_UNAVAILABLE');
+    return response.json();
+  }).then(function(setup) {
+    if (!setup || (setup.app_mode !== 'dev' && setup.app_mode !== 'prod')) throw new Error('SETUP_STATUS_INVALID');
+    if (setup.app_mode === 'prod') return {service:'genbox',version:'',mode:'prod',port:Number(location.port||8891),runtime_id:'production'};
+    return fetch('/api/runtime/status', {cache: 'no-store'}).then(function(response) {
+      if (!response.ok) throw new Error('RUNTIME_STATUS_UNAVAILABLE');
+      return response.json();
+    });
+  }).then(function(runtime) {
+    if (!runtime || runtime.service !== 'genbox' || !runtime.runtime_id) throw new Error('RUNTIME_STATUS_INVALID');
+    _backendFailureCount = 0;
+    _setBackendState(true, runtime);
+    return runtime;
+  }).catch(function(error) {
+    _backendFailureCount += 1;
+    if (immediate || _backendFailureCount >= 2) _setBackendState(false, null);
+    throw error;
+  });
+}
+
+function startRuntimeHeartbeat() {
+  if (location.hostname !== '127.0.0.1' && location.hostname !== 'localhost') return;
+  checkRuntimeStatus(true).catch(function() {});
+  if (_runtimeHeartbeatTimer) clearInterval(_runtimeHeartbeatTimer);
+  _runtimeHeartbeatTimer = setInterval(function() { checkRuntimeStatus(false).catch(function() {}); }, 3000);
+}
 
 function _authFetch(url, opts) {
   opts = opts || {};
@@ -3882,6 +3939,9 @@ function _authFetch(url, opts) {
       throw new Error('AUTH_REQUIRED');
     }
     return r;
+  }).catch(function(error) {
+    if (error && error.message !== 'AUTH_REQUIRED' && typeof _setBackendState === 'function') _setBackendState(false, null);
+    throw error;
   });
 }
 
@@ -4234,7 +4294,7 @@ function checkSetupWizard(attempt) {
       }
     });
   }).catch(function(){
-    if (_isCurrentLoginAttempt(effectiveAttempt)) _showLogin();
+    if (_isCurrentLoginAttempt(effectiveAttempt) && (typeof _backendOnline === 'undefined' || _backendOnline !== false)) _showLogin();
   });
 }
 function closeSetupWizard() {

@@ -1,10 +1,31 @@
 # Current Project Status
 
 **Last updated:** 2026-07-18
-**Current branch:** `codex/phase3-private-network` (Phase 3 connection-state Loop 1)
-**Current phase:** Phase 3 Private Network Automation — **Local workflow corrected; runtime acceptance pending**
+**Current branch:** `codex/phase3-private-network` (Phase 3 runtime-integrity Loop 2)
+**Current phase:** Phase 3 Private Network Automation — **Local runtime integrity corrected; isolated network acceptance pending**
 
 ## Current Development Snapshot
+
+- `VERIFIED 2026-07-18`: the repeated SSH blocker was amplified by a mixed
+  runtime: a cached/new browser UI remained visible while an old or stopped
+  Python backend occupied, or no longer occupied, port `8892`. Browser refresh
+  alone cannot reload Python modules.
+- `VERIFIED 2026-07-18`: the new GenBox Lab launcher owns only processes it
+  started and records PID, process creation time, repository, port, Git HEAD,
+  and a source fingerprint. Stop/restart fails closed for foreign listeners,
+  stale records, PID reuse, wrong repository/command, health mismatch, or
+  changed source. It never kills a process merely because it owns a port.
+- `VERIFIED 2026-07-18`: local development exposes a non-secret, no-store
+  runtime identity endpoint. The browser heartbeat now identifies cached pages,
+  shows the loaded version/mode/port, and locks Extension Center controls while
+  the backend is offline. The development identity endpoint is unavailable in
+  production; local production heartbeat falls back to the existing non-secret
+  setup-status contract.
+- `VERIFIED 2026-07-18`: browser GET requests can no longer stop or restart the
+  Python process; lifecycle mutation is limited to the owned local launcher.
+  Focused regression passed (`50 passed`), full suite passed (`209 passed`),
+  JavaScript syntax checks, Python compilation, and `git diff --check` passed.
+  JavaScript syntax checks, Python compilation, and `git diff --check` passed.
 
 - `VERIFIED 2026-07-18`: Phase 3 connection-state Loop 1 separates deployed
   service state from private-network completion. Restoring a historical
@@ -54,6 +75,17 @@
   (`29 passed`), full suite passed (`183 passed`), Python compilation and
   `git diff --check` passed. The diagnostic does not persist credentials,
   usernames, hosts, IPs, fingerprints, or raw AsyncSSH exceptions.
+
+## Resume Instructions
+
+1. Start the local lab only with `./start-lab.ps1 start` (or double-click
+   `start-lab.cmd`), then open `http://127.0.0.1:8892/#/extensions` and refresh
+   once so the footer shows the current version, `DEVELOPMENT`, and port `8892`.
+2. Do not repeat the standalone SSH test when the saved host fingerprint is
+   unchanged. Re-enter one session credential and run the private-network check
+   once; that task performs the credential-bearing SSH connection itself.
+3. Record the sanitized failed stage or the successful VPS-to-GenBox probe.
+   Do not change the production service or persist SSH credentials.
 
 - `VERIFIED 2026-07-16`: v2.5.1 was published under GPL-3.0-only at release
   commit `ae2b174`.

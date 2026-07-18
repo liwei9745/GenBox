@@ -792,6 +792,10 @@
         </div>
         <div class="extension-console-meta"><span>CHATGPT2API</span><strong id="extensionOverallStatus" class="extension-status"><span data-i18n="common.not_configured">Not configured</span></strong></div>
       </header>
+      <div id="backendOfflineBanner" class="backend-offline-banner hidden" role="alert">
+        <div><b data-i18n="runtime.offline_title">GenBox 后端未运行</b><span data-i18n="runtime.offline_detail">当前只是浏览器保留的旧页面，连接和部署操作已暂停。</span></div>
+        <button type="button" class="btn-secondary" onclick="checkRuntimeStatus(true)" data-i18n="runtime.recheck">重新检测</button>
+      </div>
       <section class="extension-deployed glass-panel">
         <div class="ext-deployed-collapsed">
           <span><span data-i18n="extensions.drawer_hint">服务面板已收纳至右侧，可随时查看运行状态、访问地址与密钥管理</span></span>
@@ -1182,8 +1186,8 @@
     })();
   </script>
   <script src="/static/js/i18n.js?v=6"></script>
-<script src="/static/js/app-all.js?v=35"></script>
+<script src="/static/js/app-all.js?v=36"></script>
 <script src="/static/js/sync.js?v=7"></script>
-<script src="/static/js/extensions.js?v=8"></script>
+<script src="/static/js/extensions.js?v=9"></script>
 </body>
 </html>

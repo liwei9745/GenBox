@@ -312,3 +312,40 @@ is needed only to establish or change the host fingerprint or to diagnose SSH.
   notice; they do not enter target files, task stores, URLs, or browser storage.
 - Network-task persistence remains a follow-up requirement so an interrupted
   Phase 3 task can be restored independently of deployment history.
+
+## ADR-015: Local Lab Processes Require Owned Runtime Identity
+
+**Status:** Accepted
+**Date:** 2026-07-18
+
+### Context
+
+A browser can retain a GenBox page after the Python backend stops, and static
+files can be newer than a still-running backend. The previous Windows scripts
+also used conflicting ports and terminated whichever process happened to own a
+port. These conditions made runtime failures look like SSH password failures.
+
+### Decision
+
+Manage the development Lab through one external launcher on port `8892`. The
+launcher writes an atomic, non-secret ownership record containing PID, process
+creation time, repository, mode, port, Git HEAD, and source fingerprint. It may
+stop only a process whose record, process identity, port ownership, and GenBox
+runtime health all match. Any ambiguity fails closed.
+
+Expose a no-store runtime identity only in development mode. Local browser
+heartbeats use it to display the loaded runtime and to lock backend-dependent
+Extension Center controls when the page is cached, the backend is stopped, or
+the loaded source differs. Browser HTTP routes do not stop or restart GenBox.
+
+### Consequences
+
+- A foreign service on `8892`, a reused PID, a corrupt record, or an old source
+  snapshot is reported and left untouched.
+- One legacy manually started Lab may require explicit identity verification
+  and one-time shutdown before the launcher takes ownership.
+- Runtime identity contains no credentials, configuration paths, providers, or
+  remote host facts and is unavailable in production. Local production UI uses
+  the existing non-secret setup-status contract for heartbeat instead.
+- Source edits require a Lab restart before their backend behavior can be
+  accepted, even when Git HEAD has not changed.

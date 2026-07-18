@@ -79,6 +79,103 @@ def test_setup_status_registers_exactly_one_get_route():
     assert len(_api_routes("/api/setup/status", "GET")) == 1
 
 
+def test_runtime_status_is_public_non_secret_and_identifies_the_loaded_process(monkeypatch):
+    monkeypatch.setenv("APP_MODE", "dev")
+    monkeypatch.setenv("GENBOX_RUNTIME_HEAD", "test-head-placeholder")
+    monkeypatch.setenv("GENBOX_RUNTIME_SOURCE", "test-source-placeholder")
+    response = TestClient(main.app).get("/api/runtime/status")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json()["service"] == "genbox"
+    assert response.json()["version"]
+    assert response.json()["mode"] == "dev"
+    assert response.json()["port"] == main.GENBOX_PORT
+    assert response.json()["runtime_id"] == main.app_runtime_id
+    assert response.json()["runtime_head"] == "test-head-placeholder"
+    assert response.json()["runtime_source"] == "test-source-placeholder"
+    assert "/api/runtime/status" in main.AUTH_EXEMPT_PATHS
+    assert all("key" not in name.lower() and "secret" not in name.lower() for name in response.json())
+
+
+def test_runtime_status_is_not_exposed_in_production(monkeypatch):
+    monkeypatch.setenv("APP_MODE", "prod")
+
+    response = TestClient(main.app).get("/api/runtime/status")
+
+    assert response.status_code == 404
+
+
+def test_frontend_marks_cached_local_pages_offline_and_locks_extension_controls():
+    app_source = (ROOT / "static" / "js" / "app-all.js").read_text(encoding="utf-8")
+    extension_source = (ROOT / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    index_source = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+
+    assert "fetch('/api/setup/status', {cache: 'no-store'})" in app_source
+    assert "fetch('/api/runtime/status', {cache: 'no-store'})" in app_source
+    assert "_setBackendState(false, null)" in app_source
+    assert "setExtensionsBackendOnline" in extension_source
+    assert "querySelectorAll('button,input,select,textarea')" in extension_source
+    assert 'id="backendOfflineBanner"' in index_source
+    assert "disabled=false" not in extension_source
+
+
+def test_extension_offline_control_snapshot_and_hard_lock_behavior():
+    source = (ROOT / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    setter = _extract_js_function(source, "setExtensionsBackendOnline")
+    ssh_lock = _extract_js_function(source, "setSshInputsLocked")
+    tailscale_render = _extract_js_function(source, "renderLocalTailscale")
+    targets_render = _extract_js_function(source, "renderTargets")
+    harness = f"""
+const vm = require('vm');
+function assert(value, message) {{ if (!value) throw new Error(message); }}
+const enabled = {{disabled:false,isConnected:true,closest:function(){{return null;}}}};
+const alreadyDisabled = {{disabled:true,isConnected:true,closest:function(){{return null;}}}};
+const deleteTarget = {{disabled:false,isConnected:true,closest:function(){{return null;}}}};
+const authButton = {{disabled:false,isConnected:true,closest:function(){{return null;}}}};
+const installButton = {{disabled:false,isConnected:true,closest:function(){{return null;}}}};
+const loginButton = {{disabled:false,isConnected:true,closest:function(){{return null;}}}};
+const serveButton = {{disabled:false,isConnected:true,closest:function(){{return null;}}}};
+function node() {{ return {{disabled:false,isConnected:true,closest:function(){{return null;}},className:'',textContent:''}}; }}
+const page = {{querySelectorAll:function(){{return [enabled, alreadyDisabled];}}}};
+const elements = {{pageExtensions:page,extDeleteTarget:deleteTarget,extLocalInstallBtn:installButton,extLocalLoginBtn:loginButton,extLocalServeBtn:serveButton,extLocalActionStatus:node(),extLocalTailscaleState:node(),extLocalTailscaleDetail:node(),extLocalAppPort:node(),extLocalServePort:node()}};
+const context = {{
+  backendOnline:true, backendDisabledControls:[], currentTargetId:'target-1', savedTargets:[],
+  window:{{}}, document:{{querySelectorAll:function(){{return [authButton];}}}},
+  el:function(id){{return elements[id] || enabled;}},
+  message:function(){{}}, i18nText:function(key){{return key;}}, updateCredentialState:function(){{}}, setCheck:function(){{}}, localTailscale:null,
+  escHtml:function(value){{return value;}}, renderBatchTargets:function(){{}}
+}};
+vm.createContext(context);
+vm.runInContext({json.dumps(setter + ';' + ssh_lock + ';' + tailscale_render + ';' + targets_render)}, context);
+context.setExtensionsBackendOnline(false);
+assert(enabled.disabled && alreadyDisabled.disabled, 'offline did not disable controls');
+context.setSshInputsLocked(false);
+assert(enabled.disabled && deleteTarget.disabled && authButton.disabled, 'async finally bypassed offline hard lock');
+context.renderTargets();
+assert(deleteTarget.disabled, 'late target render bypassed offline lock');
+context.renderLocalTailscale({{installed:false,online:false,serve:false,app_port:8892,serve_port:8893}});
+assert(installButton.disabled && loginButton.disabled && serveButton.disabled, 'late local status bypassed offline lock');
+context.setExtensionsBackendOnline(true);
+assert(enabled.disabled === false, 'enabled control did not recover');
+assert(alreadyDisabled.disabled === true, 'previously disabled control was incorrectly enabled');
+context.renderLocalTailscale({{installed:false,online:false,serve:false,app_port:8892,serve_port:8893}});
+assert(installButton.disabled === false && loginButton.disabled && serveButton.disabled, 'online local controls did not recover by state');
+"""
+    result = subprocess.run(["node", "-e", harness], cwd=ROOT, capture_output=True, text=True, timeout=20)
+
+    assert result.returncode == 0, result.stderr
+    assert "extVaultLockBtn').disabled=!backendOnline||" in source
+    assert "if(!backendOnline){message(i18nText('runtime.offline_detail'),true);return}" in source
+
+
+@pytest.mark.parametrize("action", ["stop", "restart", "start"])
+def test_get_server_control_cannot_mutate_process(action):
+    response = TestClient(main.app).get(f"/api/server/control?action={action}")
+
+    assert response.status_code == 405
+
+
 @pytest.mark.parametrize(
     ("app_mode", "providers", "expected"),
     [

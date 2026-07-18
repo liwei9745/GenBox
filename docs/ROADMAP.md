@@ -122,6 +122,9 @@ Establish and verify a secure route from chatgpt2api to GenBox.
 - Final stable GenBox Push URL stored as non-secret destination metadata.
 - Credential-gated, single-flight SSH and network checks with deployment state
   kept separate from private-network completion and restart recovery.
+- An owned local Lab lifecycle with runtime/source identity plus browser
+  heartbeat, so cached pages and stale Python processes cannot masquerade as the
+  current Phase 3 build.
 
 ### Acceptance Criteria
 
@@ -135,6 +138,9 @@ Establish and verify a secure route from chatgpt2api to GenBox.
 - Missing or ambiguous SSH credentials fail closed before SSH or network-task
   side effects, and stale or duplicate browser requests cannot unlock later
   steps.
+- A stopped, old, or mismatched local backend is shown as offline; remote
+  controls remain locked until the browser verifies the current development
+  runtime. Local stop/restart cannot terminate an unowned port listener.
 
 ## Phase 4: Single-Image Push End To End
 

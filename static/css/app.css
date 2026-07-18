@@ -3455,6 +3455,22 @@ body.ui-font-comfortable .nav-style-preset {
   gap: 12px;
 }
 
+.backend-offline-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: 12px;
+  background: rgba(127, 29, 29, 0.18);
+  color: #fecaca;
+}
+
+.backend-offline-banner > div { display: grid; gap: 4px; }
+.backend-offline-banner span { color: #fca5a5; font-size: 12px; }
+
 .onboarding-chatgpt-feature-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

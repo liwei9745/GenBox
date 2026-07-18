@@ -204,6 +204,7 @@ class ProviderCreateReq(BaseModel):
 # ──────────────────────────────────────────────────────────────
 app = FastAPI(title="GenBox", version=__version__)
 app_start_time = time.time()
+app_runtime_id = uuid.uuid4().hex[:12]
 GENBOX_PORT = int(os.getenv("GENBOX_PORT", "8891"))
 GENBOX_LOCAL_URL = f"http://localhost:{GENBOX_PORT}"
 GENBOX_LOOPBACK_URL = f"http://127.0.0.1:{GENBOX_PORT}"
@@ -493,6 +494,25 @@ async def status():
             "model": p.model,
         }
     return result
+
+
+@app.get("/api/runtime/status")
+async def runtime_status():
+    """Return a non-secret identity used to detect stale browser/runtime mixes."""
+    configured_mode = os.getenv("APP_MODE", "prod").strip().lower()
+    if configured_mode != "dev":
+        raise HTTPException(status_code=404, detail="Not found")
+    payload = {
+        "service": "genbox",
+        "version": __version__,
+        "mode": "dev",
+        "port": GENBOX_PORT,
+        "started_at": int(app_start_time),
+        "runtime_id": app_runtime_id,
+        "runtime_head": os.getenv("GENBOX_RUNTIME_HEAD", "").strip(),
+        "runtime_source": os.getenv("GENBOX_RUNTIME_SOURCE", "").strip(),
+    }
+    return JSONResponse(payload, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/providers")
@@ -3072,22 +3092,13 @@ def _detect_proxy():
 
 @app.get("/api/server/control")
 async def server_control(action: str = "status"):
-    """服务器控制：status/start/restart/stop"""
-    import subprocess
+    """Report status only; process mutation belongs to the owned local launcher."""
     if action == "status":
-        try:
-            import urllib.request
-            urllib.request.urlopen(f"{GENBOX_LOOPBACK_URL}/", timeout=2)
-            return {"status": "running", "port": GENBOX_PORT}
-        except Exception:
-            return {"status": "stopped", "port": GENBOX_PORT}
-    elif action == "restart":
-        subprocess.Popen(["python", "main.py"], cwd=str(STORAGE_DIR.parent))
-        return {"status": "restarting"}
-    elif action == "stop":
-        os._exit(0)
-        return {"status": "stopping"}
-    return {"status": "unknown"}
+        return {"status": "running", "port": GENBOX_PORT}
+    raise HTTPException(
+        status_code=405,
+        detail="为防止误停进程，请使用本机 GenBox Lab 启动器执行停止或重启",
+    )
 
 
 # ──────────────────────────────────────────────────────────────
@@ -3156,6 +3167,7 @@ async def get_update_info():
 # ──────────────────────────────────────────────────────────────
 AUTH_EXEMPT_PATHS = {
     "/api/setup/status",
+    "/api/runtime/status",
     "/api/sync/push",
     "/api/sync/push/status",
     "/favicon.ico",
