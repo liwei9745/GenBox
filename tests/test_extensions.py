@@ -41,7 +41,18 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
             raise HostKeyNotVerifiable("host key rejected before authentication")
         return Connection()
 
-    fake_asyncssh = SimpleNamespace(SSHClient=object, HostKeyNotVerifiable=HostKeyNotVerifiable, connect=connect)
+    imported_keys = []
+
+    def import_private_key(value, passphrase):
+        imported_keys.append((value, passphrase))
+        return "imported-private-key"
+
+    fake_asyncssh = SimpleNamespace(
+        SSHClient=object,
+        HostKeyNotVerifiable=HostKeyNotVerifiable,
+        connect=connect,
+        import_private_key=import_private_key,
+    )
     monkeypatch.setitem(sys.modules, "asyncssh", fake_asyncssh)
     request = ExtensionTestRequest(
         target=ExtensionTarget(id="vps", name="VPS", host="vps.example", username="ubuntu"),
@@ -62,6 +73,24 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
         assert connection is not None
         assert trusted_fingerprint == fingerprint
         assert calls[1]["password"] == "ssh-secret"
+        assert calls[1]["preferred_auth"] == ["password"]
+        assert calls[1]["kbdint_auth"] is False
+        assert calls[1]["password_auth"] is True
+
+        key_request = ExtensionTestRequest(
+            target=request.target,
+            credential=SSHCredential(private_key="private-key", passphrase="key-passphrase"),
+            expected_host_key=fingerprint,
+        )
+        key_connection, key_fingerprint = await _connect(key_request)
+        assert key_connection is not None
+        assert key_fingerprint == fingerprint
+        assert imported_keys == [("private-key", "key-passphrase")]
+        assert calls[2]["client_keys"] == ["imported-private-key"]
+        assert calls[2]["preferred_auth"] == ["publickey"]
+        assert calls[2]["kbdint_auth"] is False
+        assert calls[2]["password_auth"] is False
+        assert "password" not in calls[2]
 
     asyncio.run(run())
 

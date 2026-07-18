@@ -122,8 +122,14 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
             request.credential.private_key,
             request.credential.passphrase or None,
         )]
+        kwargs["preferred_auth"] = ["publickey"]
+        kwargs["kbdint_auth"] = False
+        kwargs["password_auth"] = False
     else:
         kwargs["password"] = request.credential.password
+        kwargs["preferred_auth"] = ["password"]
+        kwargs["kbdint_auth"] = False
+        kwargs["password_auth"] = True
     connection = await asyncssh.connect(**kwargs)
     return connection, trusted_client.fingerprint
 
