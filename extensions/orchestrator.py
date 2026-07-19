@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from extensions.models import ExtensionDeployRequest, ExtensionKeyResetRequest, ExtensionPlanRequest, ExtensionTestRequest
+from extensions.models import ExtensionDeployRequest, ExtensionKeyResetRequest, ExtensionPlanRequest, ExtensionTarget, ExtensionTestRequest
 from extensions.capabilities import validate_deployment_capability
 from extensions.deployment_failures import deployment_failure
 import extensions.store as extensions_store
@@ -44,6 +44,14 @@ class SSHAuthenticationError(PermissionError):
             "retry_safe": False,
             **(facts or {}),
         }
+
+
+class SSHConnectionError(ConnectionError):
+    """A fixed, non-sensitive SSH failure safe for API and task responses."""
+
+    def __init__(self, message: str, *, code: str, stage: str):
+        super().__init__(message)
+        self.diagnostic = {"code": code, "stage": stage, "retry_safe": False}
 
 
 IMAGE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/:@-]{2,255}$")
@@ -152,14 +160,7 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
     }
 
     if not expected:
-        probe_client = _FingerprintClient()
-        try:
-            await asyncssh.connect(**base_kwargs, client_factory=lambda: probe_client)
-        except asyncssh.HostKeyNotVerifiable:
-            if probe_client.fingerprint:
-                return None, probe_client.fingerprint
-            raise
-        raise RuntimeError("未能在不使用凭据的情况下确认 VPS 主机指纹")
+        return None, await probe_host_key(request.target)
 
     trusted_client = _FingerprintClient(
         expected,
@@ -167,10 +168,18 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
     )
     kwargs = {**base_kwargs, "client_factory": lambda: trusted_client}
     if request.credential.private_key:
-        kwargs["client_keys"] = [asyncssh.import_private_key(
-            request.credential.private_key,
-            request.credential.passphrase or None,
-        )]
+        try:
+            imported_key = asyncssh.import_private_key(
+                request.credential.private_key,
+                request.credential.passphrase or None,
+            )
+        except Exception as exc:
+            raise SSHConnectionError(
+                "SSH 私钥或私钥口令无法解析，请重新检查后再试。",
+                code="ssh_private_key_invalid",
+                stage="credential_validation",
+            ) from exc
+        kwargs["client_keys"] = [imported_key]
         kwargs["preferred_auth"] = ["publickey"]
         kwargs["kbdint_auth"] = False
         kwargs["password_auth"] = False
@@ -221,7 +230,82 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
                 "connection_lost_during_auth": trusted_client.connection_lost_during_auth,
             },
         ) from exc
+    except asyncssh.HostKeyNotVerifiable as exc:
+        raise SSHConnectionError(
+            "VPS 当前 SSH 主机指纹与已确认记录不一致，已拒绝继续连接。",
+            code="ssh_host_key_mismatch",
+            stage="host_key_verification",
+        ) from exc
+    except (TimeoutError, asyncio.TimeoutError) as exc:
+        raise SSHConnectionError(
+            "SSH 连接超时，请确认 VPS 在线且 SSH 端口可访问。",
+            code="ssh_transport_timeout",
+            stage="transport_connect",
+        ) from exc
+    except OSError as exc:
+        raise SSHConnectionError(
+            "SSH 网络连接未建立，请检查地址、端口和本机网络。",
+            code="ssh_transport_failed",
+            stage="transport_connect",
+        ) from exc
+    except Exception as exc:
+        raise SSHConnectionError(
+            "SSH 客户端未完成连接，原始错误已隐藏。请勿连续重试。",
+            code="ssh_protocol_failed",
+            stage="ssh_protocol",
+        ) from exc
     return connection, trusted_client.fingerprint
+
+
+async def probe_host_key(target: ExtensionTarget) -> str:
+    """Read a server public SSH identity without attempting authentication."""
+    try:
+        import asyncssh
+    except ImportError as exc:
+        raise SSHConnectionError(
+            "缺少 SSH 组件，无法读取 VPS 主机指纹。",
+            code="ssh_component_missing",
+            stage="host_key_probe",
+        ) from exc
+
+    try:
+        # AsyncSSH's dedicated helper stops after SSH key exchange, returns the
+        # presented public host key, aborts the transport, and never begins
+        # user authentication. The result is only a candidate until the user
+        # verifies it and the confirm endpoint re-probes the same identity.
+        key = await asyncio.wait_for(
+            asyncssh.get_server_host_key(
+                target.host,
+                target.port,
+                config=[],
+            ),
+            timeout=15,
+        )
+    except (TimeoutError, asyncio.TimeoutError) as exc:
+        raise SSHConnectionError(
+            "读取 VPS 主机指纹超时，请确认 SSH 地址和端口可访问。",
+            code="ssh_host_key_timeout",
+            stage="host_key_probe",
+        ) from exc
+    except OSError as exc:
+        raise SSHConnectionError(
+            "无法连接 VPS 的 SSH 端口，请检查网络、地址和端口。",
+            code="ssh_transport_failed",
+            stage="host_key_probe",
+        ) from exc
+    except Exception as exc:
+        raise SSHConnectionError(
+            "读取 VPS 主机指纹时连接未完成，原始错误已隐藏。",
+            code="ssh_host_key_probe_failed",
+            stage="host_key_probe",
+        ) from exc
+    if key is None:
+        raise SSHConnectionError(
+            "VPS 未按预期返回可确认的 SSH 主机指纹。",
+            code="ssh_host_key_unavailable",
+            stage="host_key_probe",
+        )
+    return _fingerprint(key)
 
 
 async def test_connection(request: ExtensionTestRequest) -> dict:

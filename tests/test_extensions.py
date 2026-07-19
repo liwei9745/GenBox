@@ -6,17 +6,30 @@ from html.parser import HTMLParser
 from types import SimpleNamespace
 from pathlib import Path
 
-from extensions.models import ExtensionDeployRequest, ExtensionPlanRequest, ExtensionTarget, ExtensionTestRequest, SSHCredential
+from extensions.models import (
+    ExtensionDeployRequest,
+    ExtensionDiscoveryRequest,
+    ExtensionHostKeyConfirmRequest,
+    ExtensionHostKeyProbeRequest,
+    ExtensionKeyResetRequest,
+    ExtensionPlanRequest,
+    ExtensionTarget,
+    ExtensionTestRequest,
+    NetworkConnectRequest,
+    SSHCredential,
+)
 import extensions.store as store
 from extensions.orchestrator import (
     CLONE_SCRUB_KEYS,
     DeploymentPlanManager,
     ExtensionTaskManager,
     SSHAuthenticationError,
+    SSHConnectionError,
     _clone_config_scrub_script,
     _connect,
     _password_sudo_command,
     deployment_plans,
+    probe_host_key,
 )
 
 
@@ -30,6 +43,7 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
             return Key()
 
     calls = []
+    probe_calls = []
 
     class HostKeyNotVerifiable(Exception):
         pass
@@ -44,6 +58,10 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
             calls[-1]["provided_password"] = client.password_auth_requested()
         return Connection()
 
+    async def get_server_host_key(host, port, *, config):
+        probe_calls.append({"host": host, "port": port, "config": config})
+        return Key()
+
     imported_keys = []
 
     def import_private_key(value, passphrase):
@@ -54,6 +72,7 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
         SSHClient=object,
         HostKeyNotVerifiable=HostKeyNotVerifiable,
         connect=connect,
+        get_server_host_key=get_server_host_key,
         import_private_key=import_private_key,
     )
     monkeypatch.setitem(sys.modules, "asyncssh", fake_asyncssh)
@@ -66,20 +85,17 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
         connection, fingerprint = await _connect(request)
         assert connection is None
         assert fingerprint.startswith("SHA256:")
-        assert "password" not in calls[0]
-        assert calls[0]["client_keys"] is None
-        assert calls[0]["agent_path"] is None
-        assert calls[0]["config"] == []
+        assert probe_calls == [{"host": "vps.example", "port": 22, "config": []}]
 
         request.expected_host_key = fingerprint
         connection, trusted_fingerprint = await _connect(request)
         assert connection is not None
         assert trusted_fingerprint == fingerprint
-        assert "password" not in calls[1]
-        assert calls[1]["provided_password"] == "ssh-secret"
-        assert calls[1]["preferred_auth"] == ["password"]
-        assert calls[1]["kbdint_auth"] is False
-        assert calls[1]["password_auth"] is True
+        assert "password" not in calls[0]
+        assert calls[0]["provided_password"] == "ssh-secret"
+        assert calls[0]["preferred_auth"] == ["password"]
+        assert calls[0]["kbdint_auth"] is False
+        assert calls[0]["password_auth"] is True
 
         key_request = ExtensionTestRequest(
             target=request.target,
@@ -90,11 +106,11 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
         assert key_connection is not None
         assert key_fingerprint == fingerprint
         assert imported_keys == [("private-key", "key-passphrase")]
-        assert calls[2]["client_keys"] == ["imported-private-key"]
-        assert calls[2]["preferred_auth"] == ["publickey"]
-        assert calls[2]["kbdint_auth"] is False
-        assert calls[2]["password_auth"] is False
-        assert "password" not in calls[2]
+        assert calls[1]["client_keys"] == ["imported-private-key"]
+        assert calls[1]["preferred_auth"] == ["publickey"]
+        assert calls[1]["kbdint_auth"] is False
+        assert calls[1]["password_auth"] is False
+        assert "password" not in calls[1]
 
     asyncio.run(run())
 
@@ -138,8 +154,8 @@ def test_mismatched_ssh_host_key_is_rejected_before_authentication():
             )
             try:
                 await _connect(request)
-            except asyncssh.HostKeyNotVerifiable:
-                pass
+            except SSHConnectionError as exc:
+                assert exc.diagnostic["code"] == "ssh_host_key_mismatch"
             else:
                 raise AssertionError("mismatched host key was accepted")
         finally:
@@ -372,11 +388,13 @@ def test_extension_ssh_route_returns_structured_sanitized_auth_diagnostic(monkey
         )
 
     monkeypatch.setattr(main, "test_extension_connection", reject)
+    saved_target = ExtensionTarget(
+        id="vps", name="VPS", host="vps.example", username="root",
+        host_key="SHA256:test",
+    )
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: saved_target)
     request = ExtensionTestRequest(
-        target=ExtensionTarget(
-            id="vps", name="VPS", host="vps.example", username="root",
-            host_key="SHA256:test",
-        ),
+        target=saved_target,
         credential=SSHCredential(password="ssh-secret"),
         expected_host_key="SHA256:test",
     )
@@ -396,6 +414,177 @@ def test_extension_ssh_route_returns_structured_sanitized_auth_diagnostic(monkey
             raise AssertionError("route did not return the structured SSH diagnostic")
 
     asyncio.run(run())
+
+
+def test_host_key_probe_request_has_no_credential_fields():
+    assert set(ExtensionHostKeyProbeRequest.model_fields) == {"target_id"}
+    assert set(ExtensionHostKeyConfirmRequest.model_fields) == {"target_id", "fingerprint"}
+    for fingerprint in ("", "MD5:bad", "SHA256:short", "SHA256:bad value"):
+        try:
+            ExtensionHostKeyConfirmRequest(target_id="saved", fingerprint=fingerprint)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("a malformed host fingerprint was accepted")
+
+
+def test_probe_host_key_uses_kex_only_helper_without_identity_or_credentials(monkeypatch):
+    class Key:
+        def export_public_key(self, format_name):
+            return "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA test"
+
+    calls = []
+
+    async def get_server_host_key(host, port, *, config):
+        calls.append({"host": host, "port": port, "config": config})
+        return Key()
+
+    fake_asyncssh = SimpleNamespace(
+        get_server_host_key=get_server_host_key,
+    )
+    monkeypatch.setitem(sys.modules, "asyncssh", fake_asyncssh)
+
+    fingerprint = asyncio.run(probe_host_key(ExtensionTarget(
+        id="probe", name="Probe", host="safe.example", username="ubuntu",
+    )))
+
+    assert fingerprint.startswith("SHA256:")
+    assert calls == [{"host": "safe.example", "port": 22, "config": []}]
+    assert "username" not in calls[0]
+    assert "credential" not in calls[0]
+    assert "password" not in calls[0]
+
+
+def test_host_key_confirm_reprobes_and_persists_only_matching_fingerprint(monkeypatch):
+    import main
+
+    fingerprint = "SHA256:AAAAAAAAAAAAAAAAAAAA"
+    target = ExtensionTarget(
+        id="saved", name="Saved", host="safe.example", username="ubuntu",
+    )
+    saved = []
+
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    monkeypatch.setattr(main, "probe_host_key", lambda _target: asyncio.sleep(0, result=fingerprint))
+    monkeypatch.setattr(
+        main.extensions_store,
+        "confirm_target_host_key",
+        lambda expected, value: saved.append((expected, value)) or expected.model_copy(update={"host_key": value}),
+    )
+
+    result = asyncio.run(main.extension_confirm_ssh_host_key(
+        ExtensionHostKeyConfirmRequest(target_id="saved", fingerprint=fingerprint)
+    ))
+
+    assert result["target"]["host_key"] == fingerprint
+    assert saved == [(target, fingerprint)]
+
+
+def test_host_key_confirm_rejects_changed_or_previously_conflicting_key(monkeypatch):
+    import main
+    from fastapi import HTTPException
+
+    observed = "SHA256:AAAAAAAAAAAAAAAAAAAA"
+    submitted = "SHA256:BBBBBBBBBBBBBBBBBBBB"
+    writes = []
+
+    async def current_key(_target):
+        return observed
+
+    monkeypatch.setattr(main, "probe_host_key", current_key)
+    monkeypatch.setattr(main.extensions_store, "upsert_target", lambda data: writes.append(data))
+
+    for stored_key, requested_key in (("", submitted), (submitted, observed)):
+        target = ExtensionTarget(
+            id="saved", name="Saved", host="safe.example", username="ubuntu",
+            host_key=stored_key,
+        )
+        monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id, item=target: item)
+        try:
+            asyncio.run(main.extension_confirm_ssh_host_key(
+                ExtensionHostKeyConfirmRequest(target_id="saved", fingerprint=requested_key)
+            ))
+        except HTTPException as exc:
+            assert exc.status_code == 409
+        else:
+            raise AssertionError("a changed host key was persisted")
+
+    assert writes == []
+
+
+def test_extension_ssh_route_hides_unclassified_raw_exception(monkeypatch):
+    import main
+    from fastapi import HTTPException
+
+    target = ExtensionTarget(
+        id="vps", name="VPS", host="hidden.example", username="hidden-user",
+        host_key="SHA256:AAAAAAAAAAAAAAAAAAAA",
+    )
+
+    async def reject(_request):
+        raise RuntimeError("Permission denied for user hidden-user on host hidden.example 192.0.2.77")
+
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    monkeypatch.setattr(main, "test_extension_connection", reject)
+    request = ExtensionTestRequest(
+        target=target,
+        credential=SSHCredential(password="test-secret"),
+        expected_host_key=target.host_key,
+    )
+
+    try:
+        asyncio.run(main.extension_test_ssh(request))
+    except HTTPException as exc:
+        serialized = json.dumps(exc.detail)
+        assert exc.status_code == 400
+        assert "Permission denied" not in serialized
+        assert "hidden-user" not in serialized
+        assert "hidden.example" not in serialized
+        assert "192.0.2.77" not in serialized
+        assert "test-secret" not in serialized
+    else:
+        raise AssertionError("the route exposed an unclassified exception")
+
+
+def test_post_connect_routes_hide_unclassified_remote_exceptions(monkeypatch):
+    import main
+    from fastapi import HTTPException
+
+    target = ExtensionTarget(
+        id="saved", name="Saved", host="safe.example", username="ubuntu",
+        host_key="SHA256:AAAAAAAAAAAAAAAAAAAA",
+    )
+    credential = SSHCredential(password="test-secret")
+    raw = "hidden-user hidden.example 192.0.2.77 ssh-secret remote-output"
+
+    async def reject(_request):
+        raise RuntimeError(raw)
+
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    monkeypatch.setattr(main, "discover_environment", reject)
+    monkeypatch.setattr(main, "reset_managed_admin_key", reject)
+    cases = (
+        (main.extension_discover, ExtensionDiscoveryRequest(target=target, credential=credential)),
+        (main.extension_deploy_plan, ExtensionPlanRequest(target=target, credential=credential)),
+        (main.extension_reset_admin_key, ExtensionKeyResetRequest(
+            target=target, credential=credential, instance_id="managed-one",
+        )),
+    )
+
+    for route, request_body in cases:
+        try:
+            asyncio.run(route(request_body))
+        except HTTPException as exc:
+            serialized = json.dumps(exc.detail)
+            assert exc.status_code == 400
+            assert exc.detail["diagnostic"]["retry_safe"] is False
+            for sentinel in (
+                "hidden-user", "hidden.example", "192.0.2.77",
+                "ssh-secret", "remote-output", "test-secret",
+            ):
+                assert sentinel not in serialized
+        else:
+            raise AssertionError(f"{route.__name__} exposed a raw remote exception")
 
 
 def test_network_ui_is_tailscale_and_existing_only_with_failure_recovery_contract():
@@ -437,32 +626,63 @@ def test_network_ui_is_tailscale_and_existing_only_with_failure_recovery_contrac
     assert "disabled" in providers["cloudflare"]
 
     operation_modes = [item["value"] for item in parser.inputs if item.get("name") == "extNetworkOperation"]
-    assert operation_modes == ["existing"]
-    assert [item["value"] for item in parser.options_by_select["extRemoteNetworkMode"]] == ["existing"]
-    assert not any(item.get("id") == "extNetworkToken" for item in parser.inputs)
+    assert operation_modes == ["auto", "existing"]
+    assert [item["value"] for item in parser.options_by_select["extRemoteNetworkMode"]] == ["auto", "existing"]
+    token_input = next(item for item in parser.inputs if item.get("id") == "extNetworkToken")
+    assert token_input["type"] == "password"
+    assert token_input["autocomplete"] == "off"
     assert parser.elements_by_id["extTailscaleKeyGuide"]["aria-hidden"] == "true"
+    assert "extNoviceGuide" in parser.elements_by_id
+    assert "extGuidePrimaryBtn" in parser.elements_by_id
+    assert "extNetworkDiagnosticDetail" in parser.elements_by_id
 
-    connect_handler = script.partition("window.extensionConnectNetwork")[2].partition("function renderLocalTailscale")[0]
+    connect_handler = script.rpartition("window.extensionConnectNetwork=async function")[2].partition("function renderLocalTailscale")[0]
     render_handler = script.partition("function renderNetworkTask")[2].partition("window.extensionRetryNetworkCheck")[0]
     assert "provider:'tailscale'" in connect_handler
-    assert "enrollment_token:''" in connect_handler
-    assert "operation_mode:'existing'" in connect_handler
+    assert "enrollment_token:token" in connect_handler
+    assert "operation_mode:mode" in connect_handler
+    assert "el('extNetworkToken').value=''" in connect_handler
+    assert "snapshot=networkRequestContext(mode)" in connect_handler
+    assert "networkContextMatches(snapshot,mode)" in connect_handler
+    assert "clearSessionCredentials()" not in connect_handler
     assert "t.failed_phase" in render_handler
-    assert "t.recovery_action" in render_handler
+    assert "networkRecoveryText(t)" in render_handler
+    assert "t.status==='needs_action'" in render_handler
+    assert "status.skipped" in script
+    assert "networkDiagnosticText(t.diagnostics)" in render_handler
+    assert "extensions.network_diag_magicdns" in script
+    assert "extensions.network_diag_http_error" in script
+    assert "extensions.network_diag_invalid_genbox_response" in script
+    assert "value=row&&row.children?row.children[1]:null" in script
+    assert "restoreTargetNetworkState(item)" in script
+    assert "item.network_url&&item.network_verified_at" in script
     assert "extNetworkRecoveryDetail" in render_handler
+    assert "extensions.network_failed_plain" in render_handler
 
     translation_entry = translations.partition('"task.network.remote_network_detect"')[2].splitlines()[0]
     assert "确认 VPS Tailscale 地址" in translation_entry
     assert "Confirm VPS Tailscale address" in translation_entry
 
 
-def test_deploy_completion_opens_delivery_pane():
+def test_network_recovery_and_auth_key_layout_stack_at_phone_width():
+    css = (Path(__file__).parents[1] / "static" / "css" / "extensions.css").read_text(encoding="utf-8")
+    html = (Path(__file__).parents[1] / "static" / "index.html").read_text(encoding="utf-8")
+
+    assert "@media(max-width:480px){.extension-network-recovery{align-items:stretch;flex-direction:column}" in css
+    assert ".extension-auth-key-panel .extension-copy-row{display:grid;grid-template-columns:minmax(0,1fr) auto}" in css
+    assert 'id="extNetworkToken" type="password"' in html
+    assert 'maxlength="4096"' in html
+
+
+def test_deploy_completion_opens_delivery_pane_without_falsely_finishing_network():
     script = (Path(__file__).parents[1] / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
     completed_handler = script.split("async function renderTask", 1)[1].split("window.extensionStartDeploy", 1)[0]
 
     assert "el('extHandoff').classList.remove('hidden')" in completed_handler
     assert "if(deliveryAvailable){extensionNext(5)" in completed_handler
-    assert "else{extensionNext(restoring?3:5)}" in completed_handler
+    assert "else{extensionNext(3)}" in completed_handler
+    assert "extensionNext(restoring?3:5)" not in completed_handler
+    assert "extensions.deploy_complete_save_key_then_network" in completed_handler
     assert "setCheck('url',true,t.result.url)" not in completed_handler
     assert completed_handler.index("extensionNext(5)") < completed_handler.index("claimTaskDelivery(taskId)")
 
@@ -487,6 +707,145 @@ def test_target_store_roundtrip_and_delete(tmp_path, monkeypatch):
     assert store.list_targets()[0].id == target.id
     assert store.delete_target(target.id) is True
     assert store.list_targets() == []
+
+
+def test_browser_target_save_cannot_set_or_replace_host_key(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    injected = "SHA256:BBBBBBBBBBBBBBBBBBBB"
+    confirmed = "SHA256:AAAAAAAAAAAAAAAAAAAA"
+
+    created = store.save_target_metadata({
+        "id": "saved", "name": "Saved", "host": "safe.example", "port": 22,
+        "username": "ubuntu", "host_key": injected,
+    })
+    assert created.host_key == ""
+
+    store.upsert_target({**created.model_dump(), "host_key": confirmed})
+    unchanged = store.save_target_metadata({
+        **created.model_dump(), "name": "Renamed", "host_key": injected,
+    })
+    assert unchanged.name == "Renamed"
+    assert unchanged.host_key == confirmed
+
+    changed = store.save_target_metadata({
+        **unchanged.model_dump(), "host": "new.example", "host_key": injected,
+    })
+    assert changed.host == "new.example"
+    assert changed.host_key == ""
+
+
+def test_browser_target_save_cannot_inject_network_verification_and_identity_change_clears_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    injected = store.save_target_metadata({
+        "id": "saved", "name": "Saved", "host": "safe.example", "port": 22,
+        "username": "ubuntu", "chatgpt2api_port": 33010,
+        "primary_network": "cloudflare", "available_networks": ["tailscale"],
+        "network_url": "http://100.64.0.99:8893", "network_verified_at": "2099-01-01 00:00:00",
+    })
+    assert injected.available_networks == []
+    assert injected.network_url == ""
+    assert injected.network_verified_at == ""
+    assert injected.primary_network == "tailscale"
+
+    verified = store.upsert_target({
+        **injected.model_dump(), "host_key": "SHA256:AAAAAAAAAAAAAAAAAAAA",
+        "available_networks": ["tailscale"], "network_url": "http://100.64.0.20:8893",
+        "network_verified_at": "2026-07-19 12:00:00",
+    })
+    renamed = store.save_target_metadata({
+        **verified.model_dump(), "name": "Renamed",
+        "network_url": "http://100.64.0.99:8893", "network_verified_at": "2099-01-01 00:00:00",
+    })
+    assert renamed.host_key == verified.host_key
+    assert renamed.available_networks == ["tailscale"]
+    assert renamed.network_url == verified.network_url
+    assert renamed.network_verified_at == verified.network_verified_at
+
+    changed = store.save_target_metadata({**renamed.model_dump(), "host": "new.example"})
+    assert changed.host_key == ""
+    assert changed.available_networks == []
+    assert changed.network_url == ""
+    assert changed.network_verified_at == ""
+
+
+def test_host_key_confirmation_store_fails_closed_on_concurrent_identity_change(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    original = store.upsert_target({
+        "id": "saved", "name": "Saved", "host": "safe.example", "port": 22,
+        "username": "ubuntu",
+    })
+    fingerprint = "SHA256:AAAAAAAAAAAAAAAAAAAA"
+    confirmed = store.confirm_target_host_key(original, fingerprint)
+    assert confirmed.host_key == fingerprint
+
+    expected = confirmed
+    store.save_target_metadata({**confirmed.model_dump(), "host": "changed.example"})
+    try:
+        store.confirm_target_host_key(expected, fingerprint)
+    except ValueError as exc:
+        assert str(exc) == "target_changed"
+    else:
+        raise AssertionError("a stale probe overwrote a concurrently changed target")
+    current = store.get_target("saved")
+    assert current.host == "changed.example"
+    assert current.host_key == ""
+
+
+def test_all_ssh_routes_bind_to_the_server_confirmed_target(monkeypatch):
+    import main
+    from fastapi import HTTPException
+
+    confirmed = ExtensionTarget(
+        id="saved", name="Saved", host="safe.example", port=22, username="ubuntu",
+        host_key="SHA256:AAAAAAAAAAAAAAAAAAAA",
+    )
+    submitted = confirmed.model_copy(update={
+        "host": "attacker.example",
+        "host_key": "SHA256:BBBBBBBBBBBBBBBBBBBB",
+    })
+    credential = SSHCredential(password="test-secret")
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: confirmed)
+
+    requests_and_routes = [
+        (ExtensionTestRequest(target=submitted, credential=credential), main.extension_test_ssh),
+        (ExtensionDiscoveryRequest(target=submitted, credential=credential), main.extension_discover),
+        (ExtensionPlanRequest(target=submitted, credential=credential), main.extension_deploy_plan),
+        (ExtensionDeployRequest(target=submitted, credential=credential), main.extension_start_deploy),
+        (ExtensionKeyResetRequest(target=submitted, credential=credential, instance_id="managed-one"), main.extension_reset_admin_key),
+        (NetworkConnectRequest(
+            target=submitted, credential=credential, provider="tailscale", operation_mode="existing",
+        ), main.extension_connect_network),
+    ]
+
+    for request_body, route in requests_and_routes:
+        try:
+            asyncio.run(route(request_body))
+        except HTTPException as exc:
+            assert exc.status_code == 409
+            assert "重新保存并确认" in str(exc.detail)
+        else:
+            raise AssertionError(f"{route.__name__} accepted a client-supplied target identity")
+
+
+def test_confirmed_target_binding_overrides_client_trust_fields(monkeypatch):
+    import main
+
+    confirmed = ExtensionTarget(
+        id="saved", name="Saved", host="safe.example", port=22, username="ubuntu",
+        host_key="SHA256:AAAAAAAAAAAAAAAAAAAA",
+    )
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: confirmed)
+    submitted = ExtensionDiscoveryRequest(
+        target=confirmed.model_copy(update={"host_key": "SHA256:BBBBBBBBBBBBBBBBBBBB"}),
+        credential=SSHCredential(password="test-secret"),
+        expected_host_key="SHA256:BBBBBBBBBBBBBBBBBBBB",
+        trust_host_key=False,
+    )
+
+    bound = main._bind_confirmed_extension_target(submitted)
+    assert bound.target == confirmed
+    assert bound.expected_host_key == confirmed.host_key
+    assert bound.trust_host_key is True
 
 
 def test_instance_store_contains_no_credentials(tmp_path, monkeypatch):
@@ -937,4 +1296,18 @@ def test_vps_password_fields_support_explicit_visibility_toggle_without_autofill
     assert "input.type=visible?'text':'password'" in extensions_js
     assert "button.setAttribute('aria-pressed',String(visible))" in extensions_js
     assert "sshTestInFlight||!requireCredential()" in extensions_js
-    assert "extensionNext(restoring?3:5)" in extensions_js
+    assert "else{extensionNext(3)}" in extensions_js
+
+
+def test_beginner_mode_hides_duplicate_workflow_buttons_until_advanced_is_opened():
+    root = Path(__file__).parents[1]
+    html = (root / "static" / "index.html").read_text(encoding="utf-8")
+    css = (root / "static" / "css" / "extensions.css").read_text(encoding="utf-8")
+
+    assert 'class="extension-discovery-bar extension-advanced-only"' in html
+    assert 'class="extension-actions extension-inline-actions extension-advanced-only"' in html
+    assert 'id="extPlanBtn"' in html
+    assert 'id="extDeployBtn"' in html
+    assert 'class="extension-actions extension-advanced-only"><button class="btn-ghost" onclick="extensionNext(1)"' in html
+    assert 'id="extNetworkHostKeyProbeBtn"' in html
+    assert '.extension-workspace:not(.show-advanced) .extension-advanced-only{display:none!important}' in css

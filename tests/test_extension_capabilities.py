@@ -134,6 +134,13 @@ def test_compose_plan_route_binds_project_strategy_and_mode(monkeypatch):
     manager = DeploymentPlanManager()
     monkeypatch.setattr(main, "discover_environment", discovery)
     monkeypatch.setattr(main, "deployment_plans", manager)
+    monkeypatch.setattr(
+        main.extensions_store,
+        "get_target",
+        lambda _target_id: ExtensionTarget(
+            **target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA",
+        ),
+    )
     response = TestClient(main.app, base_url="http://testserver").post(
         "/api/extensions/deploy/plan", json=request_payload(),
     )

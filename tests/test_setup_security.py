@@ -143,7 +143,7 @@ const context = {{
   backendOnline:true, backendDisabledControls:[], currentTargetId:'target-1', savedTargets:[],
   window:{{}}, document:{{querySelectorAll:function(){{return [authButton];}}}},
   el:function(id){{return elements[id] || enabled;}},
-  message:function(){{}}, i18nText:function(key){{return key;}}, updateCredentialState:function(){{}}, setCheck:function(){{}}, localTailscale:null,
+  message:function(){{}}, i18nText:function(key){{return key;}}, updateCredentialState:function(){{}}, renderNetworkHostKey:function(){{}}, setCheck:function(){{}}, localTailscale:null,
   escHtml:function(value){{return value;}}, renderBatchTargets:function(){{}}
 }};
 vm.createContext(context);

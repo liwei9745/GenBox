@@ -349,3 +349,36 @@ the loaded source differs. Browser HTTP routes do not stop or restart GenBox.
   the existing non-secret setup-status contract for heartbeat instead.
 - Source edits require a Lab restart before their backend behavior can be
   accepted, even when Git HEAD has not changed.
+
+## ADR-016: Tailscale Serve Destinations Use Validated MagicDNS
+
+**Status:** Accepted
+**Date:** 2026-07-19
+
+### Context
+
+Tailscale exposes both a node `100.x` address and a MagicDNS name. GenBox
+initially discarded the URL returned by `tailscale serve` and rebuilt an HTTP
+destination from the raw IP. Peer connectivity succeeded, but the Serve HTTP
+router returned 404 because the request did not use the expected MagicDNS host.
+
+### Decision
+
+Use the validated local `100.64.0.0/10` IPv4 address only for peer identity and
+reachability. Use the exact validated `.ts.net` MagicDNS name and the configured
+Serve port for the VPS application probe, the saved GenBox destination, and all
+future Push configuration. The destination validator rejects loopback, public
+hosts, raw Tailscale IP URLs, credentials, paths, query strings, fragments,
+wrong ports, and MagicDNS names that do not match the current local node.
+
+Do not silently fall back to an IP URL when MagicDNS resolution fails. Report a
+DNS-specific recovery action instead, because a fallback could pass a transport
+check while saving a destination that later HTTP clients cannot use correctly.
+
+### Consequences
+
+- Phase 4 sender work consumes a stable MagicDNS base URL from Phase 3.
+- Device renames, Tailnet changes, disabled MagicDNS, or DNS-policy changes
+  require fresh application-level verification before replacing the saved URL.
+- Node IPs and DNS names remain non-secret runtime metadata, but real values are
+  excluded from stable documentation and public examples.

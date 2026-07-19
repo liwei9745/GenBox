@@ -46,8 +46,66 @@ def upsert_target(data: dict) -> ExtensionTarget:
     return target
 
 
+def save_target_metadata(data: dict) -> ExtensionTarget:
+    """Save browser-editable target metadata without accepting trust material."""
+    config = load_config()
+    target_id = str(data.get("id") or uuid.uuid4().hex[:8])
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    existing = next((item for item in config.targets if item.id == target_id), None)
+    browser_fields = {"name", "host", "port", "username", "chatgpt2api_port"}
+    submitted = {key: value for key, value in data.items() if key in browser_fields}
+    same_identity = bool(existing) and (
+        str(submitted.get("host", existing.host)) == existing.host
+        and int(submitted.get("port", existing.port)) == existing.port
+        and str(submitted.get("username", existing.username)) == existing.username
+    )
+    trust_state = {
+        "host_key": existing.host_key if same_identity else "",
+        "available_networks": existing.available_networks if same_identity else [],
+        "network_url": existing.network_url if same_identity else "",
+        "network_verified_at": existing.network_verified_at if same_identity else "",
+    }
+    target = ExtensionTarget(
+        **{
+            **(existing.model_dump() if existing else {}),
+            **submitted,
+            "id": target_id,
+            **trust_state,
+            "created_at": existing.created_at if existing else now,
+            "updated_at": now,
+        }
+    )
+    config.targets = [item for item in config.targets if item.id != target_id] + [target]
+    save_config(config)
+    return target
+
+
+def confirm_target_host_key(expected: ExtensionTarget, fingerprint: str) -> ExtensionTarget:
+    """Persist a probed key only if the target identity is unchanged since probing."""
+    config = load_config()
+    current = next((item for item in config.targets if item.id == expected.id), None)
+    if not current:
+        raise ValueError("target_missing")
+    if (
+        current.host != expected.host
+        or current.port != expected.port
+        or current.username != expected.username
+        or current.host_key != expected.host_key
+    ):
+        raise ValueError("target_changed")
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    confirmed = current.model_copy(update={"host_key": fingerprint, "updated_at": now})
+    config.targets = [item for item in config.targets if item.id != current.id] + [confirmed]
+    save_config(config)
+    return confirmed
+
+
 def list_targets() -> list[ExtensionTarget]:
     return load_config().targets
+
+
+def get_target(target_id: str) -> ExtensionTarget | None:
+    return next((item for item in load_config().targets if item.id == target_id), None)
 
 
 def get_batch_target_ids() -> list[str]:

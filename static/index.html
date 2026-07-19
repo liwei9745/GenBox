@@ -817,6 +817,15 @@
           </ol>
         </nav>
         <section class="extension-workspace glass-panel">
+          <section id="extNoviceGuide" class="extension-novice-guide" aria-live="polite">
+            <div class="extension-guide-heading"><span data-i18n="extensions.guide_kicker">当前只做一件事</span><h2 id="extGuideTitle"><span data-i18n="extensions.guide_connect_title">先连接你的服务器</span></h2></div>
+            <div class="extension-guide-grid">
+              <div><b data-i18n="extensions.guide_found">系统已发现</b><p id="extGuideFound"></p></div>
+              <div><b data-i18n="extensions.guide_action">你现在只需</b><p id="extGuideAction"></p></div>
+              <div><b data-i18n="extensions.guide_after">完成后会</b><p id="extGuideAfter"></p></div>
+            </div>
+            <div class="extension-guide-actions"><button type="button" class="btn-ghost" id="extGuideAdvancedBtn" onclick="extensionToggleAdvanced()" aria-expanded="false"><span data-i18n="extensions.show_advanced">查看高级设置和日志</span></button><button type="button" class="btn-primary" id="extGuidePrimaryBtn" onclick="extensionPrimaryAction()"><span data-i18n="common.continue">继续</span></button></div>
+          </section>
           <div class="extension-pane" data-pane="1">
             <h2 tabindex="-1"><span data-i18n="extensions.connect_vps">连接 VPS</span></h2>
             <div class="extension-target-bar">
@@ -842,7 +851,7 @@
             </fieldset>
             <p id="extCredentialNotice" class="extension-credential-notice" role="status"><span data-i18n="extensions.ssh_not_saved_notice">保存 VPS 连接信息，但不保存 SSH 密码、私钥或 sudo 密码；关闭页面或重启后需要重新输入。</span></p>
             <div id="extHostKeyConfirm" class="extension-confirm hidden" role="alert"></div>
-            <div class="extension-actions"><button class="btn-secondary" id="extTestSshBtn" onclick="extensionTestSSH(false)" disabled><span data-i18n="extensions.test_connection">测试连接</span></button><button class="btn-primary" id="extSshNextBtn" onclick="extensionSshNext()" disabled><span id="extSshNextLabel" data-i18n="common.next">下一步</span></button></div>
+            <div class="extension-actions extension-advanced-only"><button class="btn-secondary" id="extStepHostKeyBtn" onclick="extensionStartHostKeySetup()" disabled><span data-i18n="extensions.read_confirm_host_key">读取并确认主机指纹</span></button><button class="btn-secondary" id="extTestSshBtn" onclick="extensionTestSSH()" disabled><span id="extTestSshLabel" data-i18n="extensions.ssh_deploy_diagnostic">测试 SSH 与部署权限</span></button><button class="btn-primary" id="extSshNextBtn" onclick="extensionSshNext()" disabled><span id="extSshNextLabel" data-i18n="common.next">下一步</span></button></div>
           </div>
           <div class="extension-pane hidden" data-pane="2">
             <h2 tabindex="-1"><span data-i18n="extensions.deploy_chatgpt2api">部署 chatgpt2api</span></h2>
@@ -851,7 +860,7 @@
               <div class="extension-catalog-heading"><b><span data-i18n="extensions.catalog">应用目录</span></b><span><span data-i18n="extensions.catalog_hint">当前仅 chatgpt2api 可部署，其余模板为规划占位</span></span></div>
               <div id="extCatalogGroups" class="extension-catalog-groups"></div>
             </div>
-            <div class="extension-discovery-bar"><div><b><span data-i18n="extensions.discover_first">先检测，再决定</span></b><span><span data-i18n="extensions.readonly_hint">仅执行只读命令，不修改已有服务</span></span></div><button class="btn-primary" id="extDiscoverBtn" onclick="extensionDiscover()"><span data-i18n="extensions.discover">检测 VPS 环境</span></button></div>
+            <div class="extension-discovery-bar extension-advanced-only"><div><b><span data-i18n="extensions.discover_first">先检测，再决定</span></b><span><span data-i18n="extensions.readonly_hint">仅执行只读命令，不修改已有服务</span></span></div><button class="btn-primary" id="extDiscoverBtn" onclick="extensionDiscover()"><span data-i18n="extensions.discover">检测 VPS 环境</span></button></div>
             <div id="extDiscoveryResult" class="extension-discovery-result hidden">
               <div id="extEnvironmentSummary" class="extension-metrics"></div>
               <div><b><span data-i18n="extensions.discovered_instances">发现的实例</span></b><div id="extExistingInstances" class="extension-instance-list"></div></div>
@@ -879,7 +888,7 @@
             <div class="extension-progress"><div><span id="extProgressLabel"><span data-i18n="common.waiting">等待开始</span></span><span id="extProgressPercent">0%</span></div><div class="extension-progress-track"><div id="extProgressFill"></div></div></div>
             <ol id="extTimeline" class="extension-timeline"></ol>
             <pre id="extLogs" class="extension-logs" aria-live="polite"></pre>
-            <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(1)"><span data-i18n="common.previous">上一步</span></button><button class="btn-secondary" id="extPlanBtn" onclick="extensionCreatePlan()"><span data-i18n="extensions.create_plan">生成安全计划</span></button><button class="btn-primary" id="extDeployBtn" onclick="extensionStartDeploy()" disabled><span data-i18n="extensions.confirm_deploy">确认并部署</span></button><button class="btn-secondary" onclick="extensionNext(3)"><span data-i18n="extensions.continue_network">继续配置链路</span></button></div>
+            <div class="extension-actions extension-advanced-only"><button class="btn-ghost" onclick="extensionNext(1)"><span data-i18n="common.previous">上一步</span></button><button class="btn-secondary" id="extPlanBtn" onclick="extensionCreatePlan()"><span data-i18n="extensions.create_plan">生成安全计划</span></button><button class="btn-primary" id="extDeployBtn" onclick="extensionStartDeploy()" disabled><span data-i18n="extensions.confirm_deploy">确认并部署</span></button><button class="btn-secondary" onclick="extensionNext(3)"><span data-i18n="extensions.continue_network">继续配置链路</span></button></div>
           </div>
           <div class="extension-pane hidden" data-pane="3">
             <h2 tabindex="-1"><span data-i18n="extensions.choose_primary_network">选择主连接方式</span></h2>
@@ -888,7 +897,7 @@
                 <div class="extension-endpoint-head"><div><span><span data-i18n="extensions.this_computer">这台电脑</span></span><b id="extLocalEndpointTitle"><span data-i18n="extensions.local_endpoint">GenBox 本机端</span></b></div><strong id="extLocalTailscaleState"><span data-i18n="extensions.waiting_detection">等待检测</span></strong></div>
                 <p id="extLocalTailscaleDetail"><span data-i18n="extensions.local_network_hint">检查网络工具，并开放 GenBox 私网入口。</span></p>
                 <dl><dt><span data-i18n="extensions.genbox_page">GenBox 页面</span></dt><dd id="extLocalAppPort"><span data-i18n="extensions.waiting_detection">等待检测</span></dd><dt><span data-i18n="extensions.private_entry">私网入口</span></dt><dd id="extLocalServePort"><span data-i18n="extensions.waiting_detection">等待检测</span></dd></dl>
-                <div class="extension-actions extension-inline-actions">
+                <div class="extension-actions extension-inline-actions extension-advanced-only">
                   <button class="btn-secondary" onclick="extensionCheckLocalTailscale()"><span data-i18n="extensions.detect_again">重新检测</span></button>
                   <button class="btn-primary" id="extLocalInstallBtn" onclick="extensionInstallLocalTailscale()"><span data-i18n="common.install">安装</span></button>
                   <button class="btn-primary" id="extLocalLoginBtn" onclick="extensionLoginLocalTailscale()"><span data-i18n="auth.login">登录</span></button>
@@ -898,43 +907,58 @@
               </section>
               <section class="extension-endpoint" aria-labelledby="extRemoteEndpointTitle">
                 <div class="extension-endpoint-head"><div><span><span data-i18n="extensions.remote_server">远程服务器</span></span><b id="extRemoteEndpointTitle"><span data-i18n="extensions.vps_endpoint">VPS 端</span></b></div><strong id="extRemoteNetworkState"><span data-i18n="extensions.waiting_configuration">等待配置</span></strong></div>
-                <p id="extRemoteNetworkDetail"><span data-i18n="extensions.existing_mode_help">不重复安装，也不需要新的 Auth Key，只检查现有连接。</span></p>
-                <label><span data-i18n="extensions.operation_mode">处理方式</span><select id="extRemoteNetworkMode"><option value="existing" selected><span data-i18n="extensions.existing_connect">已有工具，只连接和检测</span></option></select></label>
+                <p id="extRemoteNetworkDetail"><span data-i18n="extensions.remote_auto_hint">GenBox 会先检查 VPS，再按真实状态安装、启动或加入网络。</span></p>
+                <label><span data-i18n="extensions.operation_mode">处理方式</span><select id="extRemoteNetworkMode" onchange="extensionNetworkModeChanged(this.value)"><option value="auto" selected data-i18n="extensions.auto_connect">自动检查、安装并加入</option><option value="existing" data-i18n="extensions.existing_connect">高级：只检测已有连接</option></select></label>
                 <dl><dt><span data-i18n="extensions.primary_network">当前主链路</span></dt><dd id="extRemotePrimaryNetwork">Tailscale</dd><dt><span data-i18n="extensions.backup_network">备用链路</span></dt><dd id="extRemoteBackupNetworks"><span data-i18n="extensions.switch_later">以后可添加并一键切换</span></dd></dl>
               </section>
             </div>
-            <div id="extTailscaleKeyGuide" class="extension-key-guide hidden" aria-hidden="true">
+            <div id="extTailscaleKeyGuide" class="extension-key-guide extension-advanced-only hidden" aria-hidden="true">
               <div><b><span data-i18n="extensions.no_auth_key">还没有一次性 Auth Key？</span></b><span><span data-i18n="extensions.auth_key_intro">打开官方密钥页面，创建后回到下一步粘贴即可。</span></span></div>
               <a class="btn-secondary" href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener noreferrer"><span data-i18n="extensions.open_tailscale_keys">打开 Tailscale 密钥页面</span></a>
               <ol><li><span data-i18n="extensions.key_step_1">找到 Auth keys，点击 Generate auth key</span></li><li><span data-i18n="extensions.key_step_2">Reusable 关闭，Ephemeral 关闭，Pre-approved 开启</span></li><li><span data-i18n="extensions.key_step_3">有效期选 1 天，Tags 留空，然后生成</span></li></ol>
             </div>
-            <div class="extension-network-options">
+            <div class="extension-network-options extension-advanced-only">
               <label class="selected"><input type="radio" name="extNetwork" value="tailscale" checked onchange="extensionSelectNetwork(this)"><b>Tailscale Personal</b><span><span data-i18n="extensions.tailscale_hint">推荐，个人免费，安装和维护最简单</span></span></label>
               <label><input type="radio" name="extNetwork" value="netbird" disabled><b>NetBird</b><span><span data-i18n="extensions.network_not_ready">尚未完成端到端验证，暂不可用</span></span></label>
               <label><input type="radio" name="extNetwork" value="cloudflare" disabled><b>Cloudflare Tunnel</b><span><span data-i18n="extensions.network_not_ready">尚未完成端到端验证，暂不可用</span></span></label>
             </div>
-            <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(2)"><span data-i18n="common.previous">上一步</span></button><button class="btn-primary" onclick="extensionNext(4)"><span data-i18n="extensions.configure_option">配置此方案</span></button></div>
+            <div class="extension-actions extension-advanced-only"><button class="btn-ghost" onclick="extensionNext(2)"><span data-i18n="common.previous">上一步</span></button><button class="btn-primary" onclick="extensionNext(4)"><span data-i18n="extensions.configure_option">配置此方案</span></button></div>
           </div>
           <div class="extension-pane hidden" data-pane="4">
             <h2 tabindex="-1"><span data-i18n="extensions.step_configure">配置连接</span></h2>
-            <div class="extension-network-toolbar"><div><span>TAILSCALE ADMIN</span><p><span data-i18n="extensions.admin_console_hint">需要查看设备是否在线？可直接打开官方管理控制台。</span></p></div><a class="btn-secondary" href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener noreferrer"><span data-i18n="extensions.open_tailscale_admin">打开 Tailscale 管理控制台</span></a></div>
+            <div class="extension-network-toolbar extension-advanced-only"><div><span>TAILSCALE ADMIN</span><p><span data-i18n="extensions.admin_console_hint">需要查看设备是否在线？可直接打开官方管理控制台。</span></p></div><a class="btn-secondary" href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener noreferrer"><span data-i18n="extensions.open_tailscale_admin">打开 Tailscale 管理控制台</span></a></div>
             <div class="extension-network-form">
               <div class="extension-placeholder"><b id="extNetworkTitle">Tailscale Personal</b><p id="extNetworkHelp"><span data-i18n="extensions.choose_operation_first">请先选择这次要执行的操作。</span></p></div>
-              <fieldset class="extension-network-mode-cards"><legend><span data-i18n="extensions.operation_question">这次要做什么？</span></legend>
-                <label class="selected"><input type="radio" name="extNetworkOperation" value="existing" checked><span><b><span data-i18n="extensions.recheck_existing">已安装，重新检测连接</span></b><small><span data-i18n="extensions.recheck_existing_hint">不重复安装，不需要 Auth Key，只检查互通和 GenBox 访问。</span></small></span></label>
+              <fieldset class="extension-network-mode-cards extension-advanced-only"><legend><span data-i18n="extensions.operation_question">这次要做什么？</span></legend>
+                <label class="selected"><input type="radio" name="extNetworkOperation" value="auto" checked onchange="extensionNetworkModeChanged(this.value)"><span><b data-i18n="extensions.first_connect">自动准备 VPS</b><small data-i18n="extensions.first_connect_hint">系统先检测；缺什么才处理什么，不会重复安装。</small></span></label>
+                <label><input type="radio" name="extNetworkOperation" value="existing" onchange="extensionNetworkModeChanged(this.value)"><span><b><span data-i18n="extensions.recheck_existing">已安装，重新检测连接</span></b><small><span data-i18n="extensions.recheck_existing_hint">不重复安装，不需要 Auth Key，只检查互通和 GenBox 访问。</span></small></span></label>
               </fieldset>
+              <section id="extNetworkAuthKeyPanel" class="extension-auth-key-panel" aria-labelledby="extNetworkAuthKeyTitle">
+                <div><b id="extNetworkAuthKeyTitle" data-i18n="extensions.auth_key_ticket_title">给 VPS 一张一次性入网票据</b><p data-i18n="extensions.auth_key_safe_help">这不是账号密码。GenBox 只在本次任务中使用，任务创建后立即从页面清除，不写入浏览器存储、任务记录或日志。</p></div>
+                <label><span data-i18n="extensions.auth_key_label">一次性 Auth Key</span><div class="extension-copy-row"><input id="extNetworkToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="4096" placeholder="粘贴一次性 Auth Key" data-i18n-placeholder="extensions.auth_key_placeholder"><button type="button" class="btn-secondary" aria-label="显示 Auth Key" aria-pressed="false" title="显示 Auth Key" onclick="extensionTogglePassword('extNetworkToken',this)">👁</button></div></label>
+                <div class="extension-auth-key-actions"><a class="btn-secondary" href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener noreferrer" data-i18n="extensions.open_tailscale_keys">打开 Tailscale 密钥页面</a><small data-i18n="extensions.auth_key_options_help">建议：Reusable 关闭、Ephemeral 关闭；需要设备审批时开启 Pre-approved。</small></div>
+              </section>
               <div id="extNetworkKeySteps" class="extension-key-steps hidden" aria-hidden="true"></div>
-              <label><span data-i18n="extensions.device_name">设备名称</span><input id="extDeviceName" value="genbox-vps" pattern="[A-Za-z0-9._-]+"></label>
-              <section id="extMobileJoin" class="extension-mobile-join" aria-labelledby="extMobileJoinTitle">
+              <label class="extension-advanced-only"><span data-i18n="extensions.device_name">设备名称</span><input id="extDeviceName" value="genbox-vps" pattern="[A-Za-z0-9._-]+"></label>
+              <section id="extMobileJoin" class="extension-mobile-join extension-advanced-only" aria-labelledby="extMobileJoinTitle">
                 <div class="extension-mobile-copy"><span class="extension-mobile-kicker"><span data-i18n="extensions.mobile_optional">可选 · 手机也要访问 GenBox 时使用</span></span><h3 id="extMobileJoinTitle"><span data-i18n="extensions.mobile_title">用手机扫码安装 Tailscale</span></h3><ol><li><span data-i18n="extensions.mobile_step_1">手机扫描右侧二维码，安装 Tailscale。</span></li><li><span data-i18n="extensions.mobile_step_2">使用与这台电脑相同的 Tailscale 账号登录。</span></li><li><span data-i18n="extensions.mobile_step_3">连接完成后，手机即可通过私网地址访问 GenBox。</span></li></ol><div class="extension-mobile-links"><a class="btn-secondary" href="https://tailscale.com/download/ios" target="_blank" rel="noopener noreferrer">iPhone / iPad</a><a class="btn-secondary" href="https://tailscale.com/download/android" target="_blank" rel="noopener noreferrer">Android</a></div><p><span data-i18n="extensions.mobile_privacy">二维码只打开 Tailscale 官方下载页，不包含 Auth Key、密码或其他私密信息。</span></p></div>
                 <a class="extension-mobile-qr" href="https://tailscale.com/download" target="_blank" rel="noopener noreferrer" aria-label="打开 Tailscale 官方下载页" data-i18n-aria-label="extensions.mobile_download_label"><img src="/static/assets/tailscale-mobile-download-qr.png" alt="Tailscale 官方下载页二维码" width="168" height="168"><span><span data-i18n="extensions.scan_download">扫码打开官方下载页</span></span></a>
               </section>
+              <section id="extNetworkHostKey" class="extension-confirm hidden" aria-live="polite">
+                <b data-i18n="extensions.host_key_title">确认 VPS 的 SSH 主机指纹</b>
+                <p data-i18n="extensions.host_key_probe_help">这里只读取服务器公开身份，不验证密码、不执行命令。</p>
+                <code id="extNetworkHostKeyValue"></code>
+                <div class="extension-actions extension-advanced-only">
+                  <button type="button" class="btn-secondary" id="extNetworkHostKeyProbeBtn" onclick="extensionProbeHostKey()" data-i18n="extensions.read_host_key">读取主机指纹</button>
+                  <button type="button" class="btn-primary hidden" id="extNetworkHostKeyConfirmBtn" onclick="extensionConfirmHostKey()" data-i18n="extensions.confirm_host_key">我已核对并确认</button>
+                </div>
+              </section>
               <div class="extension-progress"><div><span id="extNetworkProgressLabel"><span data-i18n="extensions.waiting_connection">等待连接</span></span><span id="extNetworkProgressPercent">0%</span></div><div class="extension-progress-track"><div id="extNetworkProgressFill"></div></div></div>
               <ol id="extNetworkTimeline" class="extension-timeline"></ol>
-              <pre id="extNetworkLogs" class="extension-logs" aria-live="polite"></pre>
-              <div id="extNetworkRecovery" class="extension-network-recovery hidden"><p id="extNetworkRecoveryDetail"></p><button class="btn-secondary" onclick="extensionRetryNetworkCheck()"><span data-i18n="extensions.recheck_link">重新检查链路</span></button></div>
+              <pre id="extNetworkLogs" class="extension-logs extension-advanced-only" aria-live="polite"></pre>
+              <div id="extNetworkRecovery" class="extension-network-recovery hidden"><div><b data-i18n="extensions.recovery_title">这一步没有完成</b><p id="extNetworkRecoveryDetail"></p><small id="extNetworkDiagnosticDetail"></small></div><button class="btn-secondary" id="extNetworkRecoveryBtn" onclick="extensionRetryNetworkCheck()"><span data-i18n="extensions.recheck_link">按提示重新检测</span></button></div>
             </div>
-            <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(3)"><span data-i18n="common.previous">上一步</span></button><button class="btn-primary" id="extNetworkConnectBtn" onclick="extensionConnectNetwork()"><span data-i18n="extensions.start_network_check">开始检测私网链路</span></button></div>
+            <div class="extension-actions extension-advanced-only"><button class="btn-ghost" onclick="extensionNext(3)"><span data-i18n="common.previous">上一步</span></button><button class="btn-primary" id="extNetworkConnectBtn" onclick="extensionConnectNetwork()"><span data-i18n="extensions.start_network_check">开始自动连接和测试</span></button></div>
           </div>
           <div class="extension-pane hidden" data-pane="5">
             <h2 tabindex="-1"><span data-i18n="extensions.verify_finish">验证并完成</span></h2>

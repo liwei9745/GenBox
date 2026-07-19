@@ -66,14 +66,13 @@ and create a fully isolated development clone.
 
 ## Phase 2: Extension Center Deployment Experience
 
-**Status:** Blocked
+**Status:** Complete
 
-**Local acceptance:** Complete on 2026-07-17. All five criteria below have local
-code, automated-test, and independent-review evidence. This does not prove a
-real VPS deployment.
-
-**Resume condition:** the user identifies an isolated VPS development clone and
-separately authorizes Phase 2 remote acceptance. Production remains read-only.
+**Acceptance evidence:** Local code, automated tests, and independent review
+passed on 2026-07-17. On 2026-07-19 the isolated managed `chatgpt2api-dev`
+instance was user-confirmed ready with usable delivery information during the
+successful private-network acceptance flow. Production remains outside the
+development mutation scope.
 
 **Topic contract:** `docs/extensions-deployment-contract.md`
 
@@ -101,11 +100,14 @@ isolated chatgpt2api deployment.
 
 ## Phase 3: Private Network Automation
 
-**Status:** Blocked
+**Status:** Complete
 
-**Resume condition:** the user identifies an isolated VPS development clone and
-separately authorizes remote acceptance. Local implementation, tests, and
-independent review are complete; production remains read-only.
+**Acceptance evidence:** On 2026-07-19 the isolated managed development target
+completed local status, VPS enrollment/address detection, peer reachability,
+VPS-to-GenBox HTTP probing, and MagicDNS destination persistence. The user
+confirmed the final `PRIVATE LINK READY` state. Enrollment and SSH session
+secrets were absent from persisted target metadata. Full local verification
+passed with `247 passed`.
 
 **Topic contracts:** `docs/extensions-deployment-contract.md`,
 `docs/INTEGRATION.md`
@@ -144,7 +146,11 @@ Establish and verify a secure route from chatgpt2api to GenBox.
 
 ## Phase 4: Single-Image Push End To End
 
-**Status:** Planned
+**Status:** In Progress
+
+**Current boundary:** The GenBox Push v1 receiver exists and has local tests.
+The chatgpt2api sender, per-generation action, and real single-image receipt are
+not yet complete.
 
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`

@@ -1,6 +1,6 @@
 ﻿from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 
 class ExtensionTarget(BaseModel):
@@ -49,6 +49,14 @@ class ExtensionConfig(BaseModel):
 
 class ExtensionBatchTargetsRequest(BaseModel):
     target_ids: list[str] = Field(default_factory=list, max_length=100)
+
+
+class ExtensionHostKeyProbeRequest(BaseModel):
+    target_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+class ExtensionHostKeyConfirmRequest(ExtensionHostKeyProbeRequest):
+    fingerprint: str = Field(pattern=r"^SHA256:[A-Za-z0-9+/]{20,96}={0,2}$", max_length=128)
 
 
 class SSHCredential(BaseModel):
@@ -140,17 +148,18 @@ class NetworkConnectRequest(BaseModel):
     trust_host_key: bool = False
     expected_host_key: str = ""
     provider: Literal["tailscale", "netbird", "cloudflare"]
-    enrollment_token: str = Field(default="", max_length=4096)
+    enrollment_token: SecretStr = Field(default_factory=lambda: SecretStr(""), max_length=4096)
     operation_mode: Literal["auto", "existing"] = "auto"
     device_name: str = Field(default="genbox-vps", pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
     management_url: str = Field(default="", max_length=500)
 
     @model_validator(mode="after")
     def require_enrollment_token_for_auto(self):
+        enrollment_token = self.enrollment_token.get_secret_value()
         if self.provider != "tailscale":
             raise ValueError("当前仅 Tailscale 已具备完整的安全验证链；NetBird 和 Cloudflare 暂不可用")
-        if self.operation_mode == "auto":
-            raise ValueError("自动加入 Tailnet 暂未具备无命令行泄露授权信息的实现；请先手动加入隔离开发 VPS 后使用已有工具检测")
-        if self.operation_mode == "auto" and len(self.enrollment_token) < 8:
-            raise ValueError("自动安装需要一次性授权信息")
+        if self.operation_mode == "auto" and enrollment_token and len(enrollment_token) < 8:
+            raise ValueError("Tailscale Auth Key 长度无效")
+        if self.operation_mode == "existing" and enrollment_token:
+            raise ValueError("仅检测已有连接时不应提交 Tailscale Auth Key")
         return self

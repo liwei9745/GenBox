@@ -1,154 +1,86 @@
 # Current Project Status
 
-**Last updated:** 2026-07-18
-**Current branch:** `codex/phase3-private-network` (Phase 3 runtime-integrity Loop 2)
-**Current phase:** Phase 3 Private Network Automation — **Local runtime integrity corrected; isolated network acceptance pending**
+**Last updated:** 2026-07-19
+**Current branch:** `codex/phase3-private-network`
+**Current phase:** Phase 4 Single-Image Push End To End — **In Progress**
 
-## Current Development Snapshot
+## Verified Current State
 
-- `VERIFIED 2026-07-18`: the repeated SSH blocker was amplified by a mixed
-  runtime: a cached/new browser UI remained visible while an old or stopped
-  Python backend occupied, or no longer occupied, port `8892`. Browser refresh
-  alone cannot reload Python modules.
-- `VERIFIED 2026-07-18`: the new GenBox Lab launcher owns only processes it
-  started and records PID, process creation time, repository, port, Git HEAD,
-  and a source fingerprint. Stop/restart fails closed for foreign listeners,
-  stale records, PID reuse, wrong repository/command, health mismatch, or
-  changed source. It never kills a process merely because it owns a port.
-- `VERIFIED 2026-07-18`: local development exposes a non-secret, no-store
-  runtime identity endpoint. The browser heartbeat now identifies cached pages,
-  shows the loaded version/mode/port, and locks Extension Center controls while
-  the backend is offline. The development identity endpoint is unavailable in
-  production; local production heartbeat falls back to the existing non-secret
-  setup-status contract.
-- `VERIFIED 2026-07-18`: browser GET requests can no longer stop or restart the
-  Python process; lifecycle mutation is limited to the owned local launcher.
-  Focused regression passed (`50 passed`), full suite passed (`209 passed`),
-  JavaScript syntax checks, Python compilation, and `git diff --check` passed.
-  JavaScript syntax checks, Python compilation, and `git diff --check` passed.
-
-- `VERIFIED 2026-07-18`: Phase 3 connection-state Loop 1 separates deployed
-  service state from private-network completion. Restoring a historical
-  completed deployment now resumes at network selection instead of marking the
-  GenBox private URL complete or forcing the final step.
-- `VERIFIED 2026-07-18`: SSH actions now fail closed unless the VPS target is
-  saved and exactly one session credential is present. SSH testing and network
-  connection creation are single-flight; stale SSH responses cannot verify a
-  changed target or credential.
-- `VERIFIED 2026-07-18`: confirmed public SSH host fingerprints are written
-  back to target metadata without saving SSH or sudo credentials. A restored
-  Phase 3 flow may therefore re-enter a session credential and start the
-  network task directly; a separate SSH test is required only when the host
-  fingerprint is missing or changed.
-- `VERIFIED 2026-07-18`: one-time managed-service delivery cannot be consumed in
-  a hidden pane. An unclaimed key opens the visible delivery pane first and is
-  claimed at most once; an already-claimed historical deployment resumes at
-  network selection.
-- `VERIFIED 2026-07-18`: Loop 1 focused regression passed (`103 passed`), full
-  suite passed (`191 passed`), JavaScript syntax checks, Python compilation,
-  and `git diff --check` passed. Independent UX, security, and test reviews
-  initially blocked three race/delivery/model-validation gaps; all three were
-  corrected before this verification.
-
-- `VERIFIED 2026-07-18`: the isolated `chatgpt2api-dev` test instance was
-  deployed successfully. Existing production resources remain outside the
-  current mutation scope.
-- `VERIFIED 2026-07-18`: local Tailscale is online and the private GenBox entry
-  is served on port `8893`. This is local network evidence, not yet the complete
-  VPS-to-GenBox application probe required by Phase 3.
-- `VERIFIED 2026-07-18`: SSH password and sudo-password inputs now have explicit
-  visibility controls, password and public-key modes are mutually exclusive,
-  and authentication rejection messages no longer claim that the password is
-  necessarily wrong. These changes are committed through `0550d8d`.
-- `VERIFIED 2026-07-18`: the VPS sshd journal shows that the user's system
-  OpenSSH session was accepted with password authentication. A nearby
-  `Connection closed ... [preauth]` record cannot be reliably attributed to the
-  credential-bearing GenBox attempt because the host-key probe also opens a
-  credential-free SSH connection.
-- `UNVERIFIED 2026-07-18`: the exact reason AsyncSSH does not complete password
-  authentication remains unknown. No current evidence justifies changing VPS
-  SSH policy, enabling keyboard-interactive authentication, or treating the
-  password as invalid.
-- `VERIFIED 2026-07-18`: a secret-free diagnostic change records
-  only whether the host key was verified, AsyncSSH requested the password, and
-  the connection was lost during authentication. Focused checks passed
-  (`29 passed`), full suite passed (`183 passed`), Python compilation and
-  `git diff --check` passed. The diagnostic does not persist credentials,
-  usernames, hosts, IPs, fingerprints, or raw AsyncSSH exceptions.
-
-## Resume Instructions
-
-1. Start the local lab only with `./start-lab.ps1 start` (or double-click
-   `start-lab.cmd`), then open `http://127.0.0.1:8892/#/extensions` and refresh
-   once so the footer shows the current version, `DEVELOPMENT`, and port `8892`.
-2. Do not repeat the standalone SSH test when the saved host fingerprint is
-   unchanged. Re-enter one session credential and run the private-network check
-   once; that task performs the credential-bearing SSH connection itself.
-3. Record the sanitized failed stage or the successful VPS-to-GenBox probe.
-   Do not change the production service or persist SSH credentials.
-
-- `VERIFIED 2026-07-16`: v2.5.1 was published under GPL-3.0-only at release
-  commit `ae2b174`.
-- `VERIFIED 2026-07-17`: Phase 2 catalog-identity Loop 1 is merged through
-  commits `445d004`, `c7cce88`, and `5cb1c13`; `chatgpt2api` remains the only
-  deployable catalog item.
-- `VERIFIED 2026-07-17`: Phase 2 Loop 2 durable task recovery is merged through
-  commits `852d1f2`, `ae1796b`, `b7c22bf`, and `306a600`; browser refresh and
-  restart interruption behavior remain covered.
-- `VERIFIED 2026-07-17`: Phase 2 Loop 3A backend capability enforcement is
-  complete. Frozen implementation commit `9effee7` received two independent
-  read-only final approvals and was cherry-picked to the current integration
-  branch as `30e5e28`.
-- `VERIFIED 2026-07-17`: the backend capability registry is the execution source
-  of truth. Only the supported `chatgpt2api` Compose combinations can plan or
-  deploy; planned or unknown projects and unsupported modes fail closed before
-  discovery, task creation, or SSH side effects.
-- `VERIFIED 2026-07-17`: main-worktree Loop 3A verification passed: focused
-  checks `62 passed`; full suite `160 passed`; Python compilation and
-  `git diff --check` passed; the incremental high-confidence secret-pattern scan
-  found `0` matches; the repository-local temporary test directories were
-  cleaned.
-- `VERIFIED 2026-07-17`: Phase 2 Loop 3B structured deployment failure and
-  recovery is complete. Frozen implementation `0ce7b4f`, future Store/Repair
-  planning `d3fb82f`, and persistence hardening `f01f66c` were integrated on the
-  current branch as `291c6fc`, `d70ec59`, and `6fa1728`.
-- `VERIFIED 2026-07-17`: API/UI final review approved Loop 3B. Security review
-  initially blocked persistence validation, then approved after the corrective
-  commit enforced recovery-action state contracts and pre-replace validation.
-- `VERIFIED 2026-07-17`: main-worktree Loop 3B verification passed: focused
-  checks `78 passed`; full suite `176 passed`; Node syntax checks for
-  `static/js/extensions.js` and `static/js/i18n.js`, Python compilation,
-  `git diff --check`, and temporary-directory cleanup passed; the incremental
-  high-confidence secret-pattern scan found `0` matches.
-- `VERIFIED 2026-07-17`: the deployed-service delivery UI gap was fixed in
-  frozen commit `0cb7f07` and integrated on the current branch as `1659d50`.
-  Independent API/UI and security reviews both approved the correction.
-- `VERIFIED 2026-07-17`: Phase 2 local acceptance passed all five Roadmap
-  criteria: unique catalog identity, refresh recovery, backend capability
-  enforcement, safe delivery/open/copy behavior, and structured sanitized
-  failure recovery.
-- `VERIFIED 2026-07-17`: final main-worktree checks passed: focused `92 passed`,
-  full suite `178 passed`, both extension JavaScript syntax checks, Python
-  compilation, `git diff --check`, high-confidence sensitive-pattern scan
-  `0` matches, and temporary-directory cleanup.
-- `USER-CONFIRMED 2026-07-17`: future Store and Repair Copilot direction is
-  captured in `docs/GENBOX-STORE-REPAIR-COPILOT.md` and Roadmap Phases 9-12.
-  This planning does not change the priority of the core Phase 3-8 chain and is
-  not evidence that Store or AI repair features are implemented.
+- `VERIFIED 2026-07-19`: Phase 2 local acceptance remains complete, and the
+  isolated managed `chatgpt2api-dev` instance is running and presented with
+  usable console/API delivery information. The production source remains
+  outside the current mutation scope.
+- `USER-CONFIRMED 2026-07-19`: the Extension Center completed the guided
+  Tailscale flow and displayed `链路已连接`, `VPS 可访问`, a final Tailnet URL,
+  and the `PRIVATE LINK READY` success state.
+- `VERIFIED 2026-07-19`: `GET
+  /api/extensions/network/local/tailscale/status` reported the local client
+  installed, online, `Running`, and serving the development GenBox application
+  through the separate private-entry port.
+- `VERIFIED 2026-07-19`: `GET /api/extensions/targets` showed that the isolated
+  target contains a non-loopback, non-public `.ts.net` destination and a fresh
+  `network_verified_at` timestamp. The target record contains no enrollment
+  token or SSH credential.
+- `VERIFIED 2026-07-19`: the final HTTP-probe blocker was caused by discarding
+  the Tailscale Serve MagicDNS URL and probing the node's `100.x` address. The
+  same Serve returned HTTP 200 through MagicDNS and HTTP 404 through the raw IP.
+  The network task now validates, probes, returns, and stores the MagicDNS URL;
+  the `100.x` address remains limited to peer identity and reachability checks.
+- `VERIFIED 2026-07-19`: the completion panel now updates the value/status cell
+  instead of overwriting its label, and a saved `network_url` plus
+  `network_verified_at` restores verified display state after target reload.
+- `VERIFIED 2026-07-19`: focused network checks passed (`26 passed`); the full
+  suite passed (`247 passed`); JavaScript syntax checks, Python compilation, and
+  `git diff --check` passed.
 - `.planning/STATE.md` remains owner-controlled and was not modified, staged,
-  discarded, or committed.
+  discarded, or committed by this work.
+
+## Phase 2 Result
+
+Phase 2 is complete. The deployment experience has local test/review evidence
+and a real isolated managed instance with usable delivery information. This
+does not authorize mutation of any production source instance.
+
+## Phase 3 Result
+
+Phase 3 is complete for the Tailscale primary adapter:
+
+- local Tailscale and the separate GenBox Serve entry are verified;
+- the isolated VPS is enrolled and has a valid private address;
+- peer reachability succeeds;
+- the VPS-to-GenBox `/api/setup/status` application probe succeeds;
+- the final destination is a validated MagicDNS URL, not loopback, a raw
+  public address, or the service console URL;
+- enrollment and SSH session secrets are absent from persisted target data;
+- failures retain stage-specific, sanitized Chinese diagnostics and recovery
+  actions.
+
+NetBird and Cloudflare remain non-executable alternatives and are not part of
+this completion claim.
 
 ## Next Objective
 
-Restart the administrator laboratory on the Loop 1 build. Load the saved VPS.
-If its confirmed host fingerprint is present, enter one fresh session credential
-and start the Phase 3 private-network check directly from steps 3-4; do not run a
-separate SSH test. If the fingerprint is missing, perform exactly one SSH test
-to confirm and persist it, then run the network check. Record the sanitized task
-stage and VPS-to-GenBox probe result without repeated retries.
+Begin Phase 4 Loop 1: complete one single-image Push from the isolated
+`chatgpt2api-dev` instance into the GenBox media library.
 
-## Phase 3 Gate
+1. Reconfirm the existing GenBox Push v1 receiver contract and source-key
+   provisioning without reusing the GenBox administrator key.
+2. In the chatgpt2api sender repository/worktree, implement the shared Push
+   client and destination status probe using the Phase 3 MagicDNS base URL.
+3. Add one per-generation Push action for the isolated development instance.
+4. Verify one image imports once with SHA-256 and available metadata; repeat the
+   same request to prove idempotency.
+5. Confirm every failure path retains the source image. Source deletion remains
+   disabled.
 
-Phase 3 remote acceptance remains open until the isolated VPS can authenticate
-and complete the VPS-to-GenBox HTTP probe. Production remains read-only. The
-current diagnostic authorizes no VPS mutation and stores no SSH credential.
+## Resume Instructions
+
+1. Do not reinstall Tailscale, generate another Auth Key, or rerun Phase 3
+   unless the saved network verification becomes stale or the Tailnet changes.
+2. Keep the current private destination as non-secret target metadata. Keep the
+   Push key separate from URLs, browser storage, the GenBox administrator key,
+   and chatgpt2api management credentials.
+3. Use only the isolated `chatgpt2api-dev` instance for Phase 4 development and
+   end-to-end testing. Existing production services remain read-only.
+4. Before recording Phase 4 success, capture a sanitized receipt, SHA-256,
+   metadata result, idempotent retry result, and source-retention evidence.

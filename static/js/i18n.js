@@ -321,9 +321,9 @@
     "extensions.remote_server":{"zh-CN":"远程服务器","en":"Remote server"},
     "extensions.vps_endpoint":{"zh-CN":"VPS 端","en":"VPS endpoint"},
     "extensions.waiting_configuration":{"zh-CN":"等待配置","en":"Waiting for configuration"},
-    "extensions.remote_auto_hint":{"zh-CN":"GenBox 会通过已确认的 SSH 连接自动安装并加入同一个网络。","en":"GenBox will use the verified SSH connection to install the tool and join the same network."},
+    "extensions.remote_auto_hint":{"zh-CN":"GenBox 会先检查 VPS，再按真实状态安装、启动或加入网络，不会重复处理已经完成的步骤。","en":"GenBox checks the VPS first, then installs, starts, or enrolls only what is actually missing."},
     "extensions.operation_mode":{"zh-CN":"处理方式","en":"Operation mode"},
-    "extensions.auto_connect":{"zh-CN":"自动安装并连接","en":"Install and connect automatically"},
+    "extensions.auto_connect":{"zh-CN":"自动检查、安装并加入","en":"Check, install, and join automatically"},
     "extensions.existing_connect":{"zh-CN":"已有工具，只连接和检测","en":"Tool already installed; connect and verify only"},
     "extensions.manual_later":{"zh-CN":"我手动配置，稍后检测（后续开放）","en":"I will configure it manually and verify later (coming later)"},
     "extensions.primary_network":{"zh-CN":"当前主链路","en":"Current primary network"},
@@ -343,15 +343,41 @@
     "extensions.open_tailscale_admin":{"zh-CN":"打开 Tailscale 管理控制台","en":"Open Tailscale admin console"},
     "extensions.choose_operation_first":{"zh-CN":"请先选择这次要执行的操作。","en":"Choose the operation to run first."},
     "extensions.operation_question":{"zh-CN":"这次要做什么？","en":"What should happen this time?"},
-    "extensions.first_connect":{"zh-CN":"首次安装并连接","en":"Install and connect for the first time"},
-    "extensions.first_connect_hint":{"zh-CN":"VPS 还没有加入私有网络，需要一次性 Auth Key。","en":"The VPS has not joined the private network and needs a one-time Auth Key."},
+    "extensions.first_connect":{"zh-CN":"自动准备 VPS","en":"Prepare the VPS automatically"},
+    "extensions.first_connect_hint":{"zh-CN":"系统先检测；缺什么才处理什么，不会重复安装。","en":"The system checks first and handles only what is missing, without reinstalling."},
     "extensions.recheck_existing":{"zh-CN":"已安装，重新检测连接","en":"Already installed; recheck the connection"},
     "extensions.recheck_existing_hint":{"zh-CN":"不重复安装，不需要 Auth Key，只检查互通和 GenBox 访问。","en":"Does not reinstall and needs no Auth Key. It only checks peer connectivity and GenBox access."},
     "extensions.key_page_link":{"zh-CN":"没有 Key？点击打开官方生成页面","en":"No Key? Open the official generation page"},
     "extensions.paste_prefix":{"zh-CN":"生成后，把以","en":"After generation, paste the value beginning with"},
     "extensions.paste_suffix":{"zh-CN":"开头的内容粘贴到下面。","en":"below."},
     "extensions.auth_key_label":{"zh-CN":"一次性 Auth Key","en":"One-time Auth Key"},
-    "extensions.auth_key_placeholder":{"zh-CN":"粘贴 tskey-auth-...","en":"Paste tskey-auth-..."},
+    "extensions.auth_key_placeholder":{"zh-CN":"粘贴一次性 Auth Key","en":"Paste a one-time Auth Key"},
+    "extensions.auth_key_ticket_title":{"zh-CN":"给 VPS 一张一次性入网票据","en":"Give the VPS a one-time network ticket"},
+    "extensions.auth_key_safe_help":{"zh-CN":"这不是账号密码。GenBox 只在本次任务中使用，任务创建后立即从页面清除，不写入浏览器存储、任务记录或日志。","en":"This is not your account password. GenBox uses it only for this task, clears it from the page after task creation, and never stores it in browser storage, task records, or logs."},
+    "extensions.auth_key_options_help":{"zh-CN":"建议：Reusable 关闭、Ephemeral 关闭；需要设备审批时开启 Pre-approved。","en":"Recommended: Reusable off, Ephemeral off, and Pre-approved on when device approval is enabled."},
+    "extensions.auth_key_required":{"zh-CN":"自动准备 VPS 需要粘贴一个新的一次性 Auth Key。","en":"Automatic VPS preparation needs a new one-time Auth Key."},
+    "extensions.enter_auth_key":{"zh-CN":"输入 Auth Key","en":"Enter Auth Key"},
+    "extensions.new_auth_key":{"zh-CN":"生成新的 Auth Key","en":"Generate a new Auth Key"},
+    "extensions.read_address_again":{"zh-CN":"重新读取地址","en":"Read the address again"},
+    "extensions.recheck_peer":{"zh-CN":"重新检测互通","en":"Recheck connectivity"},
+    "extensions.check_local_entry":{"zh-CN":"检查本机私网入口","en":"Check the local private entry"},
+    "extensions.manual_check_required":{"zh-CN":"查看人工处理说明","en":"View manual recovery guidance"},
+    "extensions.network_context_changed":{"zh-CN":"VPS 或 SSH 信息已变化，旧任务结果不会覆盖当前页面。请使用当前信息重新开始。","en":"The VPS or SSH details changed. The old task result will not overwrite this page. Start again with the current details."},
+    "extensions.network_waiting_user":{"zh-CN":"检测已完成，现在只等你做一件事。","en":"Detection is complete and is waiting for one action from you."},
+    "extensions.guide_step4_waiting_user":{"zh-CN":"系统已经检查清楚","en":"The check is complete"},
+    "extensions.guide_step4_action_ready":{"zh-CN":"现在只需要完成系统提示的这一项","en":"Complete the one action shown below"},
+    "extensions.network_recovery_os_unsupported":{"zh-CN":"这个系统暂不在自动安装支持范围内。现有服务没有被修改。","en":"This operating system is not supported for automatic installation. Existing services were not changed."},
+    "extensions.network_recovery_repository_conflict":{"zh-CN":"VPS 已有不同的软件源配置，GenBox 已停止并且没有覆盖它。","en":"The VPS already has a different repository configuration. GenBox stopped without overwriting it."},
+    "extensions.network_recovery_repository_setup":{"zh-CN":"SSH 正常，但官方 Tailscale 软件源没有准备完成。请检查 VPS 网络和 sudo 权限。","en":"SSH works, but the official Tailscale repository could not be prepared. Check VPS networking and sudo access."},
+    "extensions.network_recovery_install":{"zh-CN":"SSH 正常，但 Tailscale 软件包没有安装完成。现有应用服务没有被修改。","en":"SSH works, but the Tailscale package was not installed. Existing application services were not changed."},
+    "extensions.network_recovery_service":{"zh-CN":"Tailscale 已安装，但后台服务没有成功运行。","en":"Tailscale is installed, but its background service is not running."},
+    "extensions.network_recovery_auth_key":{"zh-CN":"现在只差一次性 Auth Key。这不是 SSH 密码错误。","en":"Only a one-time Auth Key is needed now. This is not an SSH password error."},
+    "extensions.network_recovery_auth_file":{"zh-CN":"GenBox 无法以安全权限创建一次性密钥文件，已停止加入网络。","en":"GenBox could not create the one-time key file with safe permissions, so enrollment stopped."},
+    "extensions.network_recovery_auth_rejected":{"zh-CN":"这个 Auth Key 可能已使用、过期，或不属于同一个 Tailnet。请生成一个新的。","en":"This Auth Key may be used, expired, or from a different Tailnet. Generate a new one."},
+    "extensions.network_recovery_auth_cleanup":{"zh-CN":"一次性密钥临时文件未确认删除。请立即按提示人工清理后再继续。","en":"Deletion of the temporary Auth Key file was not confirmed. Follow the cleanup guidance before continuing."},
+    "extensions.network_recovery_no_ipv4":{"zh-CN":"VPS 已加入 Tailnet，但私网地址仍在同步。稍后重新读取即可，不会重复安装。","en":"The VPS joined the Tailnet, but its private address is still syncing. Read it again later; installation will not repeat."},
+    "extensions.network_recovery_peer":{"zh-CN":"电脑和 VPS 都已加入私网，但目前不能互相访问。请在 Tailscale 控制台确认两台设备在线。","en":"The computer and VPS joined the private network but cannot reach each other. Confirm both devices are online in the Tailscale console."},
+    "extensions.network_recovery_genbox":{"zh-CN":"私网已经连通，但 VPS 打不开 GenBox。通常是本机私网入口未启用或端口不一致。","en":"The private network works, but the VPS cannot open GenBox. Usually the local private entry is disabled or the ports do not match."},
     "extensions.device_name":{"zh-CN":"设备名称","en":"Device name"},
     "extensions.management_url":{"zh-CN":"Management URL（自托管 NetBird 可选）","en":"Management URL (optional for self-hosted NetBird)"},
     "extensions.mobile_optional":{"zh-CN":"可选 · 手机也要访问 GenBox 时使用","en":"Optional · Use when a phone also needs GenBox access"},
@@ -378,6 +404,8 @@
     "extensions.api_url":{"zh-CN":"API 地址","en":"API URL"},
     "extensions.admin_key":{"zh-CN":"管理密钥","en":"Management key"},
     "status.interrupted":{"zh-CN":"已中断","en":"Interrupted"},
+    "status.skipped":{"zh-CN":"无需处理","en":"No action needed"},
+    "status.needs_action":{"zh-CN":"等你操作","en":"Waiting for you"},
     "extensions.task_interrupted":{"zh-CN":"部署任务因 GenBox 重启而中断。","en":"The deployment task was interrupted by a GenBox restart."},
     "extensions.recovery_required":{"zh-CN":"需要恢复操作。","en":"Recovery action is required."},
     "extensions.recovery_regenerate_plan":{"zh-CN":"请重新生成计划并重新提供凭证；不会自动重放远程部署。","en":"Regenerate the plan and provide credentials again; remote deployment will not be replayed automatically."},
@@ -559,7 +587,7 @@
     "extensions.cloudflare_enroll":{"zh-CN":"使用 Cloudflare 控制台生成的 Tunnel Token 安装系统服务。","en":"Install the service with a Tunnel Token generated in the Cloudflare dashboard."},
     "extensions.tunnel_endpoint":{"zh-CN":"GenBox 隧道端","en":"GenBox tunnel endpoint"},
     "extensions.secret_not_saved_suffix":{"zh-CN":" 授权信息不会写入浏览器存储或任务日志。","en":" Authorization data is not written to browser storage or task logs."},
-    "extensions.tailscale_key_help_html":{"zh-CN":"<a href=\"https://login.tailscale.com/admin/settings/keys\" target=\"_blank\" rel=\"noopener noreferrer\">没有 Key？点击打开官方生成页面</a><span>生成后，把以 <code>tskey-auth-</code> 开头的内容粘贴到下面。</span>","en":"<a href=\"https://login.tailscale.com/admin/settings/keys\" target=\"_blank\" rel=\"noopener noreferrer\">No Key? Open the official generation page</a><span>Paste the value beginning with <code>tskey-auth-</code> below.</span>"},
+    "extensions.tailscale_key_help_html":{"zh-CN":"<a href=\"https://login.tailscale.com/admin/settings/keys\" target=\"_blank\" rel=\"noopener noreferrer\">没有 Key？点击打开官方生成页面</a><span>生成后，把完整的一次性 Auth Key 粘贴到下面。</span>","en":"<a href=\"https://login.tailscale.com/admin/settings/keys\" target=\"_blank\" rel=\"noopener noreferrer\">No Key? Open the official generation page</a><span>Paste the complete one-time Auth Key below.</span>"},
     "extensions.other_key_help_html":{"zh-CN":"<span>请从所选网络服务的控制台生成一次性授权信息，再粘贴到下面。</span>","en":"<span>Generate one-time authorization data in the selected network service, then paste it below.</span>"},
     "extensions.token_placeholder":{"zh-CN":"粘贴一次性授权信息","en":"Paste one-time authorization data"},
     "extensions.cloudflare_remote_hint":{"zh-CN":"GenBox 会建立安全隧道，VPS 只做访问检测。","en":"GenBox creates the secure tunnel; the VPS only verifies access."},
@@ -600,6 +628,26 @@
     "extensions.ssh_diag_auth_started":{"zh-CN":"诊断阶段：SSH 认证已开始，但客户端尚未取得密码。","en":"Diagnostic stage: SSH authentication started before the client obtained a password."},
     "extensions.ssh_diag_host_verified":{"zh-CN":"诊断阶段：主机指纹已确认，连接在认证开始前结束。","en":"Diagnostic stage: the host key was verified, but the connection ended before authentication started."},
     "extensions.ssh_diag_transport":{"zh-CN":"诊断阶段：SSH 传输已建立，连接在主机确认或认证前结束。","en":"Diagnostic stage: SSH transport was established, but the connection ended before host verification or authentication."},
+    "extensions.ssh_safe_failure":{"zh-CN":"SSH 客户端认证未完成，原始错误已隐藏。不能据此判断密码错误，请勿连续重试。","en":"SSH client authentication did not complete. Raw details were hidden; do not retry repeatedly."},
+    "extensions.ssh_diagnostic_optional":{"zh-CN":"诊断 SSH（可选）","en":"Diagnose SSH (optional)"},
+    "extensions.ssh_deploy_diagnostic":{"zh-CN":"测试 SSH 与部署权限","en":"Test SSH and deployment access"},
+    "extensions.ssh_optional_notice":{"zh-CN":"凭据已填写。SSH 诊断是可选项，不是私网检测的前置条件。","en":"Credentials are ready. SSH diagnosis is optional and not a private-link prerequisite."},
+    "extensions.ssh_deploy_notice":{"zh-CN":"主机指纹已确认。现在测试 SSH 与部署权限，通过后即可继续部署。","en":"The host key is confirmed. Test SSH and deployment access before continuing."},
+    "extensions.read_confirm_host_key":{"zh-CN":"读取并确认主机指纹","en":"Read and confirm host key"},
+    "extensions.host_key_setup_notice":{"zh-CN":"请先读取并核对 VPS 的公开主机指纹；此操作不使用密码，也不会执行远程命令。","en":"First read and verify the VPS public host key. This does not use the password or run remote commands."},
+    "extensions.host_key_title":{"zh-CN":"确认 VPS 的 SSH 主机指纹","en":"Confirm the VPS SSH host key"},
+    "extensions.host_key_probe_help":{"zh-CN":"这里只读取服务器公开身份，不验证密码、不执行命令。","en":"This reads only the server public identity. It does not verify a password or run commands."},
+    "extensions.read_host_key":{"zh-CN":"读取主机指纹","en":"Read host key"},
+    "extensions.confirm_host_key":{"zh-CN":"我已核对并确认","en":"I reviewed and confirm"},
+    "extensions.host_key_not_read":{"zh-CN":"尚未读取主机指纹","en":"Host key not read yet"},
+    "extensions.reading_host_key":{"zh-CN":"正在读取 VPS 的公开 SSH 主机指纹，不会提交密码。","en":"Reading the public SSH host key without sending a password."},
+    "extensions.host_key_invalid_response":{"zh-CN":"VPS 没有返回有效的 SHA-256 主机指纹。","en":"The VPS did not return a valid SHA-256 host key."},
+    "extensions.host_key_review":{"zh-CN":"请核对显示的 SHA-256 指纹；确认后会保存公开指纹，但不会测试密码。","en":"Review the SHA-256 fingerprint. Confirming saves the public key without testing credentials."},
+    "extensions.host_key_confirmed":{"zh-CN":"SSH 主机指纹已独立确认并保存。现在可以开始检测私网链路。","en":"The SSH host key was confirmed and saved independently. You can now check the private link."},
+    "extensions.host_key_confirmed_for_deploy":{"zh-CN":"SSH 主机指纹已保存。现在请测试 SSH 与部署权限。","en":"The SSH host key was saved. Now test SSH and deployment access."},
+    "extensions.host_key_confirm_in_network":{"zh-CN":"请在“配置连接”步骤独立读取并确认主机指纹；无需先测试 SSH 密码。","en":"Read and confirm the host key in Configure Connection. Password testing is not required first."},
+    "extensions.deployment_target_mismatch":{"zh-CN":"该服务部署在另一台 VPS，请选择对应的服务器后继续。","en":"This service is deployed on another VPS. Select its server before continuing."},
+    "extensions.host_key_required_here":{"zh-CN":"开始私网检测前，只需在本页读取并确认主机指纹，不需要返回测试 SSH。","en":"Read and confirm the host key on this page before checking the private link. Do not return to SSH testing."},
     "extensions.discovery_failed_prefix":{"zh-CN":"环境检测失败：","en":"Environment discovery failed: "},
     "extensions.confirm_fingerprint_first":{"zh-CN":"请先确认 SSH 主机指纹。","en":"Confirm the SSH host fingerprint first."},
     "extensions.source_container":{"zh-CN":"源容器","en":"Source container"},
@@ -1272,6 +1320,117 @@
   MESSAGES['update.auto_check'] = {"zh-CN":"启动时自动检查更新","en":"Automatically check for updates at startup"};
   MESSAGES['dashboard.ip_show'] = {"zh-CN":"显示 IP","en":"Show IP"};
   MESSAGES['dashboard.ip_hide'] = {"zh-CN":"隐藏 IP","en":"Hide IP"};
+
+  MESSAGES['common.continue'] = {"zh-CN":"继续","en":"Continue"};
+  MESSAGES['extensions.step_vps'] = {"zh-CN":"连接服务器","en":"Connect server"};
+  MESSAGES['extensions.step_deploy'] = {"zh-CN":"准备应用服务","en":"Prepare service"};
+  MESSAGES['extensions.step_choose_network'] = {"zh-CN":"准备本机网络","en":"Prepare local network"};
+  MESSAGES['extensions.step_configure'] = {"zh-CN":"连接并测试","en":"Connect and test"};
+  MESSAGES['extensions.step_verify'] = {"zh-CN":"完成","en":"Finish"};
+  MESSAGES['extensions.guide_kicker'] = {"zh-CN":"当前只做一件事","en":"One action at a time"};
+  MESSAGES['extensions.guide_found'] = {"zh-CN":"系统已发现","en":"GenBox found"};
+  MESSAGES['extensions.guide_action'] = {"zh-CN":"你现在只需","en":"Your only action"};
+  MESSAGES['extensions.guide_after'] = {"zh-CN":"完成后会","en":"Then GenBox will"};
+  MESSAGES['extensions.show_advanced'] = {"zh-CN":"查看高级设置和日志","en":"Show advanced settings and logs"};
+  MESSAGES['extensions.hide_advanced'] = {"zh-CN":"收起高级设置和日志","en":"Hide advanced settings and logs"};
+  MESSAGES['extensions.guide_step1_title'] = {"zh-CN":"先连接你的服务器","en":"Connect your server first"};
+  MESSAGES['extensions.guide_step1_unsaved'] = {"zh-CN":"这台 VPS 还没有保存。","en":"This VPS has not been saved yet."};
+  MESSAGES['extensions.guide_step1_save'] = {"zh-CN":"确认名称、地址和 SSH 用户，然后点“保存”。","en":"Confirm the name, address, and SSH user, then save."};
+  MESSAGES['extensions.guide_step1_saved'] = {"zh-CN":"VPS 信息已保存，还差一次服务器身份确认。","en":"The VPS is saved; its public identity still needs confirmation."};
+  MESSAGES['extensions.guide_step1_host_key'] = {"zh-CN":"读取并确认主机指纹；这一步不验证密码。","en":"Read and confirm the host key; this does not test the password."};
+  MESSAGES['extensions.guide_step1_identity_ready'] = {"zh-CN":"服务器身份已经确认。","en":"The server identity is confirmed."};
+  MESSAGES['extensions.guide_step1_credential'] = {"zh-CN":"输入本次使用的 SSH 密码或私钥。它只留在当前页面。","en":"Enter the SSH password or key for this session only."};
+  MESSAGES['extensions.guide_step1_test'] = {"zh-CN":"让 GenBox 自动测试 SSH 和部署权限。","en":"Let GenBox test SSH and deployment access."};
+  MESSAGES['extensions.guide_step1_connected'] = {"zh-CN":"SSH 与部署权限已通过。","en":"SSH and deployment access passed."};
+  MESSAGES['extensions.guide_step1_next'] = {"zh-CN":"继续准备应用服务。","en":"Continue to prepare the service."};
+  MESSAGES['extensions.guide_step1_next_after'] = {"zh-CN":"进入环境检测和部署选择。","en":"Open environment discovery and deployment choices."};
+  MESSAGES['extensions.guide_step1_resume_ready'] = {"zh-CN":"已找到原来的应用服务和正确 VPS。","en":"The existing service and its VPS were found."};
+  MESSAGES['extensions.guide_step1_resume'] = {"zh-CN":"继续检查这台电脑的 Tailscale。","en":"Continue with this computer's Tailscale check."};
+  MESSAGES['extensions.guide_step1_resume_after'] = {"zh-CN":"不会重复部署应用。","en":"The service will not be deployed again."};
+  MESSAGES['extensions.guide_step1_after'] = {"zh-CN":"安全进入下一步，不会修改现有服务。","en":"Move forward safely without changing the existing service."};
+  MESSAGES['extensions.enter_password_button'] = {"zh-CN":"去输入 SSH 密码","en":"Enter SSH password"};
+  MESSAGES['extensions.enter_private_key_button'] = {"zh-CN":"去输入 SSH 私钥","en":"Enter SSH private key"};
+  MESSAGES['extensions.guide_step2_title'] = {"zh-CN":"准备应用服务","en":"Prepare the service"};
+  MESSAGES['extensions.guide_step2_ready'] = {"zh-CN":"应用服务已经部署完成。","en":"The service is already deployed."};
+  MESSAGES['extensions.guide_step2_skip'] = {"zh-CN":"直接继续准备本机网络。","en":"Continue directly to local networking."};
+  MESSAGES['extensions.guide_step2_unknown'] = {"zh-CN":"还不知道 VPS 上有哪些服务和安装条件。","en":"The VPS environment has not been checked yet."};
+  MESSAGES['extensions.guide_step2_detect'] = {"zh-CN":"运行一次只读环境检测。","en":"Run one read-only environment check."};
+  MESSAGES['extensions.guide_step2_after'] = {"zh-CN":"给出推荐方案；部署前仍会让你确认。","en":"Recommend a plan and still ask before deployment."};
+  MESSAGES['extensions.guide_step2_discovering'] = {"zh-CN":"正在安全读取 VPS 环境，不会修改现有服务。","en":"Safely reading the VPS environment without changing existing services."};
+  MESSAGES['extensions.guide_step2_wait_discovery'] = {"zh-CN":"请稍等，检测结束后会自动告诉你下一步。","en":"Wait briefly; the next action will appear automatically."};
+  MESSAGES['extensions.guide_step2_discovered'] = {"zh-CN":"VPS 环境已经检测完成。","en":"The VPS environment check is complete."};
+  MESSAGES['extensions.guide_step2_make_plan'] = {"zh-CN":"根据检测结果生成一份可核对的安全计划。","en":"Generate a reviewable safety plan from the results."};
+  MESSAGES['extensions.guide_step2_planning'] = {"zh-CN":"正在计算安装方式、端口和隔离范围。","en":"Calculating the installation method, ports, and isolation boundaries."};
+  MESSAGES['extensions.guide_step2_wait_plan'] = {"zh-CN":"请稍等，计划生成后不会自动部署。","en":"Wait briefly; generating a plan does not deploy automatically."};
+  MESSAGES['extensions.guide_step2_plan_after'] = {"zh-CN":"计划生成后，你还要亲自确认才会开始安装。","en":"You must still confirm before installation starts."};
+  MESSAGES['extensions.guide_step2_plan_ready'] = {"zh-CN":"安全计划已经生成，尚未改动 VPS。","en":"The safety plan is ready and the VPS has not been changed."};
+  MESSAGES['extensions.guide_step2_confirm'] = {"zh-CN":"核对计划后，明确确认开始部署。","en":"Review the plan, then explicitly confirm deployment."};
+  MESSAGES['extensions.guide_step2_confirm_after'] = {"zh-CN":"部署期间会显示进度；失败时只给出一个恢复动作。","en":"Progress will be shown, with one recovery action if it fails."};
+  MESSAGES['extensions.guide_step2_deploying'] = {"zh-CN":"应用正在部署，重复点击已被锁定。","en":"The service is deploying and duplicate clicks are locked."};
+  MESSAGES['extensions.guide_step2_wait_deploy'] = {"zh-CN":"请保持页面打开，等待任务完成。","en":"Keep this page open and wait for the task to finish."};
+  MESSAGES['extensions.guide_step2_deploy_after'] = {"zh-CN":"部署完成后先交付登录信息，再继续配置私网。","en":"After deployment, save the login details and continue to private networking."};
+  MESSAGES['extensions.guide_step2_deploy_failed'] = {"zh-CN":"这次部署没有完成，现有服务不会自动重放。","en":"This deployment did not finish and will not replay automatically."};
+  MESSAGES['extensions.guide_step2_recover'] = {"zh-CN":"按失败提示重新生成安全计划。","en":"Regenerate the safety plan using the failure guidance."};
+  MESSAGES['extensions.guide_step2_recover_credential'] = {"zh-CN":"远程任务已结束，临时 SSH 凭据已清除；请重新输入后再安全重试。","en":"The remote task ended and temporary SSH credentials were cleared; enter them again before a safe retry."};
+  MESSAGES['extensions.guide_step2_recover_after'] = {"zh-CN":"重新确认前不会再次修改 VPS。","en":"The VPS will not be changed again until you reconfirm."};
+  MESSAGES['extensions.prepare_local_network'] = {"zh-CN":"准备本机网络","en":"Prepare local network"};
+  MESSAGES['extensions.guide_step3_title'] = {"zh-CN":"准备这台电脑的 Tailscale","en":"Prepare Tailscale on this computer"};
+  MESSAGES['extensions.guide_step3_checking'] = {"zh-CN":"正在读取本机状态。","en":"Checking local status."};
+  MESSAGES['extensions.guide_step3_wait'] = {"zh-CN":"等待检测结果，必要时可重新检测。","en":"Wait for the result or check again."};
+  MESSAGES['extensions.guide_step3_missing'] = {"zh-CN":"这台电脑还没有安装 Tailscale。","en":"Tailscale is not installed on this computer."};
+  MESSAGES['extensions.guide_step3_install'] = {"zh-CN":"点击安装，按 Windows 提示完成。","en":"Install it and follow the Windows prompt."};
+  MESSAGES['extensions.guide_step3_installed'] = {"zh-CN":"Tailscale 已安装，但还没有登录。","en":"Tailscale is installed but not signed in."};
+  MESSAGES['extensions.guide_step3_login'] = {"zh-CN":"打开官方登录，并使用你的 Tailscale 账号登录。","en":"Open the official sign-in and use your Tailscale account."};
+  MESSAGES['extensions.guide_step3_online'] = {"zh-CN":"本机已经加入 Tailnet。","en":"This computer has joined the Tailnet."};
+  MESSAGES['extensions.guide_step3_serve'] = {"zh-CN":"启用 GenBox 私网入口。","en":"Enable the private GenBox entry."};
+  MESSAGES['extensions.guide_step3_ready'] = {"zh-CN":"本机 Tailscale 和 GenBox 私网入口都已准备好。","en":"Local Tailscale and the private GenBox entry are ready."};
+  MESSAGES['extensions.guide_step3_next'] = {"zh-CN":"让 VPS 自动连接并测试。","en":"Let the VPS connect and test automatically."};
+  MESSAGES['extensions.guide_step3_next_after'] = {"zh-CN":"自动检查 VPS、两端互通和 GenBox 访问。","en":"Check the VPS, peer reachability, and GenBox access."};
+  MESSAGES['extensions.guide_step3_after'] = {"zh-CN":"本机准备好后，再处理 VPS，不会混在一起。","en":"Finish the local side before handling the VPS."};
+  MESSAGES['extensions.connect_and_test'] = {"zh-CN":"连接并自动测试","en":"Connect and test"};
+  MESSAGES['extensions.guide_step4_title'] = {"zh-CN":"连接 VPS 并自动测试","en":"Connect the VPS and test automatically"};
+  MESSAGES['extensions.guide_step4_host_missing'] = {"zh-CN":"还没有确认这台 VPS 的公开身份。","en":"This VPS identity is not confirmed yet."};
+  MESSAGES['extensions.guide_step4_read_host'] = {"zh-CN":"读取主机指纹。此操作不验证密码。","en":"Read the host key without testing credentials."};
+  MESSAGES['extensions.guide_step4_confirm_host'] = {"zh-CN":"核对页面显示的主机指纹并确认。","en":"Review and confirm the displayed host key."};
+  MESSAGES['extensions.guide_step4_host_ready'] = {"zh-CN":"VPS 身份已确认。","en":"The VPS identity is confirmed."};
+  MESSAGES['extensions.guide_step4_credential'] = {"zh-CN":"输入本次 SSH 凭证，再回到这里继续。","en":"Enter a session SSH credential, then continue here."};
+  MESSAGES['extensions.guide_step4_ready'] = {"zh-CN":"本机、VPS 身份和本次 SSH 凭证都已准备好。","en":"The local side, VPS identity, and session credential are ready."};
+  MESSAGES['extensions.guide_step4_start'] = {"zh-CN":"点击一次，GenBox 会按顺序自动检查。","en":"Click once and GenBox will run the checks in order."};
+  MESSAGES['extensions.guide_step4_running'] = {"zh-CN":"自动检查正在进行。","en":"Automatic checks are running."};
+  MESSAGES['extensions.guide_step4_wait'] = {"zh-CN":"不用重复点击，等待当前检查完成。","en":"Do not click again; wait for the current check."};
+  MESSAGES['extensions.guide_step4_failed'] = {"zh-CN":"已经定位到没有完成的具体环节。","en":"GenBox identified the exact unfinished stage."};
+  MESSAGES['extensions.guide_step4_retry'] = {"zh-CN":"按黄色提示处理后，点击一次重新检测。","en":"Follow the recovery hint, then check once again."};
+  MESSAGES['extensions.guide_step4_complete'] = {"zh-CN":"VPS 到 GenBox 的私网访问已经通过。","en":"Private access from the VPS to GenBox passed."};
+  MESSAGES['extensions.guide_step4_done'] = {"zh-CN":"进入完成页查看最终地址。","en":"Open the finish page to view the final address."};
+  MESSAGES['extensions.guide_step4_complete_after'] = {"zh-CN":"保存可供后续 Push 使用的私网地址。","en":"Save the private URL for later Push use."};
+  MESSAGES['extensions.guide_step4_after'] = {"zh-CN":"依次验证 VPS Tailscale、设备互通和 GenBox 页面。","en":"Verify VPS Tailscale, peer reachability, and GenBox access in order."};
+  MESSAGES['extensions.guide_step5_title'] = {"zh-CN":"连接已经完成","en":"Connection complete"};
+  MESSAGES['extensions.guide_step5_found'] = {"zh-CN":"服务、VPS 和私网地址都已确认。","en":"The service, VPS, and private URL are confirmed."};
+  MESSAGES['extensions.guide_step5_action'] = {"zh-CN":"查看最终地址和后续操作。","en":"Review the final URL and next actions."};
+  MESSAGES['extensions.guide_step5_after'] = {"zh-CN":"可以进入下一阶段的图片 Push 联调。","en":"You can proceed to image Push integration."};
+  MESSAGES['extensions.guide_step5_delivery_title'] = {"zh-CN":"应用已装好，私网还没完成","en":"Service installed; private networking is still pending"};
+  MESSAGES['extensions.guide_step5_delivery_found'] = {"zh-CN":"登录地址和一次性管理密钥已经交付。","en":"The login URL and one-time admin key are ready."};
+  MESSAGES['extensions.guide_step5_delivery_action'] = {"zh-CN":"先复制或保存登录信息，再继续准备本机网络。","en":"Copy or save the login details, then prepare local networking."};
+  MESSAGES['extensions.guide_step5_delivery_after'] = {"zh-CN":"只有 VPS 能通过私网访问 GenBox 后，才会显示真正完成。","en":"Completion appears only after the VPS reaches GenBox over the private network."};
+  MESSAGES['extensions.deploy_complete_save_key_then_network'] = {"zh-CN":"应用部署完成。请先保存本页的一次性登录信息，然后点击上方按钮继续配置私网。","en":"Deployment complete. Save the one-time login details, then use the guide above to continue private networking."};
+  MESSAGES['extensions.guide_finish'] = {"zh-CN":"已完成","en":"Finished"};
+  MESSAGES['extensions.recovery_title'] = {"zh-CN":"这一步没有完成","en":"This step did not finish"};
+  MESSAGES['extensions.network_failed_plain'] = {"zh-CN":"自动检查没有全部通过，请按页面上的一条恢复提示处理。","en":"The automatic checks did not all pass. Follow the single recovery hint shown."};
+  MESSAGES['extensions.network_diag_command_failed'] = {"zh-CN":"检测命令没有正常返回；通常是 VPS 上 Tailscale 服务或命令不可用。","en":"The status command failed; Tailscale may not be available on the VPS."};
+  MESSAGES['extensions.network_diag_no_output'] = {"zh-CN":"VPS 没有返回 Tailscale 状态，建议先确认服务正在运行。","en":"The VPS returned no Tailscale status; confirm the service is running."};
+  MESSAGES['extensions.network_diag_json_shape'] = {"zh-CN":"VPS 返回了非标准状态格式，GenBox 没有读取原始内容。","en":"The VPS returned an unexpected status shape; raw content was not retained."};
+  MESSAGES['extensions.network_diag_needs_login'] = {"zh-CN":"VPS 的 Tailscale 已安装，但还没有登录或加入 Tailnet。","en":"Tailscale is installed on the VPS but has not joined the Tailnet."};
+  MESSAGES['extensions.network_diag_starting'] = {"zh-CN":"VPS 的 Tailscale 仍在启动，稍后可重新检测。","en":"Tailscale is still starting on the VPS; check again shortly."};
+  MESSAGES['extensions.network_diag_stopped'] = {"zh-CN":"VPS 的 Tailscale 当前已停止。","en":"Tailscale is stopped on the VPS."};
+  MESSAGES['extensions.network_diag_state_unknown'] = {"zh-CN":"VPS 的 Tailscale 没有进入可用状态。","en":"Tailscale on the VPS is not in a usable state."};
+  MESSAGES['extensions.network_diag_no_ipv4'] = {"zh-CN":"Tailscale 正在运行，但 VPS 尚未获得私网 IPv4 地址。","en":"Tailscale is running, but the VPS has no private IPv4 address yet."};
+  MESSAGES['extensions.network_diag_many_ipv4'] = {"zh-CN":"VPS 返回了多个候选私网地址，需要先整理 Tailscale 状态。","en":"The VPS returned multiple candidate private addresses."};
+  MESSAGES['extensions.network_diag_retryable'] = {"zh-CN":"状态看起来正常，可按恢复提示重新检测。","en":"The status looks usable; follow the recovery hint and check again."};
+  MESSAGES['extensions.network_diag_magicdns'] = {"zh-CN":"私网已连通，但 VPS 解析不了这台电脑的 Tailscale 名称。请确认 Tailnet 已开启 MagicDNS。","en":"The private network is connected, but the VPS cannot resolve this computer's Tailscale name. Confirm MagicDNS is enabled."};
+  MESSAGES['extensions.network_diag_entry_refused'] = {"zh-CN":"VPS 已到达这台电脑，但私网入口端口没有接受连接。请重新检查本机私网入口。","en":"The VPS reached this computer, but the private entry port refused the connection. Recheck the local private entry."};
+  MESSAGES['extensions.network_diag_http_error'] = {"zh-CN":"VPS 已连到私网入口，但入口返回了 HTTP 错误。通常是访问地址或 Tailscale Serve 映射不一致。","en":"The VPS reached the private entry, but it returned an HTTP error. The address or Tailscale Serve mapping may not match."};
+  MESSAGES['extensions.network_diag_probe_timeout'] = {"zh-CN":"VPS 访问 GenBox 私网入口超时。请检查 Tailnet 访问规则和两台设备在线状态。","en":"The VPS timed out while reaching the private GenBox entry. Check Tailnet access rules and both devices' status."};
+  MESSAGES['extensions.network_diag_invalid_genbox_response'] = {"zh-CN":"VPS 打开了目标地址，但返回的不是 GenBox 状态接口。请确认私网入口指向当前 GenBox 端口。","en":"The VPS opened the target, but the response was not the GenBox status endpoint. Confirm the private entry targets the current GenBox port."};
 
   function readStoredLanguage() {
     try {

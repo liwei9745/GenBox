@@ -6,6 +6,7 @@ import os
 import sys
 import platform
 import re
+import hmac
 import threading
 import asyncio
 import json as _json
@@ -71,12 +72,14 @@ from sync.ingest import authenticate_push_source, validate_image_payload
 import sync.store as sync_store
 from extensions.models import (
     ExtensionBatchTargetsRequest, ExtensionDeployRequest, ExtensionDiscoveryRequest,
-    ExtensionKeyResetRequest, ExtensionPlanRequest, ExtensionTestRequest,
+    ExtensionHostKeyConfirmRequest, ExtensionHostKeyProbeRequest, ExtensionKeyResetRequest,
+    ExtensionPlanRequest, ExtensionTestRequest,
     ManagedCredentialUpsertRequest, VaultPasswordRequest,
 )
 from extensions.orchestrator import (
-    SSHAuthenticationError,
+    SSHAuthenticationError, SSHConnectionError,
     deployment_plans, extension_tasks, reset_managed_admin_key,
+    probe_host_key,
     test_connection as test_extension_connection,
 )
 from extensions.discovery import discover_environment
@@ -3609,7 +3612,7 @@ async def extension_catalog():
 
 @app.post("/api/extensions/targets")
 async def extension_save_target(body: dict = {}):
-    target = extensions_store.upsert_target(body)
+    target = extensions_store.save_target_metadata(body)
     return {"target": target.model_dump()}
 
 
@@ -3620,23 +3623,111 @@ async def extension_delete_target(target_id: str):
     return {"deleted": True}
 
 
+def _bind_confirmed_extension_target(body):
+    saved_target = extensions_store.get_target(body.target.id)
+    if not saved_target:
+        raise HTTPException(status_code=404, detail="请先保存 VPS，再执行远程操作")
+    if not saved_target.host_key:
+        raise HTTPException(status_code=409, detail="请先读取并确认 SSH 主机指纹")
+    if (
+        body.target.host != saved_target.host
+        or body.target.port != saved_target.port
+        or body.target.username != saved_target.username
+    ):
+        raise HTTPException(status_code=409, detail="VPS 连接信息已变化，请重新保存并确认主机指纹")
+    return body.model_copy(update={
+        "target": saved_target,
+        "expected_host_key": saved_target.host_key,
+        "trust_host_key": True,
+    })
+
+
+def _safe_extension_ssh_error(exc: Exception, *, error: str, code: str, stage: str) -> HTTPException:
+    if isinstance(exc, (SSHAuthenticationError, SSHConnectionError)):
+        return HTTPException(
+            status_code=401 if isinstance(exc, SSHAuthenticationError) else 400,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        )
+    return HTTPException(
+        status_code=400,
+        detail={
+            "error": error,
+            "diagnostic": {"code": code, "stage": stage, "retry_safe": False},
+        },
+    )
+
+
 @app.post("/api/extensions/ssh/test")
 async def extension_test_ssh(body: ExtensionTestRequest):
+    body = _bind_confirmed_extension_target(body)
     try:
         return await test_extension_connection(body)
-    except SSHAuthenticationError as exc:
+    except (SSHAuthenticationError, SSHConnectionError) as exc:
         raise HTTPException(
-            status_code=401,
+            status_code=401 if isinstance(exc, SSHAuthenticationError) else 400,
             detail={"error": str(exc), "diagnostic": exc.diagnostic},
         ) from exc
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "SSH 诊断未完成，原始错误已隐藏。请勿连续重试。",
+                "diagnostic": {"code": "ssh_check_failed", "stage": "ssh_check", "retry_safe": False},
+            },
+        ) from exc
+
+
+@app.post("/api/extensions/ssh/host-key/probe")
+async def extension_probe_ssh_host_key(body: ExtensionHostKeyProbeRequest):
+    target = extensions_store.get_target(body.target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="请先保存 VPS，再读取主机指纹")
+    try:
+        fingerprint = await probe_host_key(target)
+    except SSHConnectionError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "读取 SSH 主机指纹失败，原始错误已隐藏。",
+                "diagnostic": {"code": "ssh_host_key_probe_failed", "stage": "host_key_probe", "retry_safe": False},
+            },
+        ) from exc
+    return {"target_id": target.id, "fingerprint": fingerprint}
+
+
+@app.post("/api/extensions/ssh/host-key/confirm")
+async def extension_confirm_ssh_host_key(body: ExtensionHostKeyConfirmRequest):
+    target = extensions_store.get_target(body.target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="请先保存 VPS，再确认主机指纹")
+    try:
+        current_fingerprint = await probe_host_key(target)
+    except SSHConnectionError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        ) from exc
+    if not hmac.compare_digest(body.fingerprint, current_fingerprint):
+        raise HTTPException(status_code=409, detail="VPS 主机指纹在确认前发生变化，已拒绝保存")
+    if target.host_key and not hmac.compare_digest(target.host_key, current_fingerprint):
+        raise HTTPException(status_code=409, detail="VPS 已保存的主机指纹与当前值不一致，已拒绝覆盖")
+    try:
+        saved = extensions_store.confirm_target_host_key(target, current_fingerprint)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="VPS 连接信息在确认期间发生变化，已拒绝保存指纹") from exc
+    return {"target": saved.model_dump()}
 
 
 @app.post("/api/extensions/deploy")
 async def extension_start_deploy(body: ExtensionDeployRequest):
     try:
         validate_deployment_capability(body.project_id, body.strategy, body.deployment_mode)
+        body = _bind_confirmed_extension_target(body)
         task_id = extension_tasks.create(body)
         return {"task_id": task_id}
     except ValueError as exc:
@@ -3645,20 +3736,46 @@ async def extension_start_deploy(body: ExtensionDeployRequest):
 
 @app.post("/api/extensions/discover")
 async def extension_discover(body: ExtensionDiscoveryRequest):
+    body = _bind_confirmed_extension_target(body)
     try:
         return await discover_environment(body)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+        raise _safe_extension_ssh_error(
+            exc,
+            error="VPS 环境检查未完成，原始错误已隐藏。",
+            code="extension_discovery_failed",
+            stage="environment_discovery",
+        ) from exc
 
 
 @app.post("/api/extensions/deploy/plan")
 async def extension_deploy_plan(body: ExtensionPlanRequest):
     try:
         validate_deployment_capability(body.project_id, body.strategy, body.deployment_mode)
-        discovery = await discover_environment(body)
-        return {"plan": deployment_plans.create(body, discovery), "discovery": discovery}
-    except Exception as exc:
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+    body = _bind_confirmed_extension_target(body)
+    try:
+        discovery = await discover_environment(body)
+    except Exception as exc:
+        raise _safe_extension_ssh_error(
+            exc,
+            error="生成部署计划前的 VPS 检查未完成，原始错误已隐藏。",
+            code="extension_plan_discovery_failed",
+            stage="plan_discovery",
+        ) from exc
+    try:
+        return {"plan": deployment_plans.create(body, discovery), "discovery": discovery}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "部署计划未生成，原始错误已隐藏。",
+                "diagnostic": {"code": "extension_plan_failed", "stage": "plan_generation", "retry_safe": False},
+            },
+        ) from exc
 
 
 @app.get("/api/extensions/tasks/{task_id}")
@@ -3769,10 +3886,16 @@ async def extension_vault_delete(instance_id: str):
 
 @app.post("/api/extensions/instances/reset-admin-key")
 async def extension_reset_admin_key(body: ExtensionKeyResetRequest):
+    body = _bind_confirmed_extension_target(body)
     try:
         return await reset_managed_admin_key(body)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+        raise _safe_extension_ssh_error(
+            exc,
+            error="管理员密钥轮换未完成，原始错误已隐藏。",
+            code="extension_key_reset_failed",
+            stage="admin_key_reset",
+        ) from exc
 
 
 @app.post("/api/extensions/tasks/{task_id}/cancel")
@@ -3784,6 +3907,7 @@ async def extension_cancel_task(task_id: str):
 
 @app.post("/api/extensions/network/connect")
 async def extension_connect_network(body: NetworkConnectRequest):
+    body = _bind_confirmed_extension_target(body)
     task_id = network_tasks.create(body)
     return {"task_id": task_id}
 
