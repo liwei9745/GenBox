@@ -68,7 +68,7 @@ from providers import generate_multi, enhance_prompt_with_llm, enhance_prompt_wi
 from sync.models import RemoteImageRecord, SyncCandidate, SyncDeployment
 from sync.client import ChatGPT2APIClient, sha256_bytes
 from sync.manifest import SyncManifest, LocalImageIndex
-from sync.ingest import authenticate_push_source, validate_image_payload
+from sync.ingest import authenticate_push_source, validate_image_payload, validate_remote_path
 import sync.store as sync_store
 from extensions.models import (
     ExtensionBatchTargetsRequest, ExtensionDeployRequest, ExtensionDiscoveryRequest,
@@ -399,6 +399,9 @@ def _scan_gallery(limit: int = 100) -> List[dict]:
         prompt_text = ""
         source = "cloud" if f.stem.startswith("remote_") else "local"
         tags = ["cloud-sync"] if source == "cloud" else []
+        source_path = ""
+        source_deployment = ""
+        source_created_at = ""
         try:
             from PIL import Image
             with Image.open(f) as img:
@@ -410,6 +413,10 @@ def _scan_gallery(limit: int = 100) -> List[dict]:
                     source = img.info["Source"]
                 if img.info and img.info.get("Tags"):
                     tags = [tag.strip() for tag in img.info["Tags"].split(",") if tag.strip()]
+                if img.info:
+                    source_path = str(img.info.get("SourcePath") or "")
+                    source_deployment = str(img.info.get("SourceDeployment") or "")
+                    source_created_at = str(img.info.get("CreatedAt") or "")
         except Exception as e:
             pass
         
@@ -438,6 +445,9 @@ def _scan_gallery(limit: int = 100) -> List[dict]:
             "file_size": f.stat().st_size,
             "source": source,
             "tags": tags,
+            "source_path": source_path,
+            "source_deployment": source_deployment,
+            "source_created_at": source_created_at,
         })
     
     # 扫描视频
@@ -3202,6 +3212,7 @@ async def admin_auth_middleware(request: Request, call_next):
 # 拉取接口由全局 admin 中间件保护；push 使用独立的来源身份密钥。
 # ──────────────────────────────────────────────────────────────
 sync_tasks: Dict[str, dict] = {}
+push_commit_lock = threading.Lock()
 
 
 def _save_synced_image(data: bytes, deployment_name: str, remote_path: str,
@@ -3504,8 +3515,10 @@ async def sync_push_image(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     if not authenticated:
         raise HTTPException(status_code=401, detail="无效的推送来源或 API Key")
-    if not remote_path.strip() or len(remote_path) > 1024:
-        raise HTTPException(status_code=400, detail="remote_path 无效")
+    try:
+        remote_path = validate_remote_path(remote_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     payload = await image.read()
     try:
@@ -3513,54 +3526,49 @@ async def sync_push_image(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    manifest = SyncManifest()
-    existing = manifest.get(f"{x_genbox_source}::{remote_path}")
-    existing_path = Path(existing.get("local_path", "")) if existing else None
-    if (
-        existing
-        and existing.get("sha256") == metadata["sha256"]
-        and existing_path
-        and existing_path.is_file()
-    ):
+    with push_commit_lock:
+        manifest = SyncManifest()
+        existing = manifest.get(f"{x_genbox_source}::{remote_path}")
+        existing_path = Path(existing.get("local_path", "")) if existing else None
+        if (
+            existing
+            and existing.get("sha256") == metadata["sha256"]
+            and existing_path
+            and existing_path.is_file()
+        ):
+            filename = existing_path.name
+            status = "already-imported"
+        else:
+            local_index = LocalImageIndex()
+            local_index.ensure_sha256_index()
+            if local_index.contains_hash(metadata["sha256"]):
+                filename = local_index.index[metadata["sha256"]]
+                status = "duplicate-local"
+            else:
+                _, filename = _save_synced_image(
+                    payload, x_genbox_source, remote_path, created_at, prompt, model,
+                )
+                local_index.index[metadata["sha256"]] = filename
+                local_index.save()
+                status = "imported"
+
+            local_path = str(GALLERY_DIR / filename)
+            manifest.add(
+                x_genbox_source, remote_path, local_path, metadata["sha256"],
+                metadata["size"], created_at,
+            )
+
         return {
             "ok": True,
-            "status": "already-imported",
+            "status": status,
             "source_id": x_genbox_source,
             "remote_path": remote_path,
             "sha256": metadata["sha256"],
-            "local_file": Path(existing.get("local_path", "")).name,
+            "local_file": filename,
+            "width": metadata["width"],
+            "height": metadata["height"],
             "safe_to_delete_source": True,
         }
-
-    local_index = LocalImageIndex()
-    local_index.ensure_sha256_index()
-    if local_index.contains_hash(metadata["sha256"]):
-        filename = local_index.index[metadata["sha256"]]
-        status = "duplicate-local"
-    else:
-        _, filename = _save_synced_image(
-            payload, x_genbox_source, remote_path, created_at, prompt, model,
-        )
-        local_index.index[metadata["sha256"]] = filename
-        local_index.save()
-        status = "imported"
-
-    local_path = str(GALLERY_DIR / filename)
-    manifest.add(
-        x_genbox_source, remote_path, local_path, metadata["sha256"],
-        metadata["size"], created_at,
-    )
-    return {
-        "ok": True,
-        "status": status,
-        "source_id": x_genbox_source,
-        "remote_path": remote_path,
-        "sha256": metadata["sha256"],
-        "local_file": filename,
-        "width": metadata["width"],
-        "height": metadata["height"],
-        "safe_to_delete_source": True,
-    }
 
 
 @app.get("/api/sync/push/status")

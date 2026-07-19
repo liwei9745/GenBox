@@ -5,6 +5,7 @@ import io
 import json
 import os
 import re
+from pathlib import PurePosixPath
 from typing import Dict, Optional
 
 from PIL import Image
@@ -12,6 +13,7 @@ from PIL import Image
 
 MAX_PUSH_IMAGE_BYTES = int(os.getenv("GENBOX_PUSH_MAX_BYTES", str(25 * 1024 * 1024)))
 SOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+WINDOWS_DRIVE_PATTERN = re.compile(r"^[A-Za-z]:")
 
 
 def load_push_keys(raw: Optional[str] = None) -> Dict[str, str]:
@@ -37,6 +39,27 @@ def authenticate_push_source(source_id: str, api_key: str, raw_keys: Optional[st
         return False
     expected = load_push_keys(raw_keys).get(source_id)
     return bool(expected) and hmac.compare_digest(expected, api_key or "")
+
+
+def validate_remote_path(remote_path: str) -> str:
+    """Require an unambiguous source-relative POSIX path without changing it."""
+    value = str(remote_path or "")
+    if not value or value != value.strip() or len(value) > 1024:
+        raise ValueError("remote_path must be a stable relative path")
+    if (
+        "\\" in value
+        or "//" in value
+        or value.startswith("/")
+        or value.endswith("/")
+        or WINDOWS_DRIVE_PATTERN.match(value)
+    ):
+        raise ValueError("remote_path must be a stable relative path")
+    if "://" in value or any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise ValueError("remote_path must be a stable relative path")
+    parts = PurePosixPath(value).parts
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        raise ValueError("remote_path must be a stable relative path")
+    return value
 
 
 def validate_image_payload(payload: bytes, content_type: str = "") -> dict:

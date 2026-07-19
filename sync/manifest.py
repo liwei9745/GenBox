@@ -10,6 +10,8 @@
 """
 import json
 import hashlib
+import os
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -23,6 +25,34 @@ LOCAL_MD5_INDEX_FILE = GALLERY_DIR / ".md5_index.json"
 
 # 本地索引里记录但文件已丢失的条目，定期清理阈值（秒），默认 7 天不强制
 MANIFEST_VERSION = 1
+
+
+def _atomic_write_json(path: Path, data: Any) -> None:
+    """Write JSON through a same-directory temporary file and atomic replace."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+        temp_path = None
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 # ──────────────────────────────────────────────────────────────
@@ -45,13 +75,9 @@ class SyncManifest:
                 self.entries = {}
 
     def save(self):
-        MANIFEST_FILE.write_text(
-            json.dumps(
-                {"version": MANIFEST_VERSION, "entries": self.entries},
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
+        _atomic_write_json(
+            MANIFEST_FILE,
+            {"version": MANIFEST_VERSION, "entries": self.entries},
         )
 
     def get(self, key: str) -> Optional[Dict[str, Any]]:
@@ -102,14 +128,8 @@ class LocalImageIndex:
                 self.md5_index = {}
 
     def save(self):
-        LOCAL_INDEX_FILE.write_text(
-            json.dumps(self.index, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        LOCAL_MD5_INDEX_FILE.write_text(
-            json.dumps(self.md5_index, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        _atomic_write_json(LOCAL_INDEX_FILE, self.index)
+        _atomic_write_json(LOCAL_MD5_INDEX_FILE, self.md5_index)
 
     def contains_hash(self, sha256: str) -> bool:
         return sha256 in self.index
