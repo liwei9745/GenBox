@@ -14,10 +14,47 @@ def load_config() -> ExtensionConfig:
     if not EXTENSIONS_FILE.exists():
         return ExtensionConfig()
     try:
-        return ExtensionConfig(**json.loads(EXTENSIONS_FILE.read_text(encoding="utf-8")))
+        raw = json.loads(EXTENSIONS_FILE.read_text(encoding="utf-8"))
     except Exception as exc:
         print(f"[Extensions] 配置读取失败: {exc}")
         return ExtensionConfig()
+    if not isinstance(raw, dict):
+        return ExtensionConfig()
+    targets = []
+    invalid_targets = 0
+    raw_targets = raw.get("targets", [])
+    if not isinstance(raw_targets, list):
+        raw_targets = []
+        invalid_targets += 1
+    for item in raw_targets:
+        try:
+            targets.append(ExtensionTarget(**item))
+        except Exception:
+            invalid_targets += 1
+    instances = []
+    invalid_instances = 0
+    raw_instances = raw.get("instances", [])
+    if not isinstance(raw_instances, list):
+        raw_instances = []
+        invalid_instances += 1
+    for item in raw_instances:
+        try:
+            instances.append(ExtensionInstance(**item))
+        except Exception:
+            invalid_instances += 1
+    if invalid_targets or invalid_instances:
+        print(
+            "[Extensions] 已隔离无效配置记录: "
+            f"targets={invalid_targets}, instances={invalid_instances}"
+        )
+    batch_target_ids = raw.get("batch_target_ids", [])
+    if not isinstance(batch_target_ids, list):
+        batch_target_ids = []
+    return ExtensionConfig(
+        targets=targets,
+        instances=instances,
+        batch_target_ids=[str(item) for item in batch_target_ids],
+    )
 
 
 def save_config(config: ExtensionConfig) -> None:
@@ -153,6 +190,7 @@ def upsert_instance(data: dict) -> ExtensionInstance:
         if existing.managed:
             merged["managed"] = True
             merged["ownership"] = existing.ownership or "managed"
+            merged["service_port"] = existing.service_port
     instance = ExtensionInstance(**{
         **(existing.model_dump() if existing else {}),
         **merged,

@@ -3736,10 +3736,19 @@ async def extension_start_deploy(body: ExtensionDeployRequest):
     try:
         validate_deployment_capability(body.project_id, body.strategy, body.deployment_mode)
         body = _bind_confirmed_extension_target(body)
-        task_id = extension_tasks.create(body)
+        task_id = await extension_tasks.create(body)
         return {"task_id": task_id}
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+    except Exception as exc:
+        raise _safe_extension_ssh_error(
+            exc,
+            error="部署前远程复核或本地任务事务未完成，原始错误已隐藏。",
+            code="extension_deploy_preflight_failed",
+            stage="deployment_preflight",
+        ) from exc
 
 
 @app.post("/api/extensions/discover")

@@ -102,12 +102,6 @@ def _authentication_kind(credential: SSHCredential) -> str:
 
 
 def _elevation_contract(credential: SSHCredential) -> str:
-    # A separately supplied sudo password was the legacy explicit signal. Keep
-    # it compatible, but never infer reuse from the SSH login password.
-    if credential.reuse_ssh_password or (
-        credential.sudo_password and credential.elevation == "none"
-    ):
-        return "password_sudo"
     return credential.elevation
 
 
@@ -496,22 +490,54 @@ class ExtensionTaskManager:
             if changed or len(self.tasks) != before:
                 self.store.save(list(self.tasks.values()))
 
-    def create(self, request: ExtensionDeployRequest) -> str:
+    async def create(self, request: ExtensionDeployRequest) -> str:
         validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
-        plan = deployment_plans.take(request.confirmed_plan_id, request)
-        task_id = uuid.uuid4().hex[:12]
-        with self.lock:
-            self.tasks[task_id] = {
-                "id": task_id, "status": "queued", "phase": "connect", "progress": 0,
-                "steps": [{"id": key, "label": label, "status": "pending"} for key, label in DEPLOY_STEPS],
-                "logs": [], "error": None, "host_key": "", "result": None,
-                "created_at": self._now(), "updated_at": self._now(), "recovery_action": None,
-                "failed_phase": None, "error_code": None,
-            }
-            self._persist()
-            runner = asyncio.create_task(self._run(task_id, request, plan))
-            self.runners[task_id] = runner
-            runner.add_done_callback(lambda completed: self._discard_done_runner(task_id, completed))
+        lease_token, leased_plan = deployment_plans.lease(request.confirmed_plan_id, request)
+        try:
+            from extensions.discovery import discover_environment
+
+            fresh_discovery = await discover_environment(
+                request,
+                path_checks=leased_plan.get("path_requirements", {}),
+            )
+            deployment_plans.validate_fresh_snapshot(leased_plan, fresh_discovery)
+            plan = deployment_plans.consume_lease(request.confirmed_plan_id, lease_token, request)
+        except Exception:
+            deployment_plans.release(request.confirmed_plan_id, lease_token)
+            raise
+
+        task_id = ""
+        runner = None
+        previous_tasks = None
+        previous_runners = None
+        previous_deliveries = None
+        try:
+            task_id = uuid.uuid4().hex[:12]
+            with self.lock:
+                previous_tasks = copy.deepcopy(self.tasks)
+                previous_runners = dict(self.runners)
+                previous_deliveries = dict(self.deliveries)
+                self.tasks[task_id] = {
+                    "id": task_id, "status": "queued", "phase": "connect", "progress": 0,
+                    "steps": [{"id": key, "label": label, "status": "pending"} for key, label in DEPLOY_STEPS],
+                    "logs": [], "error": None, "host_key": "", "result": None,
+                    "created_at": self._now(), "updated_at": self._now(), "recovery_action": None,
+                    "failed_phase": None, "error_code": None,
+                }
+                runner = asyncio.create_task(self._run(task_id, request, plan))
+                self.runners[task_id] = runner
+                runner.add_done_callback(lambda completed: self._discard_done_runner(task_id, completed))
+                self._persist()
+        except Exception:
+            with self.lock:
+                if previous_tasks is not None:
+                    self.tasks = previous_tasks
+                    self.runners = previous_runners or {}
+                    self.deliveries = previous_deliveries or {}
+                if runner is not None:
+                    runner.cancel()
+            deployment_plans.restore(plan)
+            raise
         return task_id
 
     def _discard_done_runner(self, task_id: str, runner: asyncio.Task) -> None:
@@ -606,6 +632,9 @@ class ExtensionTaskManager:
             step(0, "success", "SSH 连接成功")
 
             home_dir = (await connection.run("printf %s \"$HOME\"", check=True)).stdout.strip()
+            planned_home_dir = plan.get("discovery_snapshot", {}).get("environment", {}).get("home_dir")
+            if planned_home_dir and home_dir != planned_home_dir:
+                raise PermissionError("远程用户主目录已变化，请重新发现并生成计划")
             failure_key = "docker_unavailable"
             privileges = await _diagnose_privileges(connection, request.credential)
             verified_capability = plan.get("verified_capability")
@@ -662,7 +691,7 @@ class ExtensionTaskManager:
                     self._persist()
                 return
 
-            install_dir = f"{home_dir}/genbox-apps/{plan['project_id']}/{plan['instance_id']}"
+            install_dir = plan["install_dir"]
             compose_project = plan["compose_project"]
             admin_key = f"gbx-{secrets.token_urlsafe(32)}"
             compose_content = """services:
@@ -909,10 +938,31 @@ class DeploymentPlanManager:
     def _existing_snapshot(existing: dict) -> dict[str, Any]:
         fields = (
             "id", "container_id", "name", "image", "source_image_id", "status", "ports",
+            "published_ports", "service_port",
             "compose_project", "compose_service", "working_dir", "data_dir", "config_file",
             "data_size_mb", "clone_available", "managed", "ownership",
         )
         return {key: copy.deepcopy(existing.get(key)) for key in fields}
+
+    @staticmethod
+    def _environment_snapshot(environment: dict) -> dict[str, Any]:
+        return {
+            "docker_version": copy.deepcopy(environment.get("docker_version")),
+            "compose_version": copy.deepcopy(environment.get("compose_version")),
+            "home_dir": copy.deepcopy(environment.get("home_dir")),
+            "listening_ports": sorted(int(port) for port in environment.get("listening_ports", [])),
+        }
+
+    @classmethod
+    def _discovery_snapshot(cls, discovery: dict) -> dict[str, Any]:
+        instances = [cls._existing_snapshot(item) for item in discovery.get("instances", [])]
+        instances.sort(key=lambda item: (str(item.get("id") or ""), str(item.get("container_id") or "")))
+        return {
+            "host_key": copy.deepcopy(discovery.get("host_key")),
+            "environment": cls._environment_snapshot(discovery.get("environment", {})),
+            "instances": instances,
+            "privileges": cls._capability_snapshot(discovery),
+        }
 
     def _create(self, request: ExtensionPlanRequest, discovery: dict) -> dict:
         validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
@@ -921,6 +971,11 @@ class DeploymentPlanManager:
         identity = self._identity_fields(request)
         if not identity["host_fingerprint"]:
             raise ValueError("请先确认 SSH 主机指纹，再生成部署计划")
+        discovered_host_key = str(discovery.get("host_key") or identity["host_fingerprint"])
+        if discovered_host_key != identity["host_fingerprint"]:
+            raise ValueError("发现结果与已确认 SSH 主机指纹不一致")
+        discovery = copy.deepcopy(discovery)
+        discovery["host_key"] = discovered_host_key
         verified_capability = self._capability_snapshot(discovery)
         if not verified_capability.get("can_deploy"):
             raise ValueError("当前 SSH 用户没有经过验证的 Docker 部署能力")
@@ -932,15 +987,28 @@ class DeploymentPlanManager:
             existing = next((item for item in discovery.get("instances", []) if item.get("id") == request.instance_id), None)
             if not existing:
                 raise ValueError("请选择检测到的已有实例")
+            discovered_port = existing.get("service_port")
+            if not isinstance(discovered_port, int):
+                raise ValueError("已有实例的宿主机端口缺失或存在多个映射，已拒绝登记")
+            if request.service_port != discovered_port:
+                raise ValueError("请求端口与结构化 Docker 发现端口不一致")
+            registered = extensions_store.get_instance(request.instance_id)
+            if registered and registered.target_id != request.target.id:
+                raise ValueError("instance_id_conflicts_with_another_target")
+            if registered and registered.managed and registered.service_port != discovered_port:
+                raise ValueError("GenBox 管理实例的已登记端口与远程结构化发现不一致")
             plan_id = uuid.uuid4().hex[:16]
             plan = {
                 "id": plan_id, "project_id": request.project_id, **identity, "instance_id": request.instance_id,
-                "strategy": "existing", "deployment_mode": "compose", "service_port": request.service_port,
+                "strategy": "existing", "deployment_mode": "compose", "service_port": discovered_port,
                 "image": existing.get("image") or request.image,
                 "compose_project": existing.get("compose_project") or "",
                 "install_dir": existing.get("working_dir") or "",
                 "verified_capability": verified_capability,
                 "existing_snapshot": self._existing_snapshot(existing),
+                "discovery_snapshot": self._discovery_snapshot(discovery),
+                "required_disk_mb": 0,
+                "path_requirements": {},
                 "local_side_effect": "确认并在 GenBox 本地登记现有实例；远程环境保持不变",
                 "operations": ["登记已有实例入口", "保留现有容器、配置和数据不变"],
                 "safety": ["不执行任何远程写入", "不重启、不停止、不删除已有实例", "管理密钥由用户自行提供"],
@@ -959,6 +1027,11 @@ class DeploymentPlanManager:
             raise ValueError(f"端口 {request.service_port} 已被占用")
         if any(item.get("id") == request.instance_id for item in discovery.get("instances", [])):
             raise ValueError("实例 ID 已存在，请选择接入已有实例或更换名称")
+        home_dir = str(environment.get("home_dir") or "").rstrip("/")
+        if not home_dir.startswith("/"):
+            raise ValueError("VPS 用户主目录未被可靠发现，无法绑定安全部署路径")
+        install_dir = f"{home_dir}/genbox-apps/{request.project_id}/{request.instance_id}"
+        required_mb = 512
         if request.clone_scope != "empty" and not verified_capability.get("can_admin"):
             raise ValueError("复制现有实例数据需要经过验证的管理员提权能力")
         clone_source = None
@@ -975,10 +1048,13 @@ class DeploymentPlanManager:
             required_mb = int(clone_source["data_size_mb"]) + 512
             if int(environment.get("disk_free_mb") or 0) < required_mb:
                 raise ValueError(f"磁盘空间不足，安全克隆至少需要 {required_mb} MB")
+        if int(environment.get("disk_free_mb") or 0) < required_mb:
+            raise ValueError(f"磁盘空间不足，安全部署至少需要 {required_mb} MB")
         source_baseline = {
             key: clone_source.get(key, "")
             for key in (
                 "id", "container_id", "name", "image", "status", "ports",
+                "published_ports", "service_port",
                 "compose_project", "working_dir", "data_dir", "config_file",
                 "data_size_mb", "managed", "ownership",
             )
@@ -989,6 +1065,7 @@ class DeploymentPlanManager:
             "strategy": request.strategy, "deployment_mode": request.deployment_mode,
             "service_port": request.service_port, "image": request.image,
             "compose_project": f"genbox-chatgpt2api-{request.instance_id}",
+            "install_dir": install_dir,
             "clone_scope": request.clone_scope,
             "clone_source_id": request.clone_source_id,
             "clone_source_data_dir": clone_source.get("data_dir", "") if clone_source else "",
@@ -997,6 +1074,15 @@ class DeploymentPlanManager:
             "clone_size_mb": int(clone_source.get("data_size_mb") or 0) if clone_source else 0,
             "source_baseline": source_baseline,
             "verified_capability": verified_capability,
+            "discovery_snapshot": self._discovery_snapshot(discovery),
+            "required_disk_mb": required_mb,
+            "path_requirements": {
+                "install_dir_absent": {"path": install_dir, "kind": "absent"},
+                **({
+                    "clone_data_dir_present": {"path": clone_source.get("data_dir", ""), "kind": "directory"},
+                    "clone_config_file_present": {"path": clone_source.get("config_file", ""), "kind": "file"},
+                } if clone_source else {}),
+            },
             "operations": [
                 "创建独立实例目录和 data 目录", "写入权限为 0600 的实例配置",
                 "复用生产镜像基线，不拉取 latest" if clone_source else "拉取指定镜像",
@@ -1011,15 +1097,77 @@ class DeploymentPlanManager:
         self.plans[plan_id] = plan
         return {key: value for key, value in plan.items() if key != "expires_at"}
 
+    def lease(self, plan_id: str, request: ExtensionDeployRequest) -> tuple[str, dict]:
+        with self.lock:
+            plan = self._take(plan_id, request, consume=False)
+            if plan.get("_lease_token"):
+                raise ValueError("部署计划正在进行远程复核，请勿重复提交")
+            token = uuid.uuid4().hex
+            plan["_lease_token"] = token
+            return token, copy.deepcopy(plan)
+
+    def release(self, plan_id: str, token: str) -> None:
+        with self.lock:
+            plan = self.plans.get(plan_id)
+            if plan and hmac.compare_digest(str(plan.get("_lease_token") or ""), token):
+                plan.pop("_lease_token", None)
+
+    def consume_lease(self, plan_id: str, token: str, request: ExtensionDeployRequest) -> dict:
+        with self.lock:
+            plan = self.plans.get(plan_id)
+            if not plan or not hmac.compare_digest(str(plan.get("_lease_token") or ""), token):
+                raise ValueError("部署计划复核租约无效，请重新提交")
+            self._take(plan_id, request, consume=False)
+            consumed = self.plans.pop(plan_id)
+            consumed.pop("_lease_token", None)
+            return consumed
+
+    def restore(self, plan: dict) -> None:
+        restored = copy.deepcopy(plan)
+        restored.pop("_lease_token", None)
+        with self.lock:
+            if restored.get("expires_at", 0) >= time.time() and restored.get("id") not in self.plans:
+                self.plans[restored["id"]] = restored
+
+    def validate_fresh_snapshot(self, plan: dict, discovery: dict) -> None:
+        expected = plan.get("discovery_snapshot")
+        if not isinstance(expected, dict):
+            raise ValueError("部署计划缺少可复核的远程快照，请重新生成")
+        actual = self._discovery_snapshot(discovery)
+        if actual != expected:
+            raise ValueError("远程端口、实例、Compose、镜像、挂载或提权能力已变化，请重新生成计划")
+        required_disk_mb = int(plan.get("required_disk_mb") or 0)
+        disk_free_mb = int(discovery.get("environment", {}).get("disk_free_mb") or 0)
+        if disk_free_mb < required_disk_mb:
+            raise ValueError("远程磁盘容量已不满足确认计划")
+        path_conditions = discovery.get("path_conditions", {})
+        if any(path_conditions.get(name) is not True for name in plan.get("path_requirements", {})):
+            raise ValueError("远程部署目录或克隆源路径条件已变化，请重新生成计划")
+        if plan.get("strategy") == "existing":
+            existing = next(
+                (item for item in discovery.get("instances", []) if item.get("id") == plan.get("instance_id")),
+                None,
+            )
+            if not existing or existing.get("service_port") != plan.get("service_port"):
+                raise ValueError("已有实例端口或身份已变化，请重新生成计划")
+        else:
+            environment = discovery.get("environment", {})
+            if plan.get("service_port") in environment.get("listening_ports", []):
+                raise ValueError("部署端口已被占用，请重新生成计划")
+            if any(item.get("id") == plan.get("instance_id") for item in discovery.get("instances", [])):
+                raise ValueError("部署实例 ID 已出现冲突，请重新生成计划")
+
     def take(self, plan_id: str, request: ExtensionDeployRequest) -> dict:
         with self.lock:
             return self._take(plan_id, request)
 
-    def _take(self, plan_id: str, request: ExtensionDeployRequest) -> dict:
+    def _take(self, plan_id: str, request: ExtensionDeployRequest, *, consume: bool = True) -> dict:
         validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
         plan = self.plans.get(plan_id)
         if not plan or plan["expires_at"] < time.time():
             raise ValueError("部署计划不存在或已过期，请重新检测")
+        if consume and plan.get("_lease_token"):
+            raise ValueError("部署计划正在进行远程复核，请勿重复提交")
         identity_request = request
         plan_has_bound_identity = all(key in plan for key in (
             "host", "ssh_port", "username", "host_fingerprint", "auth_kind", "elevation_contract",
@@ -1046,7 +1194,8 @@ class DeploymentPlanManager:
             raise ValueError("端口或镜像已变更，请重新生成计划")
         if plan.get("clone_source_id", "") != request.clone_source_id or plan.get("clone_scope", "empty") != request.clone_scope:
             raise ValueError("克隆范围已变更，请重新生成计划")
-        self.plans.pop(plan_id)
+        if consume:
+            self.plans.pop(plan_id)
         return plan
 
 

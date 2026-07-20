@@ -1,7 +1,7 @@
 import asyncio
 import shlex
 
-from extensions.discovery import discover_environment
+from extensions.discovery import _parse_published_ports, discover_environment
 from extensions.models import ExtensionDiscoveryRequest, ExtensionTarget, SSHCredential
 
 
@@ -10,6 +10,14 @@ def test_sudo_docker_command_preserves_go_template_quotes():
     wrapped = f"sudo -n sh -lc {shlex.quote(command)}"
 
     assert shlex.split(wrapped)[-1] == command
+
+
+def test_structured_docker_port_parser_requires_unique_valid_host_ports():
+    assert _parse_published_ports('{"80/tcp":[{"HostIp":"0.0.0.0","HostPort":"33010"}]}') == [33010]
+    assert _parse_published_ports(
+        '{"80/tcp":[{"HostPort":"33010"}],"443/tcp":[{"HostPort":"33443"}]}'
+    ) == [33010, 33443]
+    assert _parse_published_ports("not-json") == []
 
 
 def test_docker_helper_retries_failed_size_probe_with_sudo():
@@ -109,6 +117,8 @@ def test_discovery_is_read_only_and_classifies_existing_instance(monkeypatch):
                     return Result("ghcr.io/yukkcat/chatgpt2api:latest")
                 if "{{.Image}}" in command:
                     return Result("sha256:source-image")
+                if ".NetworkSettings.Ports" in command:
+                    return Result('{"80/tcp":[{"HostIp":"0.0.0.0","HostPort":"3000"}]}')
                 if 'Destination \\"/app/data\\"' in command or 'Destination \"/app/data\"' in command:
                     return Result("/opt/chatgpt2api/data")
                 if 'Destination \\"/app/config.json\\"' in command or 'Destination \"/app/config.json\"' in command:
@@ -151,6 +161,8 @@ def test_discovery_is_read_only_and_classifies_existing_instance(monkeypatch):
         assert result["instances"][0]["data_size_mb"] == 120
         assert result["instances"][0]["image"] == "ghcr.io/yukkcat/chatgpt2api@sha256:source-digest"
         assert result["instances"][0]["source_image_id"] == "sha256:source-image"
+        assert result["instances"][0]["service_port"] == 3000
+        assert result["instances"][0]["published_ports"] == [3000]
         assert result["environment"]["listening_ports"] == [22, 3000]
         assert not any(token in command for command in commands for token in (" rm ", " stop ", " down", " up "))
 

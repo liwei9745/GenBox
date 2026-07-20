@@ -35,6 +35,16 @@ def privilege_snapshot():
     }
 
 
+def environment_snapshot(*, listening_ports=None, disk_free_mb=5000):
+    return {
+        "docker_version": "27.0",
+        "compose_version": "2.30",
+        "home_dir": "/home/deploy-user",
+        "listening_ports": list(listening_ports or []),
+        "disk_free_mb": disk_free_mb,
+    }
+
+
 def target_payload():
     return {
         "id": "capability-target",
@@ -101,7 +111,7 @@ def test_deploy_route_rejects_unsupported_project_before_task_creation(monkeypat
     created = []
 
     class Tasks:
-        def create(self, _request):
+        async def create(self, _request):
             created.append(True)
             raise AssertionError("task creation must not run")
 
@@ -125,7 +135,7 @@ def test_routes_reject_unsupported_deployment_modes_before_side_effects(monkeypa
         raise AssertionError("discovery must not run")
 
     class Tasks:
-        def create(self, _request):
+        async def create(self, _request):
             created.append(True)
             raise AssertionError("task creation must not run")
 
@@ -142,7 +152,7 @@ def test_routes_reject_unsupported_deployment_modes_before_side_effects(monkeypa
 def test_compose_plan_route_binds_project_strategy_and_mode(monkeypatch):
     async def discovery(_request):
         return {
-            "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": []},
+            "environment": environment_snapshot(),
             "privileges": privilege_snapshot(),
             "instances": [],
         }
@@ -176,7 +186,7 @@ def test_plan_requires_a_verified_capability_snapshot():
         manager.create(
             ExtensionPlanRequest(target=target, credential=SSHCredential(password=SECRET_SENTINEL), service_port=33010),
             {
-                "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": []},
+                "environment": environment_snapshot(),
                 "instances": [],
             },
         )
@@ -195,7 +205,7 @@ def test_plan_drift_does_not_consume_valid_plan(changes):
     target = ExtensionTarget(**target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA")
     plan_request = ExtensionPlanRequest(target=target, credential=SSHCredential(password=SECRET_SENTINEL), service_port=33010)
     plan = manager.create(plan_request, {
-        "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": []},
+        "environment": environment_snapshot(),
         "privileges": privilege_snapshot(),
         "instances": [],
     })
@@ -214,7 +224,7 @@ def test_plan_drift_does_not_consume_valid_plan(changes):
 
 def test_target_auth_and_elevation_drift_leave_plan_available():
     discovery = {
-        "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": []},
+        "environment": environment_snapshot(),
         "privileges": privilege_snapshot(),
         "instances": [],
     }
@@ -274,7 +284,7 @@ def test_identity_drift_creates_no_connection_task_or_persistent_record(tmp_path
     plan = manager.create(
         ExtensionPlanRequest(target=target, credential=credential, service_port=33010),
         {
-            "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": []},
+            "environment": environment_snapshot(),
             "privileges": privilege_snapshot(),
             "instances": [],
         },
@@ -295,8 +305,11 @@ def test_identity_drift_creates_no_connection_task_or_persistent_record(tmp_path
         confirmed_plan_id=plan["id"],
     )
 
-    with pytest.raises(ValueError):
-        tasks.create(drifted)
+    async def run_drift():
+        with pytest.raises(ValueError):
+            await tasks.create(drifted)
+
+    asyncio.run(run_drift())
 
     assert plan["id"] in manager.plans
     assert tasks.tasks == {}
@@ -324,7 +337,7 @@ def test_manager_calls_fail_closed_before_task_or_connection(monkeypatch):
     async def run():
         task_manager = ExtensionTaskManager()
         with pytest.raises(ValueError):
-            task_manager.create(ExtensionDeployRequest(
+            await task_manager.create(ExtensionDeployRequest(
                 project_id="grok2api", target=target, credential=SSHCredential(password="test-only"), confirmed_plan_id="missing",
             ))
         assert task_manager.tasks == {}

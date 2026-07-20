@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import subprocess
 import sys
@@ -39,9 +40,9 @@ from extensions.orchestrator import (
 TEST_HOST_KEY = "SHA256:AAAAAAAAAAAAAAAAAAAA"
 
 
-def privilege_snapshot(*, elevation="none", can_admin=False):
+def privilege_snapshot(*, elevation="none", can_admin=False, auth_kind="password"):
     return {
-        "auth_kind": "password",
+        "auth_kind": auth_kind,
         "elevation_contract": elevation,
         "is_root": False,
         "docker_access": True,
@@ -50,7 +51,27 @@ def privilege_snapshot(*, elevation="none", can_admin=False):
         "password_sudo": elevation == "password_sudo" and can_admin,
         "can_admin": can_admin,
         "can_deploy": True,
-        "diagnostic_code": "passwordless_sudo" if can_admin else "direct_docker",
+        "diagnostic_code": elevation if can_admin else "direct_docker",
+    }
+
+
+def environment_snapshot(*, listening_ports=None, disk_free_mb=5000, home_dir="/home/deploy-user"):
+    return {
+        "docker_version": "27.0",
+        "compose_version": "2.30",
+        "home_dir": home_dir,
+        "listening_ports": list(listening_ports or []),
+        "disk_free_mb": disk_free_mb,
+    }
+
+
+def deployment_discovery(*, instances=None, privileges=None, listening_ports=None, path_conditions=None):
+    return {
+        "host_key": TEST_HOST_KEY,
+        "environment": environment_snapshot(listening_ports=listening_ports),
+        "privileges": privileges or privilege_snapshot(),
+        "instances": list(instances or []),
+        "path_conditions": dict(path_conditions or {}),
     }
 
 
@@ -299,10 +320,6 @@ def test_ssh_connection_rejects_missing_or_ambiguous_credentials_before_connect(
             "1000", SSHCredential(private_key="key-only", sudo_password="sudo-only", elevation="password_sudo"),
             False, False, True, "password_sudo", True,
         ),
-        (
-            "1000", SSHCredential(password="ssh-only", elevation="password_sudo"),
-            True, False, False, "sudo_password_required", False,
-        ),
         ("1000", SSHCredential(password="ssh-only"), False, False, False, "no_sudo_or_docker", False),
     ],
 )
@@ -364,13 +381,8 @@ def test_ssh_password_is_reused_for_sudo_only_with_explicit_request():
                 return Result(0 if input == "same-secret\n" else 1)
             raise AssertionError(command)
 
-    implicit = Connection()
-    implicit_result = asyncio.run(_diagnose_privileges(
-        implicit,
-        SSHCredential(password="same-secret", elevation="password_sudo"),
-    ))
-    assert implicit_result["diagnostic_code"] == "sudo_password_required"
-    assert "same-secret\n" not in implicit.inputs
+    with pytest.raises(ValueError):
+        SSHCredential(password="same-secret", elevation="password_sudo")
 
     explicit = Connection()
     explicit_result = asyncio.run(_diagnose_privileges(
@@ -393,6 +405,58 @@ def test_private_key_password_sudo_requires_a_separate_sudo_password():
             elevation="password_sudo",
             reuse_ssh_password=True,
         )
+
+
+@pytest.mark.parametrize("values", [
+    {"password": "ssh-only", "sudo_password": "sudo-only", "elevation": "none"},
+    {"password": "ssh-only", "reuse_ssh_password": True, "elevation": "none"},
+    {"private_key": "key-only", "sudo_password": "sudo-only", "elevation": "passwordless_sudo"},
+    {"password": "ssh-only", "reuse_ssh_password": True, "elevation": "passwordless_sudo"},
+    {"password": "ssh-only", "elevation": "password_sudo"},
+    {
+        "password": "ssh-only", "sudo_password": "sudo-only",
+        "reuse_ssh_password": True, "elevation": "password_sudo",
+    },
+    {"private_key": "key-only", "reuse_ssh_password": True, "elevation": "password_sudo"},
+])
+def test_elevation_contract_rejects_conflicting_credentials(values):
+    with pytest.raises(ValueError):
+        SSHCredential(**values)
+
+
+@pytest.mark.parametrize("values", [
+    {"password": "ssh-only", "elevation": "none"},
+    {"private_key": "key-only", "elevation": "none"},
+    {"password": "ssh-only", "elevation": "passwordless_sudo"},
+    {"private_key": "key-only", "elevation": "passwordless_sudo"},
+    {"password": "ssh-only", "sudo_password": "sudo-only", "elevation": "password_sudo"},
+    {"private_key": "key-only", "sudo_password": "sudo-only", "elevation": "password_sudo"},
+    {"password": "ssh-only", "reuse_ssh_password": True, "elevation": "password_sudo"},
+])
+def test_elevation_contract_accepts_only_explicit_valid_matrix(values):
+    credential = SSHCredential(**values)
+    assert credential.elevation == values["elevation"]
+
+
+@pytest.mark.parametrize("credential", [
+    {"password": "login-sentinel", "sudo_password": "sudo-sentinel", "elevation": "none"},
+    {"password": "login-sentinel", "reuse_ssh_password": True, "elevation": "passwordless_sudo"},
+    {"password": "login-sentinel", "elevation": "password_sudo"},
+    {"private_key": "key-sentinel", "reuse_ssh_password": True, "elevation": "password_sudo"},
+])
+def test_extension_server_rejects_invalid_elevation_contract_without_echoing_credentials(credential):
+    import main
+    from fastapi.testclient import TestClient
+
+    response = TestClient(main.app, base_url="http://testserver").post(
+        "/api/extensions/ssh/test",
+        json={
+            "target": {"id": "t", "name": "VPS", "host": "host.example", "username": "deploy-user"},
+            "credential": credential,
+        },
+    )
+    assert response.status_code == 422
+    assert "sentinel" not in response.text
 
 
 def test_password_auth_rejection_is_sanitized_and_does_not_claim_password_is_wrong(monkeypatch):
@@ -1044,7 +1108,7 @@ def test_existing_registration_preserves_owned_fields_and_rejects_cross_target_c
     refreshed = store.upsert_instance({
         "id": original.id,
         "target_id": "target-a",
-        "service_port": 33010,
+        "service_port": 34000,
         "install_dir": "",
         "data_dir": "",
         "image": "",
@@ -1055,6 +1119,7 @@ def test_existing_registration_preserves_owned_fields_and_rejects_cross_target_c
     })
 
     assert refreshed.managed is True
+    assert refreshed.service_port == 33010
     assert refreshed.status == "running"
     assert refreshed.data_dir == "/srv/genbox/app/data"
     assert refreshed.ownership == "managed"
@@ -1082,7 +1147,7 @@ def test_deploy_task_reports_success(tmp_path, monkeypatch):
             if command == "id -u":
                 result.stdout = "0"
             elif command == 'printf %s "$HOME"':
-                result.stdout = "/home/ubuntu"
+                result.stdout = "/home/deploy-user"
             return result
 
         def close(self):
@@ -1095,21 +1160,40 @@ def test_deploy_task_reports_success(tmp_path, monkeypatch):
         return Connection(), "SHA256:test"
 
     async def run():
+        from extensions import orchestrator
+
         monkeypatch.setattr("extensions.orchestrator._connect", fake_connect)
         monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+        target = ExtensionTarget(
+            id="t", name="VPS", host="host.example", username="deploy-user",
+            host_key=TEST_HOST_KEY, chatgpt2api_port=33010,
+        )
+        credential = SSHCredential(private_key="test-private-key", passphrase="encrypted-key-passphrase")
+        fresh_discovery = deployment_discovery(
+            privileges={
+                **privilege_snapshot(auth_kind="private_key"),
+                "is_root": True,
+                "elevated_docker_access": True,
+                "can_admin": True,
+                "diagnostic_code": "uid_0",
+            },
+            path_conditions={"install_dir_absent": True},
+        )
+        plan_manager = DeploymentPlanManager()
+        plan = plan_manager.create(
+            ExtensionPlanRequest(target=target, credential=credential, service_port=33010),
+            fresh_discovery,
+        )
+        monkeypatch.setattr(orchestrator, "deployment_plans", plan_manager)
+        async def fake_discover(_request, *, path_checks=None):
+            return copy.deepcopy(fresh_discovery)
+        monkeypatch.setattr("extensions.discovery.discover_environment", fake_discover)
         manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
         request = ExtensionDeployRequest(
-            target=ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", chatgpt2api_port=33010),
-            credential=SSHCredential(private_key="test-private-key", passphrase="encrypted-key-passphrase"), trust_host_key=True,
-            instance_id="chatgpt2api-dev", confirmed_plan_id="plan-test",
+            target=target, credential=credential,
+            instance_id="chatgpt2api-dev", confirmed_plan_id=plan["id"],
         )
-        deployment_plans.plans["plan-test"] = {
-            "id": "plan-test", "project_id": "chatgpt2api", "target_id": "t", "instance_id": "chatgpt2api-dev",
-            "strategy": "isolated", "deployment_mode": "compose", "service_port": 33010,
-            "image": request.image, "compose_project": "genbox-chatgpt2api-chatgpt2api-dev",
-            "expires_at": 9999999999,
-        }
-        task_id = manager.create(request)
+        task_id = await manager.create(request)
         await manager.runners[task_id]
         state = manager.get(task_id)
         assert state["status"] == "completed"
@@ -1152,7 +1236,7 @@ def test_working_copy_password_sudo_waits_for_ssh_input(tmp_path, monkeypatch):
             if command == "id -u":
                 result.stdout = "1000"
             elif command == 'printf %s "$HOME"':
-                result.stdout = "/home/ubuntu"
+                result.stdout = "/home/deploy-user"
             elif command == "sudo -n true >/dev/null 2>&1":
                 result.exit_status = 1
             return result
@@ -1169,26 +1253,52 @@ def test_working_copy_password_sudo_waits_for_ssh_input(tmp_path, monkeypatch):
         return connection, "SHA256:test"
 
     async def run():
+        from extensions import orchestrator
+
         monkeypatch.setattr("extensions.orchestrator._connect", fake_connect)
         monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+        target = ExtensionTarget(
+            id="t", name="VPS", host="host.example", username="deploy-user",
+            host_key=TEST_HOST_KEY, chatgpt2api_port=33010,
+        )
+        credential = SSHCredential(password="secret", sudo_password="sudo-secret", elevation="password_sudo")
+        source = {
+            "id": "chatgpt2api-warp", "container_id": "source-container", "name": "source-app",
+            "image": "ghcr.io/yukkcat/chatgpt2api:latest", "source_image_id": "sha256:source-image",
+            "status": "Up 1 hour", "ports": "0.0.0.0:3000->80/tcp",
+            "published_ports": [3000], "service_port": 3000,
+            "compose_project": "source-project", "compose_service": "app",
+            "working_dir": "/root/chatgpt2api", "data_dir": "/root/chatgpt2api/data",
+            "config_file": "/root/chatgpt2api/config.json", "data_size_mb": 10,
+            "clone_available": True, "managed": False, "ownership": "compose",
+        }
+        fresh_discovery = deployment_discovery(
+            instances=[source],
+            privileges=privilege_snapshot(elevation="password_sudo", can_admin=True),
+            listening_ports=[3000],
+            path_conditions={
+                "install_dir_absent": True,
+                "clone_data_dir_present": True,
+                "clone_config_file_present": True,
+            },
+        )
+        plan_manager = DeploymentPlanManager()
+        plan = plan_manager.create(ExtensionPlanRequest(
+            target=target, credential=credential, service_port=33010,
+            clone_source_id="chatgpt2api-warp", clone_scope="working-copy",
+        ), fresh_discovery)
+        monkeypatch.setattr(orchestrator, "deployment_plans", plan_manager)
+        async def fake_discover(_request, *, path_checks=None):
+            return copy.deepcopy(fresh_discovery)
+        monkeypatch.setattr("extensions.discovery.discover_environment", fake_discover)
         manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
         request = ExtensionDeployRequest(
-            target=ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", chatgpt2api_port=33010),
-            credential=SSHCredential(password="secret", sudo_password="sudo-secret", elevation="password_sudo"), trust_host_key=True,
-            instance_id="chatgpt2api-dev", confirmed_plan_id="plan-working-copy",
+            target=target, credential=credential,
+            instance_id="chatgpt2api-dev", confirmed_plan_id=plan["id"],
             clone_source_id="chatgpt2api-warp", clone_scope="working-copy",
         )
-        deployment_plans.plans["plan-working-copy"] = {
-            "id": "plan-working-copy", "project_id": "chatgpt2api", "target_id": "t", "instance_id": "chatgpt2api-dev",
-            "strategy": "isolated", "deployment_mode": "compose", "service_port": 33010,
-            "image": request.image, "compose_project": "genbox-chatgpt2api-chatgpt2api-dev",
-            "clone_scope": "working-copy", "clone_source_id": "chatgpt2api-warp",
-            "clone_source_data_dir": "/root/chatgpt2api/data",
-            "clone_source_config_file": "/root/chatgpt2api/config.json",
-            "expires_at": 9999999999,
-        }
 
-        task_id = manager.create(request)
+        task_id = await manager.create(request)
         await manager.runners[task_id]
 
         assert manager.get(task_id)["status"] == "completed"
@@ -1215,7 +1325,7 @@ def test_deployment_plan_rejects_port_conflict():
         target=target, credential=SSHCredential(password="secret"), service_port=33010,
     )
     discovery = {
-        "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": [33010]},
+        "environment": environment_snapshot(listening_ports=[33010]),
         "privileges": privilege_snapshot(),
         "instances": [],
     }
@@ -1234,7 +1344,7 @@ def test_deployment_plan_is_scoped_and_non_destructive():
         target=target, credential=SSHCredential(password="secret"), service_port=33010,
     )
     plan = manager.create(request, {
-        "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": []},
+        "environment": environment_snapshot(),
         "privileges": privilege_snapshot(),
         "instances": [],
     })
@@ -1284,6 +1394,8 @@ def test_existing_plan_binds_discovery_and_local_registration_preserves_managed_
         "source_image_id": "sha256:detected",
         "status": "",
         "ports": "0.0.0.0:33010->80/tcp",
+        "published_ports": [33010],
+        "service_port": 33010,
         "compose_project": "existing-project",
         "compose_service": "app",
         "working_dir": "/detected/app",
@@ -1295,6 +1407,7 @@ def test_existing_plan_binds_discovery_and_local_registration_preserves_managed_
         "ownership": "unmanaged",
     }
     manager = DeploymentPlanManager()
+    fresh_discovery = deployment_discovery(instances=[discovered], listening_ports=[33010])
     plan = manager.create(
         ExtensionPlanRequest(
             target=target,
@@ -1303,11 +1416,7 @@ def test_existing_plan_binds_discovery_and_local_registration_preserves_managed_
             strategy="existing",
             service_port=33010,
         ),
-        {
-            "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": [33010]},
-            "privileges": privilege_snapshot(),
-            "instances": [discovered],
-        },
+        fresh_discovery,
     )
     assert plan["existing_snapshot"] == discovered
     assert "session-secret" not in json.dumps(plan)
@@ -1341,8 +1450,11 @@ def test_existing_plan_binds_discovery_and_local_registration_preserves_managed_
     async def run():
         monkeypatch.setattr(orchestrator, "deployment_plans", manager)
         monkeypatch.setattr(orchestrator, "_connect", fake_connect)
+        async def fake_discover(_request, *, path_checks=None):
+            return copy.deepcopy(fresh_discovery)
+        monkeypatch.setattr("extensions.discovery.discover_environment", fake_discover)
         tasks = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
-        task_id = tasks.create(ExtensionDeployRequest(
+        task_id = await tasks.create(ExtensionDeployRequest(
             target=target,
             credential=credential,
             image=plan["image"],
@@ -1361,62 +1473,203 @@ def test_existing_plan_binds_discovery_and_local_registration_preserves_managed_
     assert registered.ownership == "managed"
 
 
+@pytest.mark.parametrize(("published_ports", "service_port", "requested_port"), [
+    ([], None, 33010),
+    ([33010, 33443], None, 33010),
+    ([33011], 33011, 33010),
+])
+def test_existing_plan_rejects_missing_ambiguous_or_mismatched_structured_port(
+    published_ports, service_port, requested_port,
+):
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=requested_port,
+    )
+    existing = {
+        "id": "external-app", "container_id": "container-a", "name": "external-app",
+        "image": "example.invalid/app:stable", "source_image_id": "sha256:image",
+        "status": "Up 1 hour", "ports": "display-only",
+        "published_ports": published_ports, "service_port": service_port,
+        "compose_project": "external-project", "compose_service": "app",
+        "working_dir": "/srv/external", "data_dir": "/srv/external/data",
+        "config_file": "/srv/external/config.json", "data_size_mb": 10,
+        "clone_available": True, "managed": False, "ownership": "compose",
+    }
+    with pytest.raises(ValueError):
+        DeploymentPlanManager().create(ExtensionPlanRequest(
+            target=target, credential=SSHCredential(password="session-only"),
+            instance_id="external-app", strategy="existing", service_port=requested_port,
+        ), deployment_discovery(instances=[existing], listening_ports=published_ports))
+
+
+def test_external_registration_accepts_only_the_structured_discovery_port(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    store.upsert_instance({
+        "id": "external-app", "target_id": "target-a", "service_port": 32000,
+        "install_dir": "/srv/external", "data_dir": "/srv/external/data",
+        "image": "example.invalid/app:stable", "managed": False,
+    })
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33010,
+    )
+    existing = {
+        "id": "external-app", "container_id": "container-a", "name": "external-app",
+        "image": "example.invalid/app:stable", "source_image_id": "sha256:image",
+        "status": "Up 1 hour", "ports": "0.0.0.0:33010->80/tcp",
+        "published_ports": [33010], "service_port": 33010,
+        "compose_project": "external-project", "compose_service": "app",
+        "working_dir": "/srv/external", "data_dir": "/srv/external/data",
+        "config_file": "/srv/external/config.json", "data_size_mb": 10,
+        "clone_available": True, "managed": False, "ownership": "compose",
+    }
+    plan = DeploymentPlanManager().create(ExtensionPlanRequest(
+        target=target, credential=SSHCredential(password="session-only"),
+        instance_id="external-app", strategy="existing", service_port=33010,
+    ), deployment_discovery(instances=[existing], listening_ports=[33010]))
+    updated = store.upsert_instance({
+        "id": "external-app", "target_id": "target-a", "service_port": plan["service_port"],
+        "install_dir": existing["working_dir"], "data_dir": existing["data_dir"],
+        "image": existing["image"], "managed": False,
+    })
+    assert updated.service_port == 33010
+
+
 def test_deployment_without_docker_or_elevation_fails_before_remote_write(tmp_path, monkeypatch):
-    class Result:
-        def __init__(self, status=0, stdout=""):
-            self.exit_status = status
-            self.stdout = stdout
-
-    class Connection:
-        def __init__(self):
-            self.commands = []
-
-        async def run(self, command, check=False, input=None, **_kwargs):
-            self.commands.append(command)
-            if command == 'printf %s "$HOME"':
-                return Result(stdout="/home/deploy-user")
-            if command == "id -u":
-                return Result(stdout="1000")
-            if command in {"docker version >/dev/null 2>&1", "sudo -n true >/dev/null 2>&1"}:
-                return Result(1)
-            raise AssertionError(f"remote write was attempted: {command}")
-
-        def close(self):
-            pass
-
-        async def wait_closed(self):
-            pass
-
-    connection = Connection()
-
-    async def fake_connect(_request):
-        return connection, TEST_HOST_KEY
-
     async def run():
-        monkeypatch.setattr("extensions.orchestrator._connect", fake_connect)
-        monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
-        manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
-        request = ExtensionDeployRequest(
-            target=ExtensionTarget(
-                id="t", name="VPS", host="host.example", username="deploy-user", chatgpt2api_port=33010,
-            ),
-            credential=SSHCredential(password="session-only"),
-            instance_id="chatgpt2api-dev",
-            confirmed_plan_id="plan-no-capability",
-        )
-        deployment_plans.plans["plan-no-capability"] = {
-            "id": "plan-no-capability", "project_id": "chatgpt2api", "target_id": "t",
-            "instance_id": "chatgpt2api-dev", "strategy": "isolated", "deployment_mode": "compose",
-            "service_port": 33010, "image": request.image,
-            "compose_project": "genbox-chatgpt2api-chatgpt2api-dev", "expires_at": 9999999999,
-        }
+        from extensions import orchestrator
 
-        task_id = manager.create(request)
-        await manager.runners[task_id]
-        assert manager.get(task_id)["status"] == "failed"
+        monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+        target = ExtensionTarget(
+            id="t", name="VPS", host="host.example", username="deploy-user",
+            host_key=TEST_HOST_KEY, chatgpt2api_port=33010,
+        )
+        credential = SSHCredential(password="session-only")
+        initial = deployment_discovery(path_conditions={"install_dir_absent": True})
+        plan_manager = DeploymentPlanManager()
+        plan = plan_manager.create(
+            ExtensionPlanRequest(target=target, credential=credential, service_port=33010),
+            initial,
+        )
+        drifted = copy.deepcopy(initial)
+        drifted["privileges"] = {
+            **privilege_snapshot(),
+            "docker_access": False,
+            "can_deploy": False,
+            "diagnostic_code": "no_sudo_or_docker",
+        }
+        remote_writes = []
+        async def fake_discover(_request, *, path_checks=None):
+            return copy.deepcopy(drifted)
+        async def forbidden_run(*_args, **_kwargs):
+            remote_writes.append(True)
+            raise AssertionError("deployment runner must not start")
+        monkeypatch.setattr(orchestrator, "deployment_plans", plan_manager)
+        monkeypatch.setattr("extensions.discovery.discover_environment", fake_discover)
+        manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
+        monkeypatch.setattr(manager, "_run", forbidden_run)
+        request = ExtensionDeployRequest(
+            target=target,
+            credential=credential,
+            instance_id="chatgpt2api-dev",
+            confirmed_plan_id=plan["id"],
+        )
+        with pytest.raises(ValueError):
+            await manager.create(request)
+        assert plan["id"] in plan_manager.plans
+        assert manager.tasks == {}
+        assert manager.runners == {}
+        assert not (tmp_path / "extension_tasks.json").exists()
+        assert remote_writes == []
 
     asyncio.run(run())
-    assert all(token not in command for command in connection.commands for token in ("mkdir", "base64 -d", "docker pull", "compose up"))
+
+
+@pytest.mark.parametrize("drift", [
+    "ports", "instances", "compose", "source_container", "image", "mount",
+    "disk", "path", "capability",
+])
+def test_fresh_remote_snapshot_drift_preserves_plan_and_creates_no_task(tmp_path, monkeypatch, drift):
+    from extensions import orchestrator
+
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33010,
+    )
+    credential = SSHCredential(password="session-only", elevation="passwordless_sudo")
+    source = {
+        "id": "source-app", "container_id": "source-container", "name": "source-app",
+        "image": "ghcr.io/yukkcat/chatgpt2api:latest", "source_image_id": "sha256:source-image",
+        "status": "Up 1 hour", "ports": "0.0.0.0:3000->80/tcp",
+        "published_ports": [3000], "service_port": 3000,
+        "compose_project": "source-project", "compose_service": "app",
+        "working_dir": "/srv/source", "data_dir": "/srv/source/data",
+        "config_file": "/srv/source/config.json", "data_size_mb": 100,
+        "clone_available": True, "managed": False, "ownership": "compose",
+    }
+    initial = deployment_discovery(
+        instances=[source],
+        privileges=privilege_snapshot(elevation="passwordless_sudo", can_admin=True),
+        listening_ports=[3000],
+        path_conditions={
+            "install_dir_absent": True,
+            "clone_data_dir_present": True,
+            "clone_config_file_present": True,
+        },
+    )
+    plan_manager = DeploymentPlanManager()
+    plan = plan_manager.create(ExtensionPlanRequest(
+        target=target, credential=credential, service_port=33010,
+        clone_source_id="source-app", clone_scope="working-copy",
+    ), initial)
+    fresh = copy.deepcopy(initial)
+    if drift == "ports":
+        fresh["environment"]["listening_ports"].append(33010)
+    elif drift == "instances":
+        fresh["instances"].append({**source, "id": "new-app", "container_id": "new-container"})
+    elif drift == "compose":
+        fresh["instances"][0]["compose_project"] = "changed-project"
+    elif drift == "source_container":
+        fresh["instances"][0]["container_id"] = "changed-container"
+    elif drift == "image":
+        fresh["instances"][0]["source_image_id"] = "sha256:changed-image"
+    elif drift == "mount":
+        fresh["instances"][0]["data_dir"] = "/srv/changed/data"
+    elif drift == "disk":
+        fresh["environment"]["disk_free_mb"] = 100
+    elif drift == "path":
+        fresh["path_conditions"]["install_dir_absent"] = False
+    elif drift == "capability":
+        fresh["privileges"]["can_deploy"] = False
+        fresh["privileges"]["diagnostic_code"] = "docker_unavailable"
+
+    async def fake_discover(_request, *, path_checks=None):
+        return copy.deepcopy(fresh)
+
+    runner_started = []
+    async def forbidden_run(*_args, **_kwargs):
+        runner_started.append(True)
+
+    async def run():
+        monkeypatch.setattr(orchestrator, "deployment_plans", plan_manager)
+        monkeypatch.setattr("extensions.discovery.discover_environment", fake_discover)
+        task_manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
+        monkeypatch.setattr(task_manager, "_run", forbidden_run)
+        request = ExtensionDeployRequest(
+            target=target, credential=credential, confirmed_plan_id=plan["id"],
+            clone_source_id="source-app", clone_scope="working-copy",
+        )
+        with pytest.raises(ValueError):
+            await task_manager.create(request)
+        assert plan["id"] in plan_manager.plans
+        assert "_lease_token" not in plan_manager.plans[plan["id"]]
+        assert task_manager.tasks == {}
+        assert task_manager.runners == {}
+        assert task_manager.deliveries == {}
+        assert runner_started == []
+        assert not (tmp_path / "extension_tasks.json").exists()
+
+    asyncio.run(run())
 
 
 def test_target_username_is_required_normalized_and_roundtrips(tmp_path, monkeypatch):
@@ -1434,6 +1687,36 @@ def test_target_username_is_required_normalized_and_roundtrips(tmp_path, monkeyp
     assert store.get_target(saved.id).username == "deploy-operator"
 
 
+def test_legacy_blank_username_quarantines_only_that_target_and_preserves_instances(tmp_path, monkeypatch):
+    path = tmp_path / "extensions.json"
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", path)
+    valid_instance = {
+        "id": "legacy-app", "target_id": "legacy-target", "service_port": 33010,
+        "install_dir": "/srv/legacy-app", "data_dir": "/srv/legacy-app/data",
+        "image": "example.invalid/app:stable", "status": "running",
+    }
+    path.write_text(json.dumps({
+        "targets": [
+            {"id": "valid-target", "name": "Valid", "host": "valid.example", "username": "operator"},
+            {"id": "legacy-target", "name": "Legacy", "host": "legacy.example", "username": "   "},
+        ],
+        "instances": [valid_instance],
+        "batch_target_ids": ["valid-target", "legacy-target"],
+    }), encoding="utf-8")
+
+    loaded = store.load_config()
+    assert [target.id for target in loaded.targets] == ["valid-target"]
+    assert [instance.id for instance in loaded.instances] == ["legacy-app"]
+    assert loaded.instances[0].target_id == "legacy-target"
+
+    store.save_config(loaded)
+    round_trip = store.load_config()
+    assert [target.username for target in round_trip.targets] == ["operator"]
+    assert [instance.id for instance in round_trip.instances] == ["legacy-app"]
+    serialized = path.read_text(encoding="utf-8")
+    assert '"username": "   "' not in serialized
+
+
 def test_isolated_working_copy_plan_requires_space_and_scrubs_push_state():
     manager = DeploymentPlanManager()
     target = ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", host_key=TEST_HOST_KEY)
@@ -1442,10 +1725,7 @@ def test_isolated_working_copy_plan_requires_space_and_scrubs_push_state():
         clone_source_id="chatgpt2api-warp", clone_scope="working-copy",
     )
     discovery = {
-        "environment": {
-            "docker_version": "27.0", "compose_version": "2.30",
-            "listening_ports": [3000], "disk_free_mb": 5000,
-        },
+        "environment": environment_snapshot(listening_ports=[3000]),
         "privileges": privilege_snapshot(elevation="passwordless_sudo", can_admin=True),
         "instances": [{
             "id": "chatgpt2api-warp", "image": "ghcr.io/yukkcat/chatgpt2api:latest",
@@ -1473,7 +1753,7 @@ def test_working_copy_plan_rejects_image_drift():
         clone_source_id="chatgpt2api-warp", clone_scope="working-copy",
     )
     discovery = {
-        "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": [], "disk_free_mb": 5000},
+        "environment": environment_snapshot(),
         "privileges": privilege_snapshot(elevation="passwordless_sudo", can_admin=True),
         "instances": [{
             "id": "chatgpt2api-warp", "image": "ghcr.io/yukkcat/chatgpt2api@sha256:abc",
@@ -1499,7 +1779,7 @@ def test_working_copy_plan_uses_existing_local_image_baseline():
         image=baseline_image, clone_source_id="chatgpt2api-warp", clone_scope="working-copy",
     )
     plan = manager.create(request, {
-        "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": [], "disk_free_mb": 5000},
+        "environment": environment_snapshot(),
         "privileges": privilege_snapshot(elevation="passwordless_sudo", can_admin=True),
         "instances": [{
             "id": "chatgpt2api-warp", "image": baseline_image,
@@ -1542,10 +1822,7 @@ def test_clone_plan_rejects_insufficient_disk():
     )
     try:
         manager.create(request, {
-            "environment": {
-                "docker_version": "27.0", "compose_version": "2.30",
-                "listening_ports": [], "disk_free_mb": 100,
-            },
+            "environment": environment_snapshot(disk_free_mb=100),
                 "privileges": privilege_snapshot(elevation="passwordless_sudo", can_admin=True),
                 "instances": [{
                     "id": "chatgpt2api-warp", "data_dir": "/data", "config_file": "/config.json",

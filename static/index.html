@@ -1010,10 +1010,12 @@
           <h3><span data-i18n="extensions.reset_key_label">重置管理密钥</span></h3>
           <p class="ext-reset-hint"><span data-i18n="extensions.reset_warning">为安全起见，重置需要重新验证该实例所属 VPS 的所有权。密钥仅在本机显示一次；旧密钥立即失效。</span></p>
           <div id="extResetInstance" class="ext-reset-instance"></div>
-          <label><span data-i18n="extensions.ssh_password">SSH 密码</span><input id="extResetPassword" type="password" autocomplete="current-password"></label>
-          <label><span data-i18n="extensions.or_private_key">或 SSH 私钥</span><textarea id="extResetKey" rows="4" spellcheck="false"></textarea></label>
+          <label><span data-i18n="extensions.ssh_password">SSH 密码</span><input id="extResetPassword" type="password" autocomplete="off" oninput="extensionResetCredentialChanged()"></label>
+          <label><span data-i18n="extensions.or_private_key">或 SSH 私钥</span><textarea id="extResetKey" rows="4" spellcheck="false" autocomplete="off" oninput="extensionResetCredentialChanged()"></textarea></label>
           <label><span data-i18n="extensions.key_passphrase">SSH 私钥口令</span><input id="extResetPassphrase" type="password" autocomplete="off"></label>
+          <label><span data-i18n="extensions.elevation_mode">提权方式</span><select id="extResetElevation" onchange="extensionResetCredentialChanged()"><option value="none" selected data-i18n="extensions.elevation_none">不使用 sudo</option><option value="passwordless_sudo" data-i18n="extensions.elevation_passwordless">免密 sudo</option><option value="password_sudo" data-i18n="extensions.elevation_password">密码 sudo</option></select></label>
           <label><span data-i18n="extensions.sudo_password">sudo 密码（默认不复用 SSH 密码）</span><input id="extResetSudo" type="password" autocomplete="off"></label>
+          <label class="extension-checkbox"><input id="extResetReuseSshPassword" type="checkbox" onchange="extensionResetCredentialChanged()"><span data-i18n="extensions.reuse_ssh_password">本次请求显式使用 SSH 密码作为 sudo 密码</span></label>
           <div id="extResetKeyResult" class="ext-reset-result hidden">
             <label><span data-i18n="extensions.new_key_once">新管理密钥（仅本次显示）</span><div class="extension-copy-row"><input id="extResetKeyNew" type="password" readonly><button class="btn-secondary" onclick="extensionRevealKey('extResetKeyNew')"><span data-i18n="common.show">显示</span></button><button class="btn-primary" onclick="extensionCopy('extResetKeyNew')"><span data-i18n="common.copy">复制</span></button></div></label>
             <div class="ext-reset-save"><input id="extResetVaultPassword" type="password" autocomplete="off" placeholder="凭证库解锁密码（如已锁定）" data-i18n-placeholder="extensions.vault_password_locked"><button class="btn-secondary" onclick="extensionSaveResetCredential()"><span data-i18n="extensions.save_local_copy">保存 / 更新本地副本</span></button></div>

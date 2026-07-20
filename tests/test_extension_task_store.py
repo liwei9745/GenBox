@@ -1,4 +1,5 @@
 import asyncio
+import copy
 from concurrent.futures import ThreadPoolExecutor
 import json
 import os
@@ -9,9 +10,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
-from extensions.models import ExtensionDeployRequest, ExtensionTarget, SSHCredential
+from extensions.models import ExtensionDeployRequest, ExtensionPlanRequest, ExtensionTarget, SSHCredential
 from extensions.deployment_failures import FAILURES, VALID_FAILURE_COMBINATIONS
-from extensions.orchestrator import ExtensionTaskManager, deployment_plans
+from extensions.orchestrator import DeploymentPlanManager, ExtensionTaskManager
 from extensions.task_store import TASK_STORE_SCHEMA_VERSION, TaskStore
 
 
@@ -31,6 +32,57 @@ def task(task_id, status="completed", updated_at="2026-07-17T00:00:00.000Z", **e
         "recovery_action": None,
         **extra,
     }
+
+
+def prepare_deployment_plan(monkeypatch, request: ExtensionDeployRequest):
+    from extensions import orchestrator
+
+    target = request.target.model_copy(update={"host_key": "SHA256:public-test"})
+    request = request.model_copy(update={"target": target, "trust_host_key": False})
+    auth_kind = "private_key" if request.credential.private_key else "password"
+    privileges = {
+        "auth_kind": auth_kind,
+        "elevation_contract": request.credential.elevation,
+        "is_root": False,
+        "docker_access": True,
+        "elevated_docker_access": False,
+        "passwordless_sudo": False,
+        "password_sudo": False,
+        "can_admin": False,
+        "can_deploy": True,
+        "diagnostic_code": "legacy_discovery",
+    }
+    discovery = {
+        "host_key": target.host_key,
+        "environment": {
+            "docker_version": "27.0", "compose_version": "2.30",
+            "home_dir": "/home/ubuntu", "listening_ports": [], "disk_free_mb": 5000,
+        },
+        "privileges": privileges,
+        "instances": [],
+        "path_conditions": {"install_dir_absent": True},
+    }
+    plan_manager = DeploymentPlanManager()
+    plan = plan_manager.create(ExtensionPlanRequest(
+        project_id=request.project_id,
+        target=target,
+        credential=request.credential,
+        instance_id=request.instance_id,
+        strategy=request.strategy,
+        deployment_mode=request.deployment_mode,
+        service_port=target.chatgpt2api_port,
+        image=request.image,
+        clone_source_id=request.clone_source_id,
+        clone_scope=request.clone_scope,
+    ), discovery)
+    request = request.model_copy(update={"confirmed_plan_id": plan["id"]})
+    monkeypatch.setattr(orchestrator, "deployment_plans", plan_manager)
+
+    async def fake_discover(_request, *, path_checks=None):
+        return copy.deepcopy(discovery)
+
+    monkeypatch.setattr("extensions.discovery.discover_environment", fake_discover)
+    return request, plan_manager, plan
 
 
 def test_task_store_roundtrip_uses_versioned_atomic_json(tmp_path, monkeypatch):
@@ -372,12 +424,8 @@ def test_done_runner_reference_is_removed_after_task_finishes(tmp_path, monkeypa
             target=ExtensionTarget(id="t", name="VPS", host="host.example", username="ubuntu", chatgpt2api_port=33010),
             credential=SSHCredential(password="test-only"), confirmed_plan_id="runner-cleanup",
         )
-        deployment_plans.plans["runner-cleanup"] = {
-            "id": "runner-cleanup", "project_id": "chatgpt2api", "target_id": "t", "instance_id": request.instance_id,
-            "strategy": "isolated", "deployment_mode": "compose", "service_port": 33010,
-            "image": request.image, "compose_project": "runner-cleanup", "expires_at": 9999999999,
-        }
-        task_id = manager.create(request)
+        request, _plan_manager, _plan = prepare_deployment_plan(monkeypatch, request)
+        task_id = await manager.create(request)
         runner = manager.runners[task_id]
         await runner
         await asyncio.sleep(0)
@@ -517,12 +565,8 @@ def test_cancelled_runner_cannot_overwrite_persisted_cancelled_state(tmp_path, m
             credential=SSHCredential(password="test-only"), trust_host_key=True,
             instance_id="chatgpt2api-dev", confirmed_plan_id="cancel-race",
         )
-        deployment_plans.plans["cancel-race"] = {
-            "id": "cancel-race", "project_id": "chatgpt2api", "target_id": "t", "instance_id": "chatgpt2api-dev",
-            "strategy": "isolated", "deployment_mode": "compose", "service_port": 33010,
-            "image": request.image, "compose_project": "genbox-chatgpt2api-chatgpt2api-dev", "expires_at": 9999999999,
-        }
-        task_id = manager.create(request)
+        request, _plan_manager, _plan = prepare_deployment_plan(monkeypatch, request)
+        task_id = await manager.create(request)
         await entered_verify.wait()
         assert manager.cancel(task_id) is True
         blocked.set()
@@ -548,12 +592,8 @@ def test_new_deployment_task_initializes_structured_failure_fields(tmp_path, mon
             target=ExtensionTarget(id="t", name="VPS", host="host.example", username="ubuntu", chatgpt2api_port=33010),
             credential=SSHCredential(password="test-only"), confirmed_plan_id="structured-init",
         )
-        deployment_plans.plans["structured-init"] = {
-            "id": "structured-init", "project_id": "chatgpt2api", "target_id": "t", "instance_id": request.instance_id,
-            "strategy": "isolated", "deployment_mode": "compose", "service_port": 33010,
-            "image": request.image, "compose_project": "structured-init", "expires_at": 9999999999,
-        }
-        task_id = manager.create(request)
+        request, _plan_manager, _plan = prepare_deployment_plan(monkeypatch, request)
+        task_id = await manager.create(request)
         state = manager.get(task_id)
         assert state["failed_phase"] is None
         assert state["error_code"] is None
@@ -562,6 +602,50 @@ def test_new_deployment_task_initializes_structured_failure_fields(tmp_path, mon
         await manager.runners[task_id]
 
     asyncio.run(run())
+
+
+def test_deploy_route_store_failure_restores_plan_without_task_runner_or_remote_write(tmp_path, monkeypatch):
+    target = ExtensionTarget(
+        id="t", name="VPS", host="host.example", username="deploy-user",
+        host_key="SHA256:public-test", chatgpt2api_port=33010,
+    )
+    request = ExtensionDeployRequest(
+        target=target,
+        credential=SSHCredential(password="transaction-test-only"),
+        instance_id="transaction-app",
+    )
+    request, plan_manager, plan = prepare_deployment_plan(monkeypatch, request)
+    manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
+    runner_started = []
+
+    async def forbidden_run(*_args, **_kwargs):
+        runner_started.append(True)
+
+    def fail_save(_tasks):
+        raise OSError("injected task store failure")
+
+    monkeypatch.setattr(manager, "_run", forbidden_run)
+    monkeypatch.setattr(manager.store, "save", fail_save)
+    monkeypatch.setattr(main, "extension_tasks", manager)
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    response = TestClient(main.app, base_url="http://testserver").post(
+        "/api/extensions/deploy",
+        json=request.model_dump(),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["diagnostic"] == {
+        "code": "extension_deploy_preflight_failed",
+        "stage": "deployment_preflight",
+        "retry_safe": False,
+    }
+    assert plan["id"] in plan_manager.plans
+    assert "_lease_token" not in plan_manager.plans[plan["id"]]
+    assert manager.tasks == {}
+    assert manager.runners == {}
+    assert manager.deliveries == {}
+    assert runner_started == []
+    assert not (tmp_path / "extension_tasks.json").exists()
 
 
 @pytest.mark.parametrize(("scenario", "expected"), [
@@ -596,7 +680,7 @@ def test_runtime_failures_are_structured_sanitized_and_stage_accurate(tmp_path, 
             if command == "id -u":
                 return Result(stdout="0")
             if command == 'printf %s "$HOME"':
-                return Result(stdout="/home/test")
+                return Result(stdout="/home/ubuntu")
             if scenario == "docker" and command == "docker version >/dev/null 2>&1":
                 raise RuntimeError("password=never-persist host=203.0.113.10 /private/path")
             if scenario == "prepare" and "test ! -e" in command:
@@ -630,13 +714,8 @@ def test_runtime_failures_are_structured_sanitized_and_stage_accurate(tmp_path, 
             credential=SSHCredential(password="test-only"), trust_host_key=True,
             instance_id="loop3b-instance", confirmed_plan_id=f"loop3b-{scenario}",
         )
-        deployment_plans.plans[request.confirmed_plan_id] = {
-            "id": request.confirmed_plan_id, "project_id": "chatgpt2api", "target_id": "t",
-            "instance_id": request.instance_id, "strategy": "isolated", "deployment_mode": "compose",
-            "service_port": 33010, "image": request.image, "compose_project": "genbox-loop3b",
-            "expires_at": 9999999999,
-        }
-        task_id = manager.create(request)
+        request, _plan_manager, _plan = prepare_deployment_plan(monkeypatch, request)
+        task_id = await manager.create(request)
         runner = manager.runners[task_id]
         await runner
         state = manager.get(task_id)
@@ -665,7 +744,7 @@ def test_connection_close_errors_do_not_overwrite_failed_terminal_state(tmp_path
             if command == "id -u":
                 return type("R", (), {"stdout": "0", "exit_status": 0})()
             if command == 'printf %s "$HOME"':
-                return type("R", (), {"stdout": "/home/test", "exit_status": 0})()
+                return type("R", (), {"stdout": "/home/ubuntu", "exit_status": 0})()
             if "test ! -e" in command:
                 return type("R", (), {"stdout": "", "exit_status": 1})()
             return type("R", (), {"stdout": "", "exit_status": 0})()
@@ -681,12 +760,8 @@ def test_connection_close_errors_do_not_overwrite_failed_terminal_state(tmp_path
             credential=SSHCredential(password="test-only"), trust_host_key=True,
             instance_id="loop3b-close", confirmed_plan_id="loop3b-close",
         )
-        deployment_plans.plans["loop3b-close"] = {
-            "id": "loop3b-close", "project_id": "chatgpt2api", "target_id": "t", "instance_id": "loop3b-close",
-            "strategy": "isolated", "deployment_mode": "compose", "service_port": 33010,
-            "image": request.image, "compose_project": "genbox-loop3b-close", "expires_at": 9999999999,
-        }
-        task_id = manager.create(request)
+        request, _plan_manager, _plan = prepare_deployment_plan(monkeypatch, request)
+        task_id = await manager.create(request)
         await manager.runners[task_id]
         state = manager.get(task_id)
         assert state["status"] == "failed"
@@ -1246,6 +1321,26 @@ const key='SHA256:AAAAAAAAAAAAAAAAAAAA';const target={id:'saved',name:'Saved',ho
 global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:false,docker_access:false,passwordless_sudo:false,password_sudo:false,can_deploy:false,diagnostic_code:'no_sudo_or_docker'}};else if(url==='/api/extensions/discover'){discoveryCalls+=1;body={}}return {ok:true,text:async()=>JSON.stringify(body)}};
 eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();await window.extensionTestSSH(false);
 if(!element('extSshNextBtn').disabled)throw new Error('can_deploy=false unlocked SSH next');if(element('extGuidePrimaryBtn').textContent==='common.next')throw new Error('can_deploy=false unlocked novice next');await window.extensionDiscover();if(discoveryCalls!==0)throw new Error('can_deploy=false unlocked discovery');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_managed_key_reset_submits_passwordless_and_explicit_reuse_contracts_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+(async()=>{
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set();elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,checked:false,readOnly:false,placeholder:'',dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
+const network={value:'tailscale',checked:true,classList:{toggle(){}}};global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('extNetwork'))return network;return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});global.localStorage=new Proxy({}, {get(){throw new Error('reset touched browser storage')},set(){throw new Error('reset touched browser storage')}});
+const key='SHA256:AAAAAAAAAAAAAAAAAAAA';const target={id:'saved',name:'Saved',host:'vps.example',port:22,username:'deploy-user',host_key:key,chatgpt2api_port:33010};const bodies=[];
+global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/network/local/tailscale/status')body={installed:false,online:false,serve:false};else if(url==='/api/extensions/instances/reset-admin-key'){bodies.push(JSON.parse(options.body));body={admin_key:'gbx-test-only'}}return {ok:true,text:async()=>JSON.stringify(body)}};
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');window.extensionOpenResetModal('managed-app');
+element('extResetPassword').value='login-session';element('extResetElevation').value='passwordless_sudo';element('extResetSudo').value='must-clear';element('extResetReuseSshPassword').checked=true;window.extensionResetCredentialChanged();await window.extensionConfirmResetKey();
+if(bodies.length!==1)throw new Error('passwordless reset was not submitted');let c=bodies[0].credential;if(c.elevation!=='passwordless_sudo'||c.sudo_password||c.reuse_ssh_password)throw new Error('passwordless reset contract was inferred incorrectly');
+window.extensionOpenResetModal('managed-app');element('extResetPassword').value='same-session';element('extResetElevation').value='password_sudo';element('extResetSudo').value='must-not-send';element('extResetReuseSshPassword').checked=true;window.extensionResetCredentialChanged();await window.extensionConfirmResetKey();
+if(bodies.length!==2)throw new Error('reuse reset was not submitted');c=bodies[1].credential;if(c.elevation!=='password_sudo'||c.reuse_ssh_password!==true||c.password!=='same-session'||c.sudo_password)throw new Error('explicit reuse reset contract was not preserved');if(JSON.stringify(bodies).includes('must-not-send'))throw new Error('unused sudo secret was submitted');
 })();
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)

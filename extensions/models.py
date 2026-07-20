@@ -82,8 +82,16 @@ class SSHCredential(BaseModel):
     def require_exactly_one_authentication_method(self):
         if bool(self.password) == bool(self.private_key):
             raise ValueError("请选择且只选择一种 SSH 凭据：密码或私钥")
-        if self.reuse_ssh_password and not self.password:
-            raise ValueError("只有密码 SSH 认证可以显式复用 SSH 密码进行 sudo 提权")
+        if self.elevation in {"none", "passwordless_sudo"}:
+            if self.sudo_password or self.reuse_ssh_password:
+                raise ValueError("当前提权方式不接受 sudo 密码或 SSH 密码复用")
+        elif self.elevation == "password_sudo":
+            if self.reuse_ssh_password and not self.password:
+                raise ValueError("只有密码 SSH 认证可以显式复用 SSH 密码进行 sudo 提权")
+            if self.sudo_password and self.reuse_ssh_password:
+                raise ValueError("sudo 密码与 SSH 密码复用只能选择一种")
+            if not self.sudo_password and not self.reuse_ssh_password:
+                raise ValueError("密码 sudo 必须提供独立 sudo 密码或显式选择复用 SSH 密码")
         return self
 
 

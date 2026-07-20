@@ -174,6 +174,7 @@ def test_existing_mode_detect_does_not_send_input_or_use_sudo(monkeypatch):
         payload["operation_mode"] = "existing"
         payload["enrollment_token"] = ""
         payload["credential"]["sudo_password"] = "sudo-secret"
+        payload["credential"]["elevation"] = "password_sudo"
         monkeypatch.setattr("extensions.network_adapters._connect", fake_connect)
         monkeypatch.setattr("extensions.network_adapters.local_status", lambda: {"online": True, "dns_name": "genbox.example.ts.net", "serve_port": 8893, "app_port": 8892})
         monkeypatch.setattr("extensions.network_adapters.enable_genbox_serve", lambda: {

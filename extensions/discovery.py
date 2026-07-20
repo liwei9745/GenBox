@@ -52,7 +52,34 @@ def _version_number(value: str) -> tuple[int, ...]:
     return tuple(int(part) for part in match.group(1).split(".")) if match else ()
 
 
-async def discover_environment(request: ExtensionDiscoveryRequest) -> dict[str, Any]:
+def _parse_published_ports(value: str) -> list[int]:
+    try:
+        bindings = json.loads(value or "{}")
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(bindings, dict):
+        return []
+    ports: set[int] = set()
+    for items in bindings.values():
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            try:
+                port = int(item.get("HostPort") or 0)
+            except (TypeError, ValueError):
+                continue
+            if 1 <= port <= 65535:
+                ports.add(port)
+    return sorted(ports)
+
+
+async def discover_environment(
+    request: ExtensionDiscoveryRequest,
+    *,
+    path_checks: dict[str, dict[str, str]] | None = None,
+) -> dict[str, Any]:
     connection, fingerprint = await _connect(request)
     if connection is None:
         raise PermissionError("需要先确认 VPS 主机指纹")
@@ -65,6 +92,7 @@ async def discover_environment(request: ExtensionDiscoveryRequest) -> dict[str, 
             "cpu": "getconf _NPROCESSORS_ONLN 2>/dev/null || nproc",
             "memory_mb": "awk '/MemTotal/{printf \"%d\", $2/1024}' /proc/meminfo",
             "disk_mb": "df -Pm \"$HOME\" | awk 'NR==2{print $4}'",
+            "home": "printf %s \"$HOME\"",
             "docker": "docker version --format '{{.Server.Version}}' 2>/dev/null",
             "compose": "docker compose version --short 2>/dev/null",
             "python": "python3 --version 2>/dev/null",
@@ -84,6 +112,21 @@ async def discover_environment(request: ExtensionDiscoveryRequest) -> dict[str, 
             for line in facts["ports"].splitlines()
             if (match := re.search(r":(\d+)$", line.strip()))
         })
+        path_conditions: dict[str, bool] = {}
+        for name, check in (path_checks or {}).items():
+            path = str(check.get("path") or "")
+            kind = str(check.get("kind") or "")
+            if not path.startswith("/") or kind not in {"absent", "directory", "file"}:
+                path_conditions[name] = False
+                continue
+            predicate = {"absent": "! -e", "directory": "-d", "file": "-f"}[kind]
+            status, _ = await _run_docker(
+                connection,
+                f"test {predicate} {shlex.quote(path)}",
+                request.credential,
+                privileges,
+            )
+            path_conditions[name] = status == 0
         instances = []
         for line in facts["containers"].splitlines():
             try:
@@ -129,6 +172,13 @@ async def discover_environment(request: ExtensionDiscoveryRequest) -> dict[str, 
                 f"genbox-chatgpt2api-source:{container_id[:12]}"
                 if image_id.startswith("sha256:") else configured_image or image
             )
+            _, structured_ports = await _run_docker(
+                connection,
+                f"docker inspect --format '{{{{json .NetworkSettings.Ports}}}}' {shlex.quote(container_id)} 2>/dev/null",
+                request.credential,
+                privileges,
+            )
+            published_ports = _parse_published_ports(structured_ports)
             _, data_dir = await _run_docker(connection, (
                 f"docker inspect --format '{{{{range .Mounts}}}}{{{{if eq .Destination \"/app/data\"}}}}"
                 f"{{{{.Source}}}}{{{{end}}}}{{{{end}}}}' {container_id} 2>/dev/null"
@@ -161,6 +211,8 @@ async def discover_environment(request: ExtensionDiscoveryRequest) -> dict[str, 
                 "source_image_id": image_id,
                 "status": str(item.get("Status") or ""),
                 "ports": str(item.get("Ports") or ""),
+                "published_ports": published_ports,
+                "service_port": published_ports[0] if len(published_ports) == 1 else None,
                 "compose_project": compose_project,
                 "compose_service": compose_service,
                 "working_dir": working_dir,
@@ -199,10 +251,12 @@ async def discover_environment(request: ExtensionDiscoveryRequest) -> dict[str, 
             "environment": {
                 "os": facts["os"], "arch": facts["arch"], "cpu": int(facts["cpu"] or 0),
                 "memory_mb": memory_mb, "disk_free_mb": int(facts["disk_mb"] or 0),
+                "home_dir": facts["home"],
                 "docker_version": facts["docker"], "compose_version": facts["compose"],
                 "python_version": facts["python"], "uv_version": facts["uv"], "listening_ports": ports,
             },
             "instances": instances,
+            "path_conditions": path_conditions,
             "deployment_modes": modes,
             "recommendation": recommendation,
             "warnings": (["检测到已有实例，默认不执行任何修改。"] if instances else []),
