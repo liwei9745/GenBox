@@ -3,9 +3,11 @@ import base64
 import copy
 import hmac
 import hashlib
+import ipaddress
 import io
 import json
 import os
+import posixpath
 import re
 import secrets
 import shlex
@@ -52,6 +54,80 @@ class SSHConnectionError(ConnectionError):
     def __init__(self, message: str, *, code: str, stage: str):
         super().__init__(message)
         self.diagnostic = {"code": code, "stage": stage, "retry_safe": False}
+
+
+class DeploymentResourceConflictError(ValueError):
+    """A deterministic conflict that does not expose remote resource details."""
+
+    def __init__(self):
+        super().__init__("deployment_resource_conflict")
+
+
+class DeploymentResourceReservations:
+    """Process-local claims; the atomic remote directory claim remains the restart guard."""
+
+    def __init__(self):
+        self.lock = threading.RLock()
+        self.claims: dict[tuple[Any, ...], str] = {}
+        self.reservations: dict[str, frozenset[tuple[Any, ...]]] = {}
+
+    @staticmethod
+    def _normalized_host(value: Any) -> str:
+        host = str(value or "").strip().lower().rstrip(".")
+        candidate = host[1:-1] if host.startswith("[") and host.endswith("]") else host
+        try:
+            return ipaddress.ip_address(candidate).compressed
+        except ValueError:
+            return host
+
+    @staticmethod
+    def _normalized_path(value: Any) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+        return posixpath.normpath("/" + raw.lstrip("/"))
+
+    @classmethod
+    def _claims_for(cls, plan: dict) -> frozenset[tuple[Any, ...]]:
+        target_scopes = {
+            ("target_id", str(plan.get("target_id") or "").strip().casefold()),
+            ("endpoint", cls._normalized_host(plan.get("host")), int(plan.get("ssh_port") or 0)),
+            ("host_key", str(plan.get("host_fingerprint") or "").strip()),
+        }
+        target_scopes = {scope for scope in target_scopes if any(scope[1:])}
+        resources = {
+            ("instance_id", str(plan.get("instance_id") or "").strip()),
+            ("install_dir", cls._normalized_path(plan.get("install_dir"))),
+            ("compose_project", str(plan.get("compose_project") or "").strip().casefold()),
+            ("service_port", int(plan.get("service_port") or 0)),
+        }
+        resources = {resource for resource in resources if resource[1] not in {"", 0}}
+        return frozenset((scope, resource) for scope in target_scopes for resource in resources)
+
+    def acquire(self, plan: dict) -> str:
+        claims = self._claims_for(plan)
+        token = uuid.uuid4().hex
+        with self.lock:
+            if any(claim in self.claims for claim in claims):
+                raise DeploymentResourceConflictError()
+            for claim in claims:
+                self.claims[claim] = token
+            self.reservations[token] = claims
+        return token
+
+    def release(self, token: str) -> None:
+        if not token:
+            return
+        with self.lock:
+            claims = self.reservations.pop(token, frozenset())
+            for claim in claims:
+                if self.claims.get(claim) == token:
+                    self.claims.pop(claim, None)
+
+    @property
+    def active_count(self) -> int:
+        with self.lock:
+            return len(self.reservations)
 
 
 IMAGE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/:@-]{2,255}$")
@@ -440,12 +516,19 @@ async def test_connection(request: ExtensionTestRequest) -> dict:
 
 
 class ExtensionTaskManager:
-    def __init__(self, store: TaskStore | None = None, store_path=None):
+    def __init__(
+        self,
+        store: TaskStore | None = None,
+        store_path=None,
+        resource_reservations: DeploymentResourceReservations | None = None,
+    ):
         self.store = store or TaskStore(store_path)
         self.lock = threading.RLock()
         self.tasks: dict[str, dict] = {task["id"]: task for task in self.store.load() if task.get("id")}
         self.runners: dict[str, asyncio.Task] = {}
         self.deliveries: dict[str, str] = {}
+        self.resource_reservations = resource_reservations or DeploymentResourceReservations()
+        self.task_reservations: dict[str, str] = {}
         self._recover_tasks()
 
     @staticmethod
@@ -493,6 +576,7 @@ class ExtensionTaskManager:
     async def create(self, request: ExtensionDeployRequest) -> str:
         validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
         lease_token, leased_plan = deployment_plans.lease(request.confirmed_plan_id, request)
+        reservation_token = ""
         try:
             from extensions.discovery import discover_environment
 
@@ -501,8 +585,10 @@ class ExtensionTaskManager:
                 path_checks=leased_plan.get("path_requirements", {}),
             )
             deployment_plans.validate_fresh_snapshot(leased_plan, fresh_discovery)
+            reservation_token = self.resource_reservations.acquire(leased_plan)
             plan = deployment_plans.consume_lease(request.confirmed_plan_id, lease_token, request)
         except Exception:
+            self.resource_reservations.release(reservation_token)
             deployment_plans.release(request.confirmed_plan_id, lease_token)
             raise
 
@@ -511,12 +597,14 @@ class ExtensionTaskManager:
         previous_tasks = None
         previous_runners = None
         previous_deliveries = None
+        previous_task_reservations = None
         try:
             task_id = uuid.uuid4().hex[:12]
             with self.lock:
                 previous_tasks = copy.deepcopy(self.tasks)
                 previous_runners = dict(self.runners)
                 previous_deliveries = dict(self.deliveries)
+                previous_task_reservations = dict(self.task_reservations)
                 self.tasks[task_id] = {
                     "id": task_id, "status": "queued", "phase": "connect", "progress": 0,
                     "steps": [{"id": key, "label": label, "status": "pending"} for key, label in DEPLOY_STEPS],
@@ -524,6 +612,7 @@ class ExtensionTaskManager:
                     "created_at": self._now(), "updated_at": self._now(), "recovery_action": None,
                     "failed_phase": None, "error_code": None,
                 }
+                self.task_reservations[task_id] = reservation_token
                 runner = asyncio.create_task(self._run(task_id, request, plan))
                 self.runners[task_id] = runner
                 runner.add_done_callback(lambda completed: self._discard_done_runner(task_id, completed))
@@ -534,16 +623,27 @@ class ExtensionTaskManager:
                     self.tasks = previous_tasks
                     self.runners = previous_runners or {}
                     self.deliveries = previous_deliveries or {}
+                    self.task_reservations = previous_task_reservations or {}
                 if runner is not None:
                     runner.cancel()
+            self.resource_reservations.release(reservation_token)
             deployment_plans.restore(plan)
             raise
         return task_id
 
     def _discard_done_runner(self, task_id: str, runner: asyncio.Task) -> None:
+        reservation_token = ""
         with self.lock:
             if self.runners.get(task_id) is runner and runner.done():
                 self.runners.pop(task_id, None)
+                reservation_token = self.task_reservations.pop(task_id, "")
+        self.resource_reservations.release(reservation_token)
+
+    def _release_task_reservation(self, task_id: str) -> None:
+        # Never hold the task lock while taking the reservation lock.
+        with self.lock:
+            reservation_token = self.task_reservations.pop(task_id, "")
+        self.resource_reservations.release(reservation_token)
 
     def get(self, task_id: str) -> dict | None:
         with self.lock:
@@ -738,9 +838,15 @@ class ExtensionTaskManager:
                 image_prepare = f"docker image inspect {shlex.quote(source_image_id)} >/dev/null"
                 if plan["image"].startswith("genbox-chatgpt2api-source:"):
                     image_prepare += f" && docker tag {shlex.quote(source_image_id)} {shlex.quote(plan['image'])}"
+            install_parent = posixpath.dirname(install_dir.rstrip("/"))
             commands = [
                 ("docker version --format '{{.Server.Version}}'", "docker"),
-                (f"test ! -e {shlex.quote(install_dir + '/.genbox-instance')} && mkdir -p {shlex.quote(install_dir + '/data')}", "none"),
+                (
+                    f"umask 077; mkdir -p {shlex.quote(install_parent)} "
+                    f"&& mkdir {shlex.quote(install_dir)} "
+                    f"&& mkdir {shlex.quote(install_dir + '/data')}",
+                    "none",
+                ),
                 (image_prepare, "docker"),
             ]
             for offset, (command, privilege) in enumerate(commands, start=1):
@@ -895,6 +1001,7 @@ class ExtensionTaskManager:
                     await connection.wait_closed()
                 except Exception:
                     pass
+            self._release_task_reservation(task_id)
 
 
 extension_tasks = ExtensionTaskManager()

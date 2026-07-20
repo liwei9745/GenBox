@@ -12,7 +12,12 @@ from fastapi.testclient import TestClient
 import main
 from extensions.models import ExtensionDeployRequest, ExtensionPlanRequest, ExtensionTarget, SSHCredential
 from extensions.deployment_failures import FAILURES, VALID_FAILURE_COMBINATIONS
-from extensions.orchestrator import DeploymentPlanManager, ExtensionTaskManager
+from extensions.orchestrator import (
+    DeploymentPlanManager,
+    DeploymentResourceConflictError,
+    DeploymentResourceReservations,
+    ExtensionTaskManager,
+)
 from extensions.task_store import TASK_STORE_SCHEMA_VERSION, TaskStore
 
 
@@ -56,7 +61,7 @@ def prepare_deployment_plan(monkeypatch, request: ExtensionDeployRequest):
         "host_key": target.host_key,
         "environment": {
             "docker_version": "27.0", "compose_version": "2.30",
-            "home_dir": "/home/ubuntu", "listening_ports": [], "disk_free_mb": 5000,
+            "home_dir": f"/home/{target.username}", "listening_ports": [], "disk_free_mb": 5000,
         },
         "privileges": privileges,
         "instances": [],
@@ -133,7 +138,9 @@ def test_running_or_queued_task_recovers_as_interrupted_without_runner(tmp_path)
         assert state["status"] == "interrupted"
         assert state["recovery_action"] == "regenerate_plan_and_reprovide_credentials"
         assert task_id not in rebuilt.runners
+        assert task_id not in rebuilt.task_reservations
     assert rebuilt.list_summary()["active_task_id"] is None
+    assert rebuilt.resource_reservations.active_count == 0
 
 
 def test_corrupt_or_unknown_schema_is_quarantined_without_overwriting_original(tmp_path):
@@ -430,6 +437,7 @@ def test_done_runner_reference_is_removed_after_task_finishes(tmp_path, monkeypa
         await runner
         await asyncio.sleep(0)
         assert task_id not in manager.runners
+        assert manager.resource_reservations.active_count == 0
 
     asyncio.run(run())
 
@@ -573,6 +581,7 @@ def test_cancelled_runner_cannot_overwrite_persisted_cancelled_state(tmp_path, m
         await manager.runners[task_id]
         assert manager.get(task_id)["status"] == "cancelled"
         assert manager.get(task_id)["result"] is None
+        assert manager.resource_reservations.active_count == 0
         persisted = json.loads((tmp_path / "extension_tasks.json").read_text(encoding="utf-8"))
         assert persisted["tasks"][0]["status"] == "cancelled"
 
@@ -644,8 +653,240 @@ def test_deploy_route_store_failure_restores_plan_without_task_runner_or_remote_
     assert manager.tasks == {}
     assert manager.runners == {}
     assert manager.deliveries == {}
+    assert manager.resource_reservations.active_count == 0
     assert runner_started == []
     assert not (tmp_path / "extension_tasks.json").exists()
+
+
+def test_concurrent_plans_for_same_resource_allow_one_task_and_retain_loser_plan(tmp_path, monkeypatch):
+    from extensions import orchestrator
+
+    class Result:
+        def __init__(self, exit_status=0, stdout=""):
+            self.exit_status = exit_status
+            self.stdout = stdout
+
+    class Instance:
+        def model_dump(self):
+            return {"id": "shared-app", "managed": True}
+
+    first_write_started = asyncio.Event()
+    release_first_write = asyncio.Event()
+    remote_commands = []
+    connection_count = 0
+
+    class Connection:
+        async def run(self, command, check=False, **kwargs):
+            remote_commands.append(command)
+            if command == 'printf %s "$HOME"':
+                return Result(stdout="/home/deploy-user")
+            if "&& mkdir /home/deploy-user/genbox-apps/chatgpt2api/shared-app" in command:
+                first_write_started.set()
+                await release_first_write.wait()
+            return Result()
+
+        def close(self):
+            pass
+
+        async def wait_closed(self):
+            pass
+
+    async def fake_connect(_request):
+        nonlocal connection_count
+        connection_count += 1
+        return Connection(), "SHA256:public-test"
+
+    privileges = {
+        "auth_kind": "password", "elevation_contract": "none", "is_root": False,
+        "docker_access": True, "elevated_docker_access": False,
+        "passwordless_sudo": False, "password_sudo": False,
+        "can_admin": False, "can_deploy": True, "diagnostic_code": "legacy_discovery",
+    }
+    discovery = {
+        "host_key": "SHA256:public-test",
+        "environment": {
+            "docker_version": "27.0", "compose_version": "2.30",
+            "home_dir": "/home/deploy-user", "listening_ports": [], "disk_free_mb": 5000,
+        },
+        "privileges": privileges,
+        "instances": [],
+        "path_conditions": {"install_dir_absent": True},
+    }
+    target = ExtensionTarget(
+        id="shared-target", name="VPS", host="host.example", username="deploy-user",
+        host_key="SHA256:public-test", chatgpt2api_port=33010,
+    )
+    credential = SSHCredential(password="concurrency-test-only")
+    plan_manager = DeploymentPlanManager()
+    plan_request = ExtensionPlanRequest(
+        target=target, credential=credential, instance_id="shared-app", service_port=33010,
+    )
+    first_plan = plan_manager.create(plan_request, discovery)
+    second_plan = plan_manager.create(plan_request, discovery)
+    first_request = ExtensionDeployRequest(
+        target=target, credential=credential, instance_id="shared-app",
+        confirmed_plan_id=first_plan["id"],
+    )
+    second_request = first_request.model_copy(update={"confirmed_plan_id": second_plan["id"]})
+    discovery_gate = asyncio.Event()
+    discovery_count = 0
+
+    async def fake_discover(_request, *, path_checks=None):
+        nonlocal discovery_count
+        discovery_count += 1
+        if discovery_count == 2:
+            discovery_gate.set()
+        await discovery_gate.wait()
+        return copy.deepcopy(discovery)
+
+    async def fake_privileges(_connection, _credential):
+        return copy.deepcopy(privileges)
+
+    async def run():
+        monkeypatch.setattr(orchestrator, "deployment_plans", plan_manager)
+        monkeypatch.setattr("extensions.discovery.discover_environment", fake_discover)
+        monkeypatch.setattr(orchestrator, "_connect", fake_connect)
+        monkeypatch.setattr(orchestrator, "_diagnose_privileges", fake_privileges)
+        monkeypatch.setattr(orchestrator.extensions_store, "upsert_instance", lambda _record: Instance())
+        manager = ExtensionTaskManager(store_path=tmp_path / "concurrent.json")
+
+        results = await asyncio.gather(
+            manager.create(first_request), manager.create(second_request), return_exceptions=True,
+        )
+        task_ids = [result for result in results if isinstance(result, str)]
+        conflicts = [result for result in results if isinstance(result, DeploymentResourceConflictError)]
+        assert len(task_ids) == 1
+        assert len(conflicts) == 1
+        assert str(conflicts[0]) == "deployment_resource_conflict"
+        assert all(secret not in str(conflicts[0]) for secret in (
+            "host.example", "deploy-user", "/home/deploy-user", "concurrency-test-only",
+        ))
+
+        await asyncio.wait_for(first_write_started.wait(), timeout=1)
+        assert connection_count == 1
+        assert len(manager.tasks) == 1
+        assert len(manager.runners) == 1
+        assert manager.resource_reservations.active_count == 1
+        assert len([command for command in remote_commands if "&& mkdir " in command]) == 1
+        persisted = TaskStore(tmp_path / "concurrent.json").load()
+        assert len(persisted) == 1
+
+        loser_plan = first_plan if isinstance(results[0], DeploymentResourceConflictError) else second_plan
+        assert loser_plan["id"] in plan_manager.plans
+        assert "_lease_token" not in plan_manager.plans[loser_plan["id"]]
+
+        runner = manager.runners[task_ids[0]]
+        release_first_write.set()
+        await runner
+        assert manager.resource_reservations.active_count == 0
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("first,second", [
+    (
+        {"target_id": "one", "host": "HOST.EXAMPLE.", "host_fingerprint": "SHA256:first", "ssh_port": 22,
+         "instance_id": "app-one", "install_dir": "/srv/one", "compose_project": "compose-one", "service_port": 33010},
+        {"target_id": "two", "host": "host.example", "host_fingerprint": "SHA256:second", "ssh_port": 22,
+         "instance_id": "app-two", "install_dir": "/srv/two", "compose_project": "compose-two", "service_port": 33010},
+    ),
+    (
+        {"target_id": "one", "host": "2001:0db8:0:0:0:0:0:1", "host_fingerprint": "SHA256:first", "ssh_port": 22,
+         "instance_id": "app-one", "install_dir": "/srv/one", "compose_project": "compose-one", "service_port": 33010},
+        {"target_id": "two", "host": "[2001:db8::1]", "host_fingerprint": "SHA256:second", "ssh_port": 22,
+         "instance_id": "app-two", "install_dir": "/srv/two", "compose_project": "compose-two", "service_port": 33010},
+    ),
+    (
+        {"target_id": "one", "host": "host.example", "host_fingerprint": "SHA256:first", "ssh_port": 22,
+         "instance_id": "app-one", "install_dir": "/srv/apps/shared", "compose_project": "compose-one", "service_port": 33010},
+        {"target_id": "two", "host": "host.example", "host_fingerprint": "SHA256:second", "ssh_port": 22,
+         "instance_id": "app-two", "install_dir": "//srv/apps/./shared/", "compose_project": "compose-two", "service_port": 33011},
+    ),
+    (
+        {"target_id": "one", "host": "host.example", "host_fingerprint": "SHA256:first", "ssh_port": 22,
+         "instance_id": "app-one", "install_dir": "/srv/one", "compose_project": "Shared-Compose", "service_port": 33010},
+        {"target_id": "two", "host": "host.example", "host_fingerprint": "SHA256:second", "ssh_port": 22,
+         "instance_id": "app-two", "install_dir": "/srv/two", "compose_project": "shared-compose", "service_port": 33011},
+    ),
+])
+def test_resource_reservation_normalizes_target_path_and_compose_aliases(first, second):
+    reservations = DeploymentResourceReservations()
+    first_token = reservations.acquire(first)
+    with pytest.raises(DeploymentResourceConflictError, match="^deployment_resource_conflict$"):
+        reservations.acquire(second)
+    reservations.release(first_token)
+    second_token = reservations.acquire(second)
+    assert reservations.active_count == 1
+    reservations.release(second_token)
+    assert reservations.active_count == 0
+
+
+def test_atomic_install_dir_claim_failure_stops_before_config_copy_or_compose(tmp_path, monkeypatch):
+    class Result:
+        def __init__(self, exit_status=0, stdout=""):
+            self.exit_status = exit_status
+            self.stdout = stdout
+
+    commands = []
+
+    class Connection:
+        async def run(self, command, check=False, **kwargs):
+            commands.append(command)
+            if command == 'printf %s "$HOME"':
+                return Result(stdout="/home/deploy-user")
+            if "&& mkdir /home/deploy-user/genbox-apps/chatgpt2api/atomic-app" in command:
+                return Result(exit_status=1)
+            return Result()
+
+        def close(self):
+            pass
+
+        async def wait_closed(self):
+            pass
+
+    async def fake_connect(_request):
+        return Connection(), "SHA256:public-test"
+
+    async def fake_privileges(_connection, _credential):
+        return {
+            "auth_kind": "password", "elevation_contract": "none", "is_root": False,
+            "docker_access": True, "elevated_docker_access": False,
+            "passwordless_sudo": False, "password_sudo": False,
+            "can_admin": False, "can_deploy": True, "diagnostic_code": "legacy_discovery",
+        }
+
+    async def run():
+        monkeypatch.setattr("extensions.orchestrator._connect", fake_connect)
+        monkeypatch.setattr("extensions.orchestrator._diagnose_privileges", fake_privileges)
+        manager = ExtensionTaskManager(store_path=tmp_path / "atomic-claim.json")
+        request = ExtensionDeployRequest(
+            target=ExtensionTarget(
+                id="atomic-target", name="VPS", host="host.example",
+                username="deploy-user", chatgpt2api_port=33010,
+            ),
+            credential=SSHCredential(password="atomic-test-only"),
+            instance_id="atomic-app", confirmed_plan_id="atomic-plan",
+        )
+        request, _plan_manager, _plan = prepare_deployment_plan(monkeypatch, request)
+        task_id = await manager.create(request)
+        await manager.runners[task_id]
+
+        state = manager.get(task_id)
+        assert state["status"] == "failed"
+        assert state["error_code"] == "preparation_failed"
+        claim_commands = [command for command in commands if "&& mkdir " in command]
+        assert claim_commands == [
+            "umask 077; mkdir -p /home/deploy-user/genbox-apps/chatgpt2api "
+            "&& mkdir /home/deploy-user/genbox-apps/chatgpt2api/atomic-app "
+            "&& mkdir /home/deploy-user/genbox-apps/chatgpt2api/atomic-app/data"
+        ]
+        assert not any(fragment in command for command in commands for fragment in (
+            "base64 -d >", "docker pull ", "docker tag ", "cp -a ", "rm -f ",
+            "compose.yml up -d", "compose.yml down", ".genbox-instance", "curl -fsS",
+        ))
+        assert manager.resource_reservations.active_count == 0
+
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize(("scenario", "expected"), [
@@ -683,7 +924,7 @@ def test_runtime_failures_are_structured_sanitized_and_stage_accurate(tmp_path, 
                 return Result(stdout="/home/ubuntu")
             if scenario == "docker" and command == "docker version >/dev/null 2>&1":
                 raise RuntimeError("password=never-persist host=203.0.113.10 /private/path")
-            if scenario == "prepare" and "test ! -e" in command:
+            if scenario == "prepare" and "&& mkdir " in command:
                 return Result(1)
             if scenario == "pull" and command.startswith("docker pull "):
                 return Result(1)
@@ -745,7 +986,7 @@ def test_connection_close_errors_do_not_overwrite_failed_terminal_state(tmp_path
                 return type("R", (), {"stdout": "0", "exit_status": 0})()
             if command == 'printf %s "$HOME"':
                 return type("R", (), {"stdout": "/home/ubuntu", "exit_status": 0})()
-            if "test ! -e" in command:
+            if "&& mkdir " in command:
                 return type("R", (), {"stdout": "", "exit_status": 1})()
             return type("R", (), {"stdout": "", "exit_status": 0})()
 
