@@ -14,7 +14,13 @@ import asyncssh
 from pydantic import SecretStr
 
 from extensions.models import NetworkConnectRequest
-from extensions.orchestrator import SSHAuthenticationError, SSHConnectionError, _connect
+from extensions.orchestrator import (
+    SSHAuthenticationError,
+    SSHConnectionError,
+    _connect,
+    _diagnose_privileges,
+    _elevated_command,
+)
 from extensions.local_tailscale import enable_genbox_serve, local_status, ping_peer
 from extensions.store import upsert_target
 
@@ -458,32 +464,47 @@ class NetworkTaskManager:
             update(1, "success", "远程 VPS 连接成功")
 
             update(2, "running", "正在检查 VPS 安装条件")
-            user_id = (await connection.run("id -u", check=True)).stdout.strip()
-            sudo_password = request.credential.sudo_password or request.credential.password
-            use_sudo = user_id != "0"
+            privileges = None
             sudo_checked = False
 
             async def ensure_admin() -> None:
-                nonlocal sudo_checked
-                if sudo_checked or not use_sudo:
+                nonlocal privileges, sudo_checked
+                if sudo_checked:
                     return
-                probe = await connection.run("sudo -n true >/dev/null 2>&1", check=False)
-                if probe.exit_status != 0:
-                    if not sudo_password:
-                        raise PermissionError("安装网络工具需要 sudo 密码")
-                    probe = await connection.run("sudo -S -p '' true", input=sudo_password + "\n", check=False)
-                    if probe.exit_status != 0:
-                        raise PermissionError("VPS 管理员权限验证失败")
+                privileges = await _diagnose_privileges(connection, request.credential)
+                if not privileges["can_admin"]:
+                    code = privileges["diagnostic_code"]
+                    recovery_code, recovery_action = {
+                        "sudo_password_required": (
+                            "SUDO_PASSWORD_REQUIRED",
+                            "请选择密码 sudo 并提供独立 sudo 密码；仅在密码 SSH 认证下可显式选择复用。",
+                        ),
+                        "sudo_password_rejected": (
+                            "SUDO_PASSWORD_REJECTED",
+                            "sudo 密码未通过验证；请检查提权凭据后重试。",
+                        ),
+                        "passwordless_sudo_unavailable": (
+                            "PASSWORDLESS_SUDO_UNAVAILABLE",
+                            "当前账号没有免密 sudo；请选择密码 sudo 或使用具备管理员权限的账号。",
+                        ),
+                    }.get(code, (
+                        "ADMIN_ELEVATION_REQUIRED",
+                        "安装或配置网络工具需要显式且已验证的管理员提权能力。",
+                    ))
+                    raise NetworkTaskError(
+                        "VPS 管理员提权条件未满足",
+                        recovery_code=recovery_code,
+                        recovery_action=recovery_action,
+                    )
                 sudo_checked = True
 
             async def run_admin(command: str, *, timeout: int = 300):
                 await ensure_admin()
-                shell_command = f"sh -lc {shlex.quote(command)}"
-                options = {"check": False}
-                if use_sudo:
-                    shell_command = f"sudo -S -p '' sh -lc {shlex.quote(command)}"
-                    options["input"] = sudo_password + "\n"
-                return await asyncio.wait_for(connection.run(shell_command, **options), timeout=timeout)
+                shell_command, input_data = _elevated_command(command, request.credential, privileges)
+                return await asyncio.wait_for(
+                    connection.run(shell_command, input=input_data, check=False),
+                    timeout=timeout,
+                )
 
             async def read_remote_status(attempt: int):
                 result = await asyncio.wait_for(

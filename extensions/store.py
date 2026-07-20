@@ -138,9 +138,24 @@ def upsert_instance(data: dict) -> ExtensionInstance:
     instance_id = str(data.get("id") or "").strip()
     now = time.strftime("%Y-%m-%d %H:%M:%S")
     existing = next((item for item in config.instances if item.id == instance_id), None)
+    target_id = str(data.get("target_id") or "").strip()
+    if existing and existing.target_id != target_id:
+        raise ValueError("instance_id_conflicts_with_another_target")
+    merged = dict(data)
+    if existing:
+        for field in (
+            "status", "data_dir", "ownership", "container_id", "container_name",
+            "install_dir", "compose_project", "image", "console_url", "api_url",
+        ):
+            unknown_values = {None, "", "unknown"} if field == "status" else {None, ""}
+            if merged.get(field) in unknown_values:
+                merged.pop(field, None)
+        if existing.managed:
+            merged["managed"] = True
+            merged["ownership"] = existing.ownership or "managed"
     instance = ExtensionInstance(**{
         **(existing.model_dump() if existing else {}),
-        **data,
+        **merged,
         "id": instance_id,
         "created_at": existing.created_at if existing else now,
         "updated_at": now,

@@ -1235,6 +1235,23 @@ await window.extensionPrimaryAction();if(sshCalls!==1||element('extGuidePrimaryB
     assert result.returncode == 0, result.stderr
 
 
+def test_ssh_diagnostic_without_deploy_capability_does_not_unlock_next_steps_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+(async()=>{
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set();elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',disabled:false,dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
+const network={value:'tailscale',checked:true,classList:{toggle(){}}};global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('extNetwork'))return network;return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});
+const key='SHA256:AAAAAAAAAAAAAAAAAAAA';const target={id:'saved',name:'Saved',host:'vps.example',port:22,username:'deploy-user',host_key:key,chatgpt2api_port:33010};let discoveryCalls=0;
+global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:false,docker_access:false,passwordless_sudo:false,password_sudo:false,can_deploy:false,diagnostic_code:'no_sudo_or_docker'}};else if(url==='/api/extensions/discover'){discoveryCalls+=1;body={}}return {ok:true,text:async()=>JSON.stringify(body)}};
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();await window.extensionTestSSH(false);
+if(!element('extSshNextBtn').disabled)throw new Error('can_deploy=false unlocked SSH next');if(element('extGuidePrimaryBtn').textContent==='common.next')throw new Error('can_deploy=false unlocked novice next');await window.extensionDiscover();if(discoveryCalls!==0)throw new Error('can_deploy=false unlocked discovery');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_novice_local_tailscale_states_expose_one_next_action_in_node():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''
@@ -1264,7 +1281,7 @@ const network={value:'tailscale',checked:true,classList:{toggle(){}}};global.win
 const key='SHA256:AAAAAAAAAAAAAAAAAAAA';const target={id:'saved',name:'Saved',host:'vps.example',port:22,username:'root',host_key:key,chatgpt2api_port:33010};const deployment={id:'done',status:'completed',progress:100,host_key:key,steps:[{id:'verify',status:'success'}],logs:[],result:{instance:{id:'managed',target_id:'saved',managed:true},url:'http://service.example',api_url:'http://service.example/v1',admin_key_available:false}};
 let attempt=0;
 global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={latest_task_id:'done',tasks:[deployment]};else if(url==='/api/extensions/network/connect'){attempt+=1;if(attempt===1)return {ok:false,status:503,text:async()=>JSON.stringify({detail:'temporary'})};body={task_id:'network-'+attempt}}else if(url==='/api/extensions/network/tasks/network-2')return {ok:false,status:502,text:async()=>JSON.stringify({detail:'poll temporary'})};else if(url==='/api/extensions/network/tasks/network-3')body={status:'completed',progress:100,steps:[{id:'http_probe',status:'success'}],logs:[],result:{local_address:'100.64.0.1',remote_address:'100.64.0.2',peer_reachable:true,genbox_reachable:true,genbox_url:'https://genbox.tailnet'}};return {ok:true,text:async()=>JSON.stringify(body)}};
-eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extRemoteNetworkMode').value='existing';window.extensionNetworkModeChanged('existing');element('extPassword').value='password-session';element('extPrivateKey').value='';element('extSudoPassword').value='sudo-session';window.extensionCredentialChanged();window.extensionNext(4);
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extRemoteNetworkMode').value='existing';window.extensionNetworkModeChanged('existing');element('extPassword').value='password-session';element('extPrivateKey').value='';element('extElevation').value='password_sudo';element('extSudoPassword').value='sudo-session';window.extensionCredentialChanged();window.extensionNext(4);
 await window.extensionConnectNetwork();if(element('extPassword').value!=='password-session'||element('extSudoPassword').value!=='sudo-session')throw new Error('network POST failure cleared credentials');
 await window.extensionConnectNetwork();if(timers.length!==1)throw new Error('polling attempt was not created');await timers[0]();if(element('extPassword').value!=='password-session'||element('extSudoPassword').value!=='sudo-session')throw new Error('poll HTTP failure cleared credentials');
 await window.extensionConnectNetwork();if(timers.length!==2)throw new Error('completion attempt was not created');await timers[1]();if(element('extPassword').value||element('extPrivateKey').value||element('extSudoPassword').value)throw new Error('completed network task did not clear session credentials');if(element('extSuccessBanner').classList.contains('hidden'))throw new Error('verified application probe did not show completion');

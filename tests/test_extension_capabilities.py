@@ -20,12 +20,27 @@ UNSUPPORTED_PROJECT_IDS = [
 ]
 
 
+def privilege_snapshot():
+    return {
+        "auth_kind": "password",
+        "elevation_contract": "none",
+        "is_root": False,
+        "docker_access": True,
+        "elevated_docker_access": False,
+        "passwordless_sudo": False,
+        "password_sudo": False,
+        "can_admin": False,
+        "can_deploy": True,
+        "diagnostic_code": "direct_docker",
+    }
+
+
 def target_payload():
     return {
         "id": "capability-target",
         "name": "Capability VPS",
         "host": "vps.example",
-        "username": "ubuntu",
+        "username": "deploy-user",
         "chatgpt2api_port": 33010,
     }
 
@@ -128,6 +143,7 @@ def test_compose_plan_route_binds_project_strategy_and_mode(monkeypatch):
     async def discovery(_request):
         return {
             "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": []},
+            "privileges": privilege_snapshot(),
             "instances": [],
         }
 
@@ -152,6 +168,20 @@ def test_compose_plan_route_binds_project_strategy_and_mode(monkeypatch):
     }
 
 
+def test_plan_requires_a_verified_capability_snapshot():
+    manager = DeploymentPlanManager()
+    target = ExtensionTarget(**target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA")
+
+    with pytest.raises(ValueError):
+        manager.create(
+            ExtensionPlanRequest(target=target, credential=SSHCredential(password=SECRET_SENTINEL), service_port=33010),
+            {
+                "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": []},
+                "instances": [],
+            },
+        )
+
+
 @pytest.mark.parametrize(
     "changes",
     [
@@ -162,10 +192,11 @@ def test_compose_plan_route_binds_project_strategy_and_mode(monkeypatch):
 )
 def test_plan_drift_does_not_consume_valid_plan(changes):
     manager = DeploymentPlanManager()
-    target = ExtensionTarget(**target_payload())
+    target = ExtensionTarget(**target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA")
     plan_request = ExtensionPlanRequest(target=target, credential=SSHCredential(password=SECRET_SENTINEL), service_port=33010)
     plan = manager.create(plan_request, {
         "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": []},
+        "privileges": privilege_snapshot(),
         "instances": [],
     })
     deploy_request = ExtensionDeployRequest(
@@ -179,6 +210,99 @@ def test_plan_drift_does_not_consume_valid_plan(changes):
     assert SECRET_SENTINEL not in str(excinfo.value)
     assert plan["id"] in manager.plans
     assert manager.take(plan["id"], deploy_request)["id"] == plan["id"]
+
+
+def test_target_auth_and_elevation_drift_leave_plan_available():
+    discovery = {
+        "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": []},
+        "privileges": privilege_snapshot(),
+        "instances": [],
+    }
+    base_target = ExtensionTarget(**target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA")
+    base_credential = SSHCredential(password=SECRET_SENTINEL)
+
+    def drifted_request(kind, plan_id):
+        target = base_target
+        credential = base_credential
+        if kind == "host":
+            target = target.model_copy(update={"host": "changed.example"})
+        elif kind == "port":
+            target = target.model_copy(update={"port": 2222})
+        elif kind == "username":
+            target = target.model_copy(update={"username": "another-user"})
+        elif kind == "fingerprint":
+            target = target.model_copy(update={"host_key": "SHA256:BBBBBBBBBBBBBBBBBBBB"})
+        elif kind == "auth_kind":
+            credential = SSHCredential(private_key="test-private-key")
+        elif kind == "elevation":
+            credential = SSHCredential(password=SECRET_SENTINEL, elevation="passwordless_sudo")
+        return ExtensionDeployRequest(
+            target=target,
+            credential=credential,
+            confirmed_plan_id=plan_id,
+        )
+
+    for kind in ("host", "port", "username", "fingerprint", "auth_kind", "elevation"):
+        manager = DeploymentPlanManager()
+        plan = manager.create(
+            ExtensionPlanRequest(
+                target=base_target,
+                credential=base_credential,
+                service_port=33010,
+            ),
+            discovery,
+        )
+        valid = ExtensionDeployRequest(
+            target=base_target,
+            credential=base_credential,
+            confirmed_plan_id=plan["id"],
+        )
+
+        with pytest.raises(ValueError):
+            manager.take(plan["id"], drifted_request(kind, plan["id"]))
+
+        assert plan["id"] in manager.plans
+        assert manager.take(plan["id"], valid)["id"] == plan["id"]
+
+
+def test_identity_drift_creates_no_connection_task_or_persistent_record(tmp_path, monkeypatch):
+    from extensions import orchestrator
+
+    target = ExtensionTarget(**target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA")
+    credential = SSHCredential(password=SECRET_SENTINEL)
+    manager = DeploymentPlanManager()
+    plan = manager.create(
+        ExtensionPlanRequest(target=target, credential=credential, service_port=33010),
+        {
+            "environment": {"docker_version": "27.0", "compose_version": "2.30", "listening_ports": []},
+            "privileges": privilege_snapshot(),
+            "instances": [],
+        },
+    )
+    connected = []
+
+    async def forbidden_connect(_request):
+        connected.append(True)
+        raise AssertionError("connection must not run")
+
+    monkeypatch.setattr(orchestrator, "deployment_plans", manager)
+    monkeypatch.setattr(orchestrator, "_connect", forbidden_connect)
+    tasks_path = tmp_path / "extension_tasks.json"
+    tasks = ExtensionTaskManager(store_path=tasks_path)
+    drifted = ExtensionDeployRequest(
+        target=target.model_copy(update={"username": "changed-user"}),
+        credential=credential,
+        confirmed_plan_id=plan["id"],
+    )
+
+    with pytest.raises(ValueError):
+        tasks.create(drifted)
+
+    assert plan["id"] in manager.plans
+    assert tasks.tasks == {}
+    assert tasks.runners == {}
+    assert connected == []
+    assert not tasks_path.exists()
 
 
 def test_manager_calls_fail_closed_before_task_or_connection(monkeypatch):

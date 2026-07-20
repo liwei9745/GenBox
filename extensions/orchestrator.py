@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from extensions.models import ExtensionDeployRequest, ExtensionKeyResetRequest, ExtensionPlanRequest, ExtensionTarget, ExtensionTestRequest
+from extensions.models import ExtensionDeployRequest, ExtensionKeyResetRequest, ExtensionPlanRequest, ExtensionTarget, ExtensionTestRequest, SSHCredential
 from extensions.capabilities import validate_deployment_capability
 from extensions.deployment_failures import deployment_failure
 import extensions.store as extensions_store
@@ -95,6 +95,126 @@ def _password_sudo_command(command: str) -> str:
         "printf '%s\\n' \"$sudo_password\" | "
         f"{sudo_command}"
     )
+
+
+def _authentication_kind(credential: SSHCredential) -> str:
+    return "private_key" if credential.private_key else "password"
+
+
+def _elevation_contract(credential: SSHCredential) -> str:
+    # A separately supplied sudo password was the legacy explicit signal. Keep
+    # it compatible, but never infer reuse from the SSH login password.
+    if credential.reuse_ssh_password or (
+        credential.sudo_password and credential.elevation == "none"
+    ):
+        return "password_sudo"
+    return credential.elevation
+
+
+def _elevation_password(credential: SSHCredential) -> str:
+    if credential.sudo_password:
+        return credential.sudo_password
+    if credential.reuse_ssh_password and credential.password:
+        return credential.password
+    return ""
+
+
+def _elevated_command(command: str, credential: SSHCredential, privileges: dict[str, Any]) -> tuple[str, str]:
+    if privileges.get("is_root"):
+        return command, ""
+    contract = privileges.get("elevation_contract")
+    if contract == "passwordless_sudo" and privileges.get("passwordless_sudo"):
+        return f"sudo -n sh -lc {shlex.quote(command)}", ""
+    if contract == "password_sudo" and privileges.get("password_sudo"):
+        password = _elevation_password(credential)
+        if password:
+            return _password_sudo_command(command), password + "\n"
+    raise PermissionError("当前请求没有经过验证的管理员提权能力")
+
+
+async def _diagnose_privileges(connection, credential: SSHCredential) -> dict[str, Any]:
+    user_id = (await connection.run("id -u", check=True)).stdout.strip()
+    is_root = user_id == "0"
+    auth_kind = _authentication_kind(credential)
+    contract = _elevation_contract(credential)
+    docker = await connection.run("docker version >/dev/null 2>&1", check=False)
+    docker_access = docker.exit_status == 0
+    passwordless_sudo = False
+    password_sudo = False
+    sudo_password_supplied = bool(_elevation_password(credential))
+    elevated_docker_access = False
+
+    if is_root:
+        elevated_docker_access = docker_access
+    else:
+        sudo_probe = await connection.run("sudo -n true >/dev/null 2>&1", check=False)
+        passwordless_sudo = sudo_probe.exit_status == 0
+        if contract == "password_sudo" and sudo_password_supplied:
+            password_probe = await connection.run(
+                _password_sudo_command("true"),
+                input=_elevation_password(credential) + "\n",
+                check=False,
+            )
+            password_sudo = password_probe.exit_status == 0
+
+        if contract == "passwordless_sudo" and passwordless_sudo:
+            elevated_docker = await connection.run(
+                "sudo -n sh -lc 'docker version >/dev/null 2>&1'",
+                check=False,
+            )
+            elevated_docker_access = elevated_docker.exit_status == 0
+        elif contract == "password_sudo" and password_sudo:
+            elevated_docker = await connection.run(
+                _password_sudo_command("docker version >/dev/null 2>&1"),
+                input=_elevation_password(credential) + "\n",
+                check=False,
+            )
+            elevated_docker_access = elevated_docker.exit_status == 0
+
+    can_admin = is_root or (
+        contract == "passwordless_sudo" and passwordless_sudo
+    ) or (
+        contract == "password_sudo" and password_sudo
+    )
+    contract_verified = is_root or contract == "none" or (
+        contract == "passwordless_sudo" and passwordless_sudo
+    ) or (
+        contract == "password_sudo" and password_sudo
+    )
+    can_deploy = contract_verified and (docker_access or elevated_docker_access)
+    if is_root and can_deploy:
+        diagnostic_code = "uid_0"
+    elif is_root:
+        diagnostic_code = "docker_unavailable"
+    elif contract == "passwordless_sudo" and passwordless_sudo and can_deploy:
+        diagnostic_code = "passwordless_sudo"
+    elif contract == "password_sudo" and password_sudo and can_deploy:
+        diagnostic_code = "password_sudo"
+    elif contract == "password_sudo" and not sudo_password_supplied:
+        diagnostic_code = "sudo_password_required"
+    elif contract == "password_sudo" and not password_sudo:
+        diagnostic_code = "sudo_password_rejected"
+    elif contract == "passwordless_sudo" and not passwordless_sudo:
+        diagnostic_code = "passwordless_sudo_unavailable"
+    elif docker_access:
+        diagnostic_code = "direct_docker"
+    elif not passwordless_sudo:
+        diagnostic_code = "no_sudo_or_docker"
+    else:
+        diagnostic_code = "docker_unavailable"
+    return {
+        "auth_kind": auth_kind,
+        "elevation_contract": contract,
+        "is_root": is_root,
+        "docker_access": docker_access,
+        "elevated_docker_access": elevated_docker_access,
+        "passwordless_sudo": passwordless_sudo,
+        "password_sudo": password_sudo,
+        "sudo_password_supplied": sudo_password_supplied,
+        "can_admin": can_admin,
+        "can_deploy": can_deploy,
+        "diagnostic_code": diagnostic_code,
+    }
 
 
 async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
@@ -314,28 +434,11 @@ async def test_connection(request: ExtensionTestRequest) -> dict:
         return {"ok": False, "needs_host_key_confirmation": True, "host_key": fingerprint}
     try:
         result = await asyncio.wait_for(connection.run("printf genbox-connected", check=True), timeout=15)
-        user_id = (await connection.run("id -u", check=True)).stdout.strip()
-        docker = await connection.run("docker version >/dev/null 2>&1", check=False)
-        sudo = await connection.run("sudo -n true >/dev/null 2>&1", check=False)
-        sudo_password = request.credential.sudo_password or request.credential.password
-        sudo_with_password = False
-        if user_id != "0" and sudo.exit_status != 0 and sudo_password:
-            probe = await connection.run(
-                _password_sudo_command("true"),
-                input=sudo_password + "\n",
-                check=False,
-            )
-            sudo_with_password = probe.exit_status == 0
+        privileges = await _diagnose_privileges(connection, request.credential)
         return {
             "ok": result.stdout == "genbox-connected",
             "host_key": fingerprint,
-            "privileges": {
-                "is_root": user_id == "0",
-                "docker_access": docker.exit_status == 0,
-                "passwordless_sudo": sudo.exit_status == 0,
-                "password_sudo": sudo_with_password,
-                "can_deploy": user_id == "0" or docker.exit_status == 0 or sudo.exit_status == 0 or sudo_with_password,
-            },
+            "privileges": privileges,
         }
     finally:
         connection.close()
@@ -502,47 +605,49 @@ class ExtensionTaskManager:
                 raise PermissionError("需要先确认 VPS 主机指纹")
             step(0, "success", "SSH 连接成功")
 
-            user_id = (await connection.run("id -u", check=True)).stdout.strip()
             home_dir = (await connection.run("printf %s \"$HOME\"", check=True)).stdout.strip()
             failure_key = "docker_unavailable"
-            docker_probe = await connection.run("docker version >/dev/null 2>&1", check=False)
-            sudo_probe = await connection.run("sudo -n true >/dev/null 2>&1", check=False)
-            sudo_password = request.credential.sudo_password or request.credential.password
-            password_sudo_ok = False
-            if user_id != "0" and sudo_probe.exit_status != 0 and sudo_password:
-                password_probe = await connection.run(
-                    _password_sudo_command("true"),
-                    input=sudo_password + "\n",
-                    check=False,
+            privileges = await _diagnose_privileges(connection, request.credential)
+            verified_capability = plan.get("verified_capability")
+            if isinstance(verified_capability, dict) and verified_capability.get("diagnostic_code") != "legacy_discovery":
+                bound_fields = (
+                    "is_root", "docker_access", "elevated_docker_access",
+                    "passwordless_sudo", "password_sudo", "can_admin", "can_deploy",
+                    "diagnostic_code",
                 )
-                password_sudo_ok = password_probe.exit_status == 0
-            use_sudo = user_id != "0" and (sudo_probe.exit_status == 0 or password_sudo_ok)
-            docker_available = docker_probe.exit_status == 0 or use_sudo
-            if user_id != "0" and not docker_available:
+                if any(verified_capability.get(key) != privileges.get(key) for key in bound_fields):
+                    raise PermissionError("远程部署能力已变化，请重新检测并生成计划")
+            if not privileges["can_deploy"]:
                 raise PermissionError("当前用户没有 Docker 访问权限，且无法提权")
-            if use_sudo and sudo_probe.exit_status != 0 and not password_sudo_ok:
-                raise PermissionError("需要 sudo 密码才能部署（复制 /root 数据或提权 Docker）")
+            if plan.get("clone_scope") in {"media", "working-copy"} and not privileges["can_admin"]:
+                raise PermissionError("复制源实例数据需要已验证的管理员提权能力")
 
-            async def run_command(command: str, privileged: bool, timeout: int = 300):
-                if not use_sudo or not privileged:
+            async def run_command(command: str, privilege: str, timeout: int = 300):
+                if privilege == "none" or (privilege == "docker" and privileges["docker_access"]):
                     return await asyncio.wait_for(connection.run(command, check=False), timeout=timeout)
-                wrapped = _password_sudo_command(command)
+                wrapped, input_data = _elevated_command(command, request.credential, privileges)
                 return await asyncio.wait_for(
-                    connection.run(wrapped, input=(sudo_password + "\n") if sudo_password else "", check=False),
+                    connection.run(wrapped, input=input_data, check=False),
                     timeout=timeout,
                 )
 
             if plan["strategy"] == "existing":
                 for index in range(1, len(DEPLOY_STEPS)):
                     step(index, "success", "接入已有实例：未执行远程变更")
+                existing_snapshot = plan.get("existing_snapshot", {})
                 console_url = f"http://{request.target.host}:{plan['service_port']}"
                 failure_key = "instance_registration_failed"
                 instance = extensions_store.upsert_instance({
                     "id": plan["instance_id"], "target_id": request.target.id, "project": plan["project_id"], "strategy": "existing",
-                    "deployment_mode": "compose", "compose_project": plan.get("compose_project", ""),
-                    "service_port": plan["service_port"], "install_dir": plan.get("install_dir", ""),
-                    "data_dir": "", "image": plan["image"], "status": "detected",
-                    "console_url": console_url, "api_url": f"{console_url}/v1", "managed": False,
+                    "deployment_mode": "compose", "compose_project": existing_snapshot.get("compose_project") or plan.get("compose_project", ""),
+                    "service_port": plan["service_port"], "install_dir": existing_snapshot.get("working_dir") or plan.get("install_dir", ""),
+                    "data_dir": existing_snapshot.get("data_dir") or "", "image": existing_snapshot.get("image") or plan["image"],
+                    "status": existing_snapshot.get("status") or "unknown",
+                    "console_url": console_url, "api_url": f"{console_url}/v1",
+                    "managed": bool(existing_snapshot.get("managed")),
+                    "ownership": existing_snapshot.get("ownership") or "",
+                    "container_id": existing_snapshot.get("container_id") or "",
+                    "container_name": existing_snapshot.get("name") or "",
                 })
                 with self.lock:
                     if state.get("status") == "cancelled":
@@ -605,14 +710,14 @@ class ExtensionTaskManager:
                 if plan["image"].startswith("genbox-chatgpt2api-source:"):
                     image_prepare += f" && docker tag {shlex.quote(source_image_id)} {shlex.quote(plan['image'])}"
             commands = [
-                ("docker version --format '{{.Server.Version}}'", True),
-                (f"test ! -e {shlex.quote(install_dir + '/.genbox-instance')} && mkdir -p {shlex.quote(install_dir + '/data')}", False),
-                (image_prepare, True),
+                ("docker version --format '{{.Server.Version}}'", "docker"),
+                (f"test ! -e {shlex.quote(install_dir + '/.genbox-instance')} && mkdir -p {shlex.quote(install_dir + '/data')}", "none"),
+                (image_prepare, "docker"),
             ]
-            for offset, (command, privileged) in enumerate(commands, start=1):
+            for offset, (command, privilege) in enumerate(commands, start=1):
                 failure_key = {1: "docker_unavailable", 2: "preparation_failed", 3: "image_prepare_failed"}[offset]
                 step(offset, "running", DEPLOY_STEPS[offset][1])
-                result = await run_command(command, privileged)
+                result = await run_command(command, privilege)
                 if result.exit_status != 0:
                     raise RuntimeError(f"{DEPLOY_STEPS[offset][1]}失败")
                 done_log = f"{DEPLOY_STEPS[offset][1]}完成"
@@ -637,7 +742,7 @@ class ExtensionTaskManager:
                     )
                 else:
                     clone_command = f"cp -a {shlex.quote(source_data + '/.')} {shlex.quote(target_data + '/')}"
-                cloned = await run_command(clone_command, True, timeout=900)
+                cloned = await run_command(clone_command, "admin", timeout=900)
                 if cloned.exit_status != 0:
                     raise RuntimeError("复制源实例数据失败")
                 scrubbed = await run_command(
@@ -645,21 +750,21 @@ class ExtensionTaskManager:
                     f"{shlex.quote(target_data)}/genbox_push_receipts.json "
                     f"{shlex.quote(target_data)}/genbox_push_schedule.json "
                     f"{shlex.quote(target_data)}/genbox_push_schedule.lease",
-                    True,
+                    "admin",
                 )
                 if scrubbed.exit_status != 0:
                     raise RuntimeError("清理克隆推送凭据失败")
                 if plan["clone_scope"] == "working-copy" and plan.get("clone_source_config_file"):
                     copied_config = await run_command(
                         f"cp {shlex.quote(plan['clone_source_config_file'])} {shlex.quote(install_dir + '/config.json')}",
-                        True,
+                        "admin",
                     )
                     if copied_config.exit_status != 0:
                         raise RuntimeError("复制源实例设置失败")
                     scrub_script = _clone_config_scrub_script()
                     scrub_config = await run_command(
                         f"python3 -c {shlex.quote(scrub_script)} {shlex.quote(install_dir + '/config.json')}",
-                        True,
+                        "admin",
                     )
                     if scrub_config.exit_status != 0:
                         raise RuntimeError("清理克隆设置中的自动任务失败")
@@ -675,7 +780,7 @@ class ExtensionTaskManager:
             step(4, "running", DEPLOY_STEPS[4][1])
             start = await run_command(
                 f"cd {shlex.quote(install_dir)} && docker compose -p {shlex.quote(compose_project)} -f compose.yml up -d",
-                True,
+                "docker",
             )
             if start.exit_status != 0:
                 raise RuntimeError("启动服务失败")
@@ -691,7 +796,7 @@ class ExtensionTaskManager:
                 try:
                     stopped = await run_command(
                         f"cd {shlex.quote(install_dir)} && docker compose -p {shlex.quote(compose_project)} -f compose.yml down",
-                        True,
+                        "docker",
                     )
                     if stopped.exit_status != 0:
                         failure_key = "service_verification_stop_unconfirmed"
@@ -708,7 +813,7 @@ class ExtensionTaskManager:
                 "deployment_mode": "compose", "compose_project": compose_project,
                 "service_port": plan["service_port"], "install_dir": install_dir,
                 "data_dir": f"{install_dir}/data", "image": plan["image"], "status": "running",
-                "console_url": console_url, "api_url": f"{console_url}/v1", "managed": True,
+                "console_url": console_url, "api_url": f"{console_url}/v1", "managed": True, "ownership": "managed",
                 "clone_source_id": plan.get("clone_source_id", ""), "clone_scope": plan.get("clone_scope", "empty"),
             })
             with self.lock:
@@ -769,22 +874,74 @@ extension_tasks = ExtensionTaskManager()
 class DeploymentPlanManager:
     def __init__(self):
         self.plans: dict[str, dict] = {}
+        self.lock = threading.RLock()
 
     def create(self, request: ExtensionPlanRequest, discovery: dict) -> dict:
+        with self.lock:
+            return self._create(request, discovery)
+
+    @staticmethod
+    def _identity_fields(request: ExtensionPlanRequest | ExtensionDeployRequest) -> dict[str, Any]:
+        fingerprint = request.expected_host_key or request.target.host_key
+        return {
+            "target_id": request.target.id,
+            "host": request.target.host,
+            "ssh_port": request.target.port,
+            "username": request.target.username.strip(),
+            "host_fingerprint": fingerprint,
+            "auth_kind": _authentication_kind(request.credential),
+            "elevation_contract": _elevation_contract(request.credential),
+        }
+
+    @staticmethod
+    def _capability_snapshot(discovery: dict) -> dict[str, Any]:
+        privileges = discovery.get("privileges")
+        if not isinstance(privileges, dict):
+            return {}
+        fields = {
+            "auth_kind", "elevation_contract", "is_root", "docker_access",
+            "elevated_docker_access", "passwordless_sudo", "password_sudo",
+            "can_admin", "can_deploy", "diagnostic_code",
+        }
+        return {key: copy.deepcopy(privileges.get(key)) for key in fields}
+
+    @staticmethod
+    def _existing_snapshot(existing: dict) -> dict[str, Any]:
+        fields = (
+            "id", "container_id", "name", "image", "source_image_id", "status", "ports",
+            "compose_project", "compose_service", "working_dir", "data_dir", "config_file",
+            "data_size_mb", "clone_available", "managed", "ownership",
+        )
+        return {key: copy.deepcopy(existing.get(key)) for key in fields}
+
+    def _create(self, request: ExtensionPlanRequest, discovery: dict) -> dict:
         validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
         if not request.target.id:
             raise ValueError("请先保存 VPS 配置，再生成部署计划")
+        identity = self._identity_fields(request)
+        if not identity["host_fingerprint"]:
+            raise ValueError("请先确认 SSH 主机指纹，再生成部署计划")
+        verified_capability = self._capability_snapshot(discovery)
+        if not verified_capability.get("can_deploy"):
+            raise ValueError("当前 SSH 用户没有经过验证的 Docker 部署能力")
+        if verified_capability.get("auth_kind") not in {"unknown", identity["auth_kind"]}:
+            raise ValueError("发现结果与当前 SSH 认证种类不一致，请重新检测")
+        if verified_capability.get("elevation_contract") != identity["elevation_contract"]:
+            raise ValueError("发现结果与当前提权方式不一致，请重新检测")
         if request.strategy == "existing":
             existing = next((item for item in discovery.get("instances", []) if item.get("id") == request.instance_id), None)
             if not existing:
                 raise ValueError("请选择检测到的已有实例")
             plan_id = uuid.uuid4().hex[:16]
             plan = {
-                "id": plan_id, "project_id": request.project_id, "target_id": request.target.id, "instance_id": request.instance_id,
+                "id": plan_id, "project_id": request.project_id, **identity, "instance_id": request.instance_id,
                 "strategy": "existing", "deployment_mode": "compose", "service_port": request.service_port,
                 "image": existing.get("image") or request.image,
                 "compose_project": existing.get("compose_project") or "",
                 "install_dir": existing.get("working_dir") or "",
+                "verified_capability": verified_capability,
+                "existing_snapshot": self._existing_snapshot(existing),
+                "local_side_effect": "确认并在 GenBox 本地登记现有实例；远程环境保持不变",
                 "operations": ["登记已有实例入口", "保留现有容器、配置和数据不变"],
                 "safety": ["不执行任何远程写入", "不重启、不停止、不删除已有实例", "管理密钥由用户自行提供"],
                 "expires_at": time.time() + 600,
@@ -802,6 +959,8 @@ class DeploymentPlanManager:
             raise ValueError(f"端口 {request.service_port} 已被占用")
         if any(item.get("id") == request.instance_id for item in discovery.get("instances", [])):
             raise ValueError("实例 ID 已存在，请选择接入已有实例或更换名称")
+        if request.clone_scope != "empty" and not verified_capability.get("can_admin"):
+            raise ValueError("复制现有实例数据需要经过验证的管理员提权能力")
         clone_source = None
         if request.clone_scope != "empty":
             if request.strategy != "isolated":
@@ -826,7 +985,7 @@ class DeploymentPlanManager:
         } if clone_source else {}
         plan_id = uuid.uuid4().hex[:16]
         plan = {
-            "id": plan_id, "project_id": request.project_id, "target_id": request.target.id, "instance_id": request.instance_id,
+            "id": plan_id, "project_id": request.project_id, **identity, "instance_id": request.instance_id,
             "strategy": request.strategy, "deployment_mode": request.deployment_mode,
             "service_port": request.service_port, "image": request.image,
             "compose_project": f"genbox-chatgpt2api-{request.instance_id}",
@@ -837,6 +996,7 @@ class DeploymentPlanManager:
             "clone_source_image_id": clone_source.get("source_image_id", "") if clone_source else "",
             "clone_size_mb": int(clone_source.get("data_size_mb") or 0) if clone_source else 0,
             "source_baseline": source_baseline,
+            "verified_capability": verified_capability,
             "operations": [
                 "创建独立实例目录和 data 目录", "写入权限为 0600 的实例配置",
                 "复用生产镜像基线，不拉取 latest" if clone_source else "拉取指定镜像",
@@ -852,19 +1012,37 @@ class DeploymentPlanManager:
         return {key: value for key, value in plan.items() if key != "expires_at"}
 
     def take(self, plan_id: str, request: ExtensionDeployRequest) -> dict:
+        with self.lock:
+            return self._take(plan_id, request)
+
+    def _take(self, plan_id: str, request: ExtensionDeployRequest) -> dict:
         validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
         plan = self.plans.get(plan_id)
         if not plan or plan["expires_at"] < time.time():
             raise ValueError("部署计划不存在或已过期，请重新检测")
+        identity_request = request
+        plan_has_bound_identity = all(key in plan for key in (
+            "host", "ssh_port", "username", "host_fingerprint", "auth_kind", "elevation_contract",
+        ))
+        if plan_has_bound_identity and request.trust_host_key:
+            live_target = extensions_store.get_target(request.target.id)
+            if not live_target:
+                raise ValueError("部署目标已删除，请重新生成计划")
+            identity_request = request.model_copy(update={
+                "target": live_target,
+                "expected_host_key": live_target.host_key,
+            })
+        current_identity = self._identity_fields(identity_request)
+        if plan_has_bound_identity and any(plan.get(key) != value for key, value in current_identity.items()):
+            raise ValueError("VPS 地址、端口、用户名、主机指纹、认证或提权方式已变化，请重新生成计划")
         if (
             plan.get("project_id") != request.project_id
-            or plan["target_id"] != request.target.id
             or plan["instance_id"] != request.instance_id
             or plan["strategy"] != request.strategy
             or plan["deployment_mode"] != request.deployment_mode
         ):
             raise ValueError("部署请求与已确认计划不一致")
-        if plan["image"] != request.image or plan["service_port"] != request.target.chatgpt2api_port:
+        if plan["image"] != request.image or plan["service_port"] != identity_request.target.chatgpt2api_port:
             raise ValueError("端口或镜像已变更，请重新生成计划")
         if plan.get("clone_source_id", "") != request.clone_source_id or plan.get("clone_scope", "empty") != request.clone_scope:
             raise ValueError("克隆范围已变更，请重新生成计划")
@@ -884,6 +1062,23 @@ async def reset_managed_admin_key(request: ExtensionKeyResetRequest) -> dict:
     connection, _ = await _connect(request)
     if connection is None:
         raise PermissionError("需要先确认 VPS 主机指纹")
+    try:
+        privileges = await _diagnose_privileges(connection, request.credential)
+    except Exception:
+        connection.close()
+        await connection.wait_closed()
+        raise
+    if not privileges["can_deploy"]:
+        connection.close()
+        await connection.wait_closed()
+        raise PermissionError("当前 SSH 用户没有经过验证的 Docker 管理能力")
+
+    async def run_docker(command: str):
+        if privileges["docker_access"]:
+            return await connection.run(command, check=False)
+        wrapped, input_data = _elevated_command(command, request.credential, privileges)
+        return await connection.run(wrapped, input=input_data, check=False)
+
     new_key = f"gbx-{secrets.token_urlsafe(32)}"
     backup_suffix = str(int(time.time()))
     try:
@@ -915,10 +1110,9 @@ async def reset_managed_admin_key(request: ExtensionKeyResetRequest) -> dict:
             )
             if written.exit_status != 0:
                 raise RuntimeError("写入新管理密钥失败")
-        restart = await connection.run(
+        restart = await run_docker(
             f"cd {shlex.quote(instance.install_dir)} && docker compose -p {shlex.quote(instance.compose_project)} "
-            "-f compose.yml up -d --force-recreate app",
-            check=False,
+            "-f compose.yml up -d --force-recreate app"
         )
         verified = await connection.run(
             f"cd {shlex.quote(instance.install_dir)} && set -a && . ./.env && set +a && "
@@ -928,11 +1122,10 @@ async def reset_managed_admin_key(request: ExtensionKeyResetRequest) -> dict:
             check=False,
         )
         if restart.exit_status != 0 or verified.exit_status != 0:
-            await connection.run(
+            await run_docker(
                 f"cp {shlex.quote(env_backup)} {shlex.quote(env_path)}; "
                 f"cd {shlex.quote(instance.install_dir)} && docker compose -p {shlex.quote(instance.compose_project)} "
-                "-f compose.yml up -d --force-recreate app",
-                check=False,
+                "-f compose.yml up -d --force-recreate app"
             )
             raise RuntimeError("新密钥验证失败，已恢复原配置")
         await connection.run(f"rm -f {shlex.quote(env_backup)}", check=False)

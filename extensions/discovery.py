@@ -6,8 +6,8 @@ import re
 import shlex
 from typing import Any
 
-from extensions.models import ExtensionDiscoveryRequest
-from extensions.orchestrator import _connect
+from extensions.models import ExtensionDiscoveryRequest, SSHCredential
+from extensions.orchestrator import _connect, _diagnose_privileges, _elevated_command
 
 
 async def _run(connection, command: str) -> tuple[int, str]:
@@ -15,10 +15,25 @@ async def _run(connection, command: str) -> tuple[int, str]:
     return result.exit_status, result.stdout.strip()
 
 
-async def _run_docker(connection, command: str, password: str) -> tuple[int, str]:
+async def _run_docker(
+    connection,
+    command: str,
+    credential: SSHCredential | str,
+    privileges: dict[str, Any] | None = None,
+) -> tuple[int, str]:
     status, output = await _run(connection, command)
     if status == 0:
         return status, output
+    if privileges is not None:
+        if not privileges.get("can_admin"):
+            return status, output
+        wrapped, input_data = _elevated_command(command, credential, privileges)
+        result = await connection.run(wrapped, input=input_data, check=False)
+        return result.exit_status, result.stdout.strip()
+
+    # Compatibility for focused helper tests: the third argument is an
+    # explicitly supplied sudo password, never an SSH-password fallback.
+    password = credential if isinstance(credential, str) else credential.sudo_password
     probe = await connection.run("sudo -n true >/dev/null 2>&1", check=False)
     if probe.exit_status == 0:
         return await _run(connection, f"sudo -n sh -lc {shlex.quote(command)}")
@@ -42,6 +57,7 @@ async def discover_environment(request: ExtensionDiscoveryRequest) -> dict[str, 
     if connection is None:
         raise PermissionError("需要先确认 VPS 主机指纹")
     try:
+        privileges = await _diagnose_privileges(connection, request.credential)
         facts: dict[str, str] = {}
         commands = {
             "os": "(. /etc/os-release 2>/dev/null && printf '%s %s' \"$ID\" \"$VERSION_ID\") || uname -s",
@@ -56,11 +72,10 @@ async def discover_environment(request: ExtensionDiscoveryRequest) -> dict[str, 
             "ports": "(ss -H -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | awk '{print $4}'",
             "containers": "docker ps -a --no-trunc --format '{{json .}}' 2>/dev/null",
         }
-        sudo_password = request.credential.sudo_password or request.credential.password
         for key, command in commands.items():
             runner = _run_docker if key in {"docker", "compose", "containers"} else _run
             if runner is _run_docker:
-                _, facts[key] = await runner(connection, command, sudo_password)
+                _, facts[key] = await runner(connection, command, request.credential, privileges)
             else:
                 _, facts[key] = await runner(connection, command)
 
@@ -86,7 +101,7 @@ async def discover_environment(request: ExtensionDiscoveryRequest) -> dict[str, 
                 f"{{{{index .Config.Labels \"com.docker.compose.project\"}}}}|"
                 f"{{{{index .Config.Labels \"com.docker.compose.project.working_dir\"}}}}|"
                 f"{{{{index .Config.Labels \"com.docker.compose.service\"}}}}' {container_id} 2>/dev/null"
-            ), sudo_password)
+            ), request.credential, privileges)
             managed, instance_id, compose_project, working_dir, compose_service = (labels.split("|") + ["", "", "", "", ""])[:5]
             is_app = compose_service == "app" or "yukkcat/chatgpt2api" in image.lower()
             if not is_app:
@@ -94,18 +109,21 @@ async def discover_environment(request: ExtensionDiscoveryRequest) -> dict[str, 
             _, configured_image = await _run_docker(
                 connection,
                 f"docker inspect --format '{{{{.Config.Image}}}}' {container_id} 2>/dev/null",
-                sudo_password,
+                request.credential,
+                privileges,
             )
             _, image_id = await _run_docker(
                 connection,
                 f"docker inspect --format '{{{{.Image}}}}' {container_id} 2>/dev/null",
-                sudo_password,
+                request.credential,
+                privileges,
             )
             _, image_digest = await _run_docker(
                 connection,
                 "docker image inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "
                 f"{shlex.quote(image_id)} 2>/dev/null",
-                sudo_password,
+                request.credential,
+                privileges,
             ) if image_id.startswith("sha256:") else (1, "")
             source_image = image_digest or (
                 f"genbox-chatgpt2api-source:{container_id[:12]}"
@@ -114,17 +132,18 @@ async def discover_environment(request: ExtensionDiscoveryRequest) -> dict[str, 
             _, data_dir = await _run_docker(connection, (
                 f"docker inspect --format '{{{{range .Mounts}}}}{{{{if eq .Destination \"/app/data\"}}}}"
                 f"{{{{.Source}}}}{{{{end}}}}{{{{end}}}}' {container_id} 2>/dev/null"
-            ), sudo_password)
+            ), request.credential, privileges)
             _, config_file = await _run_docker(connection, (
                 f"docker inspect --format '{{{{range .Mounts}}}}{{{{if eq .Destination \"/app/config.json\"}}}}"
                 f"{{{{.Source}}}}{{{{end}}}}{{{{end}}}}' {container_id} 2>/dev/null"
-            ), sudo_password)
+            ), request.credential, privileges)
             data_size_mb = 0
             if data_dir.startswith("/"):
                 size_status, size_output = await _run_docker(
                     connection,
                     f"du -sm {shlex.quote(data_dir)} 2>/dev/null",
-                    sudo_password,
+                    request.credential,
+                    privileges,
                 )
                 size_match = re.match(r"^(\d+)(?:\s|$)", size_output)
                 if size_status == 0 and size_match:
@@ -176,6 +195,7 @@ async def discover_environment(request: ExtensionDiscoveryRequest) -> dict[str, 
         return {
             "ok": True,
             "host_key": fingerprint,
+            "privileges": privileges,
             "environment": {
                 "os": facts["os"], "arch": facts["arch"], "cpu": int(facts["cpu"] or 0),
                 "memory_mb": memory_mb, "disk_free_mb": int(facts["disk_mb"] or 0),

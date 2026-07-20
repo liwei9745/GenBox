@@ -1,6 +1,6 @@
 ﻿from typing import Literal
 
-from pydantic import BaseModel, Field, SecretStr, model_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
 
 class ExtensionTarget(BaseModel):
@@ -17,6 +17,14 @@ class ExtensionTarget(BaseModel):
     chatgpt2api_port: int = Field(default=3000, ge=1, le=65535)
     created_at: str = ""
     updated_at: str = ""
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def normalize_username(cls, value):
+        normalized = str(value or "").strip()
+        if not normalized:
+            raise ValueError("SSH 用户名不能为空")
+        return normalized
 
 
 class ExtensionInstance(BaseModel):
@@ -35,6 +43,9 @@ class ExtensionInstance(BaseModel):
     console_url: str = ""
     api_url: str = ""
     managed: bool = False
+    ownership: str = ""
+    container_id: str = ""
+    container_name: str = ""
     clone_source_id: str = ""
     clone_scope: Literal["empty", "media", "working-copy"] = "empty"
     created_at: str = ""
@@ -64,11 +75,15 @@ class SSHCredential(BaseModel):
     private_key: str = ""
     passphrase: str = ""
     sudo_password: str = ""
+    elevation: Literal["none", "passwordless_sudo", "password_sudo"] = "none"
+    reuse_ssh_password: bool = False
 
     @model_validator(mode="after")
     def require_exactly_one_authentication_method(self):
         if bool(self.password) == bool(self.private_key):
             raise ValueError("请选择且只选择一种 SSH 凭据：密码或私钥")
+        if self.reuse_ssh_password and not self.password:
+            raise ValueError("只有密码 SSH 认证可以显式复用 SSH 密码进行 sudo 提权")
         return self
 
 

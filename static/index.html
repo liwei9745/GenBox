@@ -838,7 +838,7 @@
               <label><span data-i18n="extensions.name">名称</span><input id="extName" value="我的 VPS" autocomplete="off"></label>
               <label><span data-i18n="extensions.host">IP 地址或域名</span><input id="extHost" placeholder="192.0.2.10" autocomplete="off" oninput="extensionConnectionChanged()"></label>
               <label><span data-i18n="extensions.ssh_port">SSH 端口</span><input id="extPort" type="number" value="22" min="1" max="65535" oninput="extensionConnectionChanged()"></label>
-              <label><span data-i18n="extensions.ssh_username">SSH 用户名</span><input id="extUsername" value="ubuntu" autocomplete="username" oninput="extensionConnectionChanged()"></label>
+              <label><span data-i18n="extensions.ssh_username">SSH 用户名</span><input id="extUsername" value="" autocomplete="username" oninput="extensionConnectionChanged()"></label>
             </div>
             <fieldset class="extension-auth"><legend><span data-i18n="extensions.auth_method">鉴权方式</span></legend>
               <div class="extension-segments">
@@ -847,7 +847,10 @@
               </div>
               <label id="extPasswordWrap"><span data-i18n="extensions.ssh_password">SSH 密码</span><div class="extension-copy-row"><input id="extPassword" type="password" autocomplete="off" oninput="extensionCredentialChanged()"><button type="button" class="btn-secondary" aria-label="显示 SSH 密码" aria-pressed="false" title="显示 SSH 密码" onclick="extensionTogglePassword('extPassword',this)">👁</button></div></label>
               <label id="extKeyWrap" class="hidden"><span data-i18n="extensions.private_key">SSH 私钥</span><textarea id="extPrivateKey" rows="6" spellcheck="false" oninput="extensionCredentialChanged()"></textarea></label>
-              <label><span data-i18n="extensions.sudo_password">sudo 密码（留空则复用 SSH 密码）</span><div class="extension-copy-row"><input id="extSudoPassword" type="password" autocomplete="off" placeholder="仅非 root 且需要提权时使用" data-i18n-placeholder="extensions.sudo_placeholder" oninput="extensionCredentialChanged()"><button type="button" class="btn-secondary" aria-label="显示 sudo 密码" aria-pressed="false" title="显示 sudo 密码" onclick="extensionTogglePassword('extSudoPassword',this)">👁</button></div></label>
+              <label id="extPassphraseWrap" class="hidden"><span data-i18n="extensions.key_passphrase">SSH 私钥口令（仅当前会话）</span><div class="extension-copy-row"><input id="extPassphrase" type="password" autocomplete="off" oninput="extensionCredentialChanged()"><button type="button" class="btn-secondary" aria-label="显示 SSH 私钥口令" aria-pressed="false" title="显示 SSH 私钥口令" onclick="extensionTogglePassword('extPassphrase',this)">👁</button></div></label>
+              <label><span data-i18n="extensions.elevation_mode">提权方式</span><select id="extElevation" onchange="extensionCredentialChanged()"><option value="none" selected data-i18n="extensions.elevation_none">不使用 sudo</option><option value="passwordless_sudo" data-i18n="extensions.elevation_passwordless">免密 sudo</option><option value="password_sudo" data-i18n="extensions.elevation_password">密码 sudo</option></select></label>
+              <label><span data-i18n="extensions.sudo_password">sudo 密码（默认不复用 SSH 密码）</span><div class="extension-copy-row"><input id="extSudoPassword" type="password" autocomplete="off" placeholder="仅密码 sudo 时使用" data-i18n-placeholder="extensions.sudo_placeholder" oninput="extensionCredentialChanged()"><button type="button" class="btn-secondary" aria-label="显示 sudo 密码" aria-pressed="false" title="显示 sudo 密码" onclick="extensionTogglePassword('extSudoPassword',this)">👁</button></div></label>
+              <label class="extension-checkbox"><input id="extReuseSshPassword" type="checkbox" onchange="extensionCredentialChanged()"><span data-i18n="extensions.reuse_ssh_password">本次请求显式使用 SSH 密码作为 sudo 密码</span></label>
             </fieldset>
             <p id="extCredentialNotice" class="extension-credential-notice" role="status"><span data-i18n="extensions.ssh_not_saved_notice">保存 VPS 连接信息，但不保存 SSH 密码、私钥或 sudo 密码；关闭页面或重启后需要重新输入。</span></p>
             <div id="extHostKeyConfirm" class="extension-confirm hidden" role="alert"></div>
@@ -871,7 +874,7 @@
               <label><input type="radio" name="extIntent" value="first-install" onchange="extensionSelectIntent(this)"><span><b><span data-i18n="extensions.intent_production">首次部署正式服务</span></b><small><span data-i18n="extensions.intent_production_hint">推荐新建生产实例</span></small></span></label>
             </fieldset>
             <fieldset class="extension-choice-group"><legend><span data-i18n="extensions.strategy">实例策略</span></legend>
-              <label><input type="radio" name="extStrategy" value="existing"><span><b><span data-i18n="extensions.strategy_existing">接入已有实例</span></b><small><span data-i18n="extensions.strategy_existing_hint">不重建、不迁移数据，适合已有健康服务</span></small></span></label>
+              <label><input type="radio" name="extStrategy" value="existing"><span><b><span data-i18n="extensions.strategy_existing">确认并在 GenBox 本地登记</span></b><small><span data-i18n="extensions.strategy_existing_hint">远程实例保持不变；GenBox 会在本地登记容器、状态、数据目录和所有权</span></small></span></label>
               <label class="selected"><input type="radio" name="extStrategy" value="isolated" checked><span><b><span data-i18n="extensions.strategy_isolated">创建隔离测试实例</span></b><small><span data-i18n="extensions.strategy_isolated_hint">独立端口、目录和 Compose 项目，推荐开发验收</span></small></span></label>
               <label><input type="radio" name="extStrategy" value="new"><span><b><span data-i18n="extensions.strategy_new">新建生产实例</span></b><small><span data-i18n="extensions.strategy_new_hint">没有可用实例时使用，部署前仍会预览全部变更</span></small></span></label>
             </fieldset>
@@ -1009,7 +1012,8 @@
           <div id="extResetInstance" class="ext-reset-instance"></div>
           <label><span data-i18n="extensions.ssh_password">SSH 密码</span><input id="extResetPassword" type="password" autocomplete="current-password"></label>
           <label><span data-i18n="extensions.or_private_key">或 SSH 私钥</span><textarea id="extResetKey" rows="4" spellcheck="false"></textarea></label>
-          <label><span data-i18n="extensions.sudo_password">sudo 密码（留空则复用 SSH 密码）</span><input id="extResetSudo" type="password" autocomplete="off"></label>
+          <label><span data-i18n="extensions.key_passphrase">SSH 私钥口令</span><input id="extResetPassphrase" type="password" autocomplete="off"></label>
+          <label><span data-i18n="extensions.sudo_password">sudo 密码（默认不复用 SSH 密码）</span><input id="extResetSudo" type="password" autocomplete="off"></label>
           <div id="extResetKeyResult" class="ext-reset-result hidden">
             <label><span data-i18n="extensions.new_key_once">新管理密钥（仅本次显示）</span><div class="extension-copy-row"><input id="extResetKeyNew" type="password" readonly><button class="btn-secondary" onclick="extensionRevealKey('extResetKeyNew')"><span data-i18n="common.show">显示</span></button><button class="btn-primary" onclick="extensionCopy('extResetKeyNew')"><span data-i18n="common.copy">复制</span></button></div></label>
             <div class="ext-reset-save"><input id="extResetVaultPassword" type="password" autocomplete="off" placeholder="凭证库解锁密码（如已锁定）" data-i18n-placeholder="extensions.vault_password_locked"><button class="btn-secondary" onclick="extensionSaveResetCredential()"><span data-i18n="extensions.save_local_copy">保存 / 更新本地副本</span></button></div>
