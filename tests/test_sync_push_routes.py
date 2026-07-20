@@ -15,6 +15,7 @@ import sync.manifest as manifest_mod
 
 SOURCE_ID = "chatgpt2api-dev"
 PUSH_KEY = "dummy-push-key-for-tests"
+ADMIN_KEY = "dummy-admin-key-for-tests"
 REQUIRED_RECEIPT_FIELDS = {
     "ok",
     "status",
@@ -87,6 +88,35 @@ def test_push_status_route_authentication(push_environment):
 
     missing = client.get("/api/sync/push/status")
     assert missing.status_code == 401
+
+
+def test_production_push_auth_is_separate_from_admin_auth(push_environment, monkeypatch):
+    monkeypatch.setenv("APP_MODE", "prod")
+    monkeypatch.setenv("ADMIN_KEY", ADMIN_KEY)
+    client = TestClient(main.app)
+    payload = _png_bytes("orange")
+
+    status = client.get("/api/sync/push/status", headers=_headers())
+    pushed = _push(client, payload)
+    assert status.status_code == 200
+    assert pushed.status_code == 200
+    assert "X-Admin-Key" not in _headers()
+
+    admin_header = {"X-Admin-Key": ADMIN_KEY}
+    assert client.get("/api/sync/push/status", headers=admin_header).status_code == 401
+    assert client.get(
+        "/api/sync/push/status",
+        headers={**admin_header, **_headers(key="wrong-key")},
+    ).status_code == 401
+    assert _push(client, payload, headers=admin_header).status_code == 401
+    assert _push(
+        client,
+        payload,
+        headers={**admin_header, **_headers(key="wrong-key")},
+    ).status_code == 401
+
+    assert client.get("/api/gallery?limit=1").status_code == 401
+    assert client.get("/api/gallery?limit=1", headers=admin_header).status_code == 200
 
 
 def test_push_routes_fail_closed_for_malformed_key_configuration(push_environment, monkeypatch):
