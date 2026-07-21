@@ -1523,9 +1523,68 @@ eval(source);window.extensionLoadServices=async()=>{};await window.loadExtension
 if(element('extGuidePrimaryBtn').textContent!=='extensions.discover')throw new Error('step 2 did not begin with discovery');
 await window.extensionPrimaryAction();if(element('extGuidePrimaryBtn').textContent!=='extensions.create_plan')throw new Error('discovery did not advance to plan creation');
 await window.extensionPrimaryAction();if(element('extGuidePrimaryBtn').textContent!=='extensions.confirm_deploy')throw new Error('plan did not advance to explicit deployment confirmation');
-const first=window.extensionPrimaryAction();const second=window.extensionPrimaryAction();await Promise.resolve();if(deployCalls!==1)throw new Error('double click created duplicate deployment requests');if(!element('extGuidePrimaryBtn').disabled||element('extGuidePrimaryBtn').textContent!=='status.processing')throw new Error('deployment in flight was not locked');releaseDeploy();await Promise.all([first,second]);if(timers.length!==1)throw new Error('deployment poller was not created once');
+const first=window.extensionPrimaryAction();const second=window.extensionPrimaryAction();for(let i=0;i<8&&!releaseDeploy;i+=1)await Promise.resolve();if(deployCalls!==1)throw new Error('double click created duplicate deployment requests');if(!element('extGuidePrimaryBtn').disabled||element('extGuidePrimaryBtn').textContent!=='status.processing')throw new Error('deployment in flight was not locked');releaseDeploy();await Promise.all([first,second]);if(timers.length!==1)throw new Error('deployment poller was not created once');
 let visited=[];const originalNext=window.extensionNext;window.extensionNext=step=>{visited.push(step);return originalNext(step)};await timers[0]();if(visited.includes(5)||visited.at(-1)!==3)throw new Error('deployment without one-time delivery falsely skipped to completion');if(!element('extSuccessBanner').classList.contains('hidden'))throw new Error('success banner appeared before private-network verification');
 })();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_lost_deploy_response_reconciles_one_accepted_task_without_retry_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+(async()=>{
+const elements=new Map();
+function element(id){if(!elements.has(id)){const classes=new Set(['extDiscoveryResult','extPlanPreview','extHandoff','extSuccessBanner'].includes(id)?['hidden']:[]);elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,readOnly:false,placeholder:'',dataset:{},options:[],selectedIndex:0,classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
+const radios={network:{value:'tailscale',checked:true,classList:{toggle(){}}},intent:{value:'development',checked:true},strategy:{value:'isolated',checked:true},mode:{value:'compose',checked:true},scope:{value:'empty',checked:true},delivery:{value:'once',checked:true}};
+global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('extNetwork'))return radios.network;if(s.includes('extIntent')&&s.includes(':checked'))return radios.intent;if(s.includes('extStrategy')&&s.includes('[value="isolated"]'))return radios.strategy;if(s.includes('extStrategy')&&s.includes(':checked'))return radios.strategy;if(s.includes('extDeployMode'))return radios.mode;if(s.includes('extCloneScope'))return radios.scope;if(s.includes('extCredentialDelivery'))return radios.delivery;if(s.includes('.extension-pane'))return element('heading');return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};
+global.i18nText=k=>k;global.getUiLanguage=()=> 'en';global.escHtml=v=>String(v||'');const timers=[];global.setInterval=fn=>{timers.push(fn);return fn};global.clearInterval=()=>{};
+const key='SHA256:AAAAAAAAAAAAAAAAAAAA',target={id:'saved',name:'Saved',host:'vps.example',port:22,username:'root',host_key:key,chatgpt2api_port:33010};
+const discovery={environment:{os:'Ubuntu',cpu:2,memory_mb:2048,disk_free_mb:4096,listening_ports:[],docker_version:'Docker',compose_version:'Compose',python_version:'3.12'},instances:[],deployment_modes:[{id:'compose',name:'Compose',summary:'Recommended',recommended:true,available:true}]};
+const plan={id:'plan-one',instance_id:'chatgpt2api-dev',service_port:33010,image:'image:test',strategy:'isolated',deployment_mode:'compose',clone_source_id:'',clone_scope:'empty',operations:['prepare'],safety:['isolated'],source_baseline:{}};
+const accepted={id:'accepted-one',status:'running',phase:'connect',progress:5,steps:[{id:'connect',status:'running'}],logs:[],result:null};let serverTasks=[],taskVisible=false,deployCalls=0,taskListReads=0;
+global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks'){taskListReads+=1;const visible=taskVisible?serverTasks:[];body={active_task_id:visible.length?visible[0].id:null,latest_task_id:visible.length?visible[0].id:null,tasks:visible}}else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/discover')body=discovery;else if(url==='/api/extensions/deploy/plan')body={plan,discovery};else if(url==='/api/extensions/deploy'){deployCalls+=1;serverTasks=[accepted];throw new TypeError('response stream lost')}else if(url==='/api/extensions/tasks/accepted-one')body=accepted;return {ok:true,status:200,text:async()=>JSON.stringify(body)}};
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();await window.extensionTestSSH(false);window.extensionNext(2);await window.extensionDiscover();await window.extensionCreatePlan();
+await window.extensionStartDeploy();await window.extensionStartDeploy();
+if(deployCalls!==1||serverTasks.length!==1)throw new Error('lost response created a duplicate deployment task');
+if(taskListReads<3)throw new Error('lost response did not reconcile the task list');
+if(timers.length!==1)throw new Error('lost response did not keep reconciling while task visibility was unknown');
+if(element('extGuideFound').textContent==='extensions.guide_step2_confirmation_failed')throw new Error('ambiguous response falsely claimed plan confirmation blocked the task');
+if(element('extensionMessage').textContent.includes('extensions.deploy_confirmation_safe_notice'))throw new Error('ambiguous response falsely claimed no task or VPS change');
+taskVisible=true;await timers[0]();
+if(timers.length!==2)throw new Error('newly visible accepted task did not transition from reconciliation to task polling');
+await timers[1]();
+})().catch(error=>{console.error(error.stack||error);process.exit(1)});
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_identity_plan_confirmation_returns_to_authoritative_target_and_credentials_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+(async()=>{
+const elements=new Map();
+function element(id){if(!elements.has(id)){const classes=new Set(['extDiscoveryResult','extPlanPreview','extHandoff','extSuccessBanner'].includes(id)?['hidden']:[]);elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,readOnly:false,placeholder:'',dataset:{},options:[],selectedIndex:0,classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
+const radios={network:{value:'tailscale',checked:true,classList:{toggle(){}}},intent:{value:'development',checked:true},strategy:{value:'isolated',checked:true},mode:{value:'compose',checked:true},scope:{value:'empty',checked:true},delivery:{value:'once',checked:true}};
+global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('extNetwork'))return radios.network;if(s.includes('extIntent')&&s.includes(':checked'))return radios.intent;if(s.includes('extStrategy')&&s.includes('[value="isolated"]'))return radios.strategy;if(s.includes('extStrategy')&&s.includes(':checked'))return radios.strategy;if(s.includes('extDeployMode'))return radios.mode;if(s.includes('extCloneScope'))return radios.scope;if(s.includes('extCredentialDelivery'))return radios.delivery;if(s.includes('.extension-pane'))return element('heading');return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};
+global.i18nText=k=>k;global.getUiLanguage=()=> 'en';global.escHtml=v=>String(v||'');global.setInterval=()=>({});global.clearInterval=()=>{};
+const key='SHA256:AAAAAAAAAAAAAAAAAAAA';let target={id:'saved',name:'Saved',host:'authoritative.example',port:2222,username:'deploy',host_key:key,chatgpt2api_port:33010};
+const discovery={environment:{os:'Ubuntu',cpu:2,memory_mb:2048,disk_free_mb:4096,listening_ports:[],docker_version:'Docker',compose_version:'Compose',python_version:'3.12'},instances:[],deployment_modes:[{id:'compose',name:'Compose',summary:'Recommended',recommended:true,available:true}]};
+const plan={id:'plan-one',instance_id:'chatgpt2api-dev',service_port:33010,image:'image:test',strategy:'isolated',deployment_mode:'compose',clone_source_id:'',clone_scope:'empty',operations:['prepare'],safety:['isolated'],source_baseline:{}};let targetReads=0,deployCalls=0;
+global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets'){targetReads+=1;body={targets:[target]}}else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={active_task_id:null,latest_task_id:null,tasks:[]};else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/discover')body=discovery;else if(url==='/api/extensions/deploy/plan')body={plan,discovery};else if(url==='/api/extensions/deploy'){deployCalls+=1;target={...target,host:'reloaded-authoritative.example',port:2200,username:'reloaded-user'};return {ok:false,status:409,text:async()=>JSON.stringify({detail:{error:'identity changed',diagnostic:{code:'deployment_plan_identity_mismatch',stage:'plan_confirmation',retry_safe:false}}})}}return {ok:true,status:200,text:async()=>JSON.stringify(body)}};
+eval(source);window.extensionLoadServices=async()=>{};let visited=[];const originalNext=window.extensionNext;window.extensionNext=step=>{visited.push(step);return originalNext(step)};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();await window.extensionTestSSH(false);window.extensionNext(2);await window.extensionDiscover();await window.extensionCreatePlan();await window.extensionStartDeploy();
+if(deployCalls!==1)throw new Error('identity mismatch did not stop after one deploy request');
+if(targetReads<2)throw new Error('identity mismatch did not reload the authoritative saved target');
+if(element('extHost').value!=='reloaded-authoritative.example'||element('extPort').value!==2200||element('extUsername').value!=='reloaded-user')throw new Error('identity mismatch retained stale target fields');
+if(visited.at(-1)!==1)throw new Error('identity mismatch did not return to VPS identity step');
+if(element('extPassword').value||!element('extSshNextBtn').disabled)throw new Error('identity mismatch retained credentials or SSH verification');
+if(element('extGuidePrimaryBtn').textContent==='extensions.regenerate_safe_plan')throw new Error('identity mismatch exposed the step-2 regenerate loop');
+if(!element('extensionMessage').textContent.includes('extensions.deploy_identity_reconfirm_notice'))throw new Error('identity mismatch did not explain target and credential reconfirmation');
+})().catch(error=>{console.error(error.stack||error);process.exit(1)});
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
     assert result.returncode == 0, result.stderr

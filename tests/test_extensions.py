@@ -914,7 +914,7 @@ def test_deploy_completion_opens_delivery_pane_without_falsely_finishing_network
     assert completed_handler.index("extensionNext(5)") < completed_handler.index("claimTaskDelivery(taskId)")
 
 
-def test_synchronous_plan_confirmation_failure_keeps_safe_step_two_recovery_state():
+def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_states():
     root = Path(__file__).parents[1]
     html = (root / "static" / "index.html").read_text(encoding="utf-8")
     script = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
@@ -925,11 +925,15 @@ def test_synchronous_plan_confirmation_failure_keeps_safe_step_two_recovery_stat
     assert "service_port:Number(currentPlan.service_port)" in handler
     assert "clearSessionCredentials()" in handler
     assert handler.index("await json(await _authFetch('/api/extensions/deploy'") < handler.index("clearSessionCredentials()")
+    assert "knownTaskIds=deploymentTaskIds(await json(await _authFetch('/api/extensions/tasks')))" in handler
+    assert "await reconcileAmbiguousDeployment(knownTaskIds)" in handler
+    assert "await recoverDeploymentIdentity(e)" in handler
     assert "deploymentConfirmationFailed=true;clearCurrentPlan();message(extensionError(e),true)" in handler
     assert "if(!hasCredential())extensionNext(1)" in handler
-    confirmation_catch = handler.rsplit("catch(e){", 1)[1]
-    assert "currentDiscovery=null" not in confirmation_catch
-    assert "clearSessionCredentials()" not in confirmation_catch
+    assert "diagnostic.stage!=='plan_confirmation'" in script
+    assert "deployment_plan_identity_mismatch" in script
+    assert "selectNewDeploymentTask(summary,knownTaskIds)" in script
+    assert "message(i18nText('extensions.deploy_task_reconcile_pending'),true)" in script
     assert "deployment_plan_service_port_changed:'extensions.deploy_plan_service_port_changed'" in error_mapper
     assert "deployment_plan_image_changed:'extensions.deploy_plan_image_changed'" in error_mapper
     assert "deployment_plan_identity_changed:'extensions.deploy_plan_identity_changed'" in error_mapper
@@ -938,8 +942,10 @@ def test_synchronous_plan_confirmation_failure_keeps_safe_step_two_recovery_stat
     assert '"zh-CN":"重新生成安全计划"' in translations
     assert "VPS 未被修改；无任务已创建。" in translations
     assert "The VPS was not changed and no task was created." in translations
-    assert '<script src="/static/js/i18n.js?v=7"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=10"></script>' in html
+    assert "Do not deploy again; GenBox is reconciling the existing task state." in translations
+    assert "verify SSH again before creating a new plan." in translations
+    assert '<script src="/static/js/i18n.js?v=8"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=11"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):
