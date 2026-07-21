@@ -77,7 +77,7 @@ from extensions.models import (
     ManagedCredentialUpsertRequest, VaultPasswordRequest,
 )
 from extensions.orchestrator import (
-    DeploymentAttemptConflictError, DeploymentPlanConfirmationError, SSHAuthenticationError, SSHConnectionError,
+    DeploymentAttemptConflictError, DeploymentNoTaskError, SSHAuthenticationError, SSHConnectionError,
     deployment_plans, extension_tasks, reset_managed_admin_key,
     probe_host_key,
     test_connection as test_extension_connection,
@@ -3651,6 +3651,7 @@ def _bind_confirmed_extension_target(body, *, plan_confirmation: bool = False):
                         "code": "deployment_plan_identity_changed",
                         "stage": "plan_confirmation",
                         "retry_safe": False,
+                        "task_created": False,
                     },
                 },
             )
@@ -3757,9 +3758,9 @@ async def extension_start_deploy(body: ExtensionDeployRequest):
             status_code=409,
             detail={"error": str(exc), "diagnostic": exc.diagnostic},
         ) from exc
-    except DeploymentPlanConfirmationError as exc:
+    except DeploymentNoTaskError as exc:
         raise HTTPException(
-            status_code=400,
+            status_code=exc.status_code,
             detail={"error": str(exc), "diagnostic": exc.diagnostic},
         ) from exc
     except ValueError as exc:

@@ -931,9 +931,11 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "await reconcileAmbiguousDeployment(attemptId)" in handler
     assert "if(deploymentAttemptConflict(e))" in handler
     assert "await recoverDeploymentIdentity(e)" in handler
-    assert "deploymentConfirmationFailed=true;clearCurrentPlan();message(extensionError(e),true)" in handler
-    assert "if(!hasCredential())extensionNext(1)" in handler
-    assert "diagnostic.stage!=='plan_confirmation'" in script
+    assert "if(deploymentNoTask(e)){recoverDefinitiveNoTask(e);return}" in handler
+    assert "if(!hasCredential())extensionNext(1)" in script
+    assert "diagnostic.task_created===false" in script
+    assert "deployment_snapshot_changed:'fresh_discovery'" in script
+    assert "deployment_resource_conflict:'resource_reservation'" in script
     assert "deployment_plan_identity_mismatch" in script
     assert "selectDeploymentAttemptTask(summary,attemptId)" in script
     assert "task.deployment_attempt_id===attemptId" in script
@@ -943,15 +945,21 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "deployment_plan_service_port_changed:'extensions.deploy_plan_service_port_changed'" in error_mapper
     assert "deployment_plan_image_changed:'extensions.deploy_plan_image_changed'" in error_mapper
     assert "deployment_plan_identity_changed:'extensions.deploy_plan_identity_changed'" in error_mapper
+    assert "deployment_snapshot_changed:'extensions.deploy_snapshot_changed'" in error_mapper
+    assert "deployment_resource_conflict:'extensions.deploy_resource_conflict'" in error_mapper
     assert "extensions.deploy_confirmation_safe_notice" in error_mapper
+    assert "extensions.deploy_task_reconcile_manual" in script
+    assert "attempts>=6" in script
     assert "'extensions.regenerate_safe_plan',window.extensionCreatePlan" in script
     assert '"zh-CN":"重新生成安全计划"' in translations
     assert "VPS 未被修改；无任务已创建。" in translations
     assert "The VPS was not changed and no task was created." in translations
     assert "Do not deploy again; GenBox is reconciling the existing task state." in translations
+    assert "Do not deploy again; reload and check task status manually." in translations
+    assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
-    assert '<script src="/static/js/i18n.js?v=9"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=12"></script>' in html
+    assert '<script src="/static/js/i18n.js?v=10"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=13"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):
@@ -1094,6 +1102,7 @@ def test_all_ssh_routes_bind_to_the_server_confirmed_target(monkeypatch):
                     "code": "deployment_plan_identity_changed",
                     "stage": "plan_confirmation",
                     "retry_safe": False,
+                    "task_created": False,
                 }
                 assert "重新生成安全计划" in exc.detail["error"]
             else:

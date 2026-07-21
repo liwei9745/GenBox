@@ -1388,6 +1388,13 @@
   MESSAGES['extensions.deploy_confirmation_safe_notice'] = {"zh-CN":"VPS 未被修改；无任务已创建。","en":"The VPS was not changed and no task was created."};
   MESSAGES['extensions.deploy_task_reconcile_pending'] = {"zh-CN":"部署响应未能确认。请勿再次部署；GenBox 正在核对已有任务状态。","en":"The deployment response could not be confirmed. Do not deploy again; GenBox is reconciling the existing task state."};
   MESSAGES['extensions.deploy_attempt_unavailable'] = {"zh-CN":"浏览器无法生成安全的部署尝试标识，已停止提交。请更新浏览器后重试。","en":"The browser could not generate a secure deployment attempt ID, so submission was stopped. Update the browser and try again."};
+  MESSAGES['extensions.deploy_plan_unavailable'] = {"zh-CN":"已确认的部署计划不存在或已过期，请重新生成安全计划。","en":"The confirmed deployment plan is missing or expired. Generate a new safety plan."};
+  MESSAGES['extensions.deploy_snapshot_changed'] = {"zh-CN":"确认计划后 VPS 环境已变化，请重新检测环境后再生成计划。","en":"The VPS environment changed after plan confirmation. Run discovery again before creating a new plan."};
+  MESSAGES['extensions.deploy_resource_conflict'] = {"zh-CN":"另一个部署正在占用相同资源。请先查看任务状态，再重载页面后重新规划。","en":"Another deployment currently owns the same resources. Check task status, then reload before planning again."};
+  MESSAGES['extensions.deploy_task_reconcile_manual'] = {"zh-CN":"GenBox 多次检查后仍无法确认部署任务。请勿再次部署；请重载页面并人工查看任务状态。","en":"GenBox could not confirm the deployment task after several checks. Do not deploy again; reload and check task status manually."};
+  MESSAGES['extensions.guide_step2_manual_check'] = {"zh-CN":"部署任务状态仍未确认。","en":"The deployment task status is still unconfirmed."};
+  MESSAGES['extensions.guide_step2_manual_reload'] = {"zh-CN":"请重载页面并查看已有任务，不要再次提交部署。","en":"Reload and inspect existing tasks; do not submit deployment again."};
+  MESSAGES['extensions.guide_step2_manual_after'] = {"zh-CN":"确认任务状态后再决定后续恢复。","en":"Confirm task status before choosing the next recovery step."};
   MESSAGES['extensions.deploy_attempt_conflict'] = {"zh-CN":"部署尝试标识与另一份已确认上下文冲突，已拒绝继续。请重新生成计划后再确认。","en":"The deployment attempt ID conflicts with another confirmed context. The request was rejected; create a new plan before confirming again."};
   MESSAGES['extensions.deploy_identity_reconfirm_notice'] = {"zh-CN":"请返回 VPS 信息，核对已保存的目标与主机身份，重新输入凭据并再次验证 SSH，然后再创建新计划。","en":"Return to VPS information, review the saved target and host identity, re-enter credentials, and verify SSH again before creating a new plan."};
   MESSAGES['extensions.prepare_local_network'] = {"zh-CN":"准备本机网络","en":"Prepare local network"};

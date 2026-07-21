@@ -7,7 +7,12 @@ import main
 from extensions.capabilities import DEPLOYMENT_CAPABILITIES, validate_deployment_capability
 from extensions.catalog import public_catalog
 from extensions.models import ExtensionDeployRequest, ExtensionPlanRequest, ExtensionTarget, SSHCredential
-from extensions.orchestrator import DeploymentAttemptConflictError, DeploymentPlanManager, ExtensionTaskManager
+from extensions.orchestrator import (
+    DeploymentAttemptConflictError,
+    DeploymentPlanManager,
+    DeploymentResourceConflictError,
+    ExtensionTaskManager,
+)
 
 
 SECRET_SENTINEL = "capability-test-secret-must-not-leak"
@@ -183,6 +188,51 @@ def test_deploy_route_requires_attempt_id_and_returns_sanitized_conflict(monkeyp
     assert all(secret not in response.text for secret in (SECRET_SENTINEL, "vps.example", "deploy-user"))
 
 
+@pytest.mark.parametrize(
+    ("scenario", "code", "stage"),
+    [
+        ("expired_plan", "deployment_plan_unavailable", "plan_lease"),
+        ("snapshot_drift", "deployment_snapshot_changed", "fresh_discovery"),
+        ("resource_conflict", "deployment_resource_conflict", "resource_reservation"),
+    ],
+)
+def test_deploy_route_definitive_pre_task_failures_are_typed_no_task_diagnostics(
+    monkeypatch, scenario, code, stage,
+):
+    class Tasks:
+        async def create(self, request):
+            manager = DeploymentPlanManager()
+            if scenario == "expired_plan":
+                manager.lease("missing-plan", request)
+            elif scenario == "snapshot_drift":
+                manager.validate_fresh_snapshot(
+                    {"discovery_snapshot": {"expected": True}},
+                    {"environment": {}, "privileges": {}, "instances": []},
+                )
+            else:
+                raise DeploymentResourceConflictError()
+
+    saved = ExtensionTarget(**target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA")
+    monkeypatch.setattr(main, "extension_tasks", Tasks())
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: saved)
+
+    response = TestClient(main.app, base_url="http://testserver").post(
+        "/api/extensions/deploy",
+        json=request_payload(confirmed_plan_id="definitive-no-task"),
+    )
+
+    assert response.status_code in {400, 409}
+    detail = response.json()["detail"]
+    assert detail["diagnostic"] == {
+        "code": code,
+        "stage": stage,
+        "retry_safe": False,
+        "task_created": False,
+    }
+    assert SECRET_SENTINEL not in response.text
+    assert all(secret not in response.text for secret in ("vps.example", "deploy-user"))
+
+
 def test_catalog_deployability_is_derived_from_capability_registry():
     items = public_catalog()["items"]
     ids = [item["id"] for item in items]
@@ -335,6 +385,7 @@ def test_deploy_route_rejects_field_tamper_without_task_or_plan_consumption(
             "code": diagnostic_code,
             "stage": "plan_confirmation",
             "retry_safe": False,
+            "task_created": False,
         },
     }
     assert leased_requests == []
@@ -363,6 +414,7 @@ def test_deploy_route_rejects_live_identity_drift_with_structured_safe_reason(mo
             "code": "deployment_plan_identity_changed",
             "stage": "plan_confirmation",
             "retry_safe": False,
+            "task_created": False,
         },
     }
     assert leased_requests == []
@@ -390,6 +442,7 @@ def test_deploy_route_rejects_submitted_identity_tamper_before_task_creation(mon
             "code": "deployment_plan_identity_changed",
             "stage": "plan_confirmation",
             "retry_safe": False,
+            "task_created": False,
         },
     }
     assert leased_requests == []

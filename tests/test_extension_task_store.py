@@ -233,6 +233,51 @@ def test_deployment_attempt_persists_sanitized_restart_correlation(tmp_path, mon
     asyncio.run(run())
 
 
+def test_cancelled_deployment_owner_releases_lease_attempt_and_waiter(tmp_path, monkeypatch):
+    request = ExtensionDeployRequest(
+        deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
+        target=ExtensionTarget(
+            id="cancel-owner-target", name="VPS", host="host.example", username="deploy-user",
+            chatgpt2api_port=33010,
+        ),
+        credential=SSHCredential(password="cancel-owner-sentinel"),
+        instance_id="cancel-owner-app",
+        image="example.invalid/app@sha256:" + "d" * 64,
+    )
+    request, plan_manager, plan = prepare_deployment_plan(monkeypatch, request)
+    discovery_started = asyncio.Event()
+
+    async def suspended_discovery(_request, *, path_checks=None):
+        discovery_started.set()
+        await asyncio.Event().wait()
+
+    async def run():
+        monkeypatch.setattr("extensions.discovery.discover_environment", suspended_discovery)
+        manager = ExtensionTaskManager(store_path=tmp_path / "cancel-owner.json")
+        owner = asyncio.create_task(manager.create(request))
+        await discovery_started.wait()
+        waiter = asyncio.create_task(manager.create(request))
+        await asyncio.sleep(0)
+
+        owner.cancel()
+        results = await asyncio.wait_for(
+            asyncio.gather(owner, waiter, return_exceptions=True),
+            timeout=1,
+        )
+
+        assert all(isinstance(result, asyncio.CancelledError) for result in results)
+        assert request.deployment_attempt_id not in manager.deployment_attempts
+        assert plan["id"] in plan_manager.plans
+        assert "_lease_token" not in plan_manager.plans[plan["id"]]
+        assert manager.resource_reservations.active_count == 0
+        assert manager.tasks == {}
+        assert manager.runners == {}
+        assert manager.task_reservations == {}
+        assert not (tmp_path / "cancel-owner.json").exists()
+
+    asyncio.run(run())
+
+
 def test_task_store_roundtrip_uses_versioned_atomic_json(tmp_path, monkeypatch):
     path = tmp_path / "extension_tasks.json"
     store = TaskStore(path)
@@ -1717,6 +1762,98 @@ await timers[1]();
 if(acceptedTaskReads!==1)throw new Error('exact accepted task was not polled once');
 if(unrelatedTaskReads!==0||unrelatedDeliveryCalls!==0)throw new Error('unrelated task was touched after exact reconciliation');
 })().catch(error=>{console.error(error.stack||error);process.exit(1)});
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_frontend_interrupted_no_task_and_bounded_ambiguous_recovery_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const vm=require('vm');const source=fs.readFileSync(process.argv[1],'utf8');
+const marker=source.lastIndexOf('})();');
+const instrumented=source.slice(0,marker)+`
+window.__test={
+  setState(s){
+    if('currentPlan' in s)currentPlan=s.currentPlan;
+    if('currentDiscovery' in s)currentDiscovery=s.currentDiscovery;
+    if('currentExtensionStep' in s)currentExtensionStep=s.currentExtensionStep;
+    if('deploymentInFlight' in s)deploymentInFlight=s.deploymentInFlight;
+    if('deploymentFailed' in s)deploymentFailed=s.deploymentFailed;
+    if('deploymentConfirmationFailed' in s)deploymentConfirmationFailed=s.deploymentConfirmationFailed;
+    if('sshVerified' in s)sshVerified=s.sshVerified;
+    if('currentTargetId' in s)currentTargetId=s.currentTargetId;
+    if('targetDirty' in s)targetDirty=s.targetDirty;
+    if('trustedHostKey' in s)trustedHostKey=s.trustedHostKey;
+    if('taskPoll' in s)taskPoll=s.taskPoll;
+    updateNoviceGuide();
+  },
+  getState(){return {currentPlan,currentDiscovery,deploymentInFlight,deploymentFailed,deploymentConfirmationFailed,taskPoll,deploymentReconcileUnresolved:typeof deploymentReconcileUnresolved==='undefined'?false:deploymentReconcileUnresolved}},
+  reconcileAmbiguousDeployment
+};
+`+source.slice(marker);
+function boot(fetchImpl,cryptoImpl){
+  const elements=new Map(),timers=[],cleared=[];
+  function element(id){if(!elements.has(id)){const classes=new Set(['extDiscoveryResult','extPlanPreview','extHandoff','extSuccessBanner'].includes(id)?['hidden']:[]);elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,readOnly:false,placeholder:'',checked:false,dataset:{},options:[],selectedIndex:0,classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
+  const context={console,Uint8Array,Array,Promise,JSON,Number,String,Object,Math,Set,Map,Error,TypeError,RegExp,Date,
+    document:{getElementById:element,querySelector(){return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}},
+    i18nText:k=>k,getUiLanguage:()=> 'en',escHtml:v=>String(v||''),_authFetch:fetchImpl,crypto:cryptoImpl,
+    setInterval(fn,ms){const timer={fn,ms};timers.push(timer);return timer},clearInterval(timer){if(timer)cleared.push(timer)},
+    location:{reload(){context.reloads=(context.reloads||0)+1}},reloads:0
+  };
+  context.window=context;vm.createContext(context);vm.runInContext(instrumented,context);
+  return {context,elements,timers,cleared,element};
+}
+(async()=>{
+  const attempt='abababababababababababababababab';
+  const interrupted={id:'exact-interrupted',deployment_attempt_id:attempt,status:'interrupted',phase:'connect',progress:10,steps:[{id:'connect',status:'success'}],logs:[],error:null,result:null,recovery_action:'regenerate_plan_and_reprovide_credentials'};
+  const staleTimer={kind:'stale'};
+  const first=boot(async url=>({ok:true,status:200,text:async()=>JSON.stringify(url==='/api/extensions/tasks'?{active_task_id:null,latest_task_id:'exact-interrupted',tasks:[interrupted]}:{})}),{getRandomValues(v){v.fill(1);return v}});
+  first.element('extPassword').value='session-only';
+  first.context.__test.setState({currentPlan:{id:'plan'},currentDiscovery:{ready:true},currentExtensionStep:2,deploymentInFlight:false,deploymentFailed:false,sshVerified:true,currentTargetId:'saved',targetDirty:false,trustedHostKey:'SHA256:test',taskPoll:staleTimer});
+  await first.context.__test.reconcileAmbiguousDeployment(attempt);
+  const interruptedState=first.context.__test.getState();
+  if(interruptedState.deploymentInFlight||!interruptedState.deploymentFailed||interruptedState.currentPlan!==null)throw new Error('interrupted exact attempt retained processing state or stale plan');
+  if(!first.cleared.includes(staleTimer))throw new Error('interrupted exact attempt did not stop the stale timer');
+  if(first.element('extGuidePrimaryBtn').disabled||first.element('extGuidePrimaryBtn').textContent!=='extensions.enter_password_button')throw new Error('interrupted exact attempt did not expose credential recovery CTA');
+  if(!first.element('extensionMessage').textContent.includes('extensions.task_interrupted')||!first.element('extensionMessage').textContent.includes('extensions.recovery_regenerate_plan'))throw new Error('interrupted exact attempt did not render recovery guidance');
+
+  let deployCalls=0,taskReads=0;
+  const noTask=boot(async(url,options={})=>{if(url==='/api/extensions/deploy'){deployCalls+=1;return {ok:false,status:400,text:async()=>JSON.stringify({detail:{error:'sanitized snapshot change',diagnostic:{code:'deployment_snapshot_changed',stage:'fresh_discovery',retry_safe:false,task_created:false}}})}}if(url==='/api/extensions/tasks')taskReads+=1;return {ok:true,status:200,text:async()=>JSON.stringify({tasks:[]})}}, {getRandomValues(v){v.fill(2);return v}});
+  Object.assign(noTask.element('extName'),{value:'Saved'});Object.assign(noTask.element('extHost'),{value:'vps.example'});Object.assign(noTask.element('extPort'),{value:'22'});Object.assign(noTask.element('extUsername'),{value:'root'});Object.assign(noTask.element('extServicePort'),{value:'33010'});noTask.element('extPassword').value='session-only';noTask.element('extElevation').value='none';
+  noTask.context.__test.setState({currentPlan:{id:'plan',service_port:33010,image:'image:test',instance_id:'app',strategy:'isolated',deployment_mode:'compose',clone_source_id:'',clone_scope:'empty'},currentDiscovery:{ready:true},currentExtensionStep:2,deploymentInFlight:false,deploymentFailed:false,sshVerified:true,currentTargetId:'saved',targetDirty:false,trustedHostKey:'SHA256:test'});
+  await noTask.context.extensionStartDeploy();const noTaskMessage=noTask.element('extensionMessage').textContent;await noTask.context.extensionStartDeploy();
+  const noTaskState=noTask.context.__test.getState();
+  if(deployCalls!==1||taskReads!==0)throw new Error('definitive no-task failure retried or reconciled');
+  if(noTaskState.deploymentInFlight||noTaskState.currentPlan!==null||noTaskState.currentDiscovery!==null)throw new Error('definitive snapshot failure did not reset to fresh discovery');
+  if(!noTaskMessage.includes('extensions.deploy_snapshot_changed')||!noTaskMessage.includes('extensions.deploy_confirmation_safe_notice'))throw new Error('definitive no-task recovery was not specific and explicit');
+  if(noTask.element('extGuidePrimaryBtn').disabled||noTask.element('extGuidePrimaryBtn').textContent!=='extensions.discover')throw new Error('definitive snapshot failure did not expose fresh discovery CTA');
+
+  const ambiguous=boot(async()=>({ok:true,status:200,text:async()=>JSON.stringify({active_task_id:null,latest_task_id:null,tasks:[]})}),{getRandomValues(v){v.fill(3);return v}});
+  ambiguous.element('extPassword').value='session-only';
+  ambiguous.context.__test.setState({currentPlan:{id:'plan'},currentDiscovery:{ready:true},currentExtensionStep:2,deploymentInFlight:false,deploymentFailed:false,sshVerified:true,currentTargetId:'saved',targetDirty:false,trustedHostKey:'SHA256:test'});
+  await ambiguous.context.__test.reconcileAmbiguousDeployment(attempt);
+  if(ambiguous.timers.length!==1)throw new Error('ambiguous reconciliation timer was not created');
+  for(let i=0;i<8&&!ambiguous.cleared.includes(ambiguous.timers[0]);i+=1)await ambiguous.timers[0].fn();
+  const ambiguousState=ambiguous.context.__test.getState();
+  if(!ambiguous.cleared.includes(ambiguous.timers[0])||ambiguousState.deploymentInFlight||!ambiguousState.deploymentReconcileUnresolved||ambiguousState.currentPlan!==null)throw new Error('ambiguous reconciliation did not reach a bounded manual state');
+  if(!ambiguous.element('extensionMessage').textContent.includes('extensions.deploy_task_reconcile_manual'))throw new Error('bounded ambiguous recovery guidance was not visible');
+  if(ambiguous.element('extGuidePrimaryBtn').disabled||ambiguous.element('extGuidePrimaryBtn').textContent!=='common.reload')throw new Error('bounded ambiguous recovery did not expose reload CTA');
+})().catch(error=>{console.error(error.stack||error);process.exit(1)});
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_english_crypto_unavailable_preserves_specific_message_and_zero_deploy_post_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const vm=require('vm');const source=fs.readFileSync(process.argv[1],'utf8');const marker=source.lastIndexOf('})();');
+const instrumented=source.slice(0,marker)+`window.__test={setReady(){currentPlan={id:'plan',service_port:33010,image:'image:test',instance_id:'app',strategy:'isolated',deployment_mode:'compose',clone_source_id:'',clone_scope:'empty'};currentExtensionStep=2;sshVerified=true;currentTargetId='saved';targetDirty=false;trustedHostKey='SHA256:test';updateNoviceGuide()}};`+source.slice(marker);
+const elements=new Map();function element(id){if(!elements.has(id))elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,readOnly:false,placeholder:'',checked:false,dataset:{},options:[],selectedIndex:0,classList:{toggle(){},add(){},remove(){},contains(){return false}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){},closest(){return null}});return elements.get(id)}
+let deployCalls=0;const context={console,Uint8Array,Array,Promise,JSON,Number,String,Object,Math,Set,Map,Error,TypeError,RegExp,Date,document:{getElementById:element,querySelector(){return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}},i18nText:k=>k,getUiLanguage:()=> 'en',escHtml:v=>String(v||''),_authFetch:async url=>{if(url==='/api/extensions/deploy')deployCalls+=1;return {ok:true,status:200,text:async()=>JSON.stringify({task_id:'unexpected'})}},setInterval(){throw new Error('unexpected timer')},clearInterval(){}};context.window=context;vm.createContext(context);vm.runInContext(instrumented,context);
+Object.assign(element('extName'),{value:'Saved'});Object.assign(element('extHost'),{value:'vps.example'});Object.assign(element('extPort'),{value:'22'});Object.assign(element('extUsername'),{value:'root'});Object.assign(element('extServicePort'),{value:'33010'});element('extPassword').value='session-only';element('extElevation').value='none';context.__test.setReady();
+(async()=>{await context.extensionStartDeploy();if(deployCalls!==0)throw new Error('crypto-unavailable flow submitted deploy POST');if(element('extensionMessage').textContent!=='extensions.deploy_attempt_unavailable')throw new Error('specific English crypto failure was normalized away: '+element('extensionMessage').textContent)})().catch(error=>{console.error(error.stack||error);process.exit(1)});
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
     assert result.returncode == 0, result.stderr

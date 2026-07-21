@@ -56,11 +56,30 @@ class SSHConnectionError(ConnectionError):
         self.diagnostic = {"code": code, "stage": stage, "retry_safe": False}
 
 
-class DeploymentResourceConflictError(ValueError):
+class DeploymentNoTaskError(ValueError):
+    """A sanitized deterministic failure that proves task creation never occurred."""
+
+    def __init__(self, message: str, *, code: str, stage: str, status_code: int = 400):
+        super().__init__(message)
+        self.status_code = status_code
+        self.diagnostic = {
+            "code": code,
+            "stage": stage,
+            "retry_safe": False,
+            "task_created": False,
+        }
+
+
+class DeploymentResourceConflictError(DeploymentNoTaskError):
     """A deterministic conflict that does not expose remote resource details."""
 
     def __init__(self):
-        super().__init__("deployment_resource_conflict")
+        super().__init__(
+            "deployment_resource_conflict",
+            code="deployment_resource_conflict",
+            stage="resource_reservation",
+            status_code=409,
+        )
 
 
 class DeploymentAttemptConflictError(ValueError):
@@ -75,16 +94,29 @@ class DeploymentAttemptConflictError(ValueError):
         }
 
 
-class DeploymentPlanConfirmationError(ValueError):
+class DeploymentPlanConfirmationError(DeploymentNoTaskError):
     """A sanitized, field-specific failure before task or remote side effects."""
 
     def __init__(self, message: str, *, code: str):
-        super().__init__(message)
-        self.diagnostic = {
-            "code": code,
-            "stage": "plan_confirmation",
-            "retry_safe": False,
-        }
+        super().__init__(message, code=code, stage="plan_confirmation")
+
+
+class DeploymentPlanUnavailableError(DeploymentNoTaskError):
+    def __init__(self):
+        super().__init__(
+            "deployment_plan_unavailable",
+            code="deployment_plan_unavailable",
+            stage="plan_lease",
+        )
+
+
+class DeploymentSnapshotChangedError(DeploymentNoTaskError):
+    def __init__(self):
+        super().__init__(
+            "deployment_snapshot_changed",
+            code="deployment_snapshot_changed",
+            stage="fresh_discovery",
+        )
 
 
 class DeploymentResourceReservations:
@@ -690,7 +722,7 @@ class ExtensionTaskManager:
             deployment_plans.validate_fresh_snapshot(leased_plan, fresh_discovery)
             reservation_token = self.resource_reservations.acquire(leased_plan)
             plan = deployment_plans.consume_lease(request.confirmed_plan_id, lease_token, request)
-        except Exception:
+        except BaseException:
             self.resource_reservations.release(reservation_token)
             deployment_plans.release(request.confirmed_plan_id, lease_token)
             raise
@@ -722,7 +754,7 @@ class ExtensionTaskManager:
                 self.runners[task_id] = runner
                 runner.add_done_callback(lambda completed: self._discard_done_runner(task_id, completed))
                 self._persist()
-        except Exception:
+        except BaseException:
             with self.lock:
                 if previous_tasks is not None:
                     self.tasks = previous_tasks
@@ -1351,30 +1383,30 @@ class DeploymentPlanManager:
     def validate_fresh_snapshot(self, plan: dict, discovery: dict) -> None:
         expected = plan.get("discovery_snapshot")
         if not isinstance(expected, dict):
-            raise ValueError("部署计划缺少可复核的远程快照，请重新生成")
+            raise DeploymentSnapshotChangedError()
         actual = self._discovery_snapshot(discovery)
         if actual != expected:
-            raise ValueError("远程端口、实例、Compose、镜像、挂载或提权能力已变化，请重新生成计划")
+            raise DeploymentSnapshotChangedError()
         required_disk_mb = int(plan.get("required_disk_mb") or 0)
         disk_free_mb = int(discovery.get("environment", {}).get("disk_free_mb") or 0)
         if disk_free_mb < required_disk_mb:
-            raise ValueError("远程磁盘容量已不满足确认计划")
+            raise DeploymentSnapshotChangedError()
         path_conditions = discovery.get("path_conditions", {})
         if any(path_conditions.get(name) is not True for name in plan.get("path_requirements", {})):
-            raise ValueError("远程部署目录或克隆源路径条件已变化，请重新生成计划")
+            raise DeploymentSnapshotChangedError()
         if plan.get("strategy") == "existing":
             existing = next(
                 (item for item in discovery.get("instances", []) if item.get("id") == plan.get("instance_id")),
                 None,
             )
             if not existing or existing.get("service_port") != plan.get("service_port"):
-                raise ValueError("已有实例端口或身份已变化，请重新生成计划")
+                raise DeploymentSnapshotChangedError()
         else:
             environment = discovery.get("environment", {})
             if plan.get("service_port") in environment.get("listening_ports", []):
-                raise ValueError("部署端口已被占用，请重新生成计划")
+                raise DeploymentSnapshotChangedError()
             if any(item.get("id") == plan.get("instance_id") for item in discovery.get("instances", [])):
-                raise ValueError("部署实例 ID 已出现冲突，请重新生成计划")
+                raise DeploymentSnapshotChangedError()
 
     def take(self, plan_id: str, request: ExtensionDeployRequest) -> dict:
         with self.lock:
@@ -1384,7 +1416,7 @@ class DeploymentPlanManager:
         validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
         plan = self.plans.get(plan_id)
         if not plan or plan["expires_at"] < time.time():
-            raise ValueError("部署计划不存在或已过期，请重新检测")
+            raise DeploymentPlanUnavailableError()
         if consume and plan.get("_lease_token"):
             raise ValueError("部署计划正在进行远程复核，请勿重复提交")
         identity_request = request
