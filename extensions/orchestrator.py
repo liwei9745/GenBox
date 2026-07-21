@@ -1297,7 +1297,7 @@ class DeploymentPlanManager:
             or plan["deployment_mode"] != request.deployment_mode
         ):
             raise ValueError("部署请求与已确认计划不一致")
-        if plan["image"] != request.image or plan["service_port"] != identity_request.target.chatgpt2api_port:
+        if plan["image"] != request.image or plan["service_port"] != request.target.chatgpt2api_port:
             raise ValueError("端口或镜像已变更，请重新生成计划")
         if plan.get("clone_source_id", "") != request.clone_source_id or plan.get("clone_scope", "empty") != request.clone_scope:
             raise ValueError("克隆范围已变更，请重新生成计划")

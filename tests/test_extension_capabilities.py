@@ -222,6 +222,75 @@ def test_plan_drift_does_not_consume_valid_plan(changes):
     assert manager.take(plan["id"], deploy_request)["id"] == plan["id"]
 
 
+def _port_bound_plan(service_port=33011):
+    manager = DeploymentPlanManager()
+    live_target = ExtensionTarget(**target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA")
+    submitted_target = live_target.model_copy(update={"chatgpt2api_port": service_port})
+    credential = SSHCredential(password=SECRET_SENTINEL)
+    plan = manager.create(
+        ExtensionPlanRequest(
+            target=submitted_target,
+            credential=credential,
+            service_port=service_port,
+        ),
+        {
+            "environment": environment_snapshot(),
+            "privileges": privilege_snapshot(),
+            "instances": [],
+        },
+    )
+    request = ExtensionDeployRequest(
+        target=submitted_target,
+        credential=credential,
+        trust_host_key=True,
+        expected_host_key=live_target.host_key,
+        confirmed_plan_id=plan["id"],
+    )
+    return manager, live_target, submitted_target, plan, request
+
+
+def test_plan_take_allows_new_service_port_when_live_ssh_identity_is_unchanged(monkeypatch):
+    from extensions import orchestrator
+
+    manager, live_target, _submitted_target, plan, request = _port_bound_plan()
+    assert live_target.chatgpt2api_port == 33010
+    assert plan["service_port"] == request.target.chatgpt2api_port == 33011
+    monkeypatch.setattr(orchestrator.extensions_store, "get_target", lambda _target_id: live_target)
+
+    assert manager.take(plan["id"], request)["id"] == plan["id"]
+
+
+def test_plan_take_rejects_tampered_submitted_service_port(monkeypatch):
+    from extensions import orchestrator
+
+    manager, live_target, submitted_target, plan, request = _port_bound_plan()
+    monkeypatch.setattr(orchestrator.extensions_store, "get_target", lambda _target_id: live_target)
+    tampered_request = request.model_copy(update={
+        "target": submitted_target.model_copy(update={"chatgpt2api_port": 33012}),
+    })
+
+    with pytest.raises(ValueError):
+        manager.take(plan["id"], tampered_request)
+
+    assert plan["id"] in manager.plans
+    assert manager.take(plan["id"], request)["id"] == plan["id"]
+
+
+def test_plan_take_rejects_live_ssh_identity_drift_even_with_bound_request_port(monkeypatch):
+    from extensions import orchestrator
+
+    manager, live_target, _submitted_target, plan, request = _port_bound_plan()
+    current = {"target": live_target.model_copy(update={"host": "changed.example"})}
+    monkeypatch.setattr(orchestrator.extensions_store, "get_target", lambda _target_id: current["target"])
+
+    with pytest.raises(ValueError):
+        manager.take(plan["id"], request)
+
+    assert plan["id"] in manager.plans
+    current["target"] = live_target
+    assert manager.take(plan["id"], request)["id"] == plan["id"]
+
+
 def test_target_auth_and_elevation_drift_leave_plan_available():
     discovery = {
         "environment": environment_snapshot(),
