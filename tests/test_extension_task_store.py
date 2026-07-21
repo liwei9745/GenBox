@@ -1793,12 +1793,13 @@ window.__test={
 };
 `+source.slice(marker);
 function boot(fetchImpl,cryptoImpl){
-  const elements=new Map(),timers=[],cleared=[];
+  const elements=new Map(),timers=[],cleared=[],probeTimeouts=[],clearedProbeTimeouts=[];
   function element(id){if(!elements.has(id)){const classes=new Set(['extDiscoveryResult','extPlanPreview','extHandoff','extSuccessBanner'].includes(id)?['hidden']:[]);elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,readOnly:false,placeholder:'',checked:false,dataset:{},options:[],selectedIndex:0,classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
-  const context={console,Uint8Array,Array,Promise,JSON,Number,String,Object,Math,Set,Map,Error,TypeError,RegExp,Date,
+  const context={console,Uint8Array,Array,Promise,JSON,Number,String,Object,Math,Set,Map,Error,TypeError,RegExp,Date,AbortController,
     document:{getElementById:element,querySelector(){return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}},
     i18nText:k=>k,getUiLanguage:()=> 'en',escHtml:v=>String(v||''),_authFetch:fetchImpl,crypto:cryptoImpl,
     setInterval(fn,ms){const timer={fn,ms};timers.push(timer);return timer},clearInterval(timer){if(timer)cleared.push(timer)},
+    setTimeout(fn,ms){const timer={fn,ms};probeTimeouts.push(timer);return timer},clearTimeout(timer){if(timer)clearedProbeTimeouts.push(timer)},
     location:{reload(){context.reloads=(context.reloads||0)+1}},reloads:0
   };
   context.window=context;vm.createContext(context);vm.runInContext(instrumented,context);
@@ -1840,6 +1841,66 @@ function boot(fetchImpl,cryptoImpl){
   if(!ambiguous.element('extensionMessage').textContent.includes('extensions.deploy_task_reconcile_manual'))throw new Error('bounded ambiguous recovery guidance was not visible');
   if(ambiguous.element('extGuidePrimaryBtn').disabled||ambiguous.element('extGuidePrimaryBtn').textContent!=='common.reload')throw new Error('bounded ambiguous recovery did not expose reload CTA');
 })().catch(error=>{console.error(error.stack||error);process.exit(1)});
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_ambiguous_deployment_probe_timeout_is_single_flight_and_bounded_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const vm=require('vm');let source=fs.readFileSync(process.argv[1],'utf8');
+source=source.replace('var deploymentReconcileProbeTimeoutMs=5000,deploymentReconcileIntervalMs=800;','var deploymentReconcileProbeTimeoutMs=5,deploymentReconcileIntervalMs=1;');
+const marker=source.lastIndexOf('})();');
+const instrumented=source.slice(0,marker)+`
+window.__test={
+  setReady(){
+    currentPlan={id:'plan',service_port:33010,image:'image:test',instance_id:'app',strategy:'isolated',deployment_mode:'compose',clone_source_id:'',clone_scope:'empty'};
+    currentDiscovery={ready:true};currentExtensionStep=2;sshVerified=true;currentTargetId='saved';targetDirty=false;trustedHostKey='SHA256:test';updateNoviceGuide();
+  },
+  getState(){return {currentPlan,deploymentInFlight,deploymentReconcileUnresolved,taskPoll}}
+};
+`+source.slice(marker);
+const elements=new Map();
+function element(id){if(!elements.has(id)){const classes=new Set();elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,readOnly:false,placeholder:'',checked:false,dataset:{},options:[],selectedIndex:0,classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
+const nativeSetInterval=setInterval,nativeClearInterval=clearInterval,nativeSetTimeout=setTimeout,nativeClearTimeout=clearTimeout;
+const intervals=new Set(),timeouts=new Set();
+function trackedSetInterval(fn,ms){const id=nativeSetInterval(fn,ms);intervals.add(id);return id}
+function trackedClearInterval(id){if(id)intervals.delete(id);nativeClearInterval(id)}
+function trackedSetTimeout(fn,ms){let id=nativeSetTimeout(()=>{timeouts.delete(id);fn()},ms);timeouts.add(id);return id}
+function trackedClearTimeout(id){if(id)timeouts.delete(id);nativeClearTimeout(id)}
+let deployCalls=0,taskReads=0,activeProbes=0,maxActiveProbes=0,aborts=0;
+function fetchImpl(url,options={}){
+  if(url==='/api/extensions/deploy'){deployCalls+=1;return Promise.reject(new Error('lost response'))}
+  if(url==='/api/extensions/tasks'){
+    taskReads+=1;activeProbes+=1;maxActiveProbes=Math.max(maxActiveProbes,activeProbes);
+    return new Promise((resolve,reject)=>{
+      const signal=options&&options.signal;
+      if(signal&&signal.addEventListener)signal.addEventListener('abort',()=>{aborts+=1;activeProbes-=1;const error=new Error('aborted');error.name='AbortError';reject(error)},{once:true});
+    });
+  }
+  return Promise.resolve({ok:true,status:200,text:async()=>JSON.stringify({})});
+}
+const context={console,Uint8Array,Array,Promise,JSON,Number,String,Object,Math,Set,Map,Error,TypeError,RegExp,Date,AbortController,
+  document:{getElementById:element,querySelector(){return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}},
+  i18nText:k=>k,getUiLanguage:()=> 'en',escHtml:v=>String(v||''),_authFetch:fetchImpl,crypto:{getRandomValues(v){v.fill(4);return v}},
+  setInterval:trackedSetInterval,clearInterval:trackedClearInterval,setTimeout:trackedSetTimeout,clearTimeout:trackedClearTimeout,
+  location:{reload(){context.reloads=(context.reloads||0)+1}},reloads:0
+};
+context.window=context;vm.createContext(context);vm.runInContext(instrumented,context);
+Object.assign(element('extName'),{value:'Saved'});Object.assign(element('extHost'),{value:'vps.example'});Object.assign(element('extPort'),{value:'22'});Object.assign(element('extUsername'),{value:'root'});Object.assign(element('extServicePort'),{value:'33010'});element('extPassword').value='session-only';element('extElevation').value='none';context.__test.setReady();
+const watchdog=nativeSetTimeout(()=>{console.error('never-resolving reconciliation did not terminate');process.exit(1)},1000);
+(async()=>{
+  await context.extensionStartDeploy();await new Promise(resolve=>nativeSetTimeout(resolve,300));nativeClearTimeout(watchdog);
+  const state=context.__test.getState();
+  if(deployCalls!==1)throw new Error('ambiguous recovery repeated the deploy POST: '+deployCalls);
+  if(taskReads!==6||aborts!==6)throw new Error('probe timeouts did not count exactly six checks: reads='+taskReads+' aborts='+aborts);
+  if(maxActiveProbes!==1||activeProbes!==0)throw new Error('task-list probes overlapped or leaked: max='+maxActiveProbes+' active='+activeProbes);
+  if(intervals.size!==0||timeouts.size!==0||state.taskPoll!==null)throw new Error('reconciliation timers or probe cleanup remained active');
+  if(state.deploymentInFlight||!state.deploymentReconcileUnresolved||state.currentPlan!==null)throw new Error('timed-out reconciliation did not reach manual terminal state');
+  if(!element('extensionMessage').textContent.includes('extensions.deploy_task_reconcile_manual'))throw new Error('manual status guidance was not visible');
+  if(element('extGuidePrimaryBtn').disabled||element('extGuidePrimaryBtn').textContent!=='common.reload')throw new Error('manual reload CTA was not enabled');
+})().catch(error=>{nativeClearTimeout(watchdog);console.error(error.stack||error);process.exit(1)});
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
