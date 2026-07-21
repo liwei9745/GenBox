@@ -1387,6 +1387,8 @@
   MESSAGES['extensions.deploy_plan_identity_changed'] = {"zh-CN":"VPS 连接身份与已确认的安全计划不一致。","en":"The VPS connection identity does not match the confirmed safety plan."};
   MESSAGES['extensions.deploy_confirmation_safe_notice'] = {"zh-CN":"VPS 未被修改；无任务已创建。","en":"The VPS was not changed and no task was created."};
   MESSAGES['extensions.deploy_task_reconcile_pending'] = {"zh-CN":"部署响应未能确认。请勿再次部署；GenBox 正在核对已有任务状态。","en":"The deployment response could not be confirmed. Do not deploy again; GenBox is reconciling the existing task state."};
+  MESSAGES['extensions.deploy_attempt_unavailable'] = {"zh-CN":"浏览器无法生成安全的部署尝试标识，已停止提交。请更新浏览器后重试。","en":"The browser could not generate a secure deployment attempt ID, so submission was stopped. Update the browser and try again."};
+  MESSAGES['extensions.deploy_attempt_conflict'] = {"zh-CN":"部署尝试标识与另一份已确认上下文冲突，已拒绝继续。请重新生成计划后再确认。","en":"The deployment attempt ID conflicts with another confirmed context. The request was rejected; create a new plan before confirming again."};
   MESSAGES['extensions.deploy_identity_reconfirm_notice'] = {"zh-CN":"请返回 VPS 信息，核对已保存的目标与主机身份，重新输入凭据并再次验证 SSH，然后再创建新计划。","en":"Return to VPS information, review the saved target and host identity, re-enter credentials, and verify SSH again before creating a new plan."};
   MESSAGES['extensions.prepare_local_network'] = {"zh-CN":"准备本机网络","en":"Prepare local network"};
   MESSAGES['extensions.guide_step3_title'] = {"zh-CN":"准备这台电脑的 Tailscale","en":"Prepare Tailscale on this computer"};

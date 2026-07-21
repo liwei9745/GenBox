@@ -21,6 +21,9 @@ from extensions.orchestrator import (
 from extensions.task_store import TASK_STORE_SCHEMA_VERSION, TaskStore
 
 
+DEPLOYMENT_ATTEMPT_ID = "0123456789abcdef0123456789abcdef"
+
+
 def task(task_id, status="completed", updated_at="2026-07-17T00:00:00.000Z", **extra):
     return {
         "id": task_id,
@@ -37,6 +40,33 @@ def task(task_id, status="completed", updated_at="2026-07-17T00:00:00.000Z", **e
         "recovery_action": None,
         **extra,
     }
+
+
+@pytest.mark.parametrize("attempt_id", [
+    "",
+    "a" * 31,
+    "a" * 33,
+    "A" * 32,
+    "g" * 32,
+    "0123456789abcdef0123456789abcde-",
+])
+def test_deployment_attempt_id_requires_exact_lowercase_hex(attempt_id):
+    target = ExtensionTarget(
+        id="attempt-target", name="VPS", host="host.example", username="deploy-user",
+    )
+    with pytest.raises(ValueError):
+        ExtensionDeployRequest(
+            deployment_attempt_id=attempt_id,
+            target=target,
+            credential=SSHCredential(password="validation-only"),
+        )
+
+    valid = ExtensionDeployRequest(
+        deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
+        target=target,
+        credential=SSHCredential(password="validation-only"),
+    )
+    assert valid.deployment_attempt_id == DEPLOYMENT_ATTEMPT_ID
 
 
 def prepare_deployment_plan(monkeypatch, request: ExtensionDeployRequest):
@@ -88,6 +118,119 @@ def prepare_deployment_plan(monkeypatch, request: ExtensionDeployRequest):
 
     monkeypatch.setattr("extensions.discovery.discover_environment", fake_discover)
     return request, plan_manager, plan
+
+
+def test_duplicate_deployment_attempt_is_idempotent_and_conflicting_reuse_fails_closed(tmp_path, monkeypatch):
+    from extensions import orchestrator
+
+    request = ExtensionDeployRequest(
+        deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
+        target=ExtensionTarget(
+            id="attempt-target", name="VPS", host="host.example", username="deploy-user",
+            chatgpt2api_port=33010,
+        ),
+        credential=SSHCredential(password="attempt-password-sentinel"),
+        instance_id="attempt-app",
+        image="example.invalid/app@sha256:" + "a" * 64,
+    )
+    request, _plan_manager, plan = prepare_deployment_plan(monkeypatch, request)
+    fresh_discovery = copy.deepcopy(plan["discovery_snapshot"])
+    fresh_discovery["environment"]["disk_free_mb"] = 5000
+    fresh_discovery["path_conditions"] = {"install_dir_absent": True}
+    discovery_calls = 0
+    runner_calls = 0
+    release_runner = asyncio.Event()
+
+    async def counted_discovery(_request, *, path_checks=None):
+        nonlocal discovery_calls
+        discovery_calls += 1
+        return copy.deepcopy(fresh_discovery)
+
+    async def blocked_runner(_task_id, _request, _plan):
+        nonlocal runner_calls
+        runner_calls += 1
+        await release_runner.wait()
+
+    async def run():
+        monkeypatch.setattr("extensions.discovery.discover_environment", counted_discovery)
+        manager = ExtensionTaskManager(store_path=tmp_path / "attempts.json")
+        monkeypatch.setattr(manager, "_run", blocked_runner)
+
+        first_id, duplicate_id = await asyncio.gather(manager.create(request), manager.create(request))
+        assert first_id == duplicate_id
+        assert discovery_calls == 1
+        assert len(manager.tasks) == 1
+        assert len(manager.runners) == 1
+        assert manager.resource_reservations.active_count == 1
+
+        conflicting = request.model_copy(update={
+            "image": "example.invalid/other@sha256:" + "b" * 64,
+            "service_port": 33011,
+        })
+        with pytest.raises(Exception) as exc_info:
+            await manager.create(conflicting)
+        assert exc_info.value.__class__.__name__ == "DeploymentAttemptConflictError"
+        assert getattr(exc_info.value, "diagnostic", {}) == {
+            "code": "deployment_attempt_conflict",
+            "stage": "deployment_attempt",
+            "retry_safe": False,
+        }
+        assert all(value not in str(exc_info.value) for value in (
+            "host.example", "deploy-user", "attempt-password-sentinel", "33011", "example.invalid/other",
+        ))
+        assert discovery_calls == 1
+        assert len(manager.tasks) == 1
+        assert len(manager.runners) == 1
+
+        release_runner.set()
+        await manager.runners[first_id]
+        assert runner_calls == 1
+
+    asyncio.run(run())
+
+
+def test_deployment_attempt_persists_sanitized_restart_correlation(tmp_path, monkeypatch, caplog):
+    request = ExtensionDeployRequest(
+        deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
+        target=ExtensionTarget(
+            id="restart-target", name="VPS", host="restart.example", username="deploy-user",
+            chatgpt2api_port=33010,
+        ),
+        credential=SSHCredential(password="restart-password-sentinel"),
+        instance_id="restart-app",
+        image="example.invalid/app@sha256:" + "c" * 64,
+    )
+    request, _plan_manager, _plan = prepare_deployment_plan(monkeypatch, request)
+    path = tmp_path / "restart-attempts.json"
+
+    async def blocked_runner(_task_id, _request, _plan):
+        await asyncio.Event().wait()
+
+    async def run():
+        manager = ExtensionTaskManager(store_path=path)
+        monkeypatch.setattr(manager, "_run", blocked_runner)
+        task_id = await manager.create(request)
+        manager.runners[task_id].cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await manager.runners[task_id]
+
+        recovered = ExtensionTaskManager(store_path=path)
+        assert recovered.get(task_id)["deployment_attempt_id"] == DEPLOYMENT_ATTEMPT_ID
+        assert recovered.list_summary()["tasks"][0]["deployment_attempt_id"] == DEPLOYMENT_ATTEMPT_ID
+        assert await recovered.create(request) == task_id
+        assert recovered.runners == {}
+
+        persisted = path.read_text(encoding="utf-8")
+        assert DEPLOYMENT_ATTEMPT_ID in persisted
+        assert "deployment_context_fingerprint" in persisted
+        assert all(secret not in persisted for secret in (
+            "restart-password-sentinel", "restart.example", "deploy-user",
+        ))
+        assert all(secret not in caplog.text for secret in (
+            "restart-password-sentinel", "restart.example", "deploy-user",
+        ))
+
+    asyncio.run(run())
 
 
 def test_task_store_roundtrip_uses_versioned_atomic_json(tmp_path, monkeypatch):
@@ -428,6 +571,7 @@ def test_done_runner_reference_is_removed_after_task_finishes(tmp_path, monkeypa
         manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
         monkeypatch.setattr(manager, "_run", fake_run)
         request = ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
             target=ExtensionTarget(id="t", name="VPS", host="host.example", username="ubuntu", chatgpt2api_port=33010),
             credential=SSHCredential(password="test-only"), confirmed_plan_id="runner-cleanup",
         )
@@ -569,6 +713,7 @@ def test_cancelled_runner_cannot_overwrite_persisted_cancelled_state(tmp_path, m
         monkeypatch.setattr("extensions.orchestrator._connect", fake_connect)
         manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
         request = ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
             target=ExtensionTarget(id="t", name="VPS", host="host.example", username="ubuntu", chatgpt2api_port=33010),
             credential=SSHCredential(password="test-only"), trust_host_key=True,
             instance_id="chatgpt2api-dev", confirmed_plan_id="cancel-race",
@@ -598,6 +743,7 @@ def test_new_deployment_task_initializes_structured_failure_fields(tmp_path, mon
         manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
         monkeypatch.setattr(manager, "_run", fake_run)
         request = ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
             target=ExtensionTarget(id="t", name="VPS", host="host.example", username="ubuntu", chatgpt2api_port=33010),
             credential=SSHCredential(password="test-only"), confirmed_plan_id="structured-init",
         )
@@ -619,6 +765,7 @@ def test_deploy_route_store_failure_restores_plan_without_task_runner_or_remote_
         host_key="SHA256:public-test", chatgpt2api_port=33010,
     )
     request = ExtensionDeployRequest(
+        deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
         target=target,
         credential=SSHCredential(password="transaction-test-only"),
         instance_id="transaction-app",
@@ -724,10 +871,14 @@ def test_concurrent_plans_for_same_resource_allow_one_task_and_retain_loser_plan
     first_plan = plan_manager.create(plan_request, discovery)
     second_plan = plan_manager.create(plan_request, discovery)
     first_request = ExtensionDeployRequest(
+        deployment_attempt_id="11111111111111111111111111111111",
         target=target, credential=credential, instance_id="shared-app",
         confirmed_plan_id=first_plan["id"],
     )
-    second_request = first_request.model_copy(update={"confirmed_plan_id": second_plan["id"]})
+    second_request = first_request.model_copy(update={
+        "deployment_attempt_id": "22222222222222222222222222222222",
+        "confirmed_plan_id": second_plan["id"],
+    })
     discovery_gate = asyncio.Event()
     discovery_count = 0
 
@@ -860,6 +1011,7 @@ def test_atomic_install_dir_claim_failure_stops_before_config_copy_or_compose(tm
         monkeypatch.setattr("extensions.orchestrator._diagnose_privileges", fake_privileges)
         manager = ExtensionTaskManager(store_path=tmp_path / "atomic-claim.json")
         request = ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
             target=ExtensionTarget(
                 id="atomic-target", name="VPS", host="host.example",
                 username="deploy-user", chatgpt2api_port=33010,
@@ -951,6 +1103,7 @@ def test_runtime_failures_are_structured_sanitized_and_stage_accurate(tmp_path, 
             monkeypatch.setattr("extensions.orchestrator.extensions_store.upsert_instance", lambda _record: Instance())
         manager = ExtensionTaskManager(store_path=tmp_path / f"{scenario}.json")
         request = ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
             target=ExtensionTarget(id="t", name="VPS", host="host.example", username="ubuntu", chatgpt2api_port=33010),
             credential=SSHCredential(password="test-only"), trust_host_key=True,
             instance_id="loop3b-instance", confirmed_plan_id=f"loop3b-{scenario}",
@@ -997,6 +1150,7 @@ def test_connection_close_errors_do_not_overwrite_failed_terminal_state(tmp_path
         monkeypatch.setattr("extensions.orchestrator._connect", fake_connect)
         manager = ExtensionTaskManager(store_path=tmp_path / "close-errors.json")
         request = ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
             target=ExtensionTarget(id="t", name="VPS", host="host.example", username="ubuntu", chatgpt2api_port=33010),
             credential=SSHCredential(password="test-only"), trust_host_key=True,
             instance_id="loop3b-close", confirmed_plan_id="loop3b-close",
@@ -1540,22 +1694,28 @@ const elements=new Map();
 function element(id){if(!elements.has(id)){const classes=new Set(['extDiscoveryResult','extPlanPreview','extHandoff','extSuccessBanner'].includes(id)?['hidden']:[]);elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,readOnly:false,placeholder:'',dataset:{},options:[],selectedIndex:0,classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
 const radios={network:{value:'tailscale',checked:true,classList:{toggle(){}}},intent:{value:'development',checked:true},strategy:{value:'isolated',checked:true},mode:{value:'compose',checked:true},scope:{value:'empty',checked:true},delivery:{value:'once',checked:true}};
 global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('extNetwork'))return radios.network;if(s.includes('extIntent')&&s.includes(':checked'))return radios.intent;if(s.includes('extStrategy')&&s.includes('[value="isolated"]'))return radios.strategy;if(s.includes('extStrategy')&&s.includes(':checked'))return radios.strategy;if(s.includes('extDeployMode'))return radios.mode;if(s.includes('extCloneScope'))return radios.scope;if(s.includes('extCredentialDelivery'))return radios.delivery;if(s.includes('.extension-pane'))return element('heading');return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};
-global.i18nText=k=>k;global.getUiLanguage=()=> 'en';global.escHtml=v=>String(v||'');const timers=[];global.setInterval=fn=>{timers.push(fn);return fn};global.clearInterval=()=>{};
+global.i18nText=k=>k;global.getUiLanguage=()=> 'en';global.escHtml=v=>String(v||'');global.crypto={getRandomValues(values){values.fill(0xab);return values}};const timers=[];global.setInterval=fn=>{timers.push(fn);return fn};global.clearInterval=()=>{};
 const key='SHA256:AAAAAAAAAAAAAAAAAAAA',target={id:'saved',name:'Saved',host:'vps.example',port:22,username:'root',host_key:key,chatgpt2api_port:33010};
 const discovery={environment:{os:'Ubuntu',cpu:2,memory_mb:2048,disk_free_mb:4096,listening_ports:[],docker_version:'Docker',compose_version:'Compose',python_version:'3.12'},instances:[],deployment_modes:[{id:'compose',name:'Compose',summary:'Recommended',recommended:true,available:true}]};
 const plan={id:'plan-one',instance_id:'chatgpt2api-dev',service_port:33010,image:'image:test',strategy:'isolated',deployment_mode:'compose',clone_source_id:'',clone_scope:'empty',operations:['prepare'],safety:['isolated'],source_baseline:{}};
-const accepted={id:'accepted-one',status:'running',phase:'connect',progress:5,steps:[{id:'connect',status:'running'}],logs:[],result:null};let serverTasks=[],taskVisible=false,deployCalls=0,taskListReads=0;
-global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks'){taskListReads+=1;const visible=taskVisible?serverTasks:[];body={active_task_id:visible.length?visible[0].id:null,latest_task_id:visible.length?visible[0].id:null,tasks:visible}}else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/discover')body=discovery;else if(url==='/api/extensions/deploy/plan')body={plan,discovery};else if(url==='/api/extensions/deploy'){deployCalls+=1;serverTasks=[accepted];throw new TypeError('response stream lost')}else if(url==='/api/extensions/tasks/accepted-one')body=accepted;return {ok:true,status:200,text:async()=>JSON.stringify(body)}};
+const unrelatedRunning={id:'unrelated-running',deployment_attempt_id:'11111111111111111111111111111111',status:'running',phase:'connect',progress:77,steps:[{id:'connect',status:'running'}],logs:[],result:null};
+const unrelatedCompleted={id:'unrelated-completed',deployment_attempt_id:'22222222222222222222222222222222',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',status:'success'}],logs:[],result:{instance:{id:'unrelated',managed:true},url:'http://unrelated.example',api_url:'http://unrelated.example/v1',admin_key_available:true}};
+let accepted=null,deployAccepted=false,taskVisible=false,deployCalls=0,taskListReads=0,unrelatedTaskReads=0,unrelatedDeliveryCalls=0,acceptedTaskReads=0;
+global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks'){taskListReads+=1;const visible=deployAccepted?(taskVisible?[unrelatedCompleted,unrelatedRunning,accepted]:[unrelatedCompleted,unrelatedRunning]):[];body={active_task_id:taskVisible?'accepted-one':null,latest_task_id:deployAccepted?'unrelated-completed':null,tasks:visible}}else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/discover')body=discovery;else if(url==='/api/extensions/deploy/plan')body={plan,discovery};else if(url==='/api/extensions/deploy'){deployCalls+=1;const sent=JSON.parse(options.body);if(!/^[a-f0-9]{32}$/.test(sent.deployment_attempt_id))throw new Error('deploy attempt id missing or invalid');accepted={id:'accepted-one',deployment_attempt_id:sent.deployment_attempt_id,status:'running',phase:'connect',progress:5,steps:[{id:'connect',status:'running'}],logs:[],result:null};deployAccepted=true;throw new TypeError('response stream lost')}else if(url==='/api/extensions/tasks/accepted-one'){acceptedTaskReads+=1;body=accepted}else if(url==='/api/extensions/tasks/unrelated-running'||url==='/api/extensions/tasks/unrelated-completed'){unrelatedTaskReads+=1;body=url.endsWith('running')?unrelatedRunning:unrelatedCompleted}else if(url==='/api/extensions/tasks/unrelated-completed/delivery'){unrelatedDeliveryCalls+=1;body={admin_key:'must-not-be-read'}}return {ok:true,status:200,text:async()=>JSON.stringify(body)}};
 eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();await window.extensionTestSSH(false);window.extensionNext(2);await window.extensionDiscover();await window.extensionCreatePlan();
 await window.extensionStartDeploy();await window.extensionStartDeploy();
-if(deployCalls!==1||serverTasks.length!==1)throw new Error('lost response created a duplicate deployment task');
-if(taskListReads<3)throw new Error('lost response did not reconcile the task list');
+if(deployCalls!==1||!accepted)throw new Error('lost response created a duplicate deployment task');
+if(taskListReads<2)throw new Error('lost response did not reconcile the task list');
 if(timers.length!==1)throw new Error('lost response did not keep reconciling while task visibility was unknown');
+if(unrelatedTaskReads!==0||unrelatedDeliveryCalls!==0)throw new Error('unrelated task polling or delivery was attempted');
+if(element('extProgressPercent').textContent==='77%'||!element('extHandoff').classList.contains('hidden'))throw new Error('unrelated task was rendered');
 if(element('extGuideFound').textContent==='extensions.guide_step2_confirmation_failed')throw new Error('ambiguous response falsely claimed plan confirmation blocked the task');
 if(element('extensionMessage').textContent.includes('extensions.deploy_confirmation_safe_notice'))throw new Error('ambiguous response falsely claimed no task or VPS change');
 taskVisible=true;await timers[0]();
 if(timers.length!==2)throw new Error('newly visible accepted task did not transition from reconciliation to task polling');
 await timers[1]();
+if(acceptedTaskReads!==1)throw new Error('exact accepted task was not polled once');
+if(unrelatedTaskReads!==0||unrelatedDeliveryCalls!==0)throw new Error('unrelated task was touched after exact reconciliation');
 })().catch(error=>{console.error(error.stack||error);process.exit(1)});
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)

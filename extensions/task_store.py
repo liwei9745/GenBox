@@ -22,6 +22,7 @@ TASK_STATUSES = {"queued", "running", "completed", "failed", "cancelled", "inter
 _TASK_FIELDS = {
     "id", "status", "phase", "progress", "steps", "logs", "error", "host_key",
     "result", "created_at", "updated_at", "recovery_action", "failed_phase", "error_code",
+    "deployment_attempt_id", "deployment_context_fingerprint",
 }
 _INSTANCE_FIELDS = {
     "id", "target_id", "project", "strategy", "deployment_mode", "compose_project",
@@ -128,6 +129,15 @@ class TaskStore:
     def _valid_task(task: dict[str, Any]) -> bool:
         if not isinstance(task.get("id"), str) or not task["id"].strip():
             return False
+        attempt_id = task.get("deployment_attempt_id")
+        context_fingerprint = task.get("deployment_context_fingerprint")
+        if (attempt_id is None) != (context_fingerprint is None):
+            return False
+        if attempt_id is not None:
+            if not isinstance(attempt_id, str) or not re.fullmatch(r"[a-f0-9]{32}", attempt_id):
+                return False
+            if not isinstance(context_fingerprint, str) or not re.fullmatch(r"[a-f0-9]{64}", context_fingerprint):
+                return False
         if task.get("status") not in TASK_STATUSES:
             return False
         if not isinstance(task.get("phase"), str):

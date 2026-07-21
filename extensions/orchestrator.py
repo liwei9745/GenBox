@@ -63,6 +63,18 @@ class DeploymentResourceConflictError(ValueError):
         super().__init__("deployment_resource_conflict")
 
 
+class DeploymentAttemptConflictError(ValueError):
+    """A sanitized attempt-id reuse conflict safe for a synchronous response."""
+
+    def __init__(self):
+        super().__init__("deployment_attempt_conflict")
+        self.diagnostic = {
+            "code": "deployment_attempt_conflict",
+            "stage": "deployment_attempt",
+            "retry_safe": False,
+        }
+
+
 class DeploymentPlanConfirmationError(ValueError):
     """A sanitized, field-specific failure before task or remote side effects."""
 
@@ -541,6 +553,7 @@ class ExtensionTaskManager:
         self.deliveries: dict[str, str] = {}
         self.resource_reservations = resource_reservations or DeploymentResourceReservations()
         self.task_reservations: dict[str, str] = {}
+        self.deployment_attempts: dict[str, dict[str, Any]] = {}
         self._recover_tasks()
 
     @staticmethod
@@ -585,7 +598,85 @@ class ExtensionTaskManager:
             if changed or len(self.tasks) != before:
                 self.store.save(list(self.tasks.values()))
 
+    @staticmethod
+    def _deployment_context_fingerprint(request: ExtensionDeployRequest) -> str:
+        context = {
+            "project_id": request.project_id,
+            "confirmed_plan_id": request.confirmed_plan_id,
+            "target_id": request.target.id,
+            "host": request.target.host,
+            "ssh_port": request.target.port,
+            "username": request.target.username.strip(),
+            "host_fingerprint": request.expected_host_key or request.target.host_key,
+            "auth_kind": _authentication_kind(request.credential),
+            "elevation_contract": _elevation_contract(request.credential),
+            "instance_id": request.instance_id,
+            "strategy": request.strategy,
+            "deployment_mode": request.deployment_mode,
+            "service_port": request.service_port,
+            "image": request.image,
+            "clone_source_id": request.clone_source_id,
+            "clone_scope": request.clone_scope,
+        }
+        encoded = json.dumps(context, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _existing_attempt_task_locked(self, attempt_id: str, context_fingerprint: str) -> str | None:
+        matches = [
+            state for state in self.tasks.values()
+            if state.get("deployment_attempt_id") == attempt_id
+        ]
+        if not matches:
+            return None
+        if len(matches) != 1 or not hmac.compare_digest(
+            str(matches[0].get("deployment_context_fingerprint") or ""),
+            context_fingerprint,
+        ):
+            raise DeploymentAttemptConflictError()
+        return matches[0]["id"]
+
     async def create(self, request: ExtensionDeployRequest) -> str:
+        context_fingerprint = self._deployment_context_fingerprint(request)
+        loop = asyncio.get_running_loop()
+        owner = False
+        with self.lock:
+            existing_task_id = self._existing_attempt_task_locked(
+                request.deployment_attempt_id,
+                context_fingerprint,
+            )
+            if existing_task_id:
+                return existing_task_id
+            attempt = self.deployment_attempts.get(request.deployment_attempt_id)
+            if attempt:
+                if not hmac.compare_digest(attempt["context_fingerprint"], context_fingerprint):
+                    raise DeploymentAttemptConflictError()
+                future = attempt["future"]
+            else:
+                future = loop.create_future()
+                future.add_done_callback(lambda done: done.exception() if not done.cancelled() else None)
+                self.deployment_attempts[request.deployment_attempt_id] = {
+                    "context_fingerprint": context_fingerprint,
+                    "future": future,
+                }
+                owner = True
+        if not owner:
+            return await asyncio.shield(future)
+        try:
+            task_id = await self._create_owned(request, context_fingerprint)
+        except BaseException as exc:
+            if not future.done():
+                future.set_exception(exc)
+            raise
+        else:
+            if not future.done():
+                future.set_result(task_id)
+            return task_id
+        finally:
+            with self.lock:
+                if self.deployment_attempts.get(request.deployment_attempt_id, {}).get("future") is future:
+                    self.deployment_attempts.pop(request.deployment_attempt_id, None)
+
+    async def _create_owned(self, request: ExtensionDeployRequest, context_fingerprint: str) -> str:
         validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
         lease_token, leased_plan = deployment_plans.lease(request.confirmed_plan_id, request)
         reservation_token = ""
@@ -619,6 +710,8 @@ class ExtensionTaskManager:
                 previous_task_reservations = dict(self.task_reservations)
                 self.tasks[task_id] = {
                     "id": task_id, "status": "queued", "phase": "connect", "progress": 0,
+                    "deployment_attempt_id": request.deployment_attempt_id,
+                    "deployment_context_fingerprint": context_fingerprint,
                     "steps": [{"id": key, "label": label, "status": "pending"} for key, label in DEPLOY_STEPS],
                     "logs": [], "error": None, "host_key": "", "result": None,
                     "created_at": self._now(), "updated_at": self._now(), "recovery_action": None,
@@ -660,7 +753,11 @@ class ExtensionTaskManager:
     def get(self, task_id: str) -> dict | None:
         with self.lock:
             state = self.tasks.get(task_id)
-            return copy.deepcopy(state) if state else None
+            if not state:
+                return None
+            public = copy.deepcopy(state)
+            public.pop("deployment_context_fingerprint", None)
+            return public
 
     def cancel(self, task_id: str) -> bool:
         with self.lock:
@@ -706,8 +803,11 @@ class ExtensionTaskManager:
         with self.lock:
             tasks = sorted(self.tasks.values(), key=lambda task: (task.get("updated_at", ""), task.get("id", "")), reverse=True)
             active = next((task["id"] for task in tasks if task.get("status") in {"queued", "running"}), None)
+            public_tasks = copy.deepcopy(tasks)
+            for task in public_tasks:
+                task.pop("deployment_context_fingerprint", None)
             return {
-                "tasks": copy.deepcopy(tasks),
+                "tasks": public_tasks,
                 "active_task_id": active,
                 "latest_task_id": tasks[0]["id"] if tasks else None,
                 "store_warning": self.store.warning,

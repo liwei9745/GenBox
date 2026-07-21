@@ -7,10 +7,11 @@ import main
 from extensions.capabilities import DEPLOYMENT_CAPABILITIES, validate_deployment_capability
 from extensions.catalog import public_catalog
 from extensions.models import ExtensionDeployRequest, ExtensionPlanRequest, ExtensionTarget, SSHCredential
-from extensions.orchestrator import DeploymentPlanManager, ExtensionTaskManager
+from extensions.orchestrator import DeploymentAttemptConflictError, DeploymentPlanManager, ExtensionTaskManager
 
 
 SECRET_SENTINEL = "capability-test-secret-must-not-leak"
+DEPLOYMENT_ATTEMPT_ID = "0123456789abcdef0123456789abcdef"
 PINNED_IMAGE = "ghcr.io/yukkcat/chatgpt2api@sha256:" + ("a" * 64)
 UNSUPPORTED_PROJECT_IDS = [
     "unknown-project",
@@ -58,6 +59,7 @@ def target_payload():
 
 def request_payload(project_id="chatgpt2api", **overrides):
     payload = {
+        "deployment_attempt_id": DEPLOYMENT_ATTEMPT_ID,
         "project_id": project_id,
         "target": target_payload(),
         "credential": {"password": SECRET_SENTINEL},
@@ -121,6 +123,7 @@ def create_route_plan(client):
 
 def route_deploy_payload(submitted_target, plan, **overrides):
     payload = request_payload(
+        deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
         target=submitted_target,
         service_port=plan["service_port"],
         image=plan["image"],
@@ -137,12 +140,47 @@ def route_deploy_payload(submitted_target, plan, **overrides):
 
 def test_project_id_defaults_and_has_a_safe_format():
     target = ExtensionTarget(**target_payload())
-    deploy = ExtensionDeployRequest(target=target, credential=SSHCredential(password="test-only"))
+    deploy = ExtensionDeployRequest(deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID, target=target, credential=SSHCredential(password="test-only"))
     plan = ExtensionPlanRequest(target=target, credential=SSHCredential(password="test-only"))
 
     assert deploy.project_id == plan.project_id == "chatgpt2api"
     with pytest.raises(ValueError):
-        ExtensionDeployRequest(project_id="Not Safe", target=target, credential=SSHCredential(password="test-only"))
+        ExtensionDeployRequest(deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID, project_id="Not Safe", target=target, credential=SSHCredential(password="test-only"))
+
+
+def test_deploy_route_requires_attempt_id_and_returns_sanitized_conflict(monkeypatch):
+    created = []
+
+    class Tasks:
+        async def create(self, request):
+            created.append(request.deployment_attempt_id)
+            raise DeploymentAttemptConflictError()
+
+    saved = ExtensionTarget(**target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA")
+    monkeypatch.setattr(main, "extension_tasks", Tasks())
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: saved)
+    client = TestClient(main.app, base_url="http://testserver")
+    missing = request_payload()
+    missing.pop("deployment_attempt_id")
+
+    missing_response = client.post("/api/extensions/deploy", json=missing)
+    assert missing_response.status_code == 422
+    assert created == []
+
+    response = client.post("/api/extensions/deploy", json=request_payload())
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": {
+            "error": "deployment_attempt_conflict",
+            "diagnostic": {
+                "code": "deployment_attempt_conflict",
+                "stage": "deployment_attempt",
+                "retry_safe": False,
+            },
+        },
+    }
+    assert created == [DEPLOYMENT_ATTEMPT_ID]
+    assert all(secret not in response.text for secret in (SECRET_SENTINEL, "vps.example", "deploy-user"))
 
 
 def test_catalog_deployability_is_derived_from_capability_registry():
@@ -393,6 +431,7 @@ def test_plan_drift_does_not_consume_valid_plan(changes):
         "instances": [],
     })
     deploy_request = ExtensionDeployRequest(
+        deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
         target=target,
         credential=SSHCredential(password=SECRET_SENTINEL),
         confirmed_plan_id=plan["id"],
@@ -423,6 +462,7 @@ def _port_bound_plan(service_port=33011):
         },
     )
     request = ExtensionDeployRequest(
+        deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
         target=submitted_target,
         credential=credential,
         trust_host_key=True,
@@ -498,6 +538,7 @@ def test_target_auth_and_elevation_drift_leave_plan_available():
         elif kind == "elevation":
             credential = SSHCredential(password=SECRET_SENTINEL, elevation="passwordless_sudo")
         return ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
             target=target,
             credential=credential,
             confirmed_plan_id=plan_id,
@@ -514,6 +555,7 @@ def test_target_auth_and_elevation_drift_leave_plan_available():
             discovery,
         )
         valid = ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
             target=base_target,
             credential=base_credential,
             confirmed_plan_id=plan["id"],
@@ -554,6 +596,7 @@ def test_plan_confirmation_drift_creates_no_connection_task_or_persistent_record
     tasks_path = tmp_path / "extension_tasks.json"
     tasks = ExtensionTaskManager(store_path=tasks_path)
     valid = ExtensionDeployRequest(
+        deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
         target=target,
         credential=credential,
         confirmed_plan_id=plan["id"],
@@ -600,6 +643,7 @@ def test_manager_calls_fail_closed_before_task_or_connection(monkeypatch):
         task_manager = ExtensionTaskManager()
         with pytest.raises(ValueError):
             await task_manager.create(ExtensionDeployRequest(
+                deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
                 project_id="grok2api", target=target, credential=SSHCredential(password="test-only"), confirmed_plan_id="missing",
             ))
         assert task_manager.tasks == {}

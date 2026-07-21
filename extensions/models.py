@@ -96,6 +96,7 @@ class SSHCredential(BaseModel):
 
 
 class ExtensionDeployRequest(BaseModel):
+    deployment_attempt_id: str = Field(pattern=r"^[a-f0-9]{32}$", min_length=32, max_length=32)
     project_id: str = Field(default="chatgpt2api", pattern=r"^[a-z0-9][a-z0-9-]*$")
     target: ExtensionTarget
     credential: SSHCredential

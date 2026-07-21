@@ -38,6 +38,7 @@ from extensions.orchestrator import (
 
 
 TEST_HOST_KEY = "SHA256:AAAAAAAAAAAAAAAAAAAA"
+DEPLOYMENT_ATTEMPT_ID = "0123456789abcdef0123456789abcdef"
 
 
 def privilege_snapshot(*, elevation="none", can_admin=False, auth_kind="password"):
@@ -925,14 +926,19 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "service_port:Number(currentPlan.service_port)" in handler
     assert "clearSessionCredentials()" in handler
     assert handler.index("await json(await _authFetch('/api/extensions/deploy'") < handler.index("clearSessionCredentials()")
-    assert "knownTaskIds=deploymentTaskIds(await json(await _authFetch('/api/extensions/tasks')))" in handler
-    assert "await reconcileAmbiguousDeployment(knownTaskIds)" in handler
+    assert "attemptId=createDeploymentAttemptId()" in handler
+    assert "deployment_attempt_id:attemptId" in handler
+    assert "await reconcileAmbiguousDeployment(attemptId)" in handler
+    assert "if(deploymentAttemptConflict(e))" in handler
     assert "await recoverDeploymentIdentity(e)" in handler
     assert "deploymentConfirmationFailed=true;clearCurrentPlan();message(extensionError(e),true)" in handler
     assert "if(!hasCredential())extensionNext(1)" in handler
     assert "diagnostic.stage!=='plan_confirmation'" in script
     assert "deployment_plan_identity_mismatch" in script
-    assert "selectNewDeploymentTask(summary,knownTaskIds)" in script
+    assert "selectDeploymentAttemptTask(summary,attemptId)" in script
+    assert "task.deployment_attempt_id===attemptId" in script
+    assert "active_task_id" not in script.split("function selectDeploymentAttemptTask", 1)[1].split("function startCreatedDeploymentPolling", 1)[0]
+    assert "latest_task_id" not in script.split("function selectDeploymentAttemptTask", 1)[1].split("function startCreatedDeploymentPolling", 1)[0]
     assert "message(i18nText('extensions.deploy_task_reconcile_pending'),true)" in script
     assert "deployment_plan_service_port_changed:'extensions.deploy_plan_service_port_changed'" in error_mapper
     assert "deployment_plan_image_changed:'extensions.deploy_plan_image_changed'" in error_mapper
@@ -944,8 +950,8 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "The VPS was not changed and no task was created." in translations
     assert "Do not deploy again; GenBox is reconciling the existing task state." in translations
     assert "verify SSH again before creating a new plan." in translations
-    assert '<script src="/static/js/i18n.js?v=8"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=11"></script>' in html
+    assert '<script src="/static/js/i18n.js?v=9"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=12"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):
@@ -1071,7 +1077,7 @@ def test_all_ssh_routes_bind_to_the_server_confirmed_target(monkeypatch):
         (ExtensionTestRequest(target=submitted, credential=credential), main.extension_test_ssh),
         (ExtensionDiscoveryRequest(target=submitted, credential=credential), main.extension_discover),
         (ExtensionPlanRequest(target=submitted, credential=credential), main.extension_deploy_plan),
-        (ExtensionDeployRequest(target=submitted, credential=credential), main.extension_start_deploy),
+        (ExtensionDeployRequest(deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID, target=submitted, credential=credential), main.extension_start_deploy),
         (ExtensionKeyResetRequest(target=submitted, credential=credential, instance_id="managed-one"), main.extension_reset_admin_key),
         (NetworkConnectRequest(
             target=submitted, credential=credential, provider="tailscale", operation_mode="existing",
@@ -1232,6 +1238,7 @@ def test_deploy_task_reports_success(tmp_path, monkeypatch):
         monkeypatch.setattr("extensions.discovery.discover_environment", fake_discover)
         manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
         request = ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
             target=target, credential=credential,
             instance_id="chatgpt2api-dev", confirmed_plan_id=plan["id"],
         )
@@ -1335,6 +1342,7 @@ def test_working_copy_password_sudo_waits_for_ssh_input(tmp_path, monkeypatch):
         monkeypatch.setattr("extensions.discovery.discover_environment", fake_discover)
         manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
         request = ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
             target=target, credential=credential,
             instance_id="chatgpt2api-dev", confirmed_plan_id=plan["id"],
             clone_source_id="chatgpt2api-warp", clone_scope="working-copy",
@@ -1497,6 +1505,7 @@ def test_existing_plan_binds_discovery_and_local_registration_preserves_managed_
         monkeypatch.setattr("extensions.discovery.discover_environment", fake_discover)
         tasks = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
         task_id = await tasks.create(ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
             target=target,
             credential=credential,
             image=plan["image"],
@@ -1611,6 +1620,7 @@ def test_deployment_without_docker_or_elevation_fails_before_remote_write(tmp_pa
         manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
         monkeypatch.setattr(manager, "_run", forbidden_run)
         request = ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
             target=target,
             credential=credential,
             instance_id="chatgpt2api-dev",
@@ -1698,6 +1708,7 @@ def test_fresh_remote_snapshot_drift_preserves_plan_and_creates_no_task(tmp_path
         task_manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
         monkeypatch.setattr(task_manager, "_run", forbidden_run)
         request = ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
             target=target, credential=credential, confirmed_plan_id=plan["id"],
             clone_source_id="source-app", clone_scope="working-copy",
         )
