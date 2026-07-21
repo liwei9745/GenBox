@@ -1385,6 +1385,13 @@ class DeploymentPlanManager:
         if not isinstance(expected, dict):
             raise DeploymentSnapshotChangedError()
         actual = self._discovery_snapshot(discovery)
+        if plan.get("strategy") != "existing" and plan.get("clone_scope") == "empty":
+            expected = copy.deepcopy(expected)
+            actual = copy.deepcopy(actual)
+            for snapshot in (expected, actual):
+                for instance in snapshot.get("instances", []):
+                    instance.pop("status", None)
+                    instance.pop("data_size_mb", None)
         if actual != expected:
             raise DeploymentSnapshotChangedError()
         required_disk_mb = int(plan.get("required_disk_mb") or 0)

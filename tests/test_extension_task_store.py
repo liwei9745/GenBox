@@ -1974,6 +1974,41 @@ window.extensionSelectIntent(intent);if(!working.checked||empty.checked)throw ne
     assert result.returncode == 0, result.stderr
 
 
+def test_snapshot_recovery_preserves_empty_draft_and_hides_stale_panels_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+(async()=>{
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(['extDiscoveryResult','extPlanPreview'].includes(id)?['hidden']:[]);elements.set(id,{id,style:{},value:'',textContent:'',innerHTML:'',disabled:false,dataset:{},options:[],selectedIndex:0,classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
+const groups={};function radio(name,value,checked=false){const input={name,value,_checked:false,dataset:{}};Object.defineProperty(input,'checked',{get(){return this._checked},set(on){this._checked=!!on;if(on)(groups[name]||[]).forEach(other=>{if(other!==this)other._checked=false})}});(groups[name]||(groups[name]=[])).push(input);input.checked=checked;return input}
+const intent=radio('extIntent','development',true),strategy=radio('extStrategy','isolated',true),empty=radio('extCloneScope','empty',true),working=radio('extCloneScope','working-copy');radio('extDeployMode','compose',true);radio('extCredentialDelivery','once',true);radio('extNetwork','tailscale',true);
+global.window=global;global.document={getElementById:element,querySelector(s){const match=s.match(/input\[name="([^"]+)"\](?:\[value="([^"]+)"\])?/);if(match){const choices=groups[match[1]]||[];if(match[2]!==undefined)return choices.find(input=>input.value===match[2])||null;if(s.includes(':checked'))return choices.find(input=>input.checked)||null;return choices[0]||null}if(s.includes('.extension-pane'))return element('heading');return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};
+global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});global.crypto={getRandomValues(v){v.fill(7);return v}};
+const key='SHA256:AAAAAAAAAAAAAAAAAAAA';const target={id:'saved',name:'Saved',host:'vps.example',port:22,username:'root',host_key:key,chatgpt2api_port:33011};
+const discovery={environment:{os:'Ubuntu',cpu:2,memory_mb:2048,disk_free_mb:4096,listening_ports:[],docker_version:'Docker',compose_version:'Compose',python_version:'3.12'},instances:[],deployment_modes:[{id:'compose',name:'Compose',summary:'Recommended',recommended:true,available:true}]};
+const planBodies=[];let deployCalls=0,discoverCalls=0,taskReads=0;
+global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks'){taskReads+=1;body={tasks:[]}}else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/discover'){discoverCalls+=1;body=discovery}else if(url==='/api/extensions/deploy/plan'){const request=JSON.parse(options.body);planBodies.push(request);body={discovery,plan:{id:'plan-'+planBodies.length,instance_id:request.instance_id,service_port:request.service_port,image:request.image,strategy:request.strategy,deployment_mode:request.deployment_mode,clone_source_id:request.clone_source_id,clone_scope:request.clone_scope,operations:['prepare'],safety:['isolated'],source_baseline:{}}}}else if(url==='/api/extensions/deploy'){deployCalls+=1;return {ok:false,status:409,text:async()=>JSON.stringify({detail:{error:'sanitized snapshot change',diagnostic:{code:'deployment_snapshot_changed',stage:'fresh_discovery',retry_safe:false,task_created:false}}})}}return {ok:true,status:200,text:async()=>JSON.stringify(body)}};
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();await window.extensionTestSSH(false);window.extensionNext(2);element('extInstanceId').value='chatgpt2api-dev';element('extServicePort').value='33011';element('extImage').value='image:test';element('extCloneSource').value='';
+window.extensionSelectIntent(intent);empty.checked=true;await window.extensionCreatePlan();if(planBodies[0].clone_scope!=='empty'||!empty.checked||working.checked)throw new Error('initial plan did not retain explicit empty scope');
+await window.extensionStartDeploy();
+if(deployCalls!==1||taskReads!==1)throw new Error('definitive no-task failure retried or reconciled');
+if(!element('extDeployBtn').disabled)throw new Error('snapshot recovery left deploy enabled');
+if(!element('extPlanPreview').classList.contains('hidden')||!element('extDiscoveryResult').classList.contains('hidden'))throw new Error('snapshot recovery left stale plan or discovery visible');
+if(!empty.checked||working.checked||!strategy.checked||element('extCloneSource').value!==''||element('extServicePort').value!=='33011'||element('extImage').value!=='image:test')throw new Error('snapshot recovery changed the deployment draft');
+if(element('extGuidePrimaryBtn').textContent!=='extensions.discover')throw new Error('snapshot recovery did not require fresh discovery');
+await window.extensionDiscover();
+if(discoverCalls!==1||!empty.checked||working.checked)throw new Error('fresh discovery overwrote the explicit empty scope');
+if(element('extDiscoveryResult').classList.contains('hidden')||!element('extPlanPreview').classList.contains('hidden'))throw new Error('fresh discovery did not replace only the discovery panel');
+await window.extensionCreatePlan();
+if(planBodies.length!==2||planBodies[1].clone_scope!=='empty')throw new Error('regenerated plan did not preserve explicit empty scope');
+if(!empty.checked||working.checked||element('extDeployBtn').disabled||element('extPlanPreview').classList.contains('hidden'))throw new Error('regenerated plan did not restore a reviewable empty plan');
+if(deployCalls!==1)throw new Error('recovery automatically retried deployment');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_stale_plan_responses_cannot_restore_a_plan_or_enable_deploy_in_node():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''

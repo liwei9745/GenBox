@@ -959,7 +959,7 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
     assert '<script src="/static/js/i18n.js?v=10"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=14"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=15"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):
@@ -1646,9 +1646,75 @@ def test_deployment_without_docker_or_elevation_fails_before_remote_write(tmp_pa
     asyncio.run(run())
 
 
+@pytest.mark.parametrize(
+    ("field", "fresh_value"),
+    [
+        ("status", "Up 25 hours"),
+        ("data_size_mb", 141),
+    ],
+)
+def test_empty_instance_confirmation_ignores_unrelated_volatile_instance_observations(
+    tmp_path, monkeypatch, field, fresh_value,
+):
+    from extensions import orchestrator
+
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33011,
+    )
+    credential = SSHCredential(password="session-only")
+    unrelated = {
+        "id": "source-app", "container_id": "source-container", "name": "source-app",
+        "image": "ghcr.io/yukkcat/chatgpt2api:latest", "source_image_id": "sha256:source-image",
+        "status": "Up 24 hours", "ports": "0.0.0.0:3000->80/tcp",
+        "published_ports": [3000], "service_port": 3000,
+        "compose_project": "source-project", "compose_service": "app",
+        "working_dir": "/srv/source", "data_dir": "/srv/source/data",
+        "config_file": "/srv/source/config.json", "data_size_mb": 140,
+        "clone_available": True, "managed": False, "ownership": "compose",
+    }
+    initial = deployment_discovery(
+        instances=[unrelated],
+        listening_ports=[3000],
+        path_conditions={"install_dir_absent": True},
+    )
+    plan_manager = DeploymentPlanManager()
+    plan = plan_manager.create(
+        ExtensionPlanRequest(
+            target=target, credential=credential, strategy="isolated",
+            clone_scope="empty", service_port=33011,
+        ),
+        initial,
+    )
+    fresh = copy.deepcopy(initial)
+    fresh["instances"][0][field] = fresh_value
+
+    async def fake_discover(_request, *, path_checks=None):
+        assert path_checks == plan["path_requirements"]
+        return copy.deepcopy(fresh)
+
+    async def no_remote_run(*_args, **_kwargs):
+        return None
+
+    async def run():
+        monkeypatch.setattr(orchestrator, "deployment_plans", plan_manager)
+        monkeypatch.setattr("extensions.discovery.discover_environment", fake_discover)
+        task_manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
+        monkeypatch.setattr(task_manager, "_run", no_remote_run)
+        task_id = await task_manager.create(ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
+            target=target, credential=credential, strategy="isolated",
+            clone_scope="empty", service_port=33011, confirmed_plan_id=plan["id"],
+        ))
+        assert task_id in task_manager.tasks
+        assert plan["id"] not in plan_manager.plans
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("drift", [
     "ports", "instances", "compose", "source_container", "image", "mount",
-    "disk", "path", "capability",
+    "source_size", "disk", "path", "capability",
 ])
 def test_fresh_remote_snapshot_drift_preserves_plan_and_creates_no_task(tmp_path, monkeypatch, drift):
     from extensions import orchestrator
@@ -1696,6 +1762,8 @@ def test_fresh_remote_snapshot_drift_preserves_plan_and_creates_no_task(tmp_path
         fresh["instances"][0]["source_image_id"] = "sha256:changed-image"
     elif drift == "mount":
         fresh["instances"][0]["data_dir"] = "/srv/changed/data"
+    elif drift == "source_size":
+        fresh["instances"][0]["data_size_mb"] = 101
     elif drift == "disk":
         fresh["environment"]["disk_free_mb"] = 100
     elif drift == "path":
