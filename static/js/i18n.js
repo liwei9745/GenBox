@@ -1378,6 +1378,14 @@
   MESSAGES['extensions.guide_step2_recover'] = {"zh-CN":"按失败提示重新生成安全计划。","en":"Regenerate the safety plan using the failure guidance."};
   MESSAGES['extensions.guide_step2_recover_credential'] = {"zh-CN":"远程任务已结束，临时 SSH 凭据已清除；请重新输入后再安全重试。","en":"The remote task ended and temporary SSH credentials were cleared; enter them again before a safe retry."};
   MESSAGES['extensions.guide_step2_recover_after'] = {"zh-CN":"重新确认前不会再次修改 VPS。","en":"The VPS will not be changed again until you reconfirm."};
+  MESSAGES['extensions.guide_step2_confirmation_failed'] = {"zh-CN":"安全计划确认未通过。VPS 未被修改；无任务已创建。","en":"Safety-plan confirmation was blocked. The VPS was not changed and no task was created."};
+  MESSAGES['extensions.guide_step2_confirmation_recover'] = {"zh-CN":"根据上方安全原因重新生成计划。","en":"Regenerate the plan using the safe reason shown above."};
+  MESSAGES['extensions.guide_step2_confirmation_after'] = {"zh-CN":"重新确认前不会部署，也不会自动重试。","en":"Nothing will deploy or retry automatically before you reconfirm."};
+  MESSAGES['extensions.regenerate_safe_plan'] = {"zh-CN":"重新生成安全计划","en":"Regenerate safety plan"};
+  MESSAGES['extensions.deploy_plan_service_port_changed'] = {"zh-CN":"服务端口与已确认的安全计划不一致。","en":"The service port does not match the confirmed safety plan."};
+  MESSAGES['extensions.deploy_plan_image_changed'] = {"zh-CN":"容器镜像与已确认的安全计划不一致。","en":"The container image does not match the confirmed safety plan."};
+  MESSAGES['extensions.deploy_plan_identity_changed'] = {"zh-CN":"VPS 连接身份与已确认的安全计划不一致。","en":"The VPS connection identity does not match the confirmed safety plan."};
+  MESSAGES['extensions.deploy_confirmation_safe_notice'] = {"zh-CN":"VPS 未被修改；无任务已创建。","en":"The VPS was not changed and no task was created."};
   MESSAGES['extensions.prepare_local_network'] = {"zh-CN":"准备本机网络","en":"Prepare local network"};
   MESSAGES['extensions.guide_step3_title'] = {"zh-CN":"准备这台电脑的 Tailscale","en":"Prepare Tailscale on this computer"};
   MESSAGES['extensions.guide_step3_checking'] = {"zh-CN":"正在读取本机状态。","en":"Checking local status."};

@@ -77,7 +77,7 @@ from extensions.models import (
     ManagedCredentialUpsertRequest, VaultPasswordRequest,
 )
 from extensions.orchestrator import (
-    SSHAuthenticationError, SSHConnectionError,
+    DeploymentPlanConfirmationError, SSHAuthenticationError, SSHConnectionError,
     deployment_plans, extension_tasks, reset_managed_admin_key,
     probe_host_key,
     test_connection as test_extension_connection,
@@ -3631,7 +3631,7 @@ async def extension_delete_target(target_id: str):
     return {"deleted": True}
 
 
-def _bind_confirmed_extension_target(body):
+def _bind_confirmed_extension_target(body, *, plan_confirmation: bool = False):
     saved_target = extensions_store.get_target(body.target.id)
     if not saved_target:
         raise HTTPException(status_code=404, detail="请先保存 VPS，再执行远程操作")
@@ -3642,6 +3642,18 @@ def _bind_confirmed_extension_target(body):
         or body.target.port != saved_target.port
         or body.target.username != saved_target.username
     ):
+        if plan_confirmation:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "VPS 连接身份与已确认部署计划不一致，请重新生成安全计划",
+                    "diagnostic": {
+                        "code": "deployment_plan_identity_changed",
+                        "stage": "plan_confirmation",
+                        "retry_safe": False,
+                    },
+                },
+            )
         raise HTTPException(status_code=409, detail="VPS 连接信息已变化，请重新保存并确认主机指纹")
     return body.model_copy(update={
         "target": saved_target,
@@ -3735,11 +3747,16 @@ async def extension_confirm_ssh_host_key(body: ExtensionHostKeyConfirmRequest):
 async def extension_start_deploy(body: ExtensionDeployRequest):
     try:
         validate_deployment_capability(body.project_id, body.strategy, body.deployment_mode)
-        body = _bind_confirmed_extension_target(body)
+        body = _bind_confirmed_extension_target(body, plan_confirmation=True)
         task_id = await extension_tasks.create(body)
         return {"task_id": task_id}
     except HTTPException:
         raise
+    except DeploymentPlanConfirmationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
     except Exception as exc:

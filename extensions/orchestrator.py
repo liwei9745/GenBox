@@ -63,6 +63,18 @@ class DeploymentResourceConflictError(ValueError):
         super().__init__("deployment_resource_conflict")
 
 
+class DeploymentPlanConfirmationError(ValueError):
+    """A sanitized, field-specific failure before task or remote side effects."""
+
+    def __init__(self, message: str, *, code: str):
+        super().__init__(message)
+        self.diagnostic = {
+            "code": code,
+            "stage": "plan_confirmation",
+            "retry_safe": False,
+        }
+
+
 class DeploymentResourceReservations:
     """Process-local claims; the atomic remote directory claim remains the restart guard."""
 
@@ -1282,14 +1294,20 @@ class DeploymentPlanManager:
         if plan_has_bound_identity and request.trust_host_key:
             live_target = extensions_store.get_target(request.target.id)
             if not live_target:
-                raise ValueError("部署目标已删除，请重新生成计划")
+                raise DeploymentPlanConfirmationError(
+                    "VPS 连接身份与已确认部署计划不一致，请重新生成安全计划",
+                    code="deployment_plan_identity_changed",
+                )
             identity_request = request.model_copy(update={
                 "target": live_target,
                 "expected_host_key": live_target.host_key,
             })
         current_identity = self._identity_fields(identity_request)
         if plan_has_bound_identity and any(plan.get(key) != value for key, value in current_identity.items()):
-            raise ValueError("VPS 地址、端口、用户名、主机指纹、认证或提权方式已变化，请重新生成计划")
+            raise DeploymentPlanConfirmationError(
+                "VPS 连接身份与已确认部署计划不一致，请重新生成安全计划",
+                code="deployment_plan_identity_changed",
+            )
         if (
             plan.get("project_id") != request.project_id
             or plan["instance_id"] != request.instance_id
@@ -1297,8 +1315,16 @@ class DeploymentPlanManager:
             or plan["deployment_mode"] != request.deployment_mode
         ):
             raise ValueError("部署请求与已确认计划不一致")
-        if plan["image"] != request.image or plan["service_port"] != request.target.chatgpt2api_port:
-            raise ValueError("端口或镜像已变更，请重新生成计划")
+        if plan["service_port"] != request.service_port:
+            raise DeploymentPlanConfirmationError(
+                "服务端口与已确认部署计划不一致，请重新生成安全计划",
+                code="deployment_plan_service_port_changed",
+            )
+        if plan["image"] != request.image:
+            raise DeploymentPlanConfirmationError(
+                "容器镜像与已确认部署计划不一致，请重新生成安全计划",
+                code="deployment_plan_image_changed",
+            )
         if plan.get("clone_source_id", "") != request.clone_source_id or plan.get("clone_scope", "empty") != request.clone_scope:
             raise ValueError("克隆范围已变更，请重新生成计划")
         if consume:

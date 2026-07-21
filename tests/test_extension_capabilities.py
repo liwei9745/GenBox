@@ -11,6 +11,7 @@ from extensions.orchestrator import DeploymentPlanManager, ExtensionTaskManager
 
 
 SECRET_SENTINEL = "capability-test-secret-must-not-leak"
+PINNED_IMAGE = "ghcr.io/yukkcat/chatgpt2api@sha256:" + ("a" * 64)
 UNSUPPORTED_PROJECT_IDS = [
     "unknown-project",
     "gemini2api-liwei9745",
@@ -62,6 +63,74 @@ def request_payload(project_id="chatgpt2api", **overrides):
         "credential": {"password": SECRET_SENTINEL},
         "service_port": 33010,
     }
+    payload.update(overrides)
+    return payload
+
+
+def route_plan_harness(monkeypatch):
+    current_target = {
+        "value": ExtensionTarget(
+            **target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA",
+        ),
+    }
+    manager = DeploymentPlanManager()
+    discovered_target_ports = []
+    leased_requests = []
+
+    async def discovery(request):
+        discovered_target_ports.append(request.target.chatgpt2api_port)
+        return {
+            "environment": environment_snapshot(),
+            "privileges": privilege_snapshot(),
+            "instances": [],
+        }
+
+    class LeaseOnlyTasks:
+        async def create(self, request):
+            token, plan = manager.lease(request.confirmed_plan_id, request)
+            leased_requests.append((request, plan))
+            manager.release(request.confirmed_plan_id, token)
+            return "lease-only-no-remote-task"
+
+    monkeypatch.setattr(main, "discover_environment", discovery)
+    monkeypatch.setattr(main, "deployment_plans", manager)
+    monkeypatch.setattr(main, "extension_tasks", LeaseOnlyTasks())
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: current_target["value"])
+    return (
+        TestClient(main.app, base_url="http://testserver"),
+        manager,
+        current_target,
+        discovered_target_ports,
+        leased_requests,
+    )
+
+
+def create_route_plan(client):
+    submitted_target = {**target_payload(), "chatgpt2api_port": 33011}
+    response = client.post(
+        "/api/extensions/deploy/plan",
+        json=request_payload(
+            target=submitted_target,
+            service_port=33011,
+            image=PINNED_IMAGE,
+        ),
+    )
+    assert response.status_code == 200
+    return submitted_target, response.json()["plan"]
+
+
+def route_deploy_payload(submitted_target, plan, **overrides):
+    payload = request_payload(
+        target=submitted_target,
+        service_port=plan["service_port"],
+        image=plan["image"],
+        instance_id=plan["instance_id"],
+        strategy=plan["strategy"],
+        deployment_mode=plan["deployment_mode"],
+        confirmed_plan_id=plan["id"],
+        clone_source_id=plan.get("clone_source_id", ""),
+        clone_scope=plan.get("clone_scope", "empty"),
+    )
     payload.update(overrides)
     return payload
 
@@ -178,6 +247,120 @@ def test_compose_plan_route_binds_project_strategy_and_mode(monkeypatch):
     }
 
 
+def test_plan_and_deploy_routes_preserve_new_service_port_without_remote_execution(monkeypatch):
+    client, manager, _current_target, discovered_target_ports, leased_requests = route_plan_harness(monkeypatch)
+    submitted_target, plan = create_route_plan(client)
+
+    assert discovered_target_ports == [33010]
+    assert plan["service_port"] == 33011
+    assert plan["image"] == PINNED_IMAGE
+
+    deploy_response = client.post(
+        "/api/extensions/deploy",
+        json=route_deploy_payload(submitted_target, plan),
+    )
+
+    assert deploy_response.status_code == 200
+    assert deploy_response.json() == {"task_id": "lease-only-no-remote-task"}
+    assert len(leased_requests) == 1
+    leased_request, leased_plan = leased_requests[0]
+    assert leased_request.target.chatgpt2api_port == 33010
+    assert leased_plan["service_port"] == 33011
+    assert plan["id"] in manager.plans
+
+
+@pytest.mark.parametrize(
+    ("override", "diagnostic_code"),
+    [
+        ({"service_port": 33012}, "deployment_plan_service_port_changed"),
+        ({"image": "ghcr.io/yukkcat/chatgpt2api@sha256:" + ("b" * 64)}, "deployment_plan_image_changed"),
+    ],
+)
+def test_deploy_route_rejects_field_tamper_without_task_or_plan_consumption(
+    monkeypatch, override, diagnostic_code,
+):
+    client, manager, _current_target, _discovered_ports, leased_requests = route_plan_harness(monkeypatch)
+    submitted_target, plan = create_route_plan(client)
+
+    response = client.post(
+        "/api/extensions/deploy",
+        json=route_deploy_payload(submitted_target, plan, **override),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == {
+        "error": {
+            "deployment_plan_service_port_changed": "服务端口与已确认部署计划不一致，请重新生成安全计划",
+            "deployment_plan_image_changed": "容器镜像与已确认部署计划不一致，请重新生成安全计划",
+        }[diagnostic_code],
+        "diagnostic": {
+            "code": diagnostic_code,
+            "stage": "plan_confirmation",
+            "retry_safe": False,
+        },
+    }
+    assert leased_requests == []
+    assert plan["id"] in manager.plans
+    assert "_lease_token" not in manager.plans[plan["id"]]
+    assert SECRET_SENTINEL not in response.text
+    assert str(next(iter(override.values()))) not in response.text
+
+
+def test_deploy_route_rejects_live_identity_drift_with_structured_safe_reason(monkeypatch):
+    client, manager, current_target, _discovered_ports, leased_requests = route_plan_harness(monkeypatch)
+    submitted_target, plan = create_route_plan(client)
+    changed_host = "changed.example"
+    current_target["value"] = current_target["value"].model_copy(update={"host": changed_host})
+    submitted_target = {**submitted_target, "host": changed_host}
+
+    response = client.post(
+        "/api/extensions/deploy",
+        json=route_deploy_payload(submitted_target, plan),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == {
+        "error": "VPS 连接身份与已确认部署计划不一致，请重新生成安全计划",
+        "diagnostic": {
+            "code": "deployment_plan_identity_changed",
+            "stage": "plan_confirmation",
+            "retry_safe": False,
+        },
+    }
+    assert leased_requests == []
+    assert plan["id"] in manager.plans
+    assert "_lease_token" not in manager.plans[plan["id"]]
+    assert changed_host not in response.text
+    assert SECRET_SENTINEL not in response.text
+
+
+def test_deploy_route_rejects_submitted_identity_tamper_before_task_creation(monkeypatch):
+    client, manager, _current_target, _discovered_ports, leased_requests = route_plan_harness(monkeypatch)
+    submitted_target, plan = create_route_plan(client)
+    tampered_host = "tampered.example"
+    submitted_target = {**submitted_target, "host": tampered_host}
+
+    response = client.post(
+        "/api/extensions/deploy",
+        json=route_deploy_payload(submitted_target, plan),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "error": "VPS 连接身份与已确认部署计划不一致，请重新生成安全计划",
+        "diagnostic": {
+            "code": "deployment_plan_identity_changed",
+            "stage": "plan_confirmation",
+            "retry_safe": False,
+        },
+    }
+    assert leased_requests == []
+    assert plan["id"] in manager.plans
+    assert "_lease_token" not in manager.plans[plan["id"]]
+    assert tampered_host not in response.text
+    assert SECRET_SENTINEL not in response.text
+
+
 def test_plan_requires_a_verified_capability_snapshot():
     manager = DeploymentPlanManager()
     target = ExtensionTarget(**target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA")
@@ -244,6 +427,7 @@ def _port_bound_plan(service_port=33011):
         credential=credential,
         trust_host_key=True,
         expected_host_key=live_target.host_key,
+        service_port=service_port,
         confirmed_plan_id=plan["id"],
     )
     return manager, live_target, submitted_target, plan, request
@@ -263,11 +447,9 @@ def test_plan_take_allows_new_service_port_when_live_ssh_identity_is_unchanged(m
 def test_plan_take_rejects_tampered_submitted_service_port(monkeypatch):
     from extensions import orchestrator
 
-    manager, live_target, submitted_target, plan, request = _port_bound_plan()
+    manager, live_target, _submitted_target, plan, request = _port_bound_plan()
     monkeypatch.setattr(orchestrator.extensions_store, "get_target", lambda _target_id: live_target)
-    tampered_request = request.model_copy(update={
-        "target": submitted_target.model_copy(update={"chatgpt2api_port": 33012}),
-    })
+    tampered_request = request.model_copy(update={"service_port": 33012})
 
     with pytest.raises(ValueError):
         manager.take(plan["id"], tampered_request)
@@ -344,7 +526,10 @@ def test_target_auth_and_elevation_drift_leave_plan_available():
         assert manager.take(plan["id"], valid)["id"] == plan["id"]
 
 
-def test_identity_drift_creates_no_connection_task_or_persistent_record(tmp_path, monkeypatch):
+@pytest.mark.parametrize("drift_kind", ["identity", "service_port", "image"])
+def test_plan_confirmation_drift_creates_no_connection_task_or_persistent_record(
+    tmp_path, monkeypatch, drift_kind,
+):
     from extensions import orchestrator
 
     target = ExtensionTarget(**target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA")
@@ -368,11 +553,19 @@ def test_identity_drift_creates_no_connection_task_or_persistent_record(tmp_path
     monkeypatch.setattr(orchestrator, "_connect", forbidden_connect)
     tasks_path = tmp_path / "extension_tasks.json"
     tasks = ExtensionTaskManager(store_path=tasks_path)
-    drifted = ExtensionDeployRequest(
-        target=target.model_copy(update={"username": "changed-user"}),
+    valid = ExtensionDeployRequest(
+        target=target,
         credential=credential,
         confirmed_plan_id=plan["id"],
     )
+    if drift_kind == "identity":
+        drifted = valid.model_copy(update={
+            "target": target.model_copy(update={"username": "changed-user"}),
+        })
+    elif drift_kind == "service_port":
+        drifted = valid.model_copy(update={"service_port": 33011})
+    else:
+        drifted = valid.model_copy(update={"image": PINNED_IMAGE})
 
     async def run_drift():
         with pytest.raises(ValueError):

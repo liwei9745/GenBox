@@ -914,6 +914,34 @@ def test_deploy_completion_opens_delivery_pane_without_falsely_finishing_network
     assert completed_handler.index("extensionNext(5)") < completed_handler.index("claimTaskDelivery(taskId)")
 
 
+def test_synchronous_plan_confirmation_failure_keeps_safe_step_two_recovery_state():
+    root = Path(__file__).parents[1]
+    html = (root / "static" / "index.html").read_text(encoding="utf-8")
+    script = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    translations = (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+    handler = script.split("window.extensionStartDeploy=async function", 1)[1].split("function setCheck", 1)[0]
+    error_mapper = script.split("function extensionError", 1)[1].split("function clearSessionCredentials", 1)[0]
+
+    assert "service_port:Number(currentPlan.service_port)" in handler
+    assert "clearSessionCredentials()" in handler
+    assert handler.index("await json(await _authFetch('/api/extensions/deploy'") < handler.index("clearSessionCredentials()")
+    assert "deploymentConfirmationFailed=true;clearCurrentPlan();message(extensionError(e),true)" in handler
+    assert "if(!hasCredential())extensionNext(1)" in handler
+    confirmation_catch = handler.rsplit("catch(e){", 1)[1]
+    assert "currentDiscovery=null" not in confirmation_catch
+    assert "clearSessionCredentials()" not in confirmation_catch
+    assert "deployment_plan_service_port_changed:'extensions.deploy_plan_service_port_changed'" in error_mapper
+    assert "deployment_plan_image_changed:'extensions.deploy_plan_image_changed'" in error_mapper
+    assert "deployment_plan_identity_changed:'extensions.deploy_plan_identity_changed'" in error_mapper
+    assert "extensions.deploy_confirmation_safe_notice" in error_mapper
+    assert "'extensions.regenerate_safe_plan',window.extensionCreatePlan" in script
+    assert '"zh-CN":"重新生成安全计划"' in translations
+    assert "VPS 未被修改；无任务已创建。" in translations
+    assert "The VPS was not changed and no task was created." in translations
+    assert '<script src="/static/js/i18n.js?v=7"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=10"></script>' in html
+
+
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):
     path = tmp_path / "extensions.json"
     monkeypatch.setattr(store, "EXTENSIONS_FILE", path)
@@ -1049,7 +1077,15 @@ def test_all_ssh_routes_bind_to_the_server_confirmed_target(monkeypatch):
             asyncio.run(route(request_body))
         except HTTPException as exc:
             assert exc.status_code == 409
-            assert "重新保存并确认" in str(exc.detail)
+            if route is main.extension_start_deploy:
+                assert exc.detail["diagnostic"] == {
+                    "code": "deployment_plan_identity_changed",
+                    "stage": "plan_confirmation",
+                    "retry_safe": False,
+                }
+                assert "重新生成安全计划" in exc.detail["error"]
+            else:
+                assert "重新保存并确认" in str(exc.detail)
         else:
             raise AssertionError(f"{route.__name__} accepted a client-supplied target identity")
 
