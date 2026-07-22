@@ -382,3 +382,22 @@ check while saving a destination that later HTTP clients cannot use correctly.
   require fresh application-level verification before replacing the saved URL.
 - Node IPs and DNS names remain non-secret runtime metadata, but real values are
   excluded from stable documentation and public examples.
+
+## ADR-017: Deployment Safety Contract Owns Phase 4 Execution Invariants
+
+**Status:** Accepted
+**Date:** 2026-07-22
+
+### Decision
+
+`docs/deployment-invariants.md` is the versioned normative owner for Phase 4
+deployment field classification, evidence handling, ownership lifecycle, and
+side-effect ordering. Architecture and lifecycle documents link to it rather
+than restating its rules. A contract revision requires implementation and a
+new independent fixed-commit review before it can support acceptance evidence.
+
+### Consequences
+
+Local/mock results cannot replace isolated-VPS evidence, and no public task,
+diagnostic, or browser surface may become an alternate store for operational
+identities or secrets.

@@ -77,6 +77,10 @@ Managed instances require:
 - A generated management key delivered once after deployment.
 - Health verification before successful delivery.
 
+Phase 4 deployment planning and execution are constrained by the versioned
+[Deployment Safety Contract](deployment-invariants.md). Its field
+classification, evidence, ownership, and side-effect rules are normative.
+
 Only the standard Docker Compose path is currently eligible for automated
 execution. WARP and Python modes remain discovery or planning concerns until
 their isolation, ownership, rollback, and verification contracts are complete.

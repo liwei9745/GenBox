@@ -6,6 +6,11 @@ This lifecycle protects an existing chatgpt2api service while developing the
 GenBox integration and proves that completed work is reproducible before it is
 offered upstream.
 
+For deployment planning and execution, apply the normative
+[Deployment Safety Contract](deployment-invariants.md). This lifecycle defines
+environment and authority gates; it does not replace that contract's field or
+side-effect rules.
+
 ## Environment Classification
 
 ### Production Source Instance
