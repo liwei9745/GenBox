@@ -43,12 +43,38 @@ def privilege_snapshot():
 
 
 def environment_snapshot(*, listening_ports=None, disk_free_mb=5000):
+    ports = list(listening_ports or [])
     return {
         "docker_version": "27.0",
         "compose_version": "2.30",
         "home_dir": "/home/deploy-user",
-        "listening_ports": list(listening_ports or []),
+        "listening_ports": ports,
+        "tcp_listeners": [
+            {"protocol": "tcp", "host_port": port} for port in sorted(ports)
+        ],
+        "listening_ports_probe": {
+            "status": 0, "complete": True, "payload_present": True,
+        },
         "disk_free_mb": disk_free_mb,
+    }
+
+
+def deployment_discovery(*, listening_ports=None, disk_free_mb=5000):
+    return {
+        "host_key": "SHA256:AAAAAAAAAAAAAAAAAAAA",
+        "environment": environment_snapshot(
+            listening_ports=listening_ports, disk_free_mb=disk_free_mb,
+        ),
+        "privileges": privilege_snapshot(),
+        "instances": [],
+        "path_conditions_version": "phase4-v3",
+        "path_conditions": {
+            "target_install_dir_absent": True,
+            "target_install_parent_claimable": True,
+            "target_data_dir_nonoverlap": True,
+            "target_compose_project_nonoverlap": True,
+            "target_port_unoccupied": True,
+        },
     }
 
 
@@ -84,13 +110,9 @@ def route_plan_harness(monkeypatch):
     discovered_target_ports = []
     leased_requests = []
 
-    async def discovery(request):
+    async def discovery(request, *, path_checks=None):
         discovered_target_ports.append(request.target.chatgpt2api_port)
-        return {
-            "environment": environment_snapshot(),
-            "privileges": privilege_snapshot(),
-            "instances": [],
-        }
+        return deployment_discovery()
 
     class LeaseOnlyTasks:
         async def create(self, request):
@@ -313,12 +335,8 @@ def test_routes_reject_unsupported_deployment_modes_before_side_effects(monkeypa
 
 
 def test_compose_plan_route_binds_project_strategy_and_mode(monkeypatch):
-    async def discovery(_request):
-        return {
-            "environment": environment_snapshot(),
-            "privileges": privilege_snapshot(),
-            "instances": [],
-        }
+    async def discovery(_request, *, path_checks=None):
+        return deployment_discovery()
 
     manager = DeploymentPlanManager()
     monkeypatch.setattr(main, "discover_environment", discovery)
@@ -345,7 +363,7 @@ def test_plan_and_deploy_routes_preserve_new_service_port_without_remote_executi
     client, manager, _current_target, discovered_target_ports, leased_requests = route_plan_harness(monkeypatch)
     submitted_target, plan = create_route_plan(client)
 
-    assert discovered_target_ports == [33010]
+    assert discovered_target_ports == [33010, 33010]
     assert plan["service_port"] == 33011
     assert plan["image"] == PINNED_IMAGE
 
@@ -461,14 +479,13 @@ def test_deploy_route_rejects_submitted_identity_tamper_before_task_creation(mon
 def test_plan_requires_a_verified_capability_snapshot():
     manager = DeploymentPlanManager()
     target = ExtensionTarget(**target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA")
+    discovery = deployment_discovery()
+    discovery.pop("privileges")
 
     with pytest.raises(ValueError):
         manager.create(
             ExtensionPlanRequest(target=target, credential=SSHCredential(password=SECRET_SENTINEL), service_port=33010),
-            {
-                "environment": environment_snapshot(),
-                "instances": [],
-            },
+            discovery,
         )
 
 
@@ -484,11 +501,7 @@ def test_plan_drift_does_not_consume_valid_plan(changes):
     manager = DeploymentPlanManager()
     target = ExtensionTarget(**target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA")
     plan_request = ExtensionPlanRequest(target=target, credential=SSHCredential(password=SECRET_SENTINEL), service_port=33010)
-    plan = manager.create(plan_request, {
-        "environment": environment_snapshot(),
-        "privileges": privilege_snapshot(),
-        "instances": [],
-    })
+    plan = manager.create(plan_request, deployment_discovery())
     deploy_request = ExtensionDeployRequest(
         deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
         target=target,
@@ -514,11 +527,7 @@ def _port_bound_plan(service_port=33011):
             credential=credential,
             service_port=service_port,
         ),
-        {
-            "environment": environment_snapshot(),
-            "privileges": privilege_snapshot(),
-            "instances": [],
-        },
+        deployment_discovery(),
     )
     request = ExtensionDeployRequest(
         deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
@@ -573,11 +582,7 @@ def test_plan_take_rejects_live_ssh_identity_drift_even_with_bound_request_port(
 
 
 def test_target_auth_and_elevation_drift_leave_plan_available():
-    discovery = {
-        "environment": environment_snapshot(),
-        "privileges": privilege_snapshot(),
-        "instances": [],
-    }
+    discovery = deployment_discovery()
     base_target = ExtensionTarget(**target_payload(), host_key="SHA256:AAAAAAAAAAAAAAAAAAAA")
     base_credential = SSHCredential(password=SECRET_SENTINEL)
 
@@ -638,11 +643,7 @@ def test_plan_confirmation_drift_creates_no_connection_task_or_persistent_record
     manager = DeploymentPlanManager()
     plan = manager.create(
         ExtensionPlanRequest(target=target, credential=credential, service_port=33010),
-        {
-            "environment": environment_snapshot(),
-            "privileges": privilege_snapshot(),
-            "instances": [],
-        },
+        deployment_discovery(),
     )
     connected = []
 

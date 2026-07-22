@@ -3796,7 +3796,9 @@ async def extension_deploy_plan(body: ExtensionPlanRequest):
         raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
     body = _bind_confirmed_extension_target(body)
     try:
-        discovery = await discover_environment(body)
+        initial_discovery = await discover_environment(body)
+        path_requirements = deployment_plans.path_requirements(body, initial_discovery)
+        discovery = await discover_environment(body, path_checks=path_requirements)
     except Exception as exc:
         raise _safe_extension_ssh_error(
             exc,
@@ -3805,7 +3807,19 @@ async def extension_deploy_plan(body: ExtensionPlanRequest):
             stage="plan_discovery",
         ) from exc
     try:
-        return {"plan": deployment_plans.create(body, discovery), "discovery": discovery}
+        return {
+            "plan": deployment_plans.create(
+                body,
+                discovery,
+                path_requirements=path_requirements,
+            ),
+            "discovery": discovery,
+        }
+    except DeploymentNoTaskError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
     except Exception as exc:

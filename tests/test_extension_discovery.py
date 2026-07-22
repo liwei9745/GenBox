@@ -4,7 +4,9 @@ import shlex
 import pytest
 
 from extensions.discovery import (
+    _evaluate_path_conditions,
     _parse_canonical_port_bindings,
+    _parse_canonical_tcp_listeners,
     _parse_listening_ports,
     _parse_published_ports,
     discover_environment,
@@ -31,11 +33,13 @@ def test_canonical_docker_bindings_include_exposure_identity_and_are_determinist
     bindings, complete = _parse_canonical_port_bindings(
         '{"443/UDP":[{"HostIp":"::1","HostPort":"33443"}],'
         '"80/tcp":[{"HostIp":"0.0.0.0","HostPort":"33010"},'
+        '{"HostIp":"0.0.0.0","HostPort":"33010"},'
         '{"HostIp":"127.0.0.1","HostPort":"33010"}]}'
     )
 
     assert complete is True
     assert bindings == [
+        {"host_ip": "0.0.0.0", "host_port": 33010, "container_port": 80, "protocol": "tcp"},
         {"host_ip": "0.0.0.0", "host_port": 33010, "container_port": 80, "protocol": "tcp"},
         {"host_ip": "127.0.0.1", "host_port": 33010, "container_port": 80, "protocol": "tcp"},
         {"host_ip": "::1", "host_port": 33443, "container_port": 443, "protocol": "udp"},
@@ -56,17 +60,68 @@ def test_canonical_docker_bindings_fail_closed_when_identity_is_incomplete(value
     assert complete is False
 
 
-@pytest.mark.parametrize(("status", "output", "ports", "complete"), [
-    (0, "", [], True),
-    (0, "0.0.0.0:22\n:::33010", [22, 33010], True),
-    (0, "LISTEN 0 128 0.0.0.0:22 0.0.0.0:*", [22], True),
-    (1, "", [], False),
-    (0, "unsupported listener output", [], False),
+@pytest.mark.parametrize(("status", "output", "listeners", "ports", "complete"), [
+    (0, "GENBOX_TCP_LISTENERS_V1\n", [], [], True),
+    (0, "", [], [], False),
+    (
+        0,
+        "0.0.0.0:22\n:::33010\n0.0.0.0:22",
+        [
+            {"protocol": "tcp", "host_port": 22},
+            {"protocol": "tcp", "host_port": 22},
+            {"protocol": "tcp", "host_port": 33010},
+        ],
+        [22, 33010],
+        True,
+    ),
+    (0, "LISTEN 0 128 0.0.0.0:22 0.0.0.0:*", [{"protocol": "tcp", "host_port": 22}], [22], True),
+    (1, "GENBOX_TCP_LISTENERS_V1\n", [], [], False),
+    (0, "unsupported listener output", [], [], False),
 ])
 def test_listener_probe_never_treats_failure_or_garbled_output_as_no_listeners(
-    status, output, ports, complete,
+    status, output, listeners, ports, complete,
 ):
+    assert _parse_canonical_tcp_listeners(status, output) == (listeners, complete)
     assert _parse_listening_ports(status, output) == (ports, complete)
+
+
+@pytest.mark.parametrize(("failed_kind", "expected"), [
+    (None, True),
+    ("absent", False),
+    ("claimable_parent", False),
+])
+def test_isolated_empty_path_probes_require_absence_and_direct_parent_claimability(
+    failed_kind, expected,
+):
+    commands = []
+
+    class Result:
+        def __init__(self, exit_status=0):
+            self.exit_status = exit_status
+            self.stdout = ""
+
+    class Connection:
+        async def run(self, command, check=False, **kwargs):
+            commands.append(command)
+            if failed_kind == "absent" and command.startswith("test ! -e "):
+                return Result(1)
+            if failed_kind == "claimable_parent" and command.startswith("candidate="):
+                return Result(1)
+            return Result()
+
+    checks = {
+        "target_install_dir_absent": {"kind": "absent", "path": "/home/operator/app"},
+        "target_install_parent_claimable": {"kind": "claimable_parent", "path": "/home/operator"},
+        "target_data_dir_nonoverlap": {"kind": "data_nonoverlap", "path": "/home/operator/app/data"},
+        "target_compose_project_nonoverlap": {"kind": "compose_nonoverlap", "compose_project": "genbox-app"},
+        "target_port_unoccupied": {"kind": "tcp_port_unoccupied", "port": 33010},
+    }
+    conditions = asyncio.run(_evaluate_path_conditions(
+        Connection(), SSHCredential(password="test-only"), {}, checks, [], [], True, 4096,
+    ))
+
+    assert all(conditions.values()) is expected
+    assert not any(command.startswith("sudo ") for command in commands)
 
 
 def test_docker_helper_retries_failed_size_probe_with_sudo():
@@ -218,7 +273,14 @@ def test_discovery_is_read_only_and_classifies_existing_instance(monkeypatch):
             "container_port": 80, "protocol": "tcp",
         }]
         assert result["environment"]["listening_ports"] == [22, 3000]
-        assert result["environment"]["listening_ports_probe"] == {"status": 0, "complete": True}
+        assert result["environment"]["tcp_listeners"] == [
+            {"protocol": "tcp", "host_port": 22},
+            {"protocol": "tcp", "host_port": 3000},
+        ]
+        assert result["environment"]["listening_ports_probe"] == {
+            "status": 0, "complete": True, "payload_present": True,
+        }
+        assert result["path_conditions_version"] == "phase4-v3"
         assert not any(token in command for command in commands for token in (" rm ", " stop ", " down", " up "))
 
     asyncio.run(run())

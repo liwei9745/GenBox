@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import posixpath
 import re
 import shlex
 from typing import Any
@@ -85,7 +86,7 @@ def _parse_canonical_port_bindings(value: str) -> tuple[list[dict[str, Any]], bo
         return [], False
     if not isinstance(raw_bindings, dict):
         return [], False
-    canonical: set[tuple[str, int, int, str]] = set()
+    canonical: list[tuple[str, int, int, str]] = []
     for container_identity, bindings in raw_bindings.items():
         match = re.fullmatch(r"(\d{1,5})/([A-Za-z0-9]+)", str(container_identity or ""))
         if not match:
@@ -112,7 +113,7 @@ def _parse_canonical_port_bindings(value: str) -> tuple[list[dict[str, Any]], bo
                 return [], False
             if not 1 <= host_port <= 65535:
                 return [], False
-            canonical.add((host_ip, host_port, container_port, protocol))
+            canonical.append((host_ip, host_port, container_port, protocol))
     return [
         {
             "host_ip": host_ip,
@@ -135,11 +136,17 @@ def _listener_port(value: str) -> int | None:
     return port if 1 <= port <= 65535 else None
 
 
-def _parse_listening_ports(status: int, value: str) -> tuple[list[int], bool]:
-    if status != 0:
+def _parse_canonical_tcp_listeners(status: int, value: str) -> tuple[list[dict[str, Any]], bool]:
+    if status != 0 or not isinstance(value, str):
         return [], False
-    ports: set[int] = set()
-    for raw_line in str(value or "").splitlines():
+    raw_lines = value.splitlines()
+    framed = bool(raw_lines and raw_lines[0].strip() == "GENBOX_TCP_LISTENERS_V1")
+    if framed:
+        raw_lines = raw_lines[1:]
+    elif not any(line.strip() for line in raw_lines):
+        return [], False
+    listeners: list[dict[str, Any]] = []
+    for raw_line in raw_lines:
         line = raw_line.strip()
         if not line:
             continue
@@ -155,14 +162,121 @@ def _parse_listening_ports(status: int, value: str) -> tuple[list[int], bool]:
                 break
         if port is None:
             return [], False
-        ports.add(port)
-    return sorted(ports), True
+        listeners.append({"protocol": "tcp", "host_port": port})
+    listeners.sort(key=lambda item: item["host_port"])
+    return listeners, True
+
+
+def _parse_listening_ports(status: int, value: str) -> tuple[list[int], bool]:
+    listeners, complete = _parse_canonical_tcp_listeners(status, value)
+    return sorted({item["host_port"] for item in listeners}), complete
+
+
+def _normalized_remote_path(value: Any) -> str:
+    raw = str(value or "").strip()
+    return posixpath.normpath(raw) if raw.startswith("/") else ""
+
+
+def _paths_overlap(first: Any, second: Any) -> bool:
+    left = _normalized_remote_path(first)
+    right = _normalized_remote_path(second)
+    if not left or not right:
+        return False
+    return left == right or left.startswith(right.rstrip("/") + "/") or right.startswith(left.rstrip("/") + "/")
+
+
+async def _evaluate_path_conditions(
+    connection,
+    credential: SSHCredential,
+    privileges: dict[str, Any],
+    path_checks: dict[str, dict[str, Any]] | None,
+    instances: list[dict[str, Any]],
+    tcp_listeners: list[dict[str, Any]],
+    listeners_complete: bool,
+    disk_free_mb: int,
+) -> dict[str, bool]:
+    conditions: dict[str, bool] = {}
+    for name, check in (path_checks or {}).items():
+        if not isinstance(name, str) or not isinstance(check, dict):
+            conditions[str(name)] = False
+            continue
+        kind = str(check.get("kind") or "")
+        path = _normalized_remote_path(check.get("path"))
+        if kind in {"absent", "directory", "file", "claimable_parent"}:
+            if not path:
+                conditions[name] = False
+                continue
+            if kind == "claimable_parent":
+                command = (
+                    f"candidate={shlex.quote(path)}; "
+                    "while test ! -e \"$candidate\"; do next=$(dirname \"$candidate\"); "
+                    "test \"$next\" != \"$candidate\" || break; candidate=$next; done; "
+                    "test -d \"$candidate\" && test -w \"$candidate\""
+                )
+            else:
+                predicate = {"absent": "! -e", "directory": "-d", "file": "-f"}[kind]
+                command = f"test {predicate} {shlex.quote(path)}"
+            if kind in {"absent", "claimable_parent"}:
+                status, _ = await _run(connection, command)
+            else:
+                status, _ = await _run_docker(connection, command, credential, privileges)
+            conditions[name] = status == 0
+            continue
+        if kind == "data_nonoverlap":
+            observed_paths = [
+                item.get(field)
+                for item in instances
+                for field in ("working_dir", "data_dir", "config_file")
+            ]
+            conditions[name] = bool(path) and not any(_paths_overlap(path, observed) for observed in observed_paths)
+        elif kind == "compose_nonoverlap":
+            compose_project = str(check.get("compose_project") or "").strip().casefold()
+            conditions[name] = bool(compose_project) and not any(
+                str(item.get("compose_project") or "").strip().casefold() == compose_project
+                for item in instances
+            )
+        elif kind == "tcp_port_unoccupied":
+            port = check.get("port")
+            conditions[name] = (
+                listeners_complete
+                and isinstance(port, int)
+                and not isinstance(port, bool)
+                and not any(item.get("host_port") == port for item in tcp_listeners)
+            )
+        elif kind in {"instance_present", "instance_identity_matches"}:
+            instance_id = str(check.get("instance_id") or "")
+            instance = next((item for item in instances if item.get("id") == instance_id), None)
+            if kind == "instance_present":
+                conditions[name] = instance is not None
+            else:
+                conditions[name] = bool(
+                    instance
+                    and instance.get("service_port") == check.get("service_port")
+                    and instance.get("container_id") == check.get("container_id")
+                )
+        elif kind == "clone_scope_allowed":
+            conditions[name] = check.get("allowed") is True
+        elif kind == "source_target_paths_nonoverlap":
+            source_id = str(check.get("source_id") or "")
+            source = next((item for item in instances if item.get("id") == source_id), None)
+            source_paths = [source.get(field) for field in ("working_dir", "data_dir", "config_file")] if source else []
+            conditions[name] = bool(source and path) and not any(_paths_overlap(path, observed) for observed in source_paths)
+        elif kind == "capacity_sufficient":
+            required_mb = check.get("required_mb")
+            conditions[name] = (
+                isinstance(required_mb, int)
+                and not isinstance(required_mb, bool)
+                and disk_free_mb >= required_mb
+            )
+        else:
+            conditions[name] = False
+    return conditions
 
 
 async def discover_environment(
     request: ExtensionDiscoveryRequest,
     *,
-    path_checks: dict[str, dict[str, str]] | None = None,
+    path_checks: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     connection, fingerprint = await _connect(request)
     if connection is None:
@@ -183,8 +297,8 @@ async def discover_environment(
             "python": "python3 --version 2>/dev/null",
             "uv": "uv --version 2>/dev/null",
             "ports": (
-                "if output=$(ss -H -ltn 2>/dev/null); then printf '%s\\n' \"$output\"; "
-                "elif output=$(netstat -ltn 2>/dev/null); then printf '%s\\n' \"$output\"; "
+                "if output=$(ss -H -ltn 2>/dev/null); then printf 'GENBOX_TCP_LISTENERS_V1\\n%s\\n' \"$output\"; "
+                "elif output=$(netstat -ltn 2>/dev/null); then printf 'GENBOX_TCP_LISTENERS_V1\\n%s\\n' \"$output\"; "
                 "else exit 1; fi"
             ),
             "containers": "docker ps -a --no-trunc --format '{{json .}}' 2>/dev/null",
@@ -196,22 +310,10 @@ async def discover_environment(
             else:
                 fact_statuses[key], facts[key] = await runner(connection, command)
 
-        ports, ports_complete = _parse_listening_ports(fact_statuses["ports"], facts["ports"])
-        path_conditions: dict[str, bool] = {}
-        for name, check in (path_checks or {}).items():
-            path = str(check.get("path") or "")
-            kind = str(check.get("kind") or "")
-            if not path.startswith("/") or kind not in {"absent", "directory", "file"}:
-                path_conditions[name] = False
-                continue
-            predicate = {"absent": "! -e", "directory": "-d", "file": "-f"}[kind]
-            status, _ = await _run_docker(
-                connection,
-                f"test {predicate} {shlex.quote(path)}",
-                request.credential,
-                privileges,
-            )
-            path_conditions[name] = status == 0
+        tcp_listeners, ports_complete = _parse_canonical_tcp_listeners(
+            fact_statuses["ports"], facts["ports"]
+        )
+        ports = sorted({item["host_port"] for item in tcp_listeners})
         instances = []
         for line in facts["containers"].splitlines():
             try:
@@ -333,22 +435,36 @@ async def discover_environment(
             },
         ]
         recommendation = "existing" if any(item["status"].lower().startswith("up") for item in instances) else "isolated"
+        disk_free_mb = int(facts["disk_mb"] or 0)
+        path_conditions = await _evaluate_path_conditions(
+            connection,
+            request.credential,
+            privileges,
+            path_checks,
+            instances,
+            tcp_listeners,
+            ports_complete,
+            disk_free_mb,
+        )
         return {
             "ok": True,
             "host_key": fingerprint,
             "privileges": privileges,
             "environment": {
                 "os": facts["os"], "arch": facts["arch"], "cpu": int(facts["cpu"] or 0),
-                "memory_mb": memory_mb, "disk_free_mb": int(facts["disk_mb"] or 0),
+                "memory_mb": memory_mb, "disk_free_mb": disk_free_mb,
                 "home_dir": facts["home"],
                 "docker_version": facts["docker"], "compose_version": facts["compose"],
                 "python_version": facts["python"], "uv_version": facts["uv"], "listening_ports": ports,
+                "tcp_listeners": tcp_listeners,
                 "listening_ports_probe": {
                     "status": fact_statuses["ports"],
                     "complete": ports_complete,
+                    "payload_present": ports_complete,
                 },
             },
             "instances": instances,
+            "path_conditions_version": "phase4-v3",
             "path_conditions": path_conditions,
             "deployment_modes": modes,
             "recommendation": recommendation,

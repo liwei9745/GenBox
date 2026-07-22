@@ -22,7 +22,7 @@ TASK_STATUSES = {"queued", "running", "completed", "failed", "cancelled", "inter
 _TASK_FIELDS = {
     "id", "status", "phase", "progress", "steps", "logs", "error", "host_key",
     "result", "created_at", "updated_at", "recovery_action", "failed_phase", "error_code",
-    "deployment_attempt_id", "deployment_context_fingerprint",
+    "deployment_attempt_id", "deployment_context_fingerprint", "evidence_manifest",
 }
 _INSTANCE_FIELDS = {
     "id", "target_id", "project", "strategy", "deployment_mode", "compose_project",
@@ -149,6 +149,21 @@ class TaskStore:
         if not isinstance(task.get("steps"), list) or not isinstance(task.get("logs"), list):
             return False
         if task.get("result") is not None and not isinstance(task["result"], dict):
+            return False
+        manifest = task.get("evidence_manifest")
+        if manifest is not None and (
+            not isinstance(manifest, dict)
+            or manifest.get("contract_version") != "phase4-v3"
+            or manifest.get("complete") is not True
+            or not isinstance(manifest.get("snapshot_digest"), str)
+            or not re.fullmatch(r"[a-f0-9]{64}", manifest["snapshot_digest"])
+            or set(manifest) != {"contract_version", "snapshot_digest", "complete", "changed_fields"}
+            or not isinstance(manifest.get("changed_fields"), list)
+            or any(
+                not isinstance(field, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]{0,79}", field)
+                for field in manifest["changed_fields"]
+            )
+        ):
             return False
         for field in ("error", "recovery_action", "failed_phase", "error_code"):
             if task.get(field) is not None and not isinstance(task[field], str):

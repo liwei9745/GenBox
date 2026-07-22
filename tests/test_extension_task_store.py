@@ -13,6 +13,7 @@ import main
 from extensions.models import ExtensionDeployRequest, ExtensionPlanRequest, ExtensionTarget, SSHCredential
 from extensions.deployment_failures import FAILURES, VALID_FAILURE_COMBINATIONS
 from extensions.orchestrator import (
+    DeploymentPlanUnavailableError,
     DeploymentPlanManager,
     DeploymentResourceConflictError,
     DeploymentResourceReservations,
@@ -92,11 +93,22 @@ def prepare_deployment_plan(monkeypatch, request: ExtensionDeployRequest):
         "environment": {
             "docker_version": "27.0", "compose_version": "2.30",
             "home_dir": f"/home/{target.username}", "listening_ports": [],
-            "listening_ports_probe": {"status": 0, "complete": True}, "disk_free_mb": 5000,
+            "tcp_listeners": [],
+            "listening_ports_probe": {
+                "status": 0, "complete": True, "payload_present": True,
+            },
+            "disk_free_mb": 5000,
         },
         "privileges": privileges,
         "instances": [],
-        "path_conditions": {"install_dir_absent": True},
+        "path_conditions_version": "phase4-v3",
+        "path_conditions": {
+            "target_install_dir_absent": True,
+            "target_install_parent_claimable": True,
+            "target_data_dir_nonoverlap": True,
+            "target_compose_project_nonoverlap": True,
+            "target_port_unoccupied": True,
+        },
     }
     plan_manager = DeploymentPlanManager()
     plan = plan_manager.create(ExtensionPlanRequest(
@@ -134,10 +146,17 @@ def test_duplicate_deployment_attempt_is_idempotent_and_conflicting_reuse_fails_
         instance_id="attempt-app",
         image="example.invalid/app@sha256:" + "a" * 64,
     )
-    request, _plan_manager, plan = prepare_deployment_plan(monkeypatch, request)
-    fresh_discovery = copy.deepcopy(plan["discovery_snapshot"])
+    request, plan_manager, plan = prepare_deployment_plan(monkeypatch, request)
+    fresh_discovery = copy.deepcopy(plan_manager.plans[plan["id"]]["execution_snapshot"])
     fresh_discovery["environment"]["disk_free_mb"] = 5000
-    fresh_discovery["path_conditions"] = {"install_dir_absent": True}
+    fresh_discovery["path_conditions_version"] = "phase4-v3"
+    fresh_discovery["path_conditions"] = {
+        "target_install_dir_absent": True,
+        "target_install_parent_claimable": True,
+        "target_data_dir_nonoverlap": True,
+        "target_compose_project_nonoverlap": True,
+        "target_port_unoccupied": True,
+    }
     discovery_calls = 0
     runner_calls = 0
     release_runner = asyncio.Event()
@@ -799,13 +818,21 @@ def test_new_deployment_task_initializes_structured_failure_fields(tmp_path, mon
         assert state["failed_phase"] is None
         assert state["error_code"] is None
         assert state["recovery_action"] is None
+        assert state["evidence_manifest"]["contract_version"] == "phase4-v3"
+        assert state["evidence_manifest"]["complete"] is True
+        persisted = (tmp_path / "extension_tasks.json").read_text(encoding="utf-8")
+        for forbidden in (
+            "/home/ubuntu/genbox-apps", "ghcr.io/yukkcat/chatgpt2api:latest",
+            "host.example", "port_bindings", "execution_snapshot", "path_requirements",
+        ):
+            assert forbidden not in persisted
         release.set()
         await manager.runners[task_id]
 
     asyncio.run(run())
 
 
-def test_deploy_route_store_failure_restores_plan_without_task_runner_or_remote_write(tmp_path, monkeypatch):
+def test_post_cas_store_failure_consumes_plan_without_task_runner_or_remote_write(tmp_path, monkeypatch):
     target = ExtensionTarget(
         id="t", name="VPS", host="host.example", username="deploy-user",
         host_key="SHA256:public-test", chatgpt2api_port=33010,
@@ -841,8 +868,9 @@ def test_deploy_route_store_failure_restores_plan_without_task_runner_or_remote_
         "stage": "deployment_preflight",
         "retry_safe": False,
     }
-    assert plan["id"] in plan_manager.plans
-    assert "_lease_token" not in plan_manager.plans[plan["id"]]
+    assert plan["id"] not in plan_manager.plans
+    with pytest.raises(DeploymentPlanUnavailableError):
+        plan_manager.lease(plan["id"], request)
     assert manager.tasks == {}
     assert manager.runners == {}
     assert manager.deliveries == {}
@@ -900,11 +928,22 @@ def test_concurrent_plans_for_same_resource_allow_one_task_and_retain_loser_plan
         "environment": {
             "docker_version": "27.0", "compose_version": "2.30",
             "home_dir": "/home/deploy-user", "listening_ports": [],
-            "listening_ports_probe": {"status": 0, "complete": True}, "disk_free_mb": 5000,
+            "tcp_listeners": [],
+            "listening_ports_probe": {
+                "status": 0, "complete": True, "payload_present": True,
+            },
+            "disk_free_mb": 5000,
         },
         "privileges": privileges,
         "instances": [],
-        "path_conditions": {"install_dir_absent": True},
+        "path_conditions_version": "phase4-v3",
+        "path_conditions": {
+            "target_install_dir_absent": True,
+            "target_install_parent_claimable": True,
+            "target_data_dir_nonoverlap": True,
+            "target_compose_project_nonoverlap": True,
+            "target_port_unoccupied": True,
+        },
     }
     target = ExtensionTarget(
         id="shared-target", name="VPS", host="host.example", username="deploy-user",
@@ -1076,14 +1115,145 @@ def test_atomic_install_dir_claim_failure_stops_before_config_copy_or_compose(tm
         claim_commands = [command for command in commands if "&& mkdir " in command]
         assert claim_commands == [
             "umask 077; mkdir -p /home/deploy-user/genbox-apps/chatgpt2api "
-            "&& mkdir /home/deploy-user/genbox-apps/chatgpt2api/atomic-app "
-            "&& mkdir /home/deploy-user/genbox-apps/chatgpt2api/atomic-app/data"
+            "&& mkdir /home/deploy-user/genbox-apps/chatgpt2api/atomic-app"
         ]
         assert not any(fragment in command for command in commands for fragment in (
             "base64 -d >", "docker pull ", "docker tag ", "cp -a ", "rm -f ",
             "compose.yml up -d", "compose.yml down", ".genbox-instance", "curl -fsS",
         ))
         assert manager.resource_reservations.active_count == 0
+
+    asyncio.run(run())
+
+
+def test_ownership_marker_is_verified_before_data_config_image_or_compose_mutation(tmp_path, monkeypatch):
+    class Result:
+        def __init__(self, exit_status=0, stdout=""):
+            self.exit_status = exit_status
+            self.stdout = stdout
+
+    class Instance:
+        def model_dump(self):
+            return {"id": "marker-app", "target_id": "marker-target", "managed": True}
+
+    commands = []
+
+    class Connection:
+        async def run(self, command, check=False, **kwargs):
+            commands.append(command)
+            if command == 'printf %s "$HOME"':
+                return Result(stdout="/home/deploy-user")
+            return Result()
+
+        def close(self):
+            pass
+
+        async def wait_closed(self):
+            pass
+
+    async def fake_connect(_request):
+        return Connection(), "SHA256:public-test"
+
+    async def fake_privileges(_connection, _credential):
+        return {
+            "auth_kind": "password", "elevation_contract": "none", "is_root": False,
+            "docker_access": True, "elevated_docker_access": False,
+            "passwordless_sudo": False, "password_sudo": False,
+            "can_admin": False, "can_deploy": True, "diagnostic_code": "legacy_discovery",
+        }
+
+    async def run():
+        monkeypatch.setattr("extensions.orchestrator._connect", fake_connect)
+        monkeypatch.setattr("extensions.orchestrator._diagnose_privileges", fake_privileges)
+        monkeypatch.setattr("extensions.orchestrator.extensions_store.upsert_instance", lambda _record: Instance())
+        manager = ExtensionTaskManager(store_path=tmp_path / "marker-order.json")
+        request = ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
+            target=ExtensionTarget(
+                id="marker-target", name="VPS", host="host.example",
+                username="deploy-user", chatgpt2api_port=33010,
+            ),
+            credential=SSHCredential(password="marker-test-only"),
+            instance_id="marker-app", confirmed_plan_id="marker-plan",
+        )
+        request, _plan_manager, _plan = prepare_deployment_plan(monkeypatch, request)
+        task_id = await manager.create(request)
+        await manager.runners[task_id]
+        assert manager.get(task_id)["status"] == "completed"
+
+        claim_index = next(i for i, command in enumerate(commands) if "&& mkdir /home/deploy-user/genbox-apps/chatgpt2api/marker-app" in command)
+        marker_write_index = next(i for i, command in enumerate(commands) if "base64 -d > /home/deploy-user/genbox-apps/chatgpt2api/marker-app/.genbox-instance" in command)
+        marker_read_index = next(
+            i for i, command in enumerate(commands)
+            if command.startswith("python3 -c ") and "/marker-app/.genbox-instance" in command
+        )
+        data_index = next(i for i, command in enumerate(commands) if command == "umask 077; mkdir /home/deploy-user/genbox-apps/chatgpt2api/marker-app/data")
+        config_index = next(i for i, command in enumerate(commands) if "base64 -d > /home/deploy-user/genbox-apps/chatgpt2api/marker-app/compose.yml" in command)
+        assert claim_index < marker_write_index < marker_read_index < data_index < config_index
+        assert "/marker-app/data" not in commands[claim_index]
+
+    asyncio.run(run())
+
+
+def test_tampered_marker_stops_before_owned_mutation(tmp_path, monkeypatch):
+    class Result:
+        def __init__(self, exit_status=0, stdout=""):
+            self.exit_status = exit_status
+            self.stdout = stdout
+
+    commands = []
+
+    class Connection:
+        async def run(self, command, check=False, **kwargs):
+            commands.append(command)
+            if command == 'printf %s "$HOME"':
+                return Result(stdout="/home/deploy-user")
+            if command.startswith("python3 -c ") and "/marker-app/.genbox-instance" in command:
+                return Result(exit_status=1)
+            return Result()
+
+        def close(self):
+            pass
+
+        async def wait_closed(self):
+            pass
+
+    async def fake_connect(_request):
+        return Connection(), "SHA256:public-test"
+
+    async def fake_privileges(_connection, _credential):
+        return {
+            "auth_kind": "password", "elevation_contract": "none", "is_root": False,
+            "docker_access": True, "elevated_docker_access": False,
+            "passwordless_sudo": False, "password_sudo": False,
+            "can_admin": False, "can_deploy": True, "diagnostic_code": "legacy_discovery",
+        }
+
+    async def run():
+        monkeypatch.setattr("extensions.orchestrator._connect", fake_connect)
+        monkeypatch.setattr("extensions.orchestrator._diagnose_privileges", fake_privileges)
+        manager = ExtensionTaskManager(store_path=tmp_path / "marker-tamper.json")
+        request = ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
+            target=ExtensionTarget(
+                id="marker-target", name="VPS", host="host.example",
+                username="deploy-user", chatgpt2api_port=33010,
+            ),
+            credential=SSHCredential(password="marker-test-only"),
+            instance_id="marker-app", confirmed_plan_id="marker-plan",
+        )
+        request, _plan_manager, _plan = prepare_deployment_plan(monkeypatch, request)
+        task_id = await manager.create(request)
+        await manager.runners[task_id]
+
+        state = manager.get(task_id)
+        assert state["status"] == "failed"
+        assert state["error_code"] == "preparation_failed"
+        assert any(".genbox-instance" in command for command in commands)
+        assert not any(fragment in command for command in commands for fragment in (
+            "/marker-app/data", "/marker-app/compose.yml", "/marker-app/.env",
+            "/marker-app/config.json", "docker pull ", "docker compose ", "cp -a ",
+        ))
 
     asyncio.run(run())
 

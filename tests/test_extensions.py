@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import json
+import re
 import subprocess
 import sys
 from html.parser import HTMLParser
@@ -41,6 +42,43 @@ from extensions.orchestrator import (
 
 TEST_HOST_KEY = "SHA256:AAAAAAAAAAAAAAAAAAAA"
 DEPLOYMENT_ATTEMPT_ID = "0123456789abcdef0123456789abcdef"
+PHASE4_PATH_CONDITIONS_VERSION = "phase4-v3"
+
+
+def isolated_empty_path_conditions(**overrides):
+    conditions = {
+        "target_install_dir_absent": True,
+        "target_install_parent_claimable": True,
+        "target_data_dir_nonoverlap": True,
+        "target_compose_project_nonoverlap": True,
+        "target_port_unoccupied": True,
+    }
+    conditions.update(overrides)
+    return conditions
+
+
+def existing_path_conditions(**overrides):
+    conditions = {
+        "existing_instance_present": True,
+        "existing_instance_identity_matches": True,
+    }
+    conditions.update(overrides)
+    return conditions
+
+
+def source_clone_path_conditions(**overrides):
+    conditions = {
+        "source_instance_present": True,
+        "source_clone_scope_allowed": True,
+        "source_data_path_readable": True,
+        "target_install_dir_absent": True,
+        "target_install_parent_claimable": True,
+        "source_target_paths_nonoverlap": True,
+        "target_port_unoccupied": True,
+        "clone_capacity_sufficient": True,
+    }
+    conditions.update(overrides)
+    return conditions
 
 
 def privilege_snapshot(*, elevation="none", can_admin=False, auth_kind="password"):
@@ -62,15 +100,21 @@ def environment_snapshot(
     *, listening_ports=None, disk_free_mb=5000, home_dir="/home/deploy-user",
     listening_ports_probe=None,
 ):
+    ports = list(listening_ports or [])
+    probe = copy.deepcopy(
+        {"status": 0, "complete": True, "payload_present": True}
+        if listening_ports_probe is None else listening_ports_probe
+    )
     return {
         "docker_version": "27.0",
         "compose_version": "2.30",
         "home_dir": home_dir,
-        "listening_ports": list(listening_ports or []),
-        "listening_ports_probe": copy.deepcopy(
-            {"status": 0, "complete": True}
-            if listening_ports_probe is None else listening_ports_probe
-        ),
+        "listening_ports": ports,
+        "tcp_listeners": [
+            {"protocol": "tcp", "host_port": port}
+            for port in sorted(ports)
+        ],
+        "listening_ports_probe": probe,
         "disk_free_mb": disk_free_mb,
     }
 
@@ -98,7 +142,10 @@ def deployment_discovery(
         ),
         "privileges": privileges or privilege_snapshot(),
         "instances": normalized_instances,
-        "path_conditions": dict(path_conditions or {}),
+        "path_conditions_version": PHASE4_PATH_CONDITIONS_VERSION,
+        "path_conditions": dict(
+            isolated_empty_path_conditions() if path_conditions is None else path_conditions
+        ),
     }
 
 
@@ -1260,7 +1307,7 @@ def test_deploy_task_reports_success(tmp_path, monkeypatch):
                 "can_admin": True,
                 "diagnostic_code": "uid_0",
             },
-            path_conditions={"install_dir_absent": True},
+            path_conditions=isolated_empty_path_conditions(),
         )
         plan_manager = DeploymentPlanManager()
         plan = plan_manager.create(
@@ -1360,11 +1407,7 @@ def test_working_copy_password_sudo_waits_for_ssh_input(tmp_path, monkeypatch):
             instances=[source],
             privileges=privilege_snapshot(elevation="password_sudo", can_admin=True),
             listening_ports=[3000],
-            path_conditions={
-                "install_dir_absent": True,
-                "clone_data_dir_present": True,
-                "clone_config_file_present": True,
-            },
+            path_conditions=source_clone_path_conditions(),
         )
         plan_manager = DeploymentPlanManager()
         plan = plan_manager.create(ExtensionPlanRequest(
@@ -1409,11 +1452,10 @@ def test_deployment_plan_rejects_port_conflict():
     request = ExtensionPlanRequest(
         target=target, credential=SSHCredential(password="secret"), service_port=33010,
     )
-    discovery = {
-        "environment": environment_snapshot(listening_ports=[33010]),
-        "privileges": privilege_snapshot(),
-        "instances": [],
-    }
+    discovery = deployment_discovery(
+        listening_ports=[33010],
+        path_conditions=isolated_empty_path_conditions(target_port_unoccupied=False),
+    )
     try:
         manager.create(request, discovery)
     except ValueError as exc:
@@ -1428,11 +1470,7 @@ def test_deployment_plan_is_scoped_and_non_destructive():
     request = ExtensionPlanRequest(
         target=target, credential=SSHCredential(password="secret"), service_port=33010,
     )
-    plan = manager.create(request, {
-        "environment": environment_snapshot(),
-        "privileges": privilege_snapshot(),
-        "instances": [],
-    })
+    plan = manager.create(request, deployment_discovery())
     serialized = json.dumps(plan, ensure_ascii=False)
     assert plan["compose_project"] == "genbox-chatgpt2api-chatgpt2api-dev"
     assert plan["host"] == "host.example"
@@ -1492,7 +1530,10 @@ def test_existing_plan_binds_discovery_and_local_registration_preserves_managed_
         "ownership": "unmanaged",
     }
     manager = DeploymentPlanManager()
-    fresh_discovery = deployment_discovery(instances=[discovered], listening_ports=[33010])
+    fresh_discovery = deployment_discovery(
+        instances=[discovered], listening_ports=[33010],
+        path_conditions=existing_path_conditions(),
+    )
     plan = manager.create(
         ExtensionPlanRequest(
             target=target,
@@ -1585,7 +1626,10 @@ def test_existing_plan_rejects_missing_ambiguous_or_mismatched_structured_port(
         DeploymentPlanManager().create(ExtensionPlanRequest(
             target=target, credential=SSHCredential(password="session-only"),
             instance_id="external-app", strategy="existing", service_port=requested_port,
-        ), deployment_discovery(instances=[existing], listening_ports=published_ports))
+        ), deployment_discovery(
+            instances=[existing], listening_ports=published_ports,
+            path_conditions=existing_path_conditions(),
+        ))
 
 
 def test_external_registration_accepts_only_the_structured_discovery_port(tmp_path, monkeypatch):
@@ -1612,7 +1656,10 @@ def test_external_registration_accepts_only_the_structured_discovery_port(tmp_pa
     plan = DeploymentPlanManager().create(ExtensionPlanRequest(
         target=target, credential=SSHCredential(password="session-only"),
         instance_id="external-app", strategy="existing", service_port=33010,
-    ), deployment_discovery(instances=[existing], listening_ports=[33010]))
+    ), deployment_discovery(
+        instances=[existing], listening_ports=[33010],
+        path_conditions=existing_path_conditions(),
+    ))
     updated = store.upsert_instance({
         "id": "external-app", "target_id": "target-a", "service_port": plan["service_port"],
         "install_dir": existing["working_dir"], "data_dir": existing["data_dir"],
@@ -1631,7 +1678,7 @@ def test_deployment_without_docker_or_elevation_fails_before_remote_write(tmp_pa
             host_key=TEST_HOST_KEY, chatgpt2api_port=33010,
         )
         credential = SSHCredential(password="session-only")
-        initial = deployment_discovery(path_conditions={"install_dir_absent": True})
+        initial = deployment_discovery(path_conditions=isolated_empty_path_conditions())
         plan_manager = DeploymentPlanManager()
         plan = plan_manager.create(
             ExtensionPlanRequest(target=target, credential=credential, service_port=33010),
@@ -1706,7 +1753,7 @@ def test_empty_instance_confirmation_ignores_unrelated_volatile_instance_observa
     initial = deployment_discovery(
         instances=[unrelated],
         listening_ports=[3000],
-        path_conditions={"install_dir_absent": True},
+        path_conditions=isolated_empty_path_conditions(),
     )
     plan_manager = DeploymentPlanManager()
     plan = plan_manager.create(
@@ -1719,11 +1766,14 @@ def test_empty_instance_confirmation_ignores_unrelated_volatile_instance_observa
     fresh = copy.deepcopy(initial)
     if field == "environment.listening_ports":
         fresh["environment"]["listening_ports"] = fresh_value
+        fresh["environment"]["tcp_listeners"] = [
+            {"protocol": "tcp", "host_port": port} for port in fresh_value
+        ]
     else:
         fresh["instances"][0][field] = fresh_value
 
     async def fake_discover(_request, *, path_checks=None):
-        assert path_checks == plan["path_requirements"]
+        assert path_checks == plan_manager.plans[plan["id"]]["path_requirements"]
         return copy.deepcopy(fresh)
 
     async def no_remote_run(*_args, **_kwargs):
@@ -1762,7 +1812,7 @@ def test_empty_plan_snapshot_drift_reports_sanitized_category_and_fields():
     }
     initial = deployment_discovery(
         instances=[source], listening_ports=[3000],
-        path_conditions={"install_dir_absent": True},
+        path_conditions=isolated_empty_path_conditions(),
     )
     manager = DeploymentPlanManager()
     plan = manager.create(
@@ -1817,7 +1867,7 @@ def test_empty_plan_rejects_host_ip_protocol_or_container_port_binding_drift(fre
     }
     initial = deployment_discovery(
         instances=[source], listening_ports=[3000],
-        path_conditions={"install_dir_absent": True},
+        path_conditions=isolated_empty_path_conditions(),
     )
     manager = DeploymentPlanManager()
     plan = manager.create(ExtensionPlanRequest(
@@ -1857,7 +1907,7 @@ def test_empty_plan_accepts_raw_port_display_reordering_when_bindings_are_unchan
     }
     initial = deployment_discovery(
         instances=[source], listening_ports=[3000],
-        path_conditions={"install_dir_absent": True},
+        path_conditions=isolated_empty_path_conditions(),
     )
     manager = DeploymentPlanManager()
     plan = manager.create(ExtensionPlanRequest(
@@ -1907,6 +1957,178 @@ def test_plan_creation_and_confirmation_fail_closed_without_canonical_bindings()
     assert excinfo.value.diagnostic["changed_fields"] == ["instances.port_bindings"]
 
 
+def test_duplicate_binding_multiplicity_drift_is_not_collapsed_to_a_set():
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33011,
+    )
+    duplicated = {
+        "id": "source", "container_id": "container-a", "name": "source",
+        "image": "registry.example/app@sha256:" + "a" * 64,
+        "source_image_id": "sha256:" + "b" * 64,
+        "status": "Up", "ports": "display-only", "published_ports": [3000],
+        "service_port": 3000,
+        "port_bindings": [
+            {"host_ip": "0.0.0.0", "host_port": 3000, "container_port": 80, "protocol": "tcp"},
+            {"host_ip": "0.0.0.0", "host_port": 3000, "container_port": 80, "protocol": "tcp"},
+        ],
+        "port_bindings_complete": True,
+        "compose_project": "source", "compose_service": "app",
+        "working_dir": "/srv/source", "data_dir": "/srv/source/data",
+        "config_file": "/srv/source/config.json", "data_size_mb": 1,
+        "clone_available": True, "managed": False, "ownership": "compose",
+    }
+    initial = deployment_discovery(instances=[duplicated], listening_ports=[3000])
+    manager = DeploymentPlanManager()
+    public_plan = manager.create(ExtensionPlanRequest(
+        target=target, credential=SSHCredential(password="session-only"),
+        strategy="isolated", clone_scope="empty", service_port=33011,
+    ), initial)
+    fresh = copy.deepcopy(initial)
+    fresh["instances"][0]["port_bindings"].pop()
+
+    with pytest.raises(DeploymentSnapshotChangedError) as excinfo:
+        manager.validate_fresh_snapshot(manager.plans[public_plan["id"]], fresh)
+
+    assert excinfo.value.diagnostic["changed_fields"] == ["instances.port_bindings"]
+    assert public_plan["id"] in manager.plans
+
+
+@pytest.mark.parametrize("case", [
+    "missing_version", "null_version", "unknown_version", "missing_key",
+    "unknown_key", "null_value", "false_value", "strategy_mismatch",
+])
+def test_closed_path_condition_schema_rejects_every_non_exact_variant(case):
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33011,
+    )
+    discovery = deployment_discovery()
+    if case == "missing_version":
+        discovery.pop("path_conditions_version")
+    elif case == "null_version":
+        discovery["path_conditions_version"] = None
+    elif case == "unknown_version":
+        discovery["path_conditions_version"] = "phase4-v4"
+    elif case == "missing_key":
+        discovery["path_conditions"].pop("target_install_parent_claimable")
+    elif case == "unknown_key":
+        discovery["path_conditions"]["unexpected"] = True
+    elif case == "null_value":
+        discovery["path_conditions"]["target_install_dir_absent"] = None
+    elif case == "false_value":
+        discovery["path_conditions"]["target_install_parent_claimable"] = False
+    else:
+        discovery["path_conditions"] = {
+            "existing_instance_present": True,
+            "existing_instance_identity_matches": True,
+        }
+
+    manager = DeploymentPlanManager()
+    with pytest.raises(ValueError) as excinfo:
+        manager.create(ExtensionPlanRequest(
+            target=target, credential=SSHCredential(password="session-only"),
+            strategy="isolated", clone_scope="empty", service_port=33011,
+        ), discovery)
+
+    assert str(excinfo.value) == "deployment_path_conditions_invalid"
+    assert excinfo.value.diagnostic["code"] == "deployment_path_conditions_invalid"
+    assert manager.plans == {}
+
+
+@pytest.mark.parametrize("case", [
+    "missing_version", "missing_key", "unknown_key", "null_value",
+    "false_value", "strategy_mismatch",
+])
+def test_plan_route_rejects_non_closed_path_evidence_before_plan_creation(monkeypatch, case):
+    import main
+
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33011,
+    )
+    initial = deployment_discovery()
+    invalid = copy.deepcopy(initial)
+    if case == "missing_version":
+        invalid.pop("path_conditions_version")
+    elif case == "missing_key":
+        invalid["path_conditions"].pop("target_install_parent_claimable")
+    elif case == "unknown_key":
+        invalid["path_conditions"]["unexpected"] = True
+    elif case == "null_value":
+        invalid["path_conditions"]["target_install_dir_absent"] = None
+    elif case == "false_value":
+        invalid["path_conditions"]["target_install_parent_claimable"] = False
+    else:
+        invalid["path_conditions"] = existing_path_conditions()
+    calls = []
+
+    async def fake_discover(_request, *, path_checks=None):
+        calls.append(copy.deepcopy(path_checks))
+        return copy.deepcopy(initial if len(calls) == 1 else invalid)
+
+    manager = DeploymentPlanManager()
+    monkeypatch.setattr(main, "deployment_plans", manager)
+    monkeypatch.setattr(main, "discover_environment", fake_discover)
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    body = ExtensionPlanRequest(
+        target=target, credential=SSHCredential(password="session-only"),
+        strategy="isolated", clone_scope="empty", service_port=33011,
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(main.extension_deploy_plan(body))
+
+    assert excinfo.value.status_code == 400
+    assert excinfo.value.detail["diagnostic"]["code"] == "deployment_path_conditions_invalid"
+    assert calls[0] is None
+    assert set(calls[1]) == set(isolated_empty_path_conditions())
+    assert manager.plans == {}
+
+
+@pytest.mark.parametrize("payload_case", ["missing", "null", "invalid"])
+def test_listener_success_requires_a_complete_structured_payload(payload_case):
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33011,
+    )
+    discovery = deployment_discovery()
+    if payload_case == "missing":
+        discovery["environment"].pop("tcp_listeners")
+    elif payload_case == "null":
+        discovery["environment"]["tcp_listeners"] = None
+    else:
+        discovery["environment"]["tcp_listeners"] = [{"protocol": "udp", "host_port": 33011}]
+
+    manager = DeploymentPlanManager()
+    with pytest.raises(ValueError, match="^deployment_listener_probe_incomplete$"):
+        manager.create(ExtensionPlanRequest(
+            target=target, credential=SSHCredential(password="session-only"),
+            strategy="isolated", clone_scope="empty", service_port=33011,
+        ), discovery)
+
+    assert manager.plans == {}
+
+
+def test_public_plan_exposes_only_an_opaque_evidence_manifest_for_the_snapshot():
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33011,
+    )
+    manager = DeploymentPlanManager()
+    plan = manager.create(ExtensionPlanRequest(
+        target=target, credential=SSHCredential(password="session-only"),
+        strategy="isolated", clone_scope="empty", service_port=33011,
+    ), deployment_discovery())
+
+    assert "execution_snapshot" not in plan
+    assert "discovery_snapshot" not in plan
+    assert "path_requirements" not in plan
+    assert plan["evidence_manifest"]["contract_version"] == "phase4-v3"
+    assert plan["evidence_manifest"]["complete"] is True
+    assert re.fullmatch(r"[a-f0-9]{64}", plan["evidence_manifest"]["snapshot_digest"])
+
+
 @pytest.mark.parametrize("probe", [
     {"status": 1, "complete": False},
     {"status": 0, "complete": False},
@@ -1920,7 +2142,7 @@ def test_plan_creation_rejects_untrustworthy_listener_probe_with_sanitized_diagn
     manager = DeploymentPlanManager()
     discovery = deployment_discovery(
         listening_ports=[], listening_ports_probe=probe,
-        path_conditions={"install_dir_absent": True},
+        path_conditions=isolated_empty_path_conditions(),
     )
 
     with pytest.raises(ValueError) as excinfo:
@@ -1952,7 +2174,7 @@ def test_deploy_route_rejects_occupied_or_untrustworthy_listener_probe_without_s
     )
     credential = SSHCredential(password="session-only")
     initial = deployment_discovery(
-        listening_ports=[3000], path_conditions={"install_dir_absent": True},
+        listening_ports=[3000], path_conditions=isolated_empty_path_conditions(),
     )
     plan_manager = DeploymentPlanManager()
     plan = plan_manager.create(ExtensionPlanRequest(
@@ -1962,11 +2184,15 @@ def test_deploy_route_rejects_occupied_or_untrustworthy_listener_probe_without_s
     fresh = copy.deepcopy(initial)
     if probe_case == "occupied":
         fresh["environment"]["listening_ports"].append(33011)
+        fresh["environment"]["tcp_listeners"].append({"protocol": "tcp", "host_port": 33011})
+        fresh["path_conditions"]["target_port_unoccupied"] = False
     else:
         fresh["environment"]["listening_ports"] = []
+        fresh["environment"]["tcp_listeners"] = []
         fresh["environment"]["listening_ports_probe"] = {
             "status": 1 if probe_case == "failed" else 0,
             "complete": False,
+            "payload_present": False,
         }
     remote_writes = []
 
@@ -1995,7 +2221,9 @@ def test_deploy_route_rejects_occupied_or_untrustworthy_listener_probe_without_s
         diagnostic = excinfo.value.detail["diagnostic"]
         assert diagnostic["code"] == "deployment_snapshot_changed"
         assert diagnostic["task_created"] is False
-        assert diagnostic["snapshot_category"] == "requested_port"
+        assert diagnostic["snapshot_category"] == (
+            "requested_port" if probe_case == "occupied" else "listener_evidence"
+        )
         assert diagnostic["changed_fields"] == [
             "environment.listening_ports" if probe_case == "occupied"
             else "environment.listening_ports_probe"
@@ -2056,6 +2284,8 @@ def test_empty_plan_snapshot_keeps_security_bindings_fail_closed(drift, category
     fresh = copy.deepcopy(initial)
     if drift == "requested_port":
         fresh["environment"]["listening_ports"].append(33011)
+        fresh["environment"]["tcp_listeners"].append({"protocol": "tcp", "host_port": 33011})
+        fresh["path_conditions"]["target_port_unoccupied"] = False
     elif drift == "target_instance":
         fresh["instances"].append({
             **fresh["instances"][0], "id": "chatgpt2api-dev", "container_id": "target-container",
@@ -2094,7 +2324,6 @@ def test_empty_plan_snapshot_keeps_security_bindings_fail_closed(drift, category
         ("data_size_mb", 141),
         ("clone_available", False),
         ("image", "mirror.example/chatgpt2api@sha256:" + ("a" * 64)),
-        ("environment.listening_ports", [3000, 3010]),
     ],
 )
 def test_existing_and_source_clone_snapshot_contracts_remain_exact(plan_kind, field, fresh_value):
@@ -2117,11 +2346,7 @@ def test_existing_and_source_clone_snapshot_contracts_remain_exact(plan_kind, fi
         instances=[source],
         privileges=privilege_snapshot(elevation="passwordless_sudo", can_admin=True),
         listening_ports=[3000],
-        path_conditions={
-            "install_dir_absent": True,
-            "clone_data_dir_present": True,
-            "clone_config_file_present": True,
-        },
+        path_conditions=source_clone_path_conditions(),
     )
     manager = DeploymentPlanManager()
     if plan_kind == "existing":
@@ -2129,6 +2354,7 @@ def test_existing_and_source_clone_snapshot_contracts_remain_exact(plan_kind, fi
             target=target, credential=credential, instance_id="source-app",
             strategy="existing", service_port=3000,
         )
+        initial["path_conditions"] = existing_path_conditions()
     else:
         request = ExtensionPlanRequest(
             target=target, credential=credential, instance_id="chatgpt2api-dev",
@@ -2139,6 +2365,9 @@ def test_existing_and_source_clone_snapshot_contracts_remain_exact(plan_kind, fi
     fresh = copy.deepcopy(initial)
     if field == "environment.listening_ports":
         fresh["environment"]["listening_ports"] = fresh_value
+        fresh["environment"]["tcp_listeners"] = [
+            {"protocol": "tcp", "host_port": port} for port in fresh_value
+        ]
     else:
         fresh["instances"][0][field] = fresh_value
 
@@ -2172,11 +2401,7 @@ def test_fresh_remote_snapshot_drift_preserves_plan_and_creates_no_task(tmp_path
         instances=[source],
         privileges=privilege_snapshot(elevation="passwordless_sudo", can_admin=True),
         listening_ports=[3000],
-        path_conditions={
-            "install_dir_absent": True,
-            "clone_data_dir_present": True,
-            "clone_config_file_present": True,
-        },
+        path_conditions=source_clone_path_conditions(),
     )
     plan_manager = DeploymentPlanManager()
     plan = plan_manager.create(ExtensionPlanRequest(
@@ -2186,6 +2411,8 @@ def test_fresh_remote_snapshot_drift_preserves_plan_and_creates_no_task(tmp_path
     fresh = copy.deepcopy(initial)
     if drift == "ports":
         fresh["environment"]["listening_ports"].append(33010)
+        fresh["environment"]["tcp_listeners"].append({"protocol": "tcp", "host_port": 33010})
+        fresh["path_conditions"]["target_port_unoccupied"] = False
     elif drift == "instances":
         fresh["instances"].append({**source, "id": "new-app", "container_id": "new-container"})
     elif drift == "compose":
@@ -2201,7 +2428,7 @@ def test_fresh_remote_snapshot_drift_preserves_plan_and_creates_no_task(tmp_path
     elif drift == "disk":
         fresh["environment"]["disk_free_mb"] = 100
     elif drift == "path":
-        fresh["path_conditions"]["install_dir_absent"] = False
+        fresh["path_conditions"]["target_install_dir_absent"] = False
     elif drift == "capability":
         fresh["privileges"]["can_deploy"] = False
         fresh["privileges"]["diagnostic_code"] = "docker_unavailable"
@@ -2288,16 +2515,17 @@ def test_isolated_working_copy_plan_requires_space_and_scrubs_push_state():
         target=target, credential=SSHCredential(password="secret", elevation="passwordless_sudo"), service_port=33010,
         clone_source_id="chatgpt2api-warp", clone_scope="working-copy",
     )
-    discovery = {
-        "environment": environment_snapshot(listening_ports=[3000]),
-        "privileges": privilege_snapshot(elevation="passwordless_sudo", can_admin=True),
-        "instances": [{
+    discovery = deployment_discovery(
+        listening_ports=[3000],
+        privileges=privilege_snapshot(elevation="passwordless_sudo", can_admin=True),
+        instances=[{
             "id": "chatgpt2api-warp", "image": "ghcr.io/yukkcat/chatgpt2api:latest",
             "data_dir": "/opt/chatgpt2api/data", "config_file": "/opt/chatgpt2api/config.json",
             "data_size_mb": 1200, "clone_available": True,
             "port_bindings": [], "port_bindings_complete": True,
         }],
-    }
+        path_conditions=source_clone_path_conditions(),
+    )
     plan = manager.create(request, discovery)
     assert plan["clone_scope"] == "working-copy"
     assert plan["clone_size_mb"] == 1200
@@ -2343,16 +2571,16 @@ def test_working_copy_plan_uses_existing_local_image_baseline():
         credential=SSHCredential(password="secret", elevation="passwordless_sudo"), service_port=33010,
         image=baseline_image, clone_source_id="chatgpt2api-warp", clone_scope="working-copy",
     )
-    plan = manager.create(request, {
-        "environment": environment_snapshot(),
-        "privileges": privilege_snapshot(elevation="passwordless_sudo", can_admin=True),
-        "instances": [{
+    plan = manager.create(request, deployment_discovery(
+        privileges=privilege_snapshot(elevation="passwordless_sudo", can_admin=True),
+        instances=[{
             "id": "chatgpt2api-warp", "image": baseline_image,
             "source_image_id": "sha256:production-image", "data_dir": "/data",
             "config_file": "/config.json", "data_size_mb": 100, "clone_available": True,
             "port_bindings": [], "port_bindings_complete": True,
         }],
-    })
+        path_conditions=source_clone_path_conditions(),
+    ))
 
     assert plan["image"] == baseline_image
     assert plan["clone_source_image_id"] == "sha256:production-image"

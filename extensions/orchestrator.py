@@ -32,6 +32,7 @@ DEPLOY_STEPS = [
     ("start", "启动服务"),
     ("verify", "等待服务就绪"),
 ]
+PHASE4_DEPLOYMENT_CONTRACT_VERSION = "phase4-v3"
 
 
 class SSHAuthenticationError(PermissionError):
@@ -113,7 +114,7 @@ class DeploymentPlanUnavailableError(DeploymentNoTaskError):
 class DeploymentSnapshotChangedError(DeploymentNoTaskError):
     _CATEGORIES = {
         "plan_snapshot", "stable_snapshot", "capacity_threshold", "path_requirements",
-        "existing_instance", "requested_port", "target_instance",
+        "existing_instance", "requested_port", "target_instance", "listener_evidence",
     }
 
     def __init__(self, *, category: str = "stable_snapshot", changed_fields: list[str] | None = None):
@@ -761,12 +762,13 @@ class ExtensionTaskManager:
                     "logs": [], "error": None, "host_key": "", "result": None,
                     "created_at": self._now(), "updated_at": self._now(), "recovery_action": None,
                     "failed_phase": None, "error_code": None,
+                    "evidence_manifest": copy.deepcopy(plan.get("evidence_manifest")),
                 }
                 self.task_reservations[task_id] = reservation_token
+                self._persist()
                 runner = asyncio.create_task(self._run(task_id, request, plan))
                 self.runners[task_id] = runner
                 runner.add_done_callback(lambda completed: self._discard_done_runner(task_id, completed))
-                self._persist()
         except BaseException:
             with self.lock:
                 if previous_tasks is not None:
@@ -777,7 +779,6 @@ class ExtensionTaskManager:
                 if runner is not None:
                     runner.cancel()
             self.resource_reservations.release(reservation_token)
-            deployment_plans.restore(plan)
             raise
         return task_id
 
@@ -889,7 +890,7 @@ class ExtensionTaskManager:
             step(0, "success", "SSH 连接成功")
 
             home_dir = (await connection.run("printf %s \"$HOME\"", check=True)).stdout.strip()
-            planned_home_dir = plan.get("discovery_snapshot", {}).get("environment", {}).get("home_dir")
+            planned_home_dir = plan.get("execution_snapshot", {}).get("environment", {}).get("home_dir")
             if planned_home_dir and home_dir != planned_home_dir:
                 raise PermissionError("远程用户主目录已变化，请重新发现并生成计划")
             failure_key = "docker_unavailable"
@@ -1000,12 +1001,30 @@ class ExtensionTaskManager:
                 ("docker version --format '{{.Server.Version}}'", "docker"),
                 (
                     f"umask 077; mkdir -p {shlex.quote(install_parent)} "
-                    f"&& mkdir {shlex.quote(install_dir)} "
-                    f"&& mkdir {shlex.quote(install_dir + '/data')}",
+                    f"&& mkdir {shlex.quote(install_dir)}",
                     "none",
                 ),
                 (image_prepare, "docker"),
             ]
+            ownership_marker = {
+                "id": plan["instance_id"], "project": compose_project, "managed": True,
+            }
+
+            async def verify_ownership_marker() -> None:
+                script = (
+                    "import json,sys; "
+                    "p=json.load(open(sys.argv[1],encoding='utf-8')); "
+                    "raise SystemExit(0 if p=={'id':sys.argv[2],'project':sys.argv[3],'managed':True} else 1)"
+                )
+                marker = await connection.run(
+                    f"python3 -c {shlex.quote(script)} "
+                    f"{shlex.quote(install_dir + '/.genbox-instance')} "
+                    f"{shlex.quote(plan['instance_id'])} {shlex.quote(compose_project)}",
+                    check=False,
+                )
+                if marker.exit_status != 0:
+                    raise PermissionError("deployment_ownership_marker_mismatch")
+
             for offset, (command, privilege) in enumerate(commands, start=1):
                 failure_key = {1: "docker_unavailable", 2: "preparation_failed", 3: "image_prepare_failed"}[offset]
                 step(offset, "running", DEPLOY_STEPS[offset][1])
@@ -1013,6 +1032,18 @@ class ExtensionTaskManager:
                 if result.exit_status != 0:
                     raise RuntimeError(f"{DEPLOY_STEPS[offset][1]}失败")
                 done_log = f"{DEPLOY_STEPS[offset][1]}完成"
+                if offset == 2:
+                    await write_remote(
+                        f"{install_dir}/.genbox-instance",
+                        json.dumps(ownership_marker, separators=(",", ":")),
+                    )
+                    await verify_ownership_marker()
+                    data_created = await run_command(
+                        f"umask 077; mkdir {shlex.quote(install_dir + '/data')}",
+                        "none",
+                    )
+                    if data_created.exit_status != 0:
+                        raise RuntimeError("deployment_data_directory_failed")
                 if offset == 3:
                     done_log = (
                         "复用生产镜像基线，未拉取 latest"
@@ -1021,6 +1052,7 @@ class ExtensionTaskManager:
                 step(offset, "success", done_log)
             cloned_config = False
             failure_key = "preparation_failed"
+            await verify_ownership_marker()
             if plan.get("clone_scope") in {"media", "working-copy"}:
                 source_data = plan["clone_source_data_dir"]
                 target_data = f"{install_dir}/data"
@@ -1061,15 +1093,14 @@ class ExtensionTaskManager:
                     if scrub_config.exit_status != 0:
                         raise RuntimeError("清理克隆设置中的自动任务失败")
                     cloned_config = True
+            await verify_ownership_marker()
             await write_remote(f"{install_dir}/compose.yml", compose_content)
             await write_remote(f"{install_dir}/.env", env_content)
             if not cloned_config:
                 await write_remote(f"{install_dir}/config.json", config_content)
-            await write_remote(f"{install_dir}/.genbox-instance", json.dumps({
-                "id": plan["instance_id"], "project": compose_project, "managed": True,
-            }))
             failure_key = "service_start_failed"
             step(4, "running", DEPLOY_STEPS[4][1])
+            await verify_ownership_marker()
             start = await run_command(
                 f"cd {shlex.quote(install_dir)} && docker compose -p {shlex.quote(compose_project)} -f compose.yml up -d",
                 "docker",
@@ -1086,6 +1117,7 @@ class ExtensionTaskManager:
             )
             if verify.exit_status != 0:
                 try:
+                    await verify_ownership_marker()
                     stopped = await run_command(
                         f"cd {shlex.quote(install_dir)} && docker compose -p {shlex.quote(compose_project)} -f compose.yml down",
                         "docker",
@@ -1177,19 +1209,42 @@ class DeploymentPlanManager:
         "data_dir", "config_file", "data_size_mb", "clone_available", "managed", "ownership",
     )
     _ENVIRONMENT_SNAPSHOT_FIELDS = (
-        "docker_version", "compose_version", "home_dir", "listening_ports", "listening_ports_probe",
+        "docker_version", "compose_version", "home_dir", "listening_ports",
+        "tcp_listeners", "listening_ports_probe",
     )
     _EMPTY_PLAN_OBSERVATION_FIELDS = (
         "image", "status", "ports", "data_size_mb", "clone_available",
     )
+    _PATH_CONDITION_KEYS = {
+        "isolated-empty": frozenset({
+            "target_install_dir_absent", "target_install_parent_claimable",
+            "target_data_dir_nonoverlap", "target_compose_project_nonoverlap",
+            "target_port_unoccupied",
+        }),
+        "existing": frozenset({
+            "existing_instance_present", "existing_instance_identity_matches",
+        }),
+        "isolated-source-clone": frozenset({
+            "source_instance_present", "source_clone_scope_allowed",
+            "source_data_path_readable", "target_install_dir_absent",
+            "target_install_parent_claimable", "source_target_paths_nonoverlap",
+            "target_port_unoccupied", "clone_capacity_sufficient",
+        }),
+    }
 
     def __init__(self):
         self.plans: dict[str, dict] = {}
         self.lock = threading.RLock()
 
-    def create(self, request: ExtensionPlanRequest, discovery: dict) -> dict:
+    def create(
+        self,
+        request: ExtensionPlanRequest,
+        discovery: dict,
+        *,
+        path_requirements: dict[str, dict[str, Any]] | None = None,
+    ) -> dict:
         with self.lock:
-            return self._create(request, discovery)
+            return self._create(request, discovery, path_requirements=path_requirements)
 
     @staticmethod
     def _identity_fields(request: ExtensionPlanRequest | ExtensionDeployRequest) -> dict[str, Any]:
@@ -1228,26 +1283,58 @@ class DeploymentPlanManager:
             "compose_version": copy.deepcopy(environment.get("compose_version")),
             "home_dir": copy.deepcopy(environment.get("home_dir")),
             "listening_ports": sorted(int(port) for port in environment.get("listening_ports", [])),
+            "tcp_listeners": copy.deepcopy(environment.get("tcp_listeners")),
             "listening_ports_probe": copy.deepcopy(environment.get("listening_ports_probe")),
         }
 
     @staticmethod
-    def _listener_probe_complete(environment: dict) -> bool:
+    def _canonical_tcp_listeners(value: Any) -> list[dict[str, Any]] | None:
+        if not isinstance(value, list):
+            return None
+        canonical: list[tuple[str, int]] = []
+        for listener in value:
+            if not isinstance(listener, dict) or set(listener) != {"protocol", "host_port"}:
+                return None
+            protocol = str(listener.get("protocol") or "").lower()
+            host_port = listener.get("host_port")
+            if (
+                protocol != "tcp"
+                or isinstance(host_port, bool)
+                or not isinstance(host_port, int)
+                or not 1 <= host_port <= 65535
+            ):
+                return None
+            canonical.append((protocol, host_port))
+        return [
+            {"protocol": protocol, "host_port": host_port}
+            for protocol, host_port in sorted(canonical, key=lambda item: item[1])
+        ]
+
+    @classmethod
+    def _listener_probe_complete(cls, environment: dict) -> bool:
         probe = environment.get("listening_ports_probe")
         status = probe.get("status") if isinstance(probe, dict) else None
-        return (
+        listeners = cls._canonical_tcp_listeners(environment.get("tcp_listeners"))
+        display_ports = environment.get("listening_ports")
+        return bool(
             isinstance(probe, dict)
             and isinstance(status, int)
             and not isinstance(status, bool)
             and status == 0
             and probe.get("complete") is True
+            and probe.get("payload_present") is True
+            and listeners is not None
+            and listeners == environment.get("tcp_listeners")
+            and isinstance(display_ports, list)
+            and all(isinstance(port, int) and not isinstance(port, bool) for port in display_ports)
+            and sorted(set(display_ports)) == sorted({item["host_port"] for item in listeners})
         )
 
     @staticmethod
     def _canonical_port_bindings(value: Any) -> list[dict[str, Any]] | None:
         if not isinstance(value, list):
             return None
-        canonical: set[tuple[str, int, int, str]] = set()
+        canonical: list[tuple[str, int, int, str]] = []
         for binding in value:
             if not isinstance(binding, dict):
                 return None
@@ -1266,7 +1353,7 @@ class DeploymentPlanManager:
                 or protocol not in {"tcp", "udp", "sctp"}
             ):
                 return None
-            canonical.add((host_ip, host_port, container_port, protocol))
+            canonical.append((host_ip, host_port, container_port, protocol))
         return [
             {
                 "host_ip": host_ip,
@@ -1288,6 +1375,139 @@ class DeploymentPlanManager:
             ):
                 return False
         return True
+
+    @staticmethod
+    def _snapshot_digest(snapshot: dict[str, Any]) -> str:
+        encoded = json.dumps(
+            snapshot,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    @classmethod
+    def _evidence_manifest(cls, snapshot: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "contract_version": PHASE4_DEPLOYMENT_CONTRACT_VERSION,
+            "snapshot_digest": cls._snapshot_digest(snapshot),
+            "complete": True,
+            "changed_fields": [],
+        }
+
+    @staticmethod
+    def _public_plan(plan: dict[str, Any]) -> dict[str, Any]:
+        return {
+            key: copy.deepcopy(value)
+            for key, value in plan.items()
+            if key not in {"expires_at", "_lease_token", "execution_snapshot", "path_requirements"}
+        }
+
+    @staticmethod
+    def _normalized_plan_path(value: Any) -> str:
+        raw = str(value or "").strip()
+        return posixpath.normpath(raw) if raw.startswith("/") else ""
+
+    @staticmethod
+    def _path_condition_strategy(request: ExtensionPlanRequest | ExtensionDeployRequest) -> str:
+        if request.strategy == "existing":
+            return "existing"
+        if request.clone_scope == "empty":
+            return "isolated-empty"
+        return "isolated-source-clone"
+
+    @classmethod
+    def path_requirements(
+        cls,
+        request: ExtensionPlanRequest | ExtensionDeployRequest,
+        discovery: dict,
+    ) -> dict[str, dict[str, Any]]:
+        strategy = cls._path_condition_strategy(request)
+        environment = discovery.get("environment", {})
+        instances = discovery.get("instances", [])
+        if strategy == "existing":
+            existing = next(
+                (item for item in instances if item.get("id") == request.instance_id),
+                {},
+            )
+            return {
+                "existing_instance_present": {
+                    "kind": "instance_present", "instance_id": request.instance_id,
+                },
+                "existing_instance_identity_matches": {
+                    "kind": "instance_identity_matches", "instance_id": request.instance_id,
+                    "container_id": existing.get("container_id"),
+                    "service_port": existing.get("service_port"),
+                },
+            }
+        home_dir = cls._normalized_plan_path(environment.get("home_dir"))
+        install_dir = cls._normalized_plan_path(
+            f"{home_dir}/genbox-apps/{request.project_id}/{request.instance_id}"
+            if home_dir else ""
+        )
+        install_parent = posixpath.dirname(install_dir) if install_dir else ""
+        target_port = {"kind": "tcp_port_unoccupied", "port": request.service_port}
+        if strategy == "isolated-empty":
+            return {
+                "target_install_dir_absent": {"kind": "absent", "path": install_dir},
+                "target_install_parent_claimable": {"kind": "claimable_parent", "path": install_parent},
+                "target_data_dir_nonoverlap": {"kind": "data_nonoverlap", "path": f"{install_dir}/data"},
+                "target_compose_project_nonoverlap": {
+                    "kind": "compose_nonoverlap",
+                    "compose_project": f"genbox-chatgpt2api-{request.instance_id}",
+                },
+                "target_port_unoccupied": target_port,
+            }
+        source = next(
+            (item for item in instances if item.get("id") == request.clone_source_id),
+            {},
+        )
+        required_mb = int(source.get("data_size_mb") or 0) + 512
+        return {
+            "source_instance_present": {
+                "kind": "instance_present", "instance_id": request.clone_source_id,
+            },
+            "source_clone_scope_allowed": {
+                "kind": "clone_scope_allowed",
+                "allowed": request.strategy == "isolated" and request.clone_scope in {"media", "working-copy"},
+            },
+            "source_data_path_readable": {
+                "kind": "directory", "path": source.get("data_dir"),
+            },
+            "target_install_dir_absent": {"kind": "absent", "path": install_dir},
+            "target_install_parent_claimable": {"kind": "claimable_parent", "path": install_parent},
+            "source_target_paths_nonoverlap": {
+                "kind": "source_target_paths_nonoverlap",
+                "path": install_dir,
+                "source_id": request.clone_source_id,
+            },
+            "target_port_unoccupied": target_port,
+            "clone_capacity_sufficient": {
+                "kind": "capacity_sufficient", "required_mb": required_mb,
+            },
+        }
+
+    @classmethod
+    def _validate_path_conditions(
+        cls,
+        request: ExtensionPlanRequest | ExtensionDeployRequest,
+        discovery: dict,
+        path_requirements: dict[str, dict[str, Any]],
+    ) -> None:
+        strategy = cls._path_condition_strategy(request)
+        expected_keys = cls._PATH_CONDITION_KEYS[strategy]
+        conditions = discovery.get("path_conditions")
+        if (
+            discovery.get("path_conditions_version") != PHASE4_DEPLOYMENT_CONTRACT_VERSION
+            or not isinstance(conditions, dict)
+            or set(path_requirements) != expected_keys
+            or set(conditions) != expected_keys
+            or any(conditions.get(key) is not True for key in expected_keys)
+        ):
+            raise DeploymentPlanConfirmationError(
+                "deployment_path_conditions_invalid",
+                code="deployment_path_conditions_invalid",
+            )
 
     @classmethod
     def _discovery_snapshot(cls, discovery: dict) -> dict[str, Any]:
@@ -1313,14 +1533,17 @@ class DeploymentPlanManager:
     @classmethod
     def _fresh_snapshot_projection(cls, plan: dict, snapshot: dict) -> dict[str, Any]:
         projected = copy.deepcopy(snapshot)
+        environment = projected.get("environment")
+        if isinstance(environment, dict):
+            # Completeness and requested-port occupancy are validated
+            # separately. Unrelated listener churn is not ownership drift.
+            environment.pop("listening_ports", None)
+            environment.pop("tcp_listeners", None)
         if plan.get("strategy") != "existing" and plan.get("clone_scope") == "empty":
             # Empty plans consume none of the unrelated instances' display or
             # clone-eligibility observations. Requested-port occupancy is
             # checked separately; structured identity, ports, paths, and
             # source_image_id remain exact in this projection.
-            environment = projected.get("environment")
-            if isinstance(environment, dict):
-                environment.pop("listening_ports", None)
             for instance in projected.get("instances", []):
                 if not isinstance(instance, dict):
                     continue
@@ -1353,7 +1576,13 @@ class DeploymentPlanManager:
                 changed.add(f"privileges.{field}")
         return sorted(changed) or ["discovery_snapshot"]
 
-    def _create(self, request: ExtensionPlanRequest, discovery: dict) -> dict:
+    def _create(
+        self,
+        request: ExtensionPlanRequest,
+        discovery: dict,
+        *,
+        path_requirements: dict[str, dict[str, Any]] | None = None,
+    ) -> dict:
         validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
         if not request.target.id:
             raise ValueError("请先保存 VPS 配置，再生成部署计划")
@@ -1377,6 +1606,19 @@ class DeploymentPlanManager:
                 "deployment_port_bindings_incomplete",
                 code="deployment_port_bindings_incomplete",
             )
+        environment = discovery.get("environment", {})
+        if not self._listener_probe_complete(environment):
+            raise DeploymentPlanConfirmationError(
+                "deployment_listener_probe_incomplete",
+                code="deployment_listener_probe_incomplete",
+            )
+        computed_path_requirements = self.path_requirements(request, discovery)
+        if path_requirements is not None and path_requirements != computed_path_requirements:
+            raise DeploymentPlanConfirmationError(
+                "deployment_path_conditions_invalid",
+                code="deployment_path_conditions_invalid",
+            )
+        path_requirements = computed_path_requirements
         if request.strategy == "existing":
             existing = next((item for item in discovery.get("instances", []) if item.get("id") == request.instance_id), None)
             if not existing:
@@ -1391,7 +1633,9 @@ class DeploymentPlanManager:
                 raise ValueError("instance_id_conflicts_with_another_target")
             if registered and registered.managed and registered.service_port != discovered_port:
                 raise ValueError("GenBox 管理实例的已登记端口与远程结构化发现不一致")
+            self._validate_path_conditions(request, discovery, path_requirements)
             plan_id = uuid.uuid4().hex[:16]
+            execution_snapshot = self._discovery_snapshot(discovery)
             plan = {
                 "id": plan_id, "project_id": request.project_id, **identity, "instance_id": request.instance_id,
                 "strategy": "existing", "deployment_mode": "compose", "service_port": discovered_port,
@@ -1400,26 +1644,21 @@ class DeploymentPlanManager:
                 "install_dir": existing.get("working_dir") or "",
                 "verified_capability": verified_capability,
                 "existing_snapshot": self._existing_snapshot(existing),
-                "discovery_snapshot": self._discovery_snapshot(discovery),
+                "execution_snapshot": execution_snapshot,
+                "evidence_manifest": self._evidence_manifest(execution_snapshot),
                 "required_disk_mb": 0,
-                "path_requirements": {},
+                "path_requirements": path_requirements,
                 "local_side_effect": "确认并在 GenBox 本地登记现有实例；远程环境保持不变",
                 "operations": ["登记已有实例入口", "保留现有容器、配置和数据不变"],
                 "safety": ["不执行任何远程写入", "不重启、不停止、不删除已有实例", "管理密钥由用户自行提供"],
                 "expires_at": time.time() + 600,
             }
             self.plans[plan_id] = plan
-            return {key: value for key, value in plan.items() if key != "expires_at"}
+            return self._public_plan(plan)
         if request.deployment_mode != "compose":
             raise ValueError("当前仅标准 Docker Compose 已达到安全执行条件")
         if not IMAGE_PATTERN.fullmatch(request.image):
             raise ValueError("镜像引用格式无效")
-        environment = discovery.get("environment", {})
-        if not self._listener_probe_complete(environment):
-            raise DeploymentPlanConfirmationError(
-                "deployment_listener_probe_incomplete",
-                code="deployment_listener_probe_incomplete",
-            )
         if not environment.get("docker_version") or not environment.get("compose_version"):
             raise ValueError("VPS 缺少 Docker 或 Docker Compose v2")
         if request.service_port in environment.get("listening_ports", []):
@@ -1458,7 +1697,9 @@ class DeploymentPlanManager:
                 "data_size_mb", "managed", "ownership",
             )
         } if clone_source else {}
+        self._validate_path_conditions(request, discovery, path_requirements)
         plan_id = uuid.uuid4().hex[:16]
+        execution_snapshot = self._discovery_snapshot(discovery)
         plan = {
             "id": plan_id, "project_id": request.project_id, **identity, "instance_id": request.instance_id,
             "strategy": request.strategy, "deployment_mode": request.deployment_mode,
@@ -1473,15 +1714,10 @@ class DeploymentPlanManager:
             "clone_size_mb": int(clone_source.get("data_size_mb") or 0) if clone_source else 0,
             "source_baseline": source_baseline,
             "verified_capability": verified_capability,
-            "discovery_snapshot": self._discovery_snapshot(discovery),
+            "execution_snapshot": execution_snapshot,
+            "evidence_manifest": self._evidence_manifest(execution_snapshot),
             "required_disk_mb": required_mb,
-            "path_requirements": {
-                "install_dir_absent": {"path": install_dir, "kind": "absent"},
-                **({
-                    "clone_data_dir_present": {"path": clone_source.get("data_dir", ""), "kind": "directory"},
-                    "clone_config_file_present": {"path": clone_source.get("config_file", ""), "kind": "file"},
-                } if clone_source else {}),
-            },
+            "path_requirements": path_requirements,
             "operations": [
                 "创建独立实例目录和 data 目录", "写入权限为 0600 的实例配置",
                 "复用生产镜像基线，不拉取 latest" if clone_source else "拉取指定镜像",
@@ -1494,7 +1730,7 @@ class DeploymentPlanManager:
             "expires_at": time.time() + 600,
         }
         self.plans[plan_id] = plan
-        return {key: value for key, value in plan.items() if key != "expires_at"}
+        return self._public_plan(plan)
 
     def lease(self, plan_id: str, request: ExtensionDeployRequest) -> tuple[str, dict]:
         with self.lock:
@@ -1529,17 +1765,35 @@ class DeploymentPlanManager:
                 self.plans[restored["id"]] = restored
 
     def validate_fresh_snapshot(self, plan: dict, discovery: dict) -> None:
-        expected = plan.get("discovery_snapshot")
+        if "execution_snapshot" not in plan and isinstance(plan.get("id"), str):
+            plan = self.plans.get(plan["id"], plan)
+        expected = plan.get("execution_snapshot")
         if not self._snapshot_shape_valid(expected):
             raise DeploymentSnapshotChangedError(
                 category="plan_snapshot",
                 changed_fields=["discovery_snapshot"],
+            )
+        manifest = plan.get("evidence_manifest")
+        if (
+            not isinstance(manifest, dict)
+            or manifest.get("contract_version") != PHASE4_DEPLOYMENT_CONTRACT_VERSION
+            or manifest.get("complete") is not True
+            or manifest.get("snapshot_digest") != self._snapshot_digest(expected)
+        ):
+            raise DeploymentSnapshotChangedError(
+                category="plan_snapshot",
+                changed_fields=["evidence_manifest"],
             )
         environment = discovery.get("environment", {})
         if not self._port_bindings_complete(discovery):
             raise DeploymentSnapshotChangedError(
                 category="stable_snapshot",
                 changed_fields=["instances.port_bindings"],
+            )
+        if not self._listener_probe_complete(environment):
+            raise DeploymentSnapshotChangedError(
+                category="listener_evidence",
+                changed_fields=["environment.listening_ports_probe"],
             )
         if plan.get("strategy") == "existing":
             existing = next(
@@ -1557,11 +1811,6 @@ class DeploymentPlanManager:
                     changed_fields=["instances.service_port"],
                 )
         else:
-            if not self._listener_probe_complete(environment):
-                raise DeploymentSnapshotChangedError(
-                    category="requested_port",
-                    changed_fields=["environment.listening_ports_probe"],
-                )
             if plan.get("service_port") in environment.get("listening_ports", []):
                 raise DeploymentSnapshotChangedError(
                     category="requested_port",
@@ -1572,6 +1821,19 @@ class DeploymentPlanManager:
                     category="target_instance",
                     changed_fields=["instances.id"],
                 )
+        path_requirements = plan.get("path_requirements")
+        path_conditions = discovery.get("path_conditions")
+        if (
+            not isinstance(path_requirements, dict)
+            or discovery.get("path_conditions_version") != PHASE4_DEPLOYMENT_CONTRACT_VERSION
+            or not isinstance(path_conditions, dict)
+            or set(path_conditions) != set(path_requirements)
+            or any(path_conditions.get(name) is not True for name in path_requirements)
+        ):
+            raise DeploymentSnapshotChangedError(
+                category="path_requirements",
+                changed_fields=["path_conditions"],
+            )
         actual = self._discovery_snapshot(discovery)
         expected = self._fresh_snapshot_projection(plan, expected)
         actual = self._fresh_snapshot_projection(plan, actual)
@@ -1586,12 +1848,6 @@ class DeploymentPlanManager:
             raise DeploymentSnapshotChangedError(
                 category="capacity_threshold",
                 changed_fields=["environment.disk_free_mb"],
-            )
-        path_conditions = discovery.get("path_conditions", {})
-        if any(path_conditions.get(name) is not True for name in plan.get("path_requirements", {})):
-            raise DeploymentSnapshotChangedError(
-                category="path_requirements",
-                changed_fields=["path_conditions"],
             )
 
     def take(self, plan_id: str, request: ExtensionDeployRequest) -> dict:
