@@ -1,6 +1,6 @@
 # Deployment Safety Contract
 
-**Version:** Phase 4 v3  
+**Version:** Phase 4 v3
 **Status:** Accepted design contract; implementation and independent review pending
 
 This is the normative deployment-safety specification for Phase 4. It does not
@@ -94,4 +94,3 @@ mutation. Local evidence remains local evidence.
 Phase 4.5 defers generalized UDP/address-aware adapters, persistent
 cross-process leases, image-transfer mechanisms, and broader deployment-doc
 refactoring. Phase 5 owns batch/scheduling; Phase 6 owns cleanup.
-
