@@ -39,6 +39,12 @@ def task(task_id, status="completed", updated_at="2026-07-17T00:00:00.000Z", **e
         "created_at": "2026-07-16T00:00:00.000Z",
         "updated_at": updated_at,
         "recovery_action": None,
+        "evidence_manifest": {
+            "contract_version": "phase4-v3",
+            "snapshot_digest": "a" * 64,
+            "complete": True,
+            "changed_fields": [],
+        },
         **extra,
     }
 
@@ -209,7 +215,7 @@ def test_duplicate_deployment_attempt_is_idempotent_and_conflicting_reuse_fails_
     asyncio.run(run())
 
 
-def test_deployment_attempt_persists_sanitized_restart_correlation(tmp_path, monkeypatch, caplog):
+def test_deployment_attempt_correlation_is_memory_only_and_restart_uses_opaque_task_state(tmp_path, monkeypatch, caplog):
     request = ExtensionDeployRequest(
         deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
         target=ExtensionTarget(
@@ -235,14 +241,14 @@ def test_deployment_attempt_persists_sanitized_restart_correlation(tmp_path, mon
             await manager.runners[task_id]
 
         recovered = ExtensionTaskManager(store_path=path)
-        assert recovered.get(task_id)["deployment_attempt_id"] == DEPLOYMENT_ATTEMPT_ID
-        assert recovered.list_summary()["tasks"][0]["deployment_attempt_id"] == DEPLOYMENT_ATTEMPT_ID
-        assert await recovered.create(request) == task_id
+        assert recovered.get(task_id)["status"] == "interrupted"
+        assert "deployment_attempt_id" not in recovered.get(task_id)
+        assert "deployment_attempt_id" not in recovered.list_summary()["tasks"][0]
         assert recovered.runners == {}
 
         persisted = path.read_text(encoding="utf-8")
-        assert DEPLOYMENT_ATTEMPT_ID in persisted
-        assert "deployment_context_fingerprint" in persisted
+        assert DEPLOYMENT_ATTEMPT_ID not in persisted
+        assert "deployment_context_fingerprint" not in persisted
         assert all(secret not in persisted for secret in (
             "restart-password-sentinel", "restart.example", "deploy-user",
         ))
@@ -320,12 +326,161 @@ def test_task_store_roundtrip_uses_versioned_atomic_json(tmp_path, monkeypatch):
     assert not list(tmp_path.glob("*.tmp"))
 
 
+def test_task_store_and_task_routes_expose_only_the_explicit_public_projection(tmp_path, monkeypatch):
+    path = tmp_path / "extension_tasks.json"
+    manager = ExtensionTaskManager(store_path=path)
+    manifest = {
+        "contract_version": "phase4-v3",
+        "snapshot_digest": "a" * 64,
+        "complete": True,
+        "changed_fields": [],
+    }
+    sentinels = (
+        "sentinel-host.example", "SHA256:SENTINELFINGERPRINT", "/srv/sentinel/path",
+        "https://sentinel.example/console", "registry.invalid/sentinel-image", "34567",
+        "sentinel-compose", "sentinel-container", "sentinel-lease", "sentinel-command-output",
+        "sentinel-session-secret",
+    )
+    manager.tasks["opaque-task"] = task(
+        "opaque-task",
+        host_key=sentinels[1],
+        logs=[{"time": "00:00:00", "message": sentinels[9]}],
+        result={
+            "url": sentinels[3],
+            "api_url": sentinels[3] + "/v1",
+            "admin_key_available": True,
+            "instance": {
+                "id": "sentinel-instance", "target_id": "sentinel-target",
+                "install_dir": sentinels[2], "data_dir": sentinels[2] + "/data",
+                "image": sentinels[4], "service_port": 34567,
+                "compose_project": sentinels[6], "container_id": sentinels[7],
+                "managed": True,
+            },
+        },
+        deployment_attempt_id="b" * 32,
+        deployment_context_fingerprint="c" * 64,
+        evidence_manifest=manifest,
+        request={"host": sentinels[0], "secret": sentinels[10]},
+        execution_snapshot={"path": sentinels[2], "binding": sentinels[5]},
+        reservation_token=sentinels[8],
+    )
+    manager.deliveries["opaque-task"] = sentinels[10]
+    manager._persist()
+
+    monkeypatch.setattr(main, "extension_tasks", manager)
+    client = TestClient(main.app, base_url="http://testserver")
+    single = client.get("/api/extensions/tasks/opaque-task")
+    summary = client.get("/api/extensions/tasks")
+    assert single.status_code == 200
+    assert summary.status_code == 200
+
+    expected_keys = {
+        "id", "status", "phase", "steps", "progress", "created_at", "updated_at",
+        "failed_phase", "error_code", "recovery_action", "evidence_manifest",
+    }
+    single_task = single.json()
+    listed_task = summary.json()["tasks"][0]
+    assert set(single_task) == expected_keys
+    assert listed_task == single_task
+    assert set(single_task["steps"][0]) == {"id", "label", "status"}
+
+    persisted = path.read_text(encoding="utf-8")
+    responses = json.dumps({"single": single_task, "summary": summary.json()}, ensure_ascii=False)
+    for sentinel in sentinels:
+        assert sentinel not in persisted
+        assert sentinel not in responses
+
+
+def test_legacy_v1_tasks_are_sanitized_and_atomically_rewritten_to_v2(tmp_path, monkeypatch):
+    path = tmp_path / "extension_tasks.json"
+    replace_calls = []
+    real_replace = os.replace
+    sentinels = {
+        "host_key": "SHA256:LEGACYFINGERPRINT",
+        "url": "https://legacy.example/console",
+        "path": "/srv/legacy/private",
+        "image": "registry.invalid/legacy-image",
+        "secret": "legacy-session-secret",
+    }
+    legacy_tasks = [
+        task(
+            "legacy-running", "running",
+            host_key=sentinels["host_key"],
+            logs=[{"time": "00:00:00", "message": sentinels["path"]}],
+            deployment_attempt_id="d" * 32,
+            deployment_context_fingerprint="e" * 64,
+        ),
+        task(
+            "legacy-completed", "completed",
+            host_key=sentinels["host_key"],
+            result={
+                "url": sentinels["url"], "api_url": sentinels["url"] + "/v1",
+                "admin_key_available": True,
+                "instance": {
+                    "id": "legacy-instance", "target_id": "legacy-target",
+                    "install_dir": sentinels["path"], "data_dir": sentinels["path"] + "/data",
+                    "image": sentinels["image"], "service_port": 34567,
+                    "compose_project": "legacy-compose", "container_id": "legacy-container",
+                    "managed": True,
+                },
+                "delivery": sentinels["secret"],
+            },
+        ),
+    ]
+    path.write_text(json.dumps({"schema_version": 1, "tasks": legacy_tasks}), encoding="utf-8")
+
+    def record_replace(source, target):
+        replace_calls.append((Path(source), Path(target), Path(source).exists()))
+        return real_replace(source, target)
+
+    monkeypatch.setattr("extensions.task_store.os.replace", record_replace)
+    loaded = TaskStore(path).load()
+
+    assert TASK_STORE_SCHEMA_VERSION == 2
+    assert {item["id"]: item["status"] for item in loaded} == {
+        "legacy-running": "interrupted",
+        "legacy-completed": "completed",
+    }
+    assert next(item for item in loaded if item["id"] == "legacy-running")["recovery_action"] == (
+        "regenerate_plan_and_reprovide_credentials"
+    )
+    assert next(item for item in loaded if item["id"] == "legacy-completed")["recovery_action"] == (
+        "reverify_ownership_and_rotate_admin_key"
+    )
+    rewritten = path.read_text(encoding="utf-8")
+    assert json.loads(rewritten)["schema_version"] == 2
+    assert replace_calls[-1][1] == path and replace_calls[-1][2] is True
+    assert not list(tmp_path.glob("extension_tasks.json.invalid.*.json"))
+    for sentinel in sentinels.values():
+        assert sentinel not in rewritten
+
+
+def test_recognized_legacy_rewrite_failure_keeps_original_without_public_reexport(tmp_path, monkeypatch):
+    path = tmp_path / "extension_tasks.json"
+    original = json.dumps({"schema_version": 1, "tasks": [task("legacy-running", "running")]})
+    path.write_text(original, encoding="utf-8")
+
+    def fail_replace(_source, _target):
+        raise OSError("injected atomic rewrite failure")
+
+    monkeypatch.setattr("extensions.task_store.os.replace", fail_replace)
+    store = TaskStore(path)
+    assert store.load() == []
+    assert store.warning == "Previous deployment task state requires safe migration before it can be shown."
+    assert path.read_text(encoding="utf-8") == original
+    assert not list(tmp_path.glob("extension_tasks.json.invalid.*.json"))
+
+
 def test_completed_failed_and_cancelled_tasks_survive_manager_rebuild(tmp_path):
     path = tmp_path / "extension_tasks.json"
     manager = ExtensionTaskManager(store_path=path)
     manager.tasks = {
         "completed": task("completed", "completed", "2026-07-17T00:00:03.000Z"),
-        "failed": task("failed", "failed", "2026-07-17T00:00:02.000Z", error="safe failure"),
+        "failed": task(
+            "failed", "failed", "2026-07-17T00:00:02.000Z",
+            failed_phase="pull", error_code="image_prepare_failed",
+            recovery_action="check_image_access_and_regenerate_plan",
+        ),
         "cancelled": task("cancelled", "cancelled", "2026-07-17T00:00:01.000Z", error="cancelled"),
     }
     manager._persist()
@@ -401,12 +556,8 @@ def test_known_schema_field_corruption_quarantines_entire_task_store(tmp_path):
 
 def test_structured_failure_store_accepts_legacy_and_quarantines_invalid_enums(tmp_path):
     path = tmp_path / "extension_tasks.json"
-    legacy = task("legacy", "failed", error="old safe fallback")
-    TaskStore(path).save([legacy])
-    assert TaskStore(path).load()[0]["id"] == "legacy"
-
     valid = task(
-        "valid", "failed", error="fixed public message", failed_phase="pull",
+        "valid", "failed", failed_phase="pull",
         error_code="image_prepare_failed", recovery_action="check_image_access_and_regenerate_plan",
     )
     TaskStore(path).save([valid])
@@ -419,7 +570,7 @@ def test_structured_failure_store_accepts_legacy_and_quarantines_invalid_enums(t
         invalid_path = tmp_path / f"invalid-structured-{index}.json"
         invalid = dict(valid)
         invalid.update(mutation)
-        invalid_path.write_text(json.dumps({"schema_version": 1, "tasks": [invalid]}), encoding="utf-8")
+        invalid_path.write_text(json.dumps({"schema_version": TASK_STORE_SCHEMA_VERSION, "tasks": [invalid]}), encoding="utf-8")
         store = TaskStore(invalid_path)
         assert store.load() == []
         assert store.warning
@@ -509,8 +660,9 @@ def test_task_store_defensively_redacts_all_deployment_secret_sentinels(tmp_path
     text = path.read_text(encoding="utf-8")
     for sentinel in (*sentinels, "admin-secret", "ssh-secret", "private-key-secret", "passphrase-secret", "sudo-secret", "enrollment-secret"):
         assert sentinel not in text
-    assert '"admin_key_available": true' in text
-    assert "Sensitive task detail redacted." in text
+    assert "admin_key_available" not in text
+    assert "result" not in text
+    assert "logs" not in text
 
 
 def test_delivery_is_once_only_and_restart_requires_credential_recovery(tmp_path):
@@ -525,19 +677,19 @@ def test_delivery_is_once_only_and_restart_requires_credential_recovery(tmp_path
     assert "gbx-secret-delivery" not in path.read_text(encoding="utf-8")
     assert manager.take_delivery("delivery") == "gbx-secret-delivery"
     assert manager.take_delivery("delivery") is None
-    assert manager.get("delivery")["result"]["admin_key_available"] is False
+    assert "result" not in manager.get("delivery")
+    assert manager.get("delivery")["recovery_action"] == "reverify_ownership_and_rotate_admin_key"
     persisted = json.loads(path.read_text(encoding="utf-8"))
-    assert persisted["tasks"][0]["result"]["admin_key_available"] is False
+    assert "result" not in persisted["tasks"][0]
 
-    manager.tasks["restart"] = task("restart", result={
+    manager.tasks["restart"] = task("restart", recovery_action="reverify_ownership_and_rotate_admin_key", result={
         "url": "http://service.example", "api_url": "http://service.example/v1",
         "admin_key_available": True, "instance": {"id": "instance-b", "managed": True},
     })
     manager._persist()
     rebuilt = ExtensionTaskManager(store_path=path)
     recovered = rebuilt.get("restart")
-    assert recovered["result"]["admin_key_available"] is False
-    assert recovered["result"]["credential_recovery_required"] is True
+    assert "result" not in recovered
     assert recovered["recovery_action"] == "reverify_ownership_and_rotate_admin_key"
     assert rebuilt.take_delivery("restart") is None
 
@@ -559,7 +711,7 @@ def test_delivery_route_is_once_only_and_persists_consumption(tmp_path, monkeypa
     assert first.json() == {"admin_key": "route-delivery-key", "shown_once": True}
     assert client.post("/api/extensions/tasks/delivery/delivery").status_code == 404
     persisted = json.loads(path.read_text(encoding="utf-8"))
-    assert persisted["tasks"][0]["result"]["admin_key_available"] is False
+    assert "result" not in persisted["tasks"][0]
 
 
 def test_cancel_route_persists_state_and_rejects_second_cancel(tmp_path, monkeypatch):
@@ -602,7 +754,8 @@ def test_concurrent_delivery_consumption_has_one_winner(tmp_path):
 
     assert results.count("thread-safe-delivery") == 1
     assert results.count(None) == 7
-    assert manager.get("delivery")["result"]["admin_key_available"] is False
+    assert "result" not in manager.get("delivery")
+    assert manager.get("delivery")["recovery_action"] == "reverify_ownership_and_rotate_admin_key"
 
 
 def test_retention_prunes_delivery_and_runner_orphans(tmp_path):
@@ -790,7 +943,7 @@ def test_cancelled_runner_cannot_overwrite_persisted_cancelled_state(tmp_path, m
         blocked.set()
         await manager.runners[task_id]
         assert manager.get(task_id)["status"] == "cancelled"
-        assert manager.get(task_id)["result"] is None
+        assert "result" not in manager.get(task_id)
         assert manager.resource_reservations.active_count == 0
         persisted = json.loads((tmp_path / "extension_tasks.json").read_text(encoding="utf-8"))
         assert persisted["tasks"][0]["status"] == "cancelled"
@@ -1334,7 +1487,7 @@ def test_runtime_failures_are_structured_sanitized_and_stage_accurate(tmp_path, 
         assert state["status"] == "failed"
         assert state["phase"] == expected[0]
         assert next(step for step in state["steps"] if step["id"] == expected[0])["status"] == "failed"
-        assert state["result"] is None
+        assert "result" not in state
         assert task_id not in manager.deliveries
         persisted = (tmp_path / f"{scenario}.json").read_text(encoding="utf-8")
         for forbidden in ("never-persist", "203.0.113.10", "/private/path", "C:/secret/path", "stderr includes"):
@@ -1419,10 +1572,11 @@ global.getUiLanguage = () => 'en';
 global.escHtml = value => String(value || '');
 global._authFetch = async url => {
   calls.push(url);
+  if (url.includes('/delivery')) return {ok:false,status:404,text:async()=>JSON.stringify({detail:'not available'})};
   let body = {};
   if(url === '/api/extensions/vault/status') body = {configured:true,unlocked:true,entry_count:1};
-  else if(url === '/api/extensions/vault/credentials') body = {credentials:[{instance_id:'managed-one'}]};
-  else if(url === '/api/extensions/instances') body = {instances:[{id:'managed-one',project:'chatgpt2api',managed:true,status:'running',service_port:33010,console_url:'http://console.example',api_url:'http://console.example/v1',admin_key:'raw-admin-secret',raw_secret:'raw-secret'}]};
+  else if(url === '/api/extensions/vault/credentials') body = {credentials:[{instance_handle:'managed-one'}]};
+  else if(url === '/api/extensions/instances') body = {instances:[{handle:'managed-one',project:'chatgpt2api',managed:true,running:true}]};
   return {ok:true,text:async()=>JSON.stringify(body)};
 };
 eval(source);
@@ -1463,7 +1617,7 @@ function element(id){
 let nextStep = 0;
 let deliveryCalls = 0;
 let sshCalls = 0;
-const completed={id:'delivery-task',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',label:'Verify',status:'success'}],logs:[],error:null,host_key:'SHA256:public',created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action:null,failed_phase:null,error_code:null,result:{instance:{id:'managed-one',target_id:'saved',managed:true},url:'http://console.example',api_url:'http://console.example/v1',admin_key_available:true}};
+const completed={id:'delivery-task',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',label:'Verify service',status:'success'}],created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action:'reverify_ownership_and_rotate_admin_key',failed_phase:null,error_code:null,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'a'.repeat(64),complete:true,changed_fields:[]}};
 const summary={active_task_id:null,latest_task_id:'delivery-task',tasks:[completed]};
 global.window=global;
 global.document={getElementById:element,querySelector(){return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};
@@ -1481,7 +1635,6 @@ global._authFetch=async url=>{
   else if(url==='/api/extensions/tasks')body=summary;
   else if(url==='/api/extensions/tasks/delivery-task/delivery'){
     deliveryCalls+=1;
-    completed.result.admin_key_available=false;
     body={admin_key:'one-time-key',shown_once:true};
   }
   else if(url==='/api/extensions/ssh/test')sshCalls+=1;
@@ -1493,22 +1646,13 @@ const originalNext=window.extensionNext;
 window.extensionNext=step=>{nextStep=step;return originalNext(step)};
 await window.loadExtensions();
 if(deliveryCalls!==1)throw new Error('delivery endpoint was not requested exactly once');
-if(element('extConsoleUrl').value!=='http://console.example' || element('extApiUrl').value!=='http://console.example/v1')throw new Error('delivery URLs were not filled');
+if(element('extConsoleUrl').value!=='' || element('extApiUrl').value!=='')throw new Error('operational URLs reached the public task UI');
 if(element('extAdminKey').value!=='one-time-key')throw new Error('one-time key was not filled');
-if(element('extOpenConsole').href!=='http://console.example')throw new Error('console link was not filled');
+if(element('extOpenConsole').href)throw new Error('console link was exposed by the public task UI');
 if(element('extHandoff').classList.contains('hidden') || nextStep!==5)throw new Error('unclaimed delivery was not displayed hidden='+element('extHandoff').classList.contains('hidden')+' step='+nextStep);
-if(element('extGuidePrimaryBtn').textContent!=='extensions.prepare_local_network')throw new Error('delivery interstitial falsely claimed the private link was complete');
-window.extensionPrimaryAction();
-if(nextStep!==3)throw new Error('delivery interstitial did not continue to local networking');
 await window.loadExtensions();
 if(deliveryCalls!==1)throw new Error('delivery endpoint was requested more than once');
-if(nextStep!==3)throw new Error('claimed historical deployment did not resume at network selection step='+nextStep);
-window.extensionLoadTarget('saved');
-element('extPassword').value='test-only-secret';
-window.extensionCredentialChanged();
-if(element('extSshNextBtn').disabled||element('extSshNextLabel').textContent!=='extensions.return_network_check')throw new Error('network resume action was not enabled after re-entering credentials');
-window.extensionSshNext();
-if(nextStep!==4||sshCalls!==0)throw new Error('network resume required an unnecessary SSH test or went to the wrong step');
+if(nextStep!==5||sshCalls!==0)throw new Error('opaque completed-task restore changed steps or triggered SSH');
 if(source.includes('localStorage'))throw new Error('delivery flow uses localStorage');
 })();
 '''
@@ -1547,6 +1691,7 @@ global.clearInterval = timer => { if (timer) cleared.push(timer); };
 const details = {};
 global._authFetch = async url => {
   calls.push(url);
+  if (url.includes('/delivery')) return {ok:false,status:404,text:async()=>JSON.stringify({detail:'not available'})};
   let body = {};
   if (url === '/api/extensions/targets') body = {targets:[]};
   else if (url === '/api/extensions/catalog') body = {categories:[],items:[]};
@@ -1557,9 +1702,9 @@ global._authFetch = async url => {
 };
 eval(source);
 window.extensionLoadServices = async () => {};
-const fullTask = (id, status, result, recovery_action='regenerate_plan_and_reprovide_credentials', failed_phase=null, error_code=null) => ({id,status,phase:failed_phase||'verify',progress:10,steps:[{id:'connect',label:'Connect',status:'success'}],logs:[{time:'00:00:00',message:'Public'}],error:'raw backend detail must not render',host_key:'SHA256:public',result,created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action,failed_phase,error_code});
-const active = fullTask('active', 'running', null);
-const latest = fullTask('latest', 'completed', {instance:{id:'latest',managed:true},url:'http://latest',api_url:'http://latest/v1',admin_key_available:false});
+const fullTask = (id, status, recovery_action='regenerate_plan_and_reprovide_credentials', failed_phase=null, error_code=null) => ({id,status,phase:failed_phase||'verify',progress:10,steps:[{id:'connect',label:'Connect',status:'success'}],created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action,failed_phase,error_code,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'a'.repeat(64),complete:true,changed_fields:[]}});
+const active = fullTask('active', 'running');
+const latest = fullTask('latest', 'completed', 'reverify_ownership_and_rotate_admin_key');
 summary = { active_task_id: 'active', latest_task_id: 'latest', tasks: [latest, active] };
 details['/api/extensions/tasks/active'] = active;
 await window.loadExtensions();
@@ -1567,33 +1712,33 @@ if (timers.length !== 1 || timers[0].ms !== 800) throw new Error('active polling
 await timers[0].fn();
 if (!calls.includes('/api/extensions/tasks/active')) throw new Error('active task was not polled');
 if (cleared.includes(timers[0])) throw new Error('active polling callback failed');
-details['/api/extensions/tasks/active'] = fullTask('active', 'failed', null, 'check_image_access_and_regenerate_plan', 'pull', 'image_prepare_failed');
+details['/api/extensions/tasks/active'] = fullTask('active', 'failed', 'check_image_access_and_regenerate_plan', 'pull', 'image_prepare_failed');
 await timers[0].fn();
 if (!cleared.includes(timers[0])) throw new Error('live failed task did not stop polling');
 if (!element('extensionMessage').textContent.includes('extensions.deploy_error_image_prepare_failed') || !element('extensionMessage').textContent.includes('extensions.deploy_recovery_check_image_access_and_regenerate_plan')) throw new Error('live structured failure was not localized');
 if (element('extensionMessage').textContent.includes('raw backend detail')) throw new Error('raw failed-task error was rendered');
 const timerCount = timers.length;
-const interrupted = fullTask('interrupted', 'interrupted', null);
+const interrupted = fullTask('interrupted', 'interrupted');
 summary = { active_task_id: null, latest_task_id: 'interrupted', tasks: [interrupted] };
 await window.loadExtensions();
 if (timers.length !== timerCount || !cleared.includes(timers[0]) || !element('extensionMessage').textContent.includes('extensions.recovery_regenerate_plan')) throw new Error('interrupted recovery was not rendered');
-const restoredFailed = fullTask('restored-failed', 'failed', null, 'verify_owned_instance_stopped_before_retry', 'verify', 'service_verification_failed');
+const restoredFailed = fullTask('restored-failed', 'failed', 'verify_owned_instance_stopped_before_retry', 'verify', 'service_verification_failed');
 summary = { active_task_id: null, latest_task_id: 'restored-failed', tasks: [restoredFailed] };
 await window.loadExtensions();
 if (!element('extensionMessage').textContent.includes('extensions.deploy_recovery_verify_owned_instance_stopped_before_retry')) throw new Error('restored structured failure was not rendered');
-const legacyFailed = { ...fullTask('legacy-failed', 'failed', null), failed_phase: undefined, error_code: undefined, recovery_action: undefined };
+const legacyFailed = { ...fullTask('legacy-failed', 'failed'), failed_phase: undefined, error_code: undefined, recovery_action: undefined };
 summary = { active_task_id: null, latest_task_id: 'legacy-failed', tasks: [legacyFailed] };
 await window.loadExtensions();
 if (!element('extensionMessage').textContent.includes('extensions.deploy_failure_unknown_reason') || !element('extensionMessage').textContent.includes('extensions.deploy_failure_unknown_recovery')) throw new Error('legacy failed task did not use safe fallback');
-const unknownFailed = fullTask('unknown-failed', 'failed', null, 'raw_unknown_action', 'raw_unknown_phase', 'raw_unknown_code');
+const unknownFailed = fullTask('unknown-failed', 'failed', 'raw_unknown_action', 'raw_unknown_phase', 'raw_unknown_code');
 summary = { active_task_id: null, latest_task_id: 'unknown-failed', tasks: [unknownFailed] };
 await window.loadExtensions();
 if (element('extensionMessage').textContent.includes('raw_unknown')) throw new Error('unknown failure enums were rendered');
 calls.length = 0;
-const completed = fullTask('completed', 'completed', {instance:{id:'completed',managed:true},url:'http://done',api_url:'http://done/v1',admin_key_available:false,credential_recovery_required:true}, 'reverify_ownership_and_rotate_admin_key');
+const completed = fullTask('completed', 'completed', 'reverify_ownership_and_rotate_admin_key');
 summary = { active_task_id: null, latest_task_id: 'completed', tasks: [completed] };
 await window.loadExtensions();
-if (calls.some(url => url.includes('/delivery'))) throw new Error('unavailable delivery was requested');
+if (!calls.some(url => url.includes('/delivery'))) throw new Error('completed task did not check the separate one-time delivery endpoint');
 if (!element('extensionMessage').textContent.includes('extensions.recovery_rotate_admin_key')) throw new Error('credential recovery was not rendered');
 if (source.includes('localStorage')) throw new Error('extension task recovery uses localStorage');
 })();
@@ -1741,7 +1886,7 @@ if(element('extTestSshBtn').disabled)throw new Error('SSH test button stayed loc
     assert result.returncode == 0, result.stderr
 
 
-def test_deployed_target_confirms_host_key_without_ssh_auth_loop_in_node():
+def test_completed_public_task_does_not_infer_target_or_host_key_in_node():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''
 const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
@@ -1749,9 +1894,9 @@ const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
 const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(['extNetworkHostKey','extHandoff'].includes(id)?['hidden']:[]);elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,readOnly:false,placeholder:'',dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){}})}return elements.get(id)}
 const networkRadio={value:'tailscale',checked:true,disabled:false,classList:{toggle(){}},focus(){}};global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('input[name="extNetwork"]'))return networkRadio;return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});
 const fingerprint='SHA256:AAAAAAAAAAAAAAAAAAAA';let target={id:'saved',name:'Saved',host:'safe.example',port:22,username:'ubuntu',host_key:'',chatgpt2api_port:33010};let probeCalls=0,confirmCalls=0,sshCalls=0;
-const completed={id:'done',status:'completed',progress:100,host_key:'',steps:[{id:'verify',status:'success'}],logs:[],result:{instance:{id:'managed',target_id:'saved',managed:true},url:'http://service.example',api_url:'http://service.example/v1',admin_key_available:false}};
+const completed={id:'done',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',label:'Verify service',status:'success'}],created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action:'reverify_ownership_and_rotate_admin_key',failed_phase:null,error_code:null,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'a'.repeat(64),complete:true,changed_fields:[]}};
 global._authFetch=async (url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={active_task_id:null,latest_task_id:'done',tasks:[completed]};else if(url==='/api/extensions/network/local/tailscale/status')body={installed:true,online:true,serve:true,serve_port:8893,app_port:8892};else if(url==='/api/extensions/ssh/host-key/probe'){probeCalls+=1;const sent=JSON.parse(options.body);if(Object.keys(sent).join(',')!=='target_id')throw new Error('probe sent credential data');body={target_id:'saved',fingerprint};}else if(url==='/api/extensions/ssh/host-key/confirm'){confirmCalls+=1;const sent=JSON.parse(options.body);if(sent.target_id!=='saved'||sent.fingerprint!==fingerprint||Object.keys(sent).length!==2)throw new Error('confirm payload was not minimal');target={...target,host_key:fingerprint};body={target};}else if(url==='/api/extensions/ssh/test'){sshCalls+=1;return {ok:false,text:async()=>JSON.stringify({detail:'Permission denied for user ubuntu on host safe.example 192.0.2.77'})};}return {ok:true,text:async()=>JSON.stringify(body)}};
-eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();const visited=[];const originalNext=window.extensionNext;window.extensionNext=step=>{visited.push(step);return originalNext(step)};window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();window.extensionSshNext();if(visited.at(-1)!==4)throw new Error('deployed target did not return to step 4');if(element('extNetworkHostKey').classList.contains('hidden'))throw new Error('missing host key did not stay in network step');if(!element('extNetworkConnectBtn').disabled)throw new Error('network connected before host key confirmation');await window.extensionProbeHostKey();if(visited.at(-1)!==4)throw new Error('probe left step 4');if(element('extNetworkHostKeyValue').textContent!==fingerprint)throw new Error('fingerprint was not shown for review');await window.extensionConfirmHostKey();if(visited.at(-1)!==4)throw new Error('confirm left step 4 for a deployed target');if(probeCalls!==1||confirmCalls!==1)throw new Error('host key flow did not run exactly once');if(element('extNetworkConnectBtn').disabled)throw new Error('confirmed host key did not unlock network check');await window.extensionTestSSH(false);if(sshCalls!==1)throw new Error('optional SSH diagnostic was not called');const output=element('extensionMessage').textContent;if(output.includes('Permission denied')||output.includes('ubuntu')||output.includes('safe.example')||output.includes('192.0.2.77'))throw new Error('raw SSH error reached the UI');if(element('extNetworkConnectBtn').disabled)throw new Error('SSH diagnostic failure erased confirmed host key');await window.loadExtensions();window.extensionLoadTarget('saved');if(!element('extNetworkHostKey').classList.contains('hidden')||element('extNetworkConnectBtn').disabled)throw new Error('reload did not restore persisted host key');if(probeCalls!==1)throw new Error('reload unnecessarily reprobed the host key');
+const marker=source.lastIndexOf('})();'),instrumented=source.slice(0,marker)+`window.__deploymentState=()=>currentDeployment;`+source.slice(marker);eval(instrumented);window.extensionLoadServices=async()=>{};await window.loadExtensions();if(window.__deploymentState()!==null)throw new Error('opaque completed task inferred deployment target state');const visited=[];const originalNext=window.extensionNext;window.extensionNext=step=>{visited.push(step);return originalNext(step)};window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();window.extensionSshNext();if(visited.includes(4))throw new Error('opaque completed task bypassed fresh SSH verification');if(probeCalls!==0||confirmCalls!==0||sshCalls!==0)throw new Error('completed task restore triggered a remote identity operation');
 })();
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
@@ -1788,15 +1933,15 @@ eval(source);window.extensionLoadServices=async()=>{};await window.loadExtension
     assert result.returncode == 0, result.stderr
 
 
-def test_restored_deployment_is_bound_to_its_original_target_in_node():
+def test_restored_public_task_does_not_recreate_target_binding_in_node():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''
 const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
 (async()=>{
 const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(['extNetworkHostKey','extHandoff'].includes(id)?['hidden']:[]);elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,readOnly:false,placeholder:'',dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){}})}return elements.get(id)}
 const networkRadio={value:'tailscale',checked:true,classList:{toggle(){}},focus(){}};global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('input[name="extNetwork"]'))return networkRadio;return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});
-const key='SHA256:AAAAAAAAAAAAAAAAAAAA';const targets=[{id:'one',name:'One',host:'one.example',port:22,username:'ubuntu',host_key:key,chatgpt2api_port:3000},{id:'two',name:'Two',host:'two.example',port:22,username:'ubuntu',host_key:key,chatgpt2api_port:3000}];const completed={id:'done',status:'completed',progress:100,host_key:key,steps:[{id:'verify',status:'success'}],logs:[],result:{instance:{id:'managed',target_id:'one',managed:true},url:'http://service.example',api_url:'http://service.example/v1',admin_key_available:false}};let remoteCalls=0;global._authFetch=async (url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={latest_task_id:'done',tasks:[completed]};else if(url.includes('/api/extensions/ssh/')||url==='/api/extensions/network/connect'){remoteCalls+=1;body={};}return {ok:true,text:async()=>JSON.stringify(body)}};
-eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();if(element('extTargetSelect').value!=='one')throw new Error('restore did not select the deployed VPS');window.extensionLoadTarget('two');element('extPassword').value='session-only';window.extensionCredentialChanged();const visited=[];const originalNext=window.extensionNext;window.extensionNext=step=>{visited.push(step);return originalNext(step)};window.extensionSshNext();await window.extensionProbeHostKey();await window.extensionConnectNetwork();if(visited.includes(4))throw new Error('wrong target entered network step');if(remoteCalls!==0)throw new Error('wrong target triggered a remote operation');if(!element('extensionMessage').textContent.includes('extensions.deployment_target_mismatch'))throw new Error('wrong target did not show recovery guidance');if(!element('extNetworkConnectBtn').disabled)throw new Error('wrong target left network action enabled');
+const key='SHA256:AAAAAAAAAAAAAAAAAAAA';const targets=[{id:'one',name:'One',host:'one.example',port:22,username:'deploy-one',host_key:key,chatgpt2api_port:3000},{id:'two',name:'Two',host:'two.example',port:22,username:'deploy-two',host_key:key,chatgpt2api_port:3000}];const completed={id:'done',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',label:'Verify service',status:'success'}],created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action:'reverify_ownership_and_rotate_admin_key',failed_phase:null,error_code:null,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'a'.repeat(64),complete:true,changed_fields:[]}};let remoteCalls=0;global._authFetch=async (url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={latest_task_id:'done',tasks:[completed]};else if(url.includes('/api/extensions/ssh/')||url==='/api/extensions/network/connect'){remoteCalls+=1;body={};}return {ok:true,status:url.includes('/delivery')?404:200,text:async()=>JSON.stringify(body)}};
+const marker=source.lastIndexOf('})();'),instrumented=source.slice(0,marker)+`window.__deploymentState=()=>currentDeployment;`+source.slice(marker);eval(instrumented);window.extensionLoadServices=async()=>{};await window.loadExtensions();if(window.__deploymentState()!==null)throw new Error('restart recreated a target binding from public task state');window.extensionLoadTarget('two');element('extPassword').value='session-only';window.extensionCredentialChanged();const visited=[];const originalNext=window.extensionNext;window.extensionNext=step=>{visited.push(step);return originalNext(step)};window.extensionSshNext();if(visited.includes(4))throw new Error('public task restore bypassed target SSH verification');if(remoteCalls!==0)throw new Error('public task restore triggered a remote operation');
 })();
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
@@ -1886,10 +2031,10 @@ global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(
 const timers=[];global.setInterval=fn=>{timers.push(fn);return fn};
 const key='SHA256:AAAAAAAAAAAAAAAAAAAA';
 const target={id:'saved',name:'Saved',host:'vps.example',port:22,username:'root',host_key:key,chatgpt2api_port:33010};
-const discovery={environment:{os:'Ubuntu',cpu:2,memory_mb:2048,disk_free_mb:4096,listening_ports:[],docker_version:'Docker',compose_version:'Compose',python_version:'3.12'},instances:[],deployment_modes:[{id:'compose',name:'Compose',summary:'Recommended',recommended:true,available:true}]};
-const plan={id:'plan-one',instance_id:'chatgpt2api-dev',service_port:33010,image:'image:test',strategy:'isolated',deployment_mode:'compose',clone_source_id:'',clone_scope:'empty',operations:['prepare'],safety:['isolated'],source_baseline:{}};
+const discovery={ready:true,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'a'.repeat(64),complete:true,changed_fields:[]},capabilities:{can_deploy:true,can_admin:false,docker_available:true,compose_available:true},instances:[],deployment_modes:[{id:'compose',recommended:true,available:true}]};
+const plan={id:'plan-one',ready:true,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'b'.repeat(64),complete:true,changed_fields:[]},registers_locally:false,remote_write_expected:true,clone_requested:false,admin_required:false};
 let deployCalls=0,releaseDeploy;
-global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/discover')body=discovery;else if(url==='/api/extensions/deploy/plan')body={plan,discovery};else if(url==='/api/extensions/deploy'){deployCalls+=1;return await new Promise(resolve=>{releaseDeploy=()=>resolve({ok:true,text:async()=>JSON.stringify({task_id:'deploy-one'})})})}else if(url==='/api/extensions/tasks/deploy-one')body={status:'completed',progress:100,host_key:key,steps:[{id:'verify',status:'success'}],logs:[],result:{instance:{id:'managed',target_id:'saved',managed:true},url:'http://service.example',api_url:'http://service.example/v1',admin_key_available:false}};return {ok:true,text:async()=>JSON.stringify(body)}};
+global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/discover')body=discovery;else if(url==='/api/extensions/deploy/plan')body={plan,discovery};else if(url==='/api/extensions/deploy'){deployCalls+=1;return await new Promise(resolve=>{releaseDeploy=()=>resolve({ok:true,status:200,text:async()=>JSON.stringify({task_id:'deploy-one'})})})}else if(url==='/api/extensions/tasks/deploy-one')body={id:'deploy-one',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',label:'Verify service',status:'success'}],created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action:'reverify_ownership_and_rotate_admin_key',failed_phase:null,error_code:null,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'c'.repeat(64),complete:true,changed_fields:[]}};else if(url.includes('/delivery'))return {ok:false,status:404,text:async()=>JSON.stringify({detail:'not available'})};else if(url==='/api/extensions/instances')body={instances:[]};return {ok:true,status:200,text:async()=>JSON.stringify(body)}};
 eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();await window.extensionTestSSH(false);window.extensionNext(2);
 if(element('extGuidePrimaryBtn').textContent!=='extensions.discover')throw new Error('step 2 did not begin with discovery');
 await window.extensionPrimaryAction();if(element('extGuidePrimaryBtn').textContent!=='extensions.create_plan')throw new Error('discovery did not advance to plan creation');
@@ -1913,12 +2058,13 @@ const radios={network:{value:'tailscale',checked:true,classList:{toggle(){}}},in
 global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('extNetwork'))return radios.network;if(s.includes('extIntent')&&s.includes(':checked'))return radios.intent;if(s.includes('extStrategy')&&s.includes('[value="isolated"]'))return radios.strategy;if(s.includes('extStrategy')&&s.includes(':checked'))return radios.strategy;if(s.includes('extDeployMode'))return radios.mode;if(s.includes('extCloneScope'))return radios.scope;if(s.includes('extCredentialDelivery'))return radios.delivery;if(s.includes('.extension-pane'))return element('heading');return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};
 global.i18nText=k=>k;global.getUiLanguage=()=> 'en';global.escHtml=v=>String(v||'');global.crypto={getRandomValues(values){values.fill(0xab);return values}};const timers=[];global.setInterval=fn=>{timers.push(fn);return fn};global.clearInterval=()=>{};
 const key='SHA256:AAAAAAAAAAAAAAAAAAAA',target={id:'saved',name:'Saved',host:'vps.example',port:22,username:'root',host_key:key,chatgpt2api_port:33010};
-const discovery={environment:{os:'Ubuntu',cpu:2,memory_mb:2048,disk_free_mb:4096,listening_ports:[],docker_version:'Docker',compose_version:'Compose',python_version:'3.12'},instances:[],deployment_modes:[{id:'compose',name:'Compose',summary:'Recommended',recommended:true,available:true}]};
-const plan={id:'plan-one',instance_id:'chatgpt2api-dev',service_port:33010,image:'image:test',strategy:'isolated',deployment_mode:'compose',clone_source_id:'',clone_scope:'empty',operations:['prepare'],safety:['isolated'],source_baseline:{}};
-const unrelatedRunning={id:'unrelated-running',deployment_attempt_id:'11111111111111111111111111111111',status:'running',phase:'connect',progress:77,steps:[{id:'connect',status:'running'}],logs:[],result:null};
-const unrelatedCompleted={id:'unrelated-completed',deployment_attempt_id:'22222222222222222222222222222222',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',status:'success'}],logs:[],result:{instance:{id:'unrelated',managed:true},url:'http://unrelated.example',api_url:'http://unrelated.example/v1',admin_key_available:true}};
+const discovery={ready:true,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'a'.repeat(64),complete:true,changed_fields:[]},capabilities:{can_deploy:true,can_admin:false,docker_available:true,compose_available:true},instances:[],deployment_modes:[{id:'compose',recommended:true,available:true}]};
+const plan={id:'plan-one',ready:true,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'b'.repeat(64),complete:true,changed_fields:[]},registers_locally:false,remote_write_expected:true,clone_requested:false,admin_required:false};
+const publicManifest={contract_version:'phase4-v3',snapshot_digest:'c'.repeat(64),complete:true,changed_fields:[]};
+const unrelatedRunning={id:'unrelated-running',status:'running',phase:'connect',progress:77,steps:[{id:'connect',label:'Connect',status:'running'}],created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action:null,failed_phase:null,error_code:null,evidence_manifest:publicManifest};
+const unrelatedCompleted={id:'unrelated-completed',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',label:'Verify service',status:'success'}],created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action:'reverify_ownership_and_rotate_admin_key',failed_phase:null,error_code:null,evidence_manifest:publicManifest};
 let accepted=null,deployAccepted=false,taskVisible=false,deployCalls=0,taskListReads=0,unrelatedTaskReads=0,unrelatedDeliveryCalls=0,acceptedTaskReads=0;
-global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks'){taskListReads+=1;const visible=deployAccepted?(taskVisible?[unrelatedCompleted,unrelatedRunning,accepted]:[unrelatedCompleted,unrelatedRunning]):[];body={active_task_id:taskVisible?'accepted-one':null,latest_task_id:deployAccepted?'unrelated-completed':null,tasks:visible}}else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/discover')body=discovery;else if(url==='/api/extensions/deploy/plan')body={plan,discovery};else if(url==='/api/extensions/deploy'){deployCalls+=1;const sent=JSON.parse(options.body);if(!/^[a-f0-9]{32}$/.test(sent.deployment_attempt_id))throw new Error('deploy attempt id missing or invalid');accepted={id:'accepted-one',deployment_attempt_id:sent.deployment_attempt_id,status:'running',phase:'connect',progress:5,steps:[{id:'connect',status:'running'}],logs:[],result:null};deployAccepted=true;throw new TypeError('response stream lost')}else if(url==='/api/extensions/tasks/accepted-one'){acceptedTaskReads+=1;body=accepted}else if(url==='/api/extensions/tasks/unrelated-running'||url==='/api/extensions/tasks/unrelated-completed'){unrelatedTaskReads+=1;body=url.endsWith('running')?unrelatedRunning:unrelatedCompleted}else if(url==='/api/extensions/tasks/unrelated-completed/delivery'){unrelatedDeliveryCalls+=1;body={admin_key:'must-not-be-read'}}return {ok:true,status:200,text:async()=>JSON.stringify(body)}};
+global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks'){taskListReads+=1;const visible=taskVisible?[unrelatedCompleted,unrelatedRunning,accepted]:[unrelatedCompleted,unrelatedRunning];body={active_task_id:taskVisible?'accepted-one':null,latest_task_id:null,tasks:visible}}else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/discover')body=discovery;else if(url==='/api/extensions/deploy/plan')body={plan,discovery};else if(url==='/api/extensions/deploy'){deployCalls+=1;const sent=JSON.parse(options.body);if(!/^[a-f0-9]{32}$/.test(sent.deployment_attempt_id))throw new Error('deploy attempt id missing or invalid');accepted={id:'accepted-one',status:'running',phase:'connect',progress:5,steps:[{id:'connect',label:'Connect',status:'running'}],created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action:null,failed_phase:null,error_code:null,evidence_manifest:publicManifest};deployAccepted=true;throw new TypeError('response stream lost')}else if(url==='/api/extensions/tasks/accepted-one'){acceptedTaskReads+=1;body=accepted}else if(url==='/api/extensions/tasks/unrelated-running'||url==='/api/extensions/tasks/unrelated-completed'){unrelatedTaskReads+=1;body=url.endsWith('running')?unrelatedRunning:unrelatedCompleted}else if(url==='/api/extensions/tasks/unrelated-completed/delivery'){unrelatedDeliveryCalls+=1;body={admin_key:'must-not-be-read'}}return {ok:true,status:200,text:async()=>JSON.stringify(body)}};
 eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();await window.extensionTestSSH(false);window.extensionNext(2);await window.extensionDiscover();await window.extensionCreatePlan();
 await window.extensionStartDeploy();await window.extensionStartDeploy();
 if(deployCalls!==1||!accepted)throw new Error('lost response created a duplicate deployment task');
@@ -1978,13 +2124,12 @@ function boot(fetchImpl,cryptoImpl){
   return {context,elements,timers,cleared,element};
 }
 (async()=>{
-  const attempt='abababababababababababababababab';
-  const interrupted={id:'exact-interrupted',deployment_attempt_id:attempt,status:'interrupted',phase:'connect',progress:10,steps:[{id:'connect',status:'success'}],logs:[],error:null,result:null,recovery_action:'regenerate_plan_and_reprovide_credentials'};
+  const interrupted={id:'exact-interrupted',status:'interrupted',phase:'connect',progress:10,steps:[{id:'connect',label:'Connect',status:'success'}],failed_phase:null,error_code:null,recovery_action:'regenerate_plan_and_reprovide_credentials',evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'a'.repeat(64),complete:false,changed_fields:['legacy.task_state']}};
   const staleTimer={kind:'stale'};
   const first=boot(async url=>({ok:true,status:200,text:async()=>JSON.stringify(url==='/api/extensions/tasks'?{active_task_id:null,latest_task_id:'exact-interrupted',tasks:[interrupted]}:{})}),{getRandomValues(v){v.fill(1);return v}});
   first.element('extPassword').value='session-only';
   first.context.__test.setState({currentPlan:{id:'plan'},currentDiscovery:{ready:true},currentExtensionStep:2,deploymentInFlight:false,deploymentFailed:false,sshVerified:true,currentTargetId:'saved',targetDirty:false,trustedHostKey:'SHA256:test',taskPoll:staleTimer});
-  await first.context.__test.reconcileAmbiguousDeployment(attempt);
+  await first.context.__test.reconcileAmbiguousDeployment({});
   const interruptedState=first.context.__test.getState();
   if(interruptedState.deploymentInFlight||!interruptedState.deploymentFailed||interruptedState.currentPlan!==null)throw new Error('interrupted exact attempt retained processing state or stale plan');
   if(!first.cleared.includes(staleTimer))throw new Error('interrupted exact attempt did not stop the stale timer');
@@ -2005,7 +2150,7 @@ function boot(fetchImpl,cryptoImpl){
   const ambiguous=boot(async()=>({ok:true,status:200,text:async()=>JSON.stringify({active_task_id:null,latest_task_id:null,tasks:[]})}),{getRandomValues(v){v.fill(3);return v}});
   ambiguous.element('extPassword').value='session-only';
   ambiguous.context.__test.setState({currentPlan:{id:'plan'},currentDiscovery:{ready:true},currentExtensionStep:2,deploymentInFlight:false,deploymentFailed:false,sshVerified:true,currentTargetId:'saved',targetDirty:false,trustedHostKey:'SHA256:test'});
-  await ambiguous.context.__test.reconcileAmbiguousDeployment(attempt);
+  await ambiguous.context.__test.reconcileAmbiguousDeployment({});
   if(ambiguous.timers.length!==1)throw new Error('ambiguous reconciliation timer was not created');
   for(let i=0;i<8&&!ambiguous.cleared.includes(ambiguous.timers[0]);i+=1)await ambiguous.timers[0].fn();
   const ambiguousState=ambiguous.context.__test.getState();
@@ -2103,8 +2248,8 @@ const radios={network:{value:'tailscale',checked:true,classList:{toggle(){}}},in
 global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('extNetwork'))return radios.network;if(s.includes('extIntent')&&s.includes(':checked'))return radios.intent;if(s.includes('extStrategy')&&s.includes('[value="isolated"]'))return radios.strategy;if(s.includes('extStrategy')&&s.includes(':checked'))return radios.strategy;if(s.includes('extDeployMode'))return radios.mode;if(s.includes('extCloneScope'))return radios.scope;if(s.includes('extCredentialDelivery'))return radios.delivery;if(s.includes('.extension-pane'))return element('heading');return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};
 global.i18nText=k=>k;global.getUiLanguage=()=> 'en';global.escHtml=v=>String(v||'');global.setInterval=()=>({});global.clearInterval=()=>{};
 const key='SHA256:AAAAAAAAAAAAAAAAAAAA';let target={id:'saved',name:'Saved',host:'authoritative.example',port:2222,username:'deploy',host_key:key,chatgpt2api_port:33010};
-const discovery={environment:{os:'Ubuntu',cpu:2,memory_mb:2048,disk_free_mb:4096,listening_ports:[],docker_version:'Docker',compose_version:'Compose',python_version:'3.12'},instances:[],deployment_modes:[{id:'compose',name:'Compose',summary:'Recommended',recommended:true,available:true}]};
-const plan={id:'plan-one',instance_id:'chatgpt2api-dev',service_port:33010,image:'image:test',strategy:'isolated',deployment_mode:'compose',clone_source_id:'',clone_scope:'empty',operations:['prepare'],safety:['isolated'],source_baseline:{}};let targetReads=0,deployCalls=0;
+const discovery={ready:true,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'a'.repeat(64),complete:true,changed_fields:[]},capabilities:{can_deploy:true,can_admin:false,docker_available:true,compose_available:true},instances:[],deployment_modes:[{id:'compose',recommended:true,available:true}]};
+const plan={id:'plan-one',ready:true,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'b'.repeat(64),complete:true,changed_fields:[]},registers_locally:false,remote_write_expected:true,clone_requested:false,admin_required:false};let targetReads=0,deployCalls=0;
 global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets'){targetReads+=1;body={targets:[target]}}else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={active_task_id:null,latest_task_id:null,tasks:[]};else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/discover')body=discovery;else if(url==='/api/extensions/deploy/plan')body={plan,discovery};else if(url==='/api/extensions/deploy'){deployCalls+=1;target={...target,host:'reloaded-authoritative.example',port:2200,username:'reloaded-user'};return {ok:false,status:409,text:async()=>JSON.stringify({detail:{error:'identity changed',diagnostic:{code:'deployment_plan_identity_mismatch',stage:'plan_confirmation',retry_safe:false}}})}}return {ok:true,status:200,text:async()=>JSON.stringify(body)}};
 eval(source);window.extensionLoadServices=async()=>{};let visited=[];const originalNext=window.extensionNext;window.extensionNext=step=>{visited.push(step);return originalNext(step)};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();await window.extensionTestSSH(false);window.extensionNext(2);await window.extensionDiscover();await window.extensionCreatePlan();await window.extensionStartDeploy();
 if(deployCalls!==1)throw new Error('identity mismatch did not stop after one deploy request');
@@ -2133,9 +2278,9 @@ const intent=radio('extIntent','development',true),strategy=radio('extStrategy',
 global.window=global;global.document={getElementById:element,querySelector(s){const match=s.match(/input\[name="([^"]+)"\](?:\[value="([^"]+)"\])?/);if(match){const choices=groups[match[1]]||[];if(match[2]!==undefined)return choices.find(input=>input.value===match[2])||null;if(s.includes(':checked'))return choices.find(input=>input.checked)||null;return choices[0]||null}if(s.includes('.extension-pane'))return element('heading');return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};
 global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});
 const key='SHA256:AAAAAAAAAAAAAAAAAAAA';const target={id:'saved',name:'Saved',host:'vps.example',port:22,username:'root',host_key:key,chatgpt2api_port:33010};
-const discovery={environment:{os:'Ubuntu',cpu:2,memory_mb:2048,disk_free_mb:4096,listening_ports:[],docker_version:'Docker',compose_version:'Compose',python_version:'3.12'},instances:[],deployment_modes:[{id:'compose',name:'Compose',summary:'Recommended',recommended:true,available:true}]};
+const discovery={ready:true,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'a'.repeat(64),complete:true,changed_fields:[]},capabilities:{can_deploy:true,can_admin:false,docker_available:true,compose_available:true},instances:[],deployment_modes:[{id:'compose',recommended:true,available:true}]};
 const planBodies=[];
-global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/deploy/plan'){const request=JSON.parse(options.body);planBodies.push(request);body={discovery,plan:{id:'plan-'+planBodies.length,instance_id:request.instance_id,service_port:request.service_port,image:request.image,strategy:request.strategy,deployment_mode:request.deployment_mode,clone_source_id:request.clone_source_id,clone_scope:request.clone_scope,operations:['prepare'],safety:['isolated'],source_baseline:{}}}}return {ok:true,text:async()=>JSON.stringify(body)}};
+global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/deploy/plan'){const request=JSON.parse(options.body);planBodies.push(request);body={discovery,plan:{id:'plan-'+planBodies.length,ready:true,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'b'.repeat(64),complete:true,changed_fields:[]},registers_locally:false,remote_write_expected:true,clone_requested:request.clone_scope!=='empty',admin_required:request.clone_scope!=='empty'}}}return {ok:true,text:async()=>JSON.stringify(body)}};
 eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();await window.extensionTestSSH(false);element('extInstanceId').value='chatgpt2api-dev';element('extServicePort').value='33010';element('extImage').value='image:test';element('extCloneSource').value='';
 window.extensionSelectIntent(intent);empty.checked=true;await window.extensionCreatePlan();if(planBodies[0].clone_scope!=='empty')throw new Error('first plan did not submit the explicit empty scope');if(!empty.checked||working.checked)throw new Error('successful empty plan was rendered as working-copy');if(!strategy.checked||element('extCloneSource').value!==''||element('extImage').value!=='image:test')throw new Error('plan rendering changed strategy, source, or image semantics');
 await window.extensionCreatePlan();if(planBodies[1].clone_scope!=='empty')throw new Error('regenerated plan did not preserve empty scope');if(!empty.checked||working.checked)throw new Error('regenerated empty plan changed the visible scope');
@@ -2157,9 +2302,9 @@ const intent=radio('extIntent','development',true),strategy=radio('extStrategy',
 global.window=global;global.document={getElementById:element,querySelector(s){const match=s.match(/input\[name="([^"]+)"\](?:\[value="([^"]+)"\])?/);if(match){const choices=groups[match[1]]||[];if(match[2]!==undefined)return choices.find(input=>input.value===match[2])||null;if(s.includes(':checked'))return choices.find(input=>input.checked)||null;return choices[0]||null}if(s.includes('.extension-pane'))return element('heading');return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};
 global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});global.crypto={getRandomValues(v){v.fill(7);return v}};
 const key='SHA256:AAAAAAAAAAAAAAAAAAAA';const target={id:'saved',name:'Saved',host:'vps.example',port:22,username:'root',host_key:key,chatgpt2api_port:33011};
-const discovery={environment:{os:'Ubuntu',cpu:2,memory_mb:2048,disk_free_mb:4096,listening_ports:[],docker_version:'Docker',compose_version:'Compose',python_version:'3.12'},instances:[],deployment_modes:[{id:'compose',name:'Compose',summary:'Recommended',recommended:true,available:true}]};
+const discovery={ready:true,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'a'.repeat(64),complete:true,changed_fields:[]},capabilities:{can_deploy:true,can_admin:false,docker_available:true,compose_available:true},instances:[],deployment_modes:[{id:'compose',recommended:true,available:true}]};
 const planBodies=[];let deployCalls=0,discoverCalls=0,taskReads=0;
-global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks'){taskReads+=1;body={tasks:[]}}else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/discover'){discoverCalls+=1;body=discovery}else if(url==='/api/extensions/deploy/plan'){const request=JSON.parse(options.body);planBodies.push(request);body={discovery,plan:{id:'plan-'+planBodies.length,instance_id:request.instance_id,service_port:request.service_port,image:request.image,strategy:request.strategy,deployment_mode:request.deployment_mode,clone_source_id:request.clone_source_id,clone_scope:request.clone_scope,operations:['prepare'],safety:['isolated'],source_baseline:{}}}}else if(url==='/api/extensions/deploy'){deployCalls+=1;return {ok:false,status:409,text:async()=>JSON.stringify({detail:{error:'sanitized snapshot change',diagnostic:{code:'deployment_snapshot_changed',stage:'fresh_discovery',retry_safe:false,task_created:false}}})}}return {ok:true,status:200,text:async()=>JSON.stringify(body)}};
+global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks'){taskReads+=1;body={tasks:[]}}else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/discover'){discoverCalls+=1;body=discovery}else if(url==='/api/extensions/deploy/plan'){const request=JSON.parse(options.body);planBodies.push(request);body={discovery,plan:{id:'plan-'+planBodies.length,ready:true,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'b'.repeat(64),complete:true,changed_fields:[]},registers_locally:false,remote_write_expected:true,clone_requested:request.clone_scope!=='empty',admin_required:request.clone_scope!=='empty'}}}else if(url==='/api/extensions/deploy'){deployCalls+=1;return {ok:false,status:409,text:async()=>JSON.stringify({detail:{error:'sanitized snapshot change',diagnostic:{code:'deployment_snapshot_changed',stage:'fresh_discovery',retry_safe:false,task_created:false}}})}}return {ok:true,status:200,text:async()=>JSON.stringify(body)}};
 eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();await window.extensionTestSSH(false);window.extensionNext(2);element('extInstanceId').value='chatgpt2api-dev';element('extServicePort').value='33011';element('extImage').value='image:test';element('extCloneSource').value='';
 window.extensionSelectIntent(intent);empty.checked=true;await window.extensionCreatePlan();if(planBodies[0].clone_scope!=='empty'||!empty.checked||working.checked)throw new Error('initial plan did not retain explicit empty scope');
 await window.extensionStartDeploy();

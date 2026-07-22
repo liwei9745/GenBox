@@ -152,14 +152,14 @@ def route_deploy_payload(submitted_target, plan, **overrides):
     payload = request_payload(
         deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
         target=submitted_target,
-        service_port=plan["service_port"],
-        image=plan["image"],
-        instance_id=plan["instance_id"],
-        strategy=plan["strategy"],
-        deployment_mode=plan["deployment_mode"],
+        service_port=33011,
+        image=PINNED_IMAGE,
+        instance_id="chatgpt2api-dev",
+        strategy="isolated",
+        deployment_mode="compose",
         confirmed_plan_id=plan["id"],
-        clone_source_id=plan.get("clone_source_id", ""),
-        clone_scope=plan.get("clone_scope", "empty"),
+        clone_source_id="",
+        clone_scope="empty",
     )
     payload.update(overrides)
     return payload
@@ -354,7 +354,8 @@ def test_compose_plan_route_binds_project_strategy_and_mode(monkeypatch):
 
     assert response.status_code == 200
     plan = response.json()["plan"]
-    assert {key: plan[key] for key in ("project_id", "strategy", "deployment_mode")} == {
+    internal_plan = manager.plans[plan["id"]]
+    assert {key: internal_plan[key] for key in ("project_id", "strategy", "deployment_mode")} == {
         "project_id": "chatgpt2api", "strategy": "isolated", "deployment_mode": "compose",
     }
 
@@ -362,10 +363,11 @@ def test_compose_plan_route_binds_project_strategy_and_mode(monkeypatch):
 def test_plan_and_deploy_routes_preserve_new_service_port_without_remote_execution(monkeypatch):
     client, manager, _current_target, discovered_target_ports, leased_requests = route_plan_harness(monkeypatch)
     submitted_target, plan = create_route_plan(client)
+    internal_plan = manager.plans[plan["id"]]
 
     assert discovered_target_ports == [33010, 33010]
-    assert plan["service_port"] == 33011
-    assert plan["image"] == PINNED_IMAGE
+    assert internal_plan["service_port"] == 33011
+    assert internal_plan["image"] == PINNED_IMAGE
 
     deploy_response = client.post(
         "/api/extensions/deploy",
@@ -545,8 +547,9 @@ def test_plan_take_allows_new_service_port_when_live_ssh_identity_is_unchanged(m
     from extensions import orchestrator
 
     manager, live_target, _submitted_target, plan, request = _port_bound_plan()
+    internal_plan = manager.plans[plan["id"]]
     assert live_target.chatgpt2api_port == 33010
-    assert plan["service_port"] == request.target.chatgpt2api_port == 33011
+    assert internal_plan["service_port"] == request.target.chatgpt2api_port == 33011
     monkeypatch.setattr(orchestrator.extensions_store, "get_target", lambda _target_id: live_target)
 
     assert manager.take(plan["id"], request)["id"] == plan["id"]

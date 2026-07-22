@@ -33,6 +33,13 @@ DEPLOY_STEPS = [
     ("verify", "等待服务就绪"),
 ]
 PHASE4_DEPLOYMENT_CONTRACT_VERSION = "phase4-v3"
+_PUBLIC_INSTANCE_HANDLE_KEY = secrets.token_bytes(32)
+
+
+def public_instance_handle(target_id: str, instance_id: str) -> str:
+    payload = f"{target_id}\0{instance_id}".encode("utf-8")
+    digest = hmac.new(_PUBLIC_INSTANCE_HANDLE_KEY, payload, hashlib.sha256).hexdigest()[:32]
+    return f"i-{digest}"
 
 
 class SSHAuthenticationError(PermissionError):
@@ -600,6 +607,7 @@ class ExtensionTaskManager:
         self.resource_reservations = resource_reservations or DeploymentResourceReservations()
         self.task_reservations: dict[str, str] = {}
         self.deployment_attempts: dict[str, dict[str, Any]] = {}
+        self.attempt_tasks: dict[str, dict[str, str]] = {}
         self._recover_tasks()
 
     @staticmethod
@@ -619,6 +627,9 @@ class ExtensionTaskManager:
             self.tasks.pop(task_id, None)
             self.deliveries.pop(task_id, None)
             self.runners.pop(task_id, None)
+            for attempt_id, record in list(self.attempt_tasks.items()):
+                if record.get("task_id") == task_id:
+                    self.attempt_tasks.pop(attempt_id, None)
         for task_id, runner in list(self.runners.items()):
             if runner.done():
                 self.runners.pop(task_id, None)
@@ -630,13 +641,6 @@ class ExtensionTaskManager:
                 if state.get("status") in {"queued", "running"}:
                     state["status"] = "interrupted"
                     state["recovery_action"] = "regenerate_plan_and_reprovide_credentials"
-                    state["updated_at"] = self._now()
-                    changed = True
-                result = state.get("result")
-                if isinstance(result, dict) and result.get("admin_key_available"):
-                    result["admin_key_available"] = False
-                    result["credential_recovery_required"] = True
-                    state["recovery_action"] = "reverify_ownership_and_rotate_admin_key"
                     state["updated_at"] = self._now()
                     changed = True
             before = len(self.tasks)
@@ -668,18 +672,16 @@ class ExtensionTaskManager:
         return hashlib.sha256(encoded).hexdigest()
 
     def _existing_attempt_task_locked(self, attempt_id: str, context_fingerprint: str) -> str | None:
-        matches = [
-            state for state in self.tasks.values()
-            if state.get("deployment_attempt_id") == attempt_id
-        ]
-        if not matches:
+        record = self.attempt_tasks.get(attempt_id)
+        if not record:
             return None
-        if len(matches) != 1 or not hmac.compare_digest(
-            str(matches[0].get("deployment_context_fingerprint") or ""),
-            context_fingerprint,
-        ):
+        task_id = record.get("task_id", "")
+        if task_id not in self.tasks:
+            self.attempt_tasks.pop(attempt_id, None)
+            return None
+        if not hmac.compare_digest(record.get("context_fingerprint", ""), context_fingerprint):
             raise DeploymentAttemptConflictError()
-        return matches[0]["id"]
+        return task_id
 
     async def create(self, request: ExtensionDeployRequest) -> str:
         context_fingerprint = self._deployment_context_fingerprint(request)
@@ -747,6 +749,7 @@ class ExtensionTaskManager:
         previous_runners = None
         previous_deliveries = None
         previous_task_reservations = None
+        previous_attempt_tasks = None
         try:
             task_id = uuid.uuid4().hex[:12]
             with self.lock:
@@ -754,18 +757,20 @@ class ExtensionTaskManager:
                 previous_runners = dict(self.runners)
                 previous_deliveries = dict(self.deliveries)
                 previous_task_reservations = dict(self.task_reservations)
-                self.tasks[task_id] = {
+                previous_attempt_tasks = copy.deepcopy(self.attempt_tasks)
+                self.tasks[task_id] = TaskStore.public_task({
                     "id": task_id, "status": "queued", "phase": "connect", "progress": 0,
-                    "deployment_attempt_id": request.deployment_attempt_id,
-                    "deployment_context_fingerprint": context_fingerprint,
                     "steps": [{"id": key, "label": label, "status": "pending"} for key, label in DEPLOY_STEPS],
-                    "logs": [], "error": None, "host_key": "", "result": None,
                     "created_at": self._now(), "updated_at": self._now(), "recovery_action": None,
                     "failed_phase": None, "error_code": None,
                     "evidence_manifest": copy.deepcopy(plan.get("evidence_manifest")),
-                }
+                })
                 self.task_reservations[task_id] = reservation_token
                 self._persist()
+                self.attempt_tasks[request.deployment_attempt_id] = {
+                    "context_fingerprint": context_fingerprint,
+                    "task_id": task_id,
+                }
                 runner = asyncio.create_task(self._run(task_id, request, plan))
                 self.runners[task_id] = runner
                 runner.add_done_callback(lambda completed: self._discard_done_runner(task_id, completed))
@@ -776,6 +781,7 @@ class ExtensionTaskManager:
                     self.runners = previous_runners or {}
                     self.deliveries = previous_deliveries or {}
                     self.task_reservations = previous_task_reservations or {}
+                    self.attempt_tasks = previous_attempt_tasks or {}
                 if runner is not None:
                     runner.cancel()
             self.resource_reservations.release(reservation_token)
@@ -801,9 +807,7 @@ class ExtensionTaskManager:
             state = self.tasks.get(task_id)
             if not state:
                 return None
-            public = copy.deepcopy(state)
-            public.pop("deployment_context_fingerprint", None)
-            return public
+            return TaskStore.public_task(state)
 
     def cancel(self, task_id: str) -> bool:
         with self.lock:
@@ -814,8 +818,7 @@ class ExtensionTaskManager:
             if not runner or runner.done():
                 return False
             state["status"] = "cancelled"
-            state["error"] = "任务已取消"
-            state["result"] = None
+            state.pop("result", None)
             state["failed_phase"] = None
             state["error_code"] = None
             state["recovery_action"] = None
@@ -828,19 +831,13 @@ class ExtensionTaskManager:
     def take_delivery(self, task_id: str) -> str | None:
         with self.lock:
             state = self.tasks.get(task_id)
-            result = state.get("result") if state else None
-            if (
-                not state
-                or state.get("status") != "completed"
-                or not isinstance(result, dict)
-                or result.get("admin_key_available") is not True
-            ):
+            if not state or state.get("status") != "completed":
                 self.deliveries.pop(task_id, None)
                 return None
             key = self.deliveries.pop(task_id, None)
             if not key:
                 return None
-            result["admin_key_available"] = False
+            state["recovery_action"] = "reverify_ownership_and_rotate_admin_key"
             state["updated_at"] = self._now()
             self._persist()
             return key
@@ -849,9 +846,7 @@ class ExtensionTaskManager:
         with self.lock:
             tasks = sorted(self.tasks.values(), key=lambda task: (task.get("updated_at", ""), task.get("id", "")), reverse=True)
             active = next((task["id"] for task in tasks if task.get("status") in {"queued", "running"}), None)
-            public_tasks = copy.deepcopy(tasks)
-            for task in public_tasks:
-                task.pop("deployment_context_fingerprint", None)
+            public_tasks = [TaskStore.public_task(task) for task in tasks]
             return {
                 "tasks": public_tasks,
                 "active_task_id": active,
@@ -870,8 +865,6 @@ class ExtensionTaskManager:
                 state["phase"] = DEPLOY_STEPS[index][0]
                 state["steps"][index]["status"] = status
                 state["progress"] = int(index / len(DEPLOY_STEPS) * 100)
-                if log:
-                    state["logs"].append({"time": time.strftime("%H:%M:%S"), "message": log})
                 state["updated_at"] = self._now()
                 self._persist()
 
@@ -882,8 +875,7 @@ class ExtensionTaskManager:
                 self._persist()
             step(0, "running", "正在建立安全 SSH 连接")
             validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
-            connection, fingerprint = await _connect(request)
-            state["host_key"] = fingerprint
+            connection, _fingerprint = await _connect(request)
             if connection is None:
                 failure_key = "host_key_confirmation_required"
                 raise PermissionError("需要先确认 VPS 主机指纹")
@@ -941,10 +933,7 @@ class ExtensionTaskManager:
                         raise asyncio.CancelledError
                     state["progress"] = 100
                     state["status"] = "completed"
-                    state["result"] = {
-                        "url": console_url, "api_url": f"{console_url}/v1", "instance": instance.model_dump(),
-                        "admin_key_available": False,
-                    }
+                    state["recovery_action"] = "reverify_ownership_and_rotate_admin_key"
                     state["updated_at"] = self._now()
                     self._persist()
                 return
@@ -1146,17 +1135,13 @@ class ExtensionTaskManager:
                 state["progress"] = 100
                 state["status"] = "completed"
                 self.deliveries[task_id] = admin_key
-                state["result"] = {
-                    "url": console_url, "api_url": f"{console_url}/v1", "instance": instance.model_dump(),
-                    "admin_key_available": True,
-                }
+                state["recovery_action"] = "reverify_ownership_and_rotate_admin_key"
                 state["updated_at"] = self._now()
                 self._persist()
         except asyncio.CancelledError:
             with self.lock:
                 state["status"] = "cancelled"
-                state["error"] = "任务已取消"
-                state["result"] = None
+                state.pop("result", None)
                 state["failed_phase"] = None
                 state["error_code"] = None
                 state["recovery_action"] = None
@@ -1175,8 +1160,8 @@ class ExtensionTaskManager:
                     state["failed_phase"] = failure.failed_phase
                     state["error_code"] = failure.error_code
                     state["recovery_action"] = failure.recovery_action
-                    state["error"] = failure.public_message
-                    state["result"] = None
+                    state.pop("error", None)
+                    state.pop("result", None)
                     self.deliveries.pop(task_id, None)
                     state["updated_at"] = self._now()
                     self._persist()
@@ -1398,10 +1383,93 @@ class DeploymentPlanManager:
     @staticmethod
     def _public_plan(plan: dict[str, Any]) -> dict[str, Any]:
         return {
-            key: copy.deepcopy(value)
-            for key, value in plan.items()
-            if key not in {"expires_at", "_lease_token", "execution_snapshot", "path_requirements"}
+            "id": plan.get("id"),
+            "evidence_manifest": copy.deepcopy(plan.get("evidence_manifest")),
+            "ready": True,
+            "registers_locally": plan.get("strategy") == "existing",
+            "remote_write_expected": plan.get("strategy") != "existing",
+            "clone_requested": plan.get("clone_scope") in {"media", "working-copy"},
+            "admin_required": plan.get("clone_scope") in {"media", "working-copy"},
         }
+
+    @classmethod
+    def public_discovery(cls, discovery: dict[str, Any], target_id: str) -> dict[str, Any]:
+        snapshot = cls._discovery_snapshot(discovery)
+        manifest = cls._evidence_manifest(snapshot)
+        privileges = snapshot.get("privileges", {})
+        environment = snapshot.get("environment", {})
+        complete = cls._port_bindings_complete(discovery) and cls._listener_probe_complete(
+            discovery.get("environment", {})
+        )
+        manifest["complete"] = complete
+        manifest["changed_fields"] = [] if complete else ["discovery.completeness"]
+        modes = []
+        for mode in discovery.get("deployment_modes", []):
+            if not isinstance(mode, dict) or mode.get("id") not in {"compose", "warp", "python"}:
+                continue
+            modes.append({
+                "id": mode["id"],
+                "available": mode.get("available") is True,
+                "recommended": mode.get("recommended") is True,
+            })
+        instances = []
+        for item in discovery.get("instances", []):
+            if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"]:
+                continue
+            status = str(item.get("status") or "").lower()
+            instances.append({
+                "handle": public_instance_handle(target_id, item["id"]),
+                "managed": item.get("managed") is True,
+                "running": status.startswith("up") or status in {"running", "healthy"},
+                "clone_available": item.get("clone_available") is True,
+            })
+        capabilities = {
+            "can_deploy": privileges.get("can_deploy") is True,
+            "can_admin": privileges.get("can_admin") is True,
+            "docker_available": bool(environment.get("docker_version")),
+            "compose_available": bool(environment.get("compose_version")),
+        }
+        return {
+            "ready": capabilities["can_deploy"] and complete,
+            "evidence_manifest": manifest,
+            "capabilities": capabilities,
+            "instances": instances,
+            "deployment_modes": modes,
+        }
+
+    def resolve_public_references(self, request: ExtensionDeployRequest) -> ExtensionDeployRequest:
+        with self.lock:
+            plan = self.plans.get(request.confirmed_plan_id)
+            if not plan:
+                return request
+            updates: dict[str, Any] = {}
+            target_id = str(plan.get("target_id") or "")
+            if plan.get("strategy") == "existing":
+                expected = public_instance_handle(target_id, str(plan.get("instance_id") or ""))
+                if request.instance_id == expected:
+                    updates.update({
+                        "instance_id": plan["instance_id"],
+                        "service_port": plan["service_port"],
+                        "image": plan["image"],
+                    })
+                elif request.instance_id != plan.get("instance_id"):
+                    raise DeploymentPlanConfirmationError(
+                        "deployment_plan_identity_changed",
+                        code="deployment_plan_identity_changed",
+                    )
+            if plan.get("clone_scope") in {"media", "working-copy"}:
+                expected = public_instance_handle(target_id, str(plan.get("clone_source_id") or ""))
+                if request.clone_source_id == expected:
+                    updates.update({
+                        "clone_source_id": plan["clone_source_id"],
+                        "image": plan["image"],
+                    })
+                elif request.clone_source_id != plan.get("clone_source_id"):
+                    raise DeploymentPlanConfirmationError(
+                        "deployment_plan_identity_changed",
+                        code="deployment_plan_identity_changed",
+                    )
+            return request.model_copy(update=updates) if updates else request
 
     @staticmethod
     def _normalized_plan_path(value: Any) -> str:

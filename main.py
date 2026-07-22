@@ -78,7 +78,7 @@ from extensions.models import (
 )
 from extensions.orchestrator import (
     DeploymentAttemptConflictError, DeploymentNoTaskError, SSHAuthenticationError, SSHConnectionError,
-    deployment_plans, extension_tasks, reset_managed_admin_key,
+    deployment_plans, extension_tasks, public_instance_handle, reset_managed_admin_key,
     probe_host_key,
     test_connection as test_extension_connection,
 )
@@ -3678,6 +3678,60 @@ def _safe_extension_ssh_error(exc: Exception, *, error: str, code: str, stage: s
     )
 
 
+def _resolve_discovered_instance_handle(target_id: str, handle: str, discovery: dict) -> dict:
+    matches = [
+        item for item in discovery.get("instances", [])
+        if isinstance(item, dict)
+        and isinstance(item.get("id"), str)
+        and hmac.compare_digest(public_instance_handle(target_id, item["id"]), handle)
+    ]
+    if len(matches) != 1:
+        raise ValueError("deployment_instance_handle_invalid")
+    return matches[0]
+
+
+def _resolve_plan_discovery_references(body: ExtensionPlanRequest, discovery: dict) -> ExtensionPlanRequest:
+    updates = {}
+    if body.strategy == "existing" and body.instance_id.startswith("i-"):
+        instance = _resolve_discovered_instance_handle(body.target.id, body.instance_id, discovery)
+        updates.update({
+            "instance_id": instance["id"],
+            "service_port": instance.get("service_port"),
+            "image": instance.get("image") or body.image,
+        })
+    if body.clone_scope in {"media", "working-copy"} and body.clone_source_id.startswith("i-"):
+        source = _resolve_discovered_instance_handle(body.target.id, body.clone_source_id, discovery)
+        updates.update({
+            "clone_source_id": source["id"],
+            "image": source.get("image") or body.image,
+        })
+    return body.model_copy(update=updates) if updates else body
+
+
+def _resolve_stored_instance_handle(instance_handle: str, target_id: str = ""):
+    candidates = extensions_store.list_instances(target_id)
+    matches = [
+        item for item in candidates
+        if hmac.compare_digest(public_instance_handle(item.target_id, item.id), instance_handle)
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    raw_matches = [item for item in candidates if item.id == instance_handle]
+    if len(raw_matches) == 1:
+        return raw_matches[0]
+    return None
+
+
+def _public_instance_projection(instance) -> dict:
+    status = str(instance.status or "").lower()
+    return {
+        "handle": public_instance_handle(instance.target_id, instance.id),
+        "project": instance.project,
+        "managed": instance.managed is True,
+        "running": status.startswith("up") or status in {"running", "healthy"},
+    }
+
+
 @app.post("/api/extensions/ssh/test")
 async def extension_test_ssh(body: ExtensionTestRequest):
     body = _bind_confirmed_extension_target(body)
@@ -3749,6 +3803,7 @@ async def extension_start_deploy(body: ExtensionDeployRequest):
     try:
         validate_deployment_capability(body.project_id, body.strategy, body.deployment_mode)
         body = _bind_confirmed_extension_target(body, plan_confirmation=True)
+        body = deployment_plans.resolve_public_references(body)
         task_id = await extension_tasks.create(body)
         return {"task_id": task_id}
     except HTTPException:
@@ -3764,7 +3819,18 @@ async def extension_start_deploy(body: ExtensionDeployRequest):
             detail={"error": str(exc), "diagnostic": exc.diagnostic},
         ) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "deployment_request_rejected",
+                "diagnostic": {
+                    "code": "extension_deploy_request_rejected",
+                    "stage": "plan_confirmation",
+                    "retry_safe": False,
+                    "task_created": False,
+                },
+            },
+        ) from exc
     except Exception as exc:
         raise _safe_extension_ssh_error(
             exc,
@@ -3778,7 +3844,8 @@ async def extension_start_deploy(body: ExtensionDeployRequest):
 async def extension_discover(body: ExtensionDiscoveryRequest):
     body = _bind_confirmed_extension_target(body)
     try:
-        return await discover_environment(body)
+        discovery = await discover_environment(body)
+        return deployment_plans.public_discovery(discovery, body.target.id)
     except Exception as exc:
         raise _safe_extension_ssh_error(
             exc,
@@ -3797,6 +3864,7 @@ async def extension_deploy_plan(body: ExtensionPlanRequest):
     body = _bind_confirmed_extension_target(body)
     try:
         initial_discovery = await discover_environment(body)
+        body = _resolve_plan_discovery_references(body, initial_discovery)
         path_requirements = deployment_plans.path_requirements(body, initial_discovery)
         discovery = await discover_environment(body, path_checks=path_requirements)
     except Exception as exc:
@@ -3807,13 +3875,14 @@ async def extension_deploy_plan(body: ExtensionPlanRequest):
             stage="plan_discovery",
         ) from exc
     try:
+        plan = deployment_plans.create(
+            body,
+            discovery,
+            path_requirements=path_requirements,
+        )
         return {
-            "plan": deployment_plans.create(
-                body,
-                discovery,
-                path_requirements=path_requirements,
-            ),
-            "discovery": discovery,
+            "plan": plan,
+            "discovery": deployment_plans.public_discovery(discovery, body.target.id),
         }
     except DeploymentNoTaskError as exc:
         raise HTTPException(
@@ -3821,7 +3890,18 @@ async def extension_deploy_plan(body: ExtensionPlanRequest):
             detail={"error": str(exc), "diagnostic": exc.diagnostic},
         ) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "deployment_plan_rejected",
+                "diagnostic": {
+                    "code": "extension_plan_rejected",
+                    "stage": "plan_generation",
+                    "retry_safe": False,
+                    "task_created": False,
+                },
+            },
+        ) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=400,
@@ -3855,11 +3935,16 @@ async def extension_task_delivery(task_id: str):
 
 @app.get("/api/extensions/instances")
 async def extension_instances(target_id: str = ""):
-    return {"instances": [item.model_dump() for item in extensions_store.list_instances(target_id)]}
+    return {
+        "instances": [
+            _public_instance_projection(item)
+            for item in extensions_store.list_instances(target_id)
+        ]
+    }
 
 
 def _managed_vault_instance(instance_id: str):
-    instance = extensions_store.get_instance(instance_id)
+    instance = _resolve_stored_instance_handle(instance_id)
     if not instance or not instance.managed:
         raise HTTPException(status_code=404, detail="托管实例不存在")
     return instance
@@ -3904,35 +3989,53 @@ async def extension_vault_lock():
 @app.get("/api/extensions/vault/credentials")
 async def extension_vault_list():
     try:
-        return {"credentials": credential_vault.list_metadata()}
+        credentials = []
+        for item in credential_vault.list_metadata():
+            instance = extensions_store.get_instance(item.get("instance_id", ""))
+            if not instance:
+                continue
+            credentials.append({
+                "instance_handle": public_instance_handle(instance.target_id, instance.id),
+                "updated_at": item.get("updated_at", ""),
+                "fields": list(item.get("fields", [])),
+            })
+        return {"credentials": credentials}
     except Exception as exc:
         _vault_error(exc)
 
 
 @app.get("/api/extensions/vault/credentials/{instance_id}")
 async def extension_vault_get(instance_id: str):
-    _managed_vault_instance(instance_id)
+    instance = _managed_vault_instance(instance_id)
     try:
-        return {"instance_id": instance_id, "credential": credential_vault.get(instance_id).model_dump()}
+        return {
+            "instance_handle": public_instance_handle(instance.target_id, instance.id),
+            "credential": credential_vault.get(instance.id).model_dump(),
+        }
     except Exception as exc:
         _vault_error(exc)
 
 
 @app.put("/api/extensions/vault/credentials/{instance_id}")
 async def extension_vault_upsert(instance_id: str, body: ManagedCredentialUpsertRequest):
-    _managed_vault_instance(instance_id)
+    instance = _managed_vault_instance(instance_id)
     try:
-        return {"credential": credential_vault.upsert(instance_id, body.credential)}
+        saved = credential_vault.upsert(instance.id, body.credential)
+        return {"credential": {
+            "instance_handle": public_instance_handle(instance.target_id, instance.id),
+            "updated_at": saved.get("updated_at", ""),
+            "fields": list(saved.get("fields", [])),
+        }}
     except Exception as exc:
         _vault_error(exc)
 
 
 @app.delete("/api/extensions/vault/credentials/{instance_id}")
 async def extension_vault_delete(instance_id: str):
-    _managed_vault_instance(instance_id)
+    instance = _managed_vault_instance(instance_id)
     try:
-        if not credential_vault.delete(instance_id):
-            raise KeyError(instance_id)
+        if not credential_vault.delete(instance.id):
+            raise KeyError(instance.id)
         return {"deleted": True}
     except Exception as exc:
         _vault_error(exc)
@@ -3942,6 +4045,10 @@ async def extension_vault_delete(instance_id: str):
 async def extension_reset_admin_key(body: ExtensionKeyResetRequest):
     body = _bind_confirmed_extension_target(body)
     try:
+        instance = _resolve_stored_instance_handle(body.instance_id, body.target.id)
+        if not instance:
+            raise PermissionError("managed_instance_not_found")
+        body = body.model_copy(update={"instance_id": instance.id})
         return await reset_managed_admin_key(body)
     except Exception as exc:
         raise _safe_extension_ssh_error(
