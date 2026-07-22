@@ -72,7 +72,7 @@ from sync.ingest import authenticate_push_source, validate_image_payload, valida
 import sync.store as sync_store
 from extensions.models import (
     ExtensionBatchTargetsRequest, ExtensionDeployRequest, ExtensionDiscoveryRequest,
-    ExtensionHostKeyConfirmRequest, ExtensionHostKeyProbeRequest, ExtensionKeyResetRequest,
+    ExtensionDeliveryClaimRequest, ExtensionHostKeyConfirmRequest, ExtensionHostKeyProbeRequest, ExtensionKeyResetRequest,
     ExtensionPlanRequest, ExtensionTestRequest,
     ManagedCredentialUpsertRequest, VaultPasswordRequest,
 )
@@ -3679,22 +3679,25 @@ def _safe_extension_ssh_error(exc: Exception, *, error: str, code: str, stage: s
 
 
 def _resolve_discovered_instance_handle(target_id: str, handle: str, discovery: dict) -> dict:
+    candidates = discovery.get("instances", [])
     handle_matches = [
-        item for item in discovery.get("instances", [])
+        (index, item) for index, item in enumerate(candidates)
         if isinstance(item, dict)
         and isinstance(item.get("id"), str)
         and hmac.compare_digest(public_instance_handle(target_id, item["id"]), handle)
     ]
-    if len(handle_matches) == 1:
-        return handle_matches[0]
-    if handle_matches:
-        raise ValueError("deployment_instance_handle_invalid")
     raw_matches = [
-        item for item in discovery.get("instances", [])
+        (index, item) for index, item in enumerate(candidates)
         if isinstance(item, dict) and item.get("id") == handle
     ]
-    if len(raw_matches) == 1:
-        return raw_matches[0]
+    if len(handle_matches) > 1 or len(raw_matches) > 1:
+        raise ValueError("deployment_instance_handle_invalid")
+    if handle_matches and raw_matches and handle_matches[0][0] != raw_matches[0][0]:
+        raise ValueError("deployment_instance_handle_invalid")
+    if handle_matches:
+        return handle_matches[0][1]
+    if raw_matches:
+        return raw_matches[0][1]
     raise ValueError("deployment_instance_handle_invalid")
 
 
@@ -3719,14 +3722,18 @@ def _resolve_plan_discovery_references(body: ExtensionPlanRequest, discovery: di
 def _resolve_stored_instance_handle(instance_handle: str, target_id: str = ""):
     candidates = extensions_store.list_instances(target_id)
     matches = [
-        item for item in candidates
+        (index, item) for index, item in enumerate(candidates)
         if hmac.compare_digest(public_instance_handle(item.target_id, item.id), instance_handle)
     ]
-    if len(matches) == 1:
-        return matches[0]
-    raw_matches = [item for item in candidates if item.id == instance_handle]
-    if len(raw_matches) == 1:
-        return raw_matches[0]
+    raw_matches = [(index, item) for index, item in enumerate(candidates) if item.id == instance_handle]
+    if len(matches) > 1 or len(raw_matches) > 1:
+        return None
+    if matches and raw_matches and matches[0][0] != raw_matches[0][0]:
+        return None
+    if matches:
+        return matches[0][1]
+    if raw_matches:
+        return raw_matches[0][1]
     return None
 
 
@@ -3927,8 +3934,8 @@ async def extension_task_list():
 
 
 @app.post("/api/extensions/tasks/{task_id}/delivery")
-async def extension_task_delivery(task_id: str):
-    delivery = extension_tasks.take_delivery(task_id)
+async def extension_task_delivery(task_id: str, body: ExtensionDeliveryClaimRequest):
+    delivery = extension_tasks.take_delivery(task_id, body.deployment_attempt_id)
     if not delivery:
         raise HTTPException(status_code=404, detail="一次性交付信息不存在或已读取")
     response = {

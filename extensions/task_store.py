@@ -131,6 +131,14 @@ class TaskStore:
             return "inspect_owned_partial_deployment_and_regenerate_plan"
         return "inspect_owned_instance_and_regenerate_plan"
 
+    @staticmethod
+    def cancelled_recovery_action(phase: Any) -> str | None:
+        if phase == "prepare":
+            return "inspect_owned_partial_deployment_and_regenerate_plan"
+        if phase in {"pull", "start", "verify"}:
+            return "inspect_owned_instance_and_regenerate_plan"
+        return None
+
     @classmethod
     def public_task(cls, task: dict[str, Any]) -> dict[str, Any]:
         task_id = task.get("id")
@@ -193,11 +201,11 @@ class TaskStore:
                 status = "interrupted"
                 failed_phase = None
                 error_code = None
-                recovery_action = "regenerate_plan_and_reprovide_credentials"
+                recovery_action = cls.interrupted_recovery_action(task.get("phase"))
         elif status == "cancelled":
             failed_phase = None
             error_code = None
-            recovery_action = None
+            recovery_action = cls.cancelled_recovery_action(task.get("phase"))
         else:
             raise ValueError("unrecognized legacy task status")
         return cls.public_task({
@@ -287,7 +295,11 @@ class TaskStore:
                 "completed": {None, "reverify_ownership_and_rotate_admin_key"},
                 "queued": {None},
                 "running": {None},
-                "cancelled": {None},
+                "cancelled": {
+                    None,
+                    "inspect_owned_partial_deployment_and_regenerate_plan",
+                    "inspect_owned_instance_and_regenerate_plan",
+                },
             }
             if recovery_action not in allowed_actions[task["status"]]:
                 return False

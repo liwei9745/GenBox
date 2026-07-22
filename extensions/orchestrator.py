@@ -867,13 +867,13 @@ class ExtensionTaskManager:
             state.pop("result", None)
             state["failed_phase"] = None
             state["error_code"] = None
-            state["recovery_action"] = None
+            state["recovery_action"] = TaskStore.cancelled_recovery_action(state.get("phase"))
             self.deliveries.pop(task_id, None)
             state["updated_at"] = self._now()
             self._persist()
             return True
 
-    def take_delivery(self, task_id: str) -> dict[str, Any] | None:
+    def take_delivery(self, task_id: str, deployment_attempt_id: str) -> dict[str, Any] | None:
         with self.lock:
             state = self.tasks.get(task_id)
             if not state or state.get("status") != "completed":
@@ -881,6 +881,13 @@ class ExtensionTaskManager:
                 return None
             delivery = self.deliveries.get(task_id)
             if not isinstance(delivery, dict):
+                return None
+            expected_attempt_id = delivery.get("deployment_attempt_id")
+            if (
+                not isinstance(expected_attempt_id, str)
+                or not isinstance(deployment_attempt_id, str)
+                or not hmac.compare_digest(expected_attempt_id, deployment_attempt_id)
+            ):
                 return None
             previous_recovery_action = state.get("recovery_action")
             previous_updated_at = state.get("updated_at")
@@ -897,7 +904,9 @@ class ExtensionTaskManager:
                 state["updated_at"] = previous_updated_at
                 self.deliveries[task_id] = delivery
                 raise
-            return copy.deepcopy(delivery)
+            public_delivery = copy.deepcopy(delivery)
+            public_delivery.pop("deployment_attempt_id", None)
+            return public_delivery
 
     def list_summary(self) -> dict:
         with self.lock:
@@ -991,6 +1000,7 @@ class ExtensionTaskManager:
                     state["progress"] = 100
                     state["status"] = "completed"
                     self.deliveries[task_id] = {
+                        "deployment_attempt_id": request.deployment_attempt_id,
                         "admin_key": None,
                         "instance": public_instance_access(instance),
                     }
@@ -1196,6 +1206,7 @@ class ExtensionTaskManager:
                 state["progress"] = 100
                 state["status"] = "completed"
                 self.deliveries[task_id] = {
+                    "deployment_attempt_id": request.deployment_attempt_id,
                     "admin_key": admin_key,
                     "instance": public_instance_access(instance),
                 }
@@ -1208,7 +1219,7 @@ class ExtensionTaskManager:
                 state.pop("result", None)
                 state["failed_phase"] = None
                 state["error_code"] = None
-                state["recovery_action"] = None
+                state["recovery_action"] = TaskStore.cancelled_recovery_action(state.get("phase"))
                 self.deliveries.pop(task_id, None)
                 state["updated_at"] = self._now()
                 self._persist()

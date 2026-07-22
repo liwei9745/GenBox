@@ -456,6 +456,24 @@ def test_legacy_v1_tasks_are_sanitized_and_atomically_rewritten_to_v2(tmp_path, 
         assert sentinel not in rewritten
 
 
+@pytest.mark.parametrize(("phase", "expected"), [
+    ("prepare", "inspect_owned_partial_deployment_and_regenerate_plan"),
+    ("verify", "inspect_owned_instance_and_regenerate_plan"),
+])
+def test_legacy_invalid_failed_task_migrates_to_phase_aware_interrupted_recovery(tmp_path, phase, expected):
+    path = tmp_path / f"legacy-invalid-{phase}.json"
+    legacy = task(
+        f"legacy-invalid-{phase}", "failed", phase=phase,
+        failed_phase="unknown", error_code="unknown", recovery_action="unknown",
+    )
+    path.write_text(json.dumps({"schema_version": 1, "tasks": [legacy]}), encoding="utf-8")
+
+    loaded = TaskStore(path).load()
+
+    assert loaded[0]["status"] == "interrupted"
+    assert loaded[0]["recovery_action"] == expected
+
+
 def test_recognized_legacy_rewrite_failure_keeps_original_without_public_reexport(tmp_path, monkeypatch):
     path = tmp_path / "extension_tasks.json"
     original = json.dumps({"schema_version": 1, "tasks": [task("legacy-running", "running")]})
@@ -736,6 +754,7 @@ def test_delivery_is_once_only_and_restart_requires_credential_recovery(tmp_path
         "admin_key_available": True, "instance": {"id": "instance-a", "managed": True},
     })
     manager.deliveries["delivery"] = {
+        "deployment_attempt_id": DEPLOYMENT_ATTEMPT_ID,
         "admin_key": "gbx-secret-delivery",
         "instance": {
             "handle": "i-" + "a" * 32, "project": "chatgpt2api", "managed": True,
@@ -745,8 +764,8 @@ def test_delivery_is_once_only_and_restart_requires_credential_recovery(tmp_path
     }
     manager._persist()
     assert "gbx-secret-delivery" not in path.read_text(encoding="utf-8")
-    assert manager.take_delivery("delivery")["admin_key"] == "gbx-secret-delivery"
-    assert manager.take_delivery("delivery") is None
+    assert manager.take_delivery("delivery", DEPLOYMENT_ATTEMPT_ID)["admin_key"] == "gbx-secret-delivery"
+    assert manager.take_delivery("delivery", DEPLOYMENT_ATTEMPT_ID) is None
     assert "result" not in manager.get("delivery")
     assert manager.get("delivery")["recovery_action"] == "reverify_ownership_and_rotate_admin_key"
     persisted = json.loads(path.read_text(encoding="utf-8"))
@@ -761,7 +780,7 @@ def test_delivery_is_once_only_and_restart_requires_credential_recovery(tmp_path
     recovered = rebuilt.get("restart")
     assert "result" not in recovered
     assert recovered["recovery_action"] == "reverify_ownership_and_rotate_admin_key"
-    assert rebuilt.take_delivery("restart") is None
+    assert rebuilt.take_delivery("restart", DEPLOYMENT_ATTEMPT_ID) is None
 
 
 def test_delivery_route_is_once_only_and_persists_consumption(tmp_path, monkeypatch):
@@ -772,6 +791,7 @@ def test_delivery_route_is_once_only_and_persists_consumption(tmp_path, monkeypa
         "admin_key_available": True, "instance": {"id": "instance-a", "managed": True},
     })
     manager.deliveries["delivery"] = {
+        "deployment_attempt_id": DEPLOYMENT_ATTEMPT_ID,
         "admin_key": "route-delivery-key",
         "instance": {
             "handle": "i-" + "b" * 32, "project": "chatgpt2api", "managed": True,
@@ -783,7 +803,16 @@ def test_delivery_route_is_once_only_and_persists_consumption(tmp_path, monkeypa
     monkeypatch.setattr(main, "extension_tasks", manager)
     client = TestClient(main.app, base_url="http://testserver")
 
-    first = client.post("/api/extensions/tasks/delivery/delivery")
+    assert client.post("/api/extensions/tasks/delivery/delivery").status_code == 422
+    assert client.post(
+        "/api/extensions/tasks/delivery/delivery",
+        json={"deployment_attempt_id": "f" * 32},
+    ).status_code == 404
+    assert "delivery" in manager.deliveries
+    first = client.post(
+        "/api/extensions/tasks/delivery/delivery",
+        json={"deployment_attempt_id": DEPLOYMENT_ATTEMPT_ID},
+    )
     assert first.status_code == 200
     assert first.json() == {
         "admin_key": "route-delivery-key",
@@ -794,12 +823,15 @@ def test_delivery_route_is_once_only_and_persists_consumption(tmp_path, monkeypa
         },
         "shown_once": True,
     }
-    assert client.post("/api/extensions/tasks/delivery/delivery").status_code == 404
+    assert client.post(
+        "/api/extensions/tasks/delivery/delivery",
+        json={"deployment_attempt_id": DEPLOYMENT_ATTEMPT_ID},
+    ).status_code == 404
     persisted = json.loads(path.read_text(encoding="utf-8"))
     assert "result" not in persisted["tasks"][0]
 
 
-def test_delivery_route_keeps_multiple_tasks_bound_to_their_exact_instance_handles(tmp_path, monkeypatch):
+def test_two_tabs_cannot_cross_claim_delivery_and_each_initiator_consumes_once(tmp_path, monkeypatch):
     manager = ExtensionTaskManager(store_path=tmp_path / "multiple-deliveries.json")
     for task_id, suffix, host in (
         ("task-a", "a", "first.example"),
@@ -807,6 +839,7 @@ def test_delivery_route_keeps_multiple_tasks_bound_to_their_exact_instance_handl
     ):
         manager.tasks[task_id] = task(task_id)
         manager.deliveries[task_id] = {
+            "deployment_attempt_id": suffix * 32,
             "admin_key": f"key-{suffix}",
             "instance": {
                 "handle": "i-" + suffix * 32, "project": "chatgpt2api",
@@ -818,14 +851,25 @@ def test_delivery_route_keeps_multiple_tasks_bound_to_their_exact_instance_handl
     monkeypatch.setattr(main, "extension_tasks", manager)
     client = TestClient(main.app, base_url="http://testserver")
 
-    second = client.post("/api/extensions/tasks/task-b/delivery").json()
-    first = client.post("/api/extensions/tasks/task-a/delivery").json()
+    assert client.post(
+        "/api/extensions/tasks/task-b/delivery", json={"deployment_attempt_id": "a" * 32},
+    ).status_code == 404
+    assert "task-b" in manager.deliveries
+    second = client.post(
+        "/api/extensions/tasks/task-b/delivery", json={"deployment_attempt_id": "b" * 32},
+    ).json()
+    first = client.post(
+        "/api/extensions/tasks/task-a/delivery", json={"deployment_attempt_id": "a" * 32},
+    ).json()
     assert second["admin_key"] == "key-b"
     assert second["instance"]["handle"] == "i-" + "b" * 32
     assert second["instance"]["console_url"] == "https://second.example"
     assert first["admin_key"] == "key-a"
     assert first["instance"]["handle"] == "i-" + "a" * 32
     assert first["instance"]["console_url"] == "https://first.example"
+    assert client.post(
+        "/api/extensions/tasks/task-b/delivery", json={"deployment_attempt_id": "b" * 32},
+    ).status_code == 404
 
 
 def test_cancel_route_persists_state_and_rejects_second_cancel(tmp_path, monkeypatch):
@@ -877,6 +921,35 @@ def test_cancel_save_failure_still_stops_runner_before_remote_side_effects_conti
         manager.cancel("cancel")
     assert runner.cancelled is True
     assert manager.get("cancel")["status"] == "cancelled"
+    assert manager.get("cancel")["recovery_action"] == (
+        "inspect_owned_partial_deployment_and_regenerate_plan"
+    )
+
+
+@pytest.mark.parametrize(("phase", "expected"), [
+    ("connect", None),
+    ("docker", None),
+    ("prepare", "inspect_owned_partial_deployment_and_regenerate_plan"),
+    ("pull", "inspect_owned_instance_and_regenerate_plan"),
+    ("start", "inspect_owned_instance_and_regenerate_plan"),
+    ("verify", "inspect_owned_instance_and_regenerate_plan"),
+])
+def test_cancel_persists_phase_aware_owned_resource_guidance(tmp_path, phase, expected):
+    class Runner:
+        def done(self):
+            return False
+
+        def cancel(self):
+            pass
+
+    path = tmp_path / f"cancel-{phase}.json"
+    manager = ExtensionTaskManager(store_path=path)
+    manager.tasks[phase] = task(phase, "running", phase=phase)
+    manager.runners[phase] = Runner()
+
+    assert manager.cancel(phase) is True
+    assert manager.get(phase)["recovery_action"] == expected
+    assert json.loads(path.read_text(encoding="utf-8"))["tasks"][0]["recovery_action"] == expected
 
 
 def test_concurrent_delivery_consumption_has_one_winner(tmp_path):
@@ -886,6 +959,7 @@ def test_concurrent_delivery_consumption_has_one_winner(tmp_path):
         "admin_key_available": True, "instance": {"id": "instance-a", "managed": True},
     })
     manager.deliveries["delivery"] = {
+        "deployment_attempt_id": DEPLOYMENT_ATTEMPT_ID,
         "admin_key": "thread-safe-delivery",
         "instance": {
             "handle": "i-" + "c" * 32, "project": "chatgpt2api", "managed": True,
@@ -896,7 +970,9 @@ def test_concurrent_delivery_consumption_has_one_winner(tmp_path):
     manager._persist()
 
     with ThreadPoolExecutor(max_workers=8) as executor:
-        results = list(executor.map(lambda _: manager.take_delivery("delivery"), range(8)))
+        results = list(executor.map(
+            lambda _: manager.take_delivery("delivery", DEPLOYMENT_ATTEMPT_ID), range(8),
+        ))
 
     assert sum(result is not None and result["admin_key"] == "thread-safe-delivery" for result in results) == 1
     assert results.count(None) == 7
@@ -908,6 +984,7 @@ def test_delivery_save_failure_restores_one_time_value_and_public_state(tmp_path
     manager = ExtensionTaskManager(store_path=tmp_path / "delivery-save-failure.json")
     manager.tasks["delivery"] = task("delivery", recovery_action=None)
     delivery = {
+        "deployment_attempt_id": DEPLOYMENT_ATTEMPT_ID,
         "admin_key": "retryable-one-time-key",
         "instance": {
             "handle": "i-" + "e" * 32, "project": "chatgpt2api", "managed": True,
@@ -924,12 +1001,14 @@ def test_delivery_save_failure_restores_one_time_value_and_public_state(tmp_path
 
     monkeypatch.setattr(manager.store, "save", fail_save)
     with pytest.raises(OSError, match="injected delivery save failure"):
-        manager.take_delivery("delivery")
+        manager.take_delivery("delivery", DEPLOYMENT_ATTEMPT_ID)
     assert manager.deliveries["delivery"] == delivery
     assert manager.get("delivery") == before
 
     monkeypatch.setattr(manager.store, "save", real_save)
-    assert manager.take_delivery("delivery") == delivery
+    expected = copy.deepcopy(delivery)
+    expected.pop("deployment_attempt_id")
+    assert manager.take_delivery("delivery", DEPLOYMENT_ATTEMPT_ID) == expected
 
 
 def test_retention_prunes_delivery_and_runner_orphans(tmp_path):
@@ -952,7 +1031,7 @@ def test_retention_prunes_delivery_and_runner_orphans(tmp_path):
     assert "done-00" not in manager.tasks
     assert "done-00" not in manager.deliveries
     assert "done-00" not in manager.runners
-    assert manager.take_delivery("done-00") is None
+    assert manager.take_delivery("done-00", DEPLOYMENT_ATTEMPT_ID) is None
 
 
 def test_done_runner_reference_is_removed_after_task_finishes(tmp_path, monkeypatch):
@@ -994,6 +1073,7 @@ def test_completed_task_cannot_cancel_but_can_take_its_available_delivery(tmp_pa
     })
     manager.runners["completed"] = WaitingRunner()
     manager.deliveries["completed"] = {
+        "deployment_attempt_id": DEPLOYMENT_ATTEMPT_ID,
         "admin_key": "completed-delivery",
         "instance": {
             "handle": "i-" + "d" * 32, "project": "chatgpt2api", "managed": True,
@@ -1007,7 +1087,10 @@ def test_completed_task_cannot_cancel_but_can_take_its_available_delivery(tmp_pa
 
     assert client.post("/api/extensions/tasks/completed/cancel").status_code == 409
     assert manager.get("completed")["status"] == "completed"
-    delivery = client.post("/api/extensions/tasks/completed/delivery")
+    delivery = client.post(
+        "/api/extensions/tasks/completed/delivery",
+        json={"deployment_attempt_id": DEPLOYMENT_ATTEMPT_ID},
+    )
     assert delivery.status_code == 200
     assert delivery.json()["admin_key"] == "completed-delivery"
 
@@ -1020,7 +1103,7 @@ def test_cancelled_task_never_delivers_even_if_key_was_injected(tmp_path):
     manager.deliveries["cancelled"] = "injected-delivery"
     manager._persist()
 
-    assert manager.take_delivery("cancelled") is None
+    assert manager.take_delivery("cancelled", DEPLOYMENT_ATTEMPT_ID) is None
     assert "cancelled" not in manager.deliveries
 
 
@@ -1125,9 +1208,11 @@ def test_cancelled_runner_cannot_overwrite_persisted_cancelled_state(tmp_path, m
         await manager.runners[task_id]
         assert manager.get(task_id)["status"] == "cancelled"
         assert "result" not in manager.get(task_id)
+        assert manager.get(task_id)["recovery_action"] == "inspect_owned_instance_and_regenerate_plan"
         assert manager.resource_reservations.active_count == 0
         persisted = json.loads((tmp_path / "extension_tasks.json").read_text(encoding="utf-8"))
         assert persisted["tasks"][0]["status"] == "cancelled"
+        assert persisted["tasks"][0]["recovery_action"] == "inspect_owned_instance_and_regenerate_plan"
 
     asyncio.run(run())
 
@@ -1778,7 +1863,7 @@ if(source.includes('localStorage')) throw new Error('service drawer uses localSt
     assert result.returncode == 0, result.stderr
 
 
-def test_completed_delivery_renders_once_and_does_not_refetch_in_node():
+def test_first_and_post_consumption_refresh_never_claim_and_target_scoped_network_resume_works_in_node():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''
 const fs = require('fs');
@@ -1795,8 +1880,10 @@ function element(id){
   }
   return elements.get(id);
 }
-let nextStep = 0;
-let deliveryCalls = 0;
+    let nextStep = 0;
+    let deliveryCalls = 0;
+    let deliveryConsumed = false;
+    let instanceLookups = 0;
 let sshCalls = 0;
 const completed={id:'delivery-task',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',label:'Verify service',status:'success'}],created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action:'reverify_ownership_and_rotate_admin_key',failed_phase:null,error_code:null,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'a'.repeat(64),complete:true,changed_fields:[]}};
 const summary={active_task_id:null,latest_task_id:'delivery-task',tasks:[completed]};
@@ -1813,10 +1900,18 @@ global._authFetch=async url=>{
   if(url==='/api/extensions/targets')body={targets:[{id:'saved',name:'Saved VPS',host:'vps.example',port:22,username:'root',host_key:'SHA256:test',chatgpt2api_port:33010}]};
   else if(url==='/api/extensions/catalog')body={categories:[],items:[]};
   else if(url==='/api/extensions/targets/batch')body={target_ids:[]};
-  else if(url==='/api/extensions/tasks')body=summary;
-  else if(url==='/api/extensions/tasks/delivery-task/delivery'){
-    deliveryCalls+=1;
-    body={admin_key:'one-time-key',shown_once:true,instance:{handle:'i-'+"a".repeat(32),project:'chatgpt2api',managed:true,running:true,console_url:'https://console.example',api_url:'https://console.example/v1'}};
+      else if(url==='/api/extensions/tasks')body=summary;
+      else if(url==='/api/extensions/instances?target_id=saved'){
+        instanceLookups+=1;
+        body={instances:[
+          {handle:'i-'+"a".repeat(32),project:'chatgpt2api',managed:true,running:true,console_url:'https://first.example',api_url:'https://first.example/v1'},
+          {handle:'i-'+"b".repeat(32),project:'chatgpt2api',managed:true,running:true,console_url:'https://second.example',api_url:'https://second.example/v1'}
+        ]};
+      }
+      else if(url==='/api/extensions/tasks/delivery-task/delivery'){
+        deliveryCalls+=1;
+        if(deliveryConsumed)return {ok:false,status:404,text:async()=>JSON.stringify({detail:'already consumed'})};
+        body={admin_key:'one-time-key',shown_once:true,instance:{handle:'i-'+"a".repeat(32),project:'chatgpt2api',managed:true,running:true,console_url:'https://console.example',api_url:'https://console.example/v1'}};
   }
   else if(url==='/api/extensions/ssh/test')sshCalls+=1;
   return {ok:true,text:async()=>JSON.stringify(body)};
@@ -1824,18 +1919,35 @@ global._authFetch=async url=>{
 eval(source);
 window.extensionLoadServices=async()=>{};
 const originalNext=window.extensionNext;
-window.extensionNext=step=>{nextStep=step;return originalNext(step)};
-await window.loadExtensions();
-if(deliveryCalls!==1)throw new Error('delivery endpoint was not requested exactly once');
-if(element('extConsoleUrl').value!=='https://console.example' || element('extApiUrl').value!=='https://console.example/v1')throw new Error('safe access URLs were not rendered');
-if(element('extAdminKey').value!=='one-time-key')throw new Error('one-time key was not filled');
-if(element('extOpenConsole').href!=='https://console.example')throw new Error('safe console open action was not rendered');
-if(element('extHandoff').classList.contains('hidden') || nextStep!==5)throw new Error('unclaimed delivery was not displayed hidden='+element('extHandoff').classList.contains('hidden')+' step='+nextStep);
-await window.loadExtensions();
-if(deliveryCalls!==1)throw new Error('delivery endpoint was requested more than once');
-if(nextStep!==5||sshCalls!==0)throw new Error('opaque completed-task restore changed steps or triggered SSH');
+    window.extensionNext=step=>{nextStep=step;return originalNext(step)};
+    await window.loadExtensions();
+    if(deliveryCalls!==0)throw new Error('refresh auto-claimed a one-time delivery');
+    if(element('extAdminKey').value||!element('extHandoff').classList.contains('hidden'))throw new Error('refresh exposed delivery content');
+    if(!element('extensionMessage').textContent.includes('extensions.recovery_rotate_admin_key'))throw new Error('refresh did not show safe key recovery');
+    await window.extensionLoadTarget('saved');
+    if(instanceLookups!==1||nextStep!==3)throw new Error('selected target did not enable target-scoped network resume');
+    deliveryConsumed=true;
+    await window.loadExtensions();
+    if(deliveryCalls!==0)throw new Error('later refresh auto-claimed a one-time delivery');
+    if(nextStep!==3||sshCalls!==0)throw new Error('target-scoped completion resume changed steps or triggered SSH');
 if(source.includes('localStorage'))throw new Error('delivery flow uses localStorage');
 })();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_initiating_tab_claims_show_once_key_with_exact_attempt_only_once_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');let source=fs.readFileSync(process.argv[1],'utf8');const marker=source.lastIndexOf('})();');
+source=source.slice(0,marker)+`window.__test={renderTask,setTarget(){currentTargetId='saved';targetDirty=false}};`+source.slice(marker);
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(id==='extHandoff'?['hidden']:[]);elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(n,v){this[n]=v},removeAttribute(n){this[n]=''}})}return elements.get(id)}
+let calls=0,nextStep=0;const attempt='a'.repeat(32),completed={id:'owned-task',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',label:'Verify service',status:'success'}],recovery_action:'reverify_ownership_and_rotate_admin_key'};
+global.window=global;global.document={getElementById:element,querySelector(){return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'en';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});
+global._authFetch=async(url,options={})=>{if(url!=='/api/extensions/tasks/owned-task/delivery')throw new Error('unexpected request '+url);calls+=1;const claim=JSON.parse(options.body);if(claim.deployment_attempt_id!==attempt||Object.keys(claim).length!==1)throw new Error('claim proof mismatch');return {ok:true,status:200,text:async()=>JSON.stringify({admin_key:'one-time-key',shown_once:true,instance:{handle:'i-'+"a".repeat(32),project:'chatgpt2api',managed:true,running:true,console_url:'https://console.example',api_url:'https://console.example/v1'}})}};
+eval(source);window.extensionNext=step=>{nextStep=step};window.__test.setTarget();
+(async()=>{await Promise.all([window.__test.renderTask(completed,'owned-task',false,attempt),window.__test.renderTask(completed,'owned-task',false,attempt)]);if(calls!==1)throw new Error('initiator claimed delivery more than once');if(element('extAdminKey').value!=='one-time-key'||element('extHandoff').classList.contains('hidden')||nextStep!==5)throw new Error('initiator did not receive show-once key')})().catch(error=>{console.error(error.stack||error);process.exit(1)});
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
@@ -1900,10 +2012,14 @@ if (!element('extensionMessage').textContent.includes('extensions.deploy_error_i
 if (element('extensionMessage').textContent.includes('raw backend detail')) throw new Error('raw failed-task error was rendered');
 const timerCount = timers.length;
 const interrupted = fullTask('interrupted', 'interrupted');
-summary = { active_task_id: null, latest_task_id: 'interrupted', tasks: [interrupted] };
-await window.loadExtensions();
-if (timers.length !== timerCount || !cleared.includes(timers[0]) || !element('extensionMessage').textContent.includes('extensions.recovery_regenerate_plan')) throw new Error('interrupted recovery was not rendered');
-const restoredFailed = fullTask('restored-failed', 'failed', 'verify_owned_instance_stopped_before_retry', 'verify', 'service_verification_failed');
+    summary = { active_task_id: null, latest_task_id: 'interrupted', tasks: [interrupted] };
+    await window.loadExtensions();
+    if (timers.length !== timerCount || !cleared.includes(timers[0]) || !element('extensionMessage').textContent.includes('extensions.recovery_regenerate_plan')) throw new Error('interrupted recovery was not rendered');
+    const cancelled = fullTask('cancelled', 'cancelled', 'inspect_owned_instance_and_regenerate_plan');
+    summary = { active_task_id: null, latest_task_id: 'cancelled', tasks: [cancelled] };
+    await window.loadExtensions();
+    if (!element('extensionMessage').textContent.includes('extensions.deploy_recovery_inspect_owned_instance_and_regenerate_plan')) throw new Error('post-write cancellation recovery was not rendered');
+    const restoredFailed = fullTask('restored-failed', 'failed', 'verify_owned_instance_stopped_before_retry', 'verify', 'service_verification_failed');
 summary = { active_task_id: null, latest_task_id: 'restored-failed', tasks: [restoredFailed] };
 await window.loadExtensions();
 if (!element('extensionMessage').textContent.includes('extensions.deploy_recovery_verify_owned_instance_stopped_before_retry')) throw new Error('restored structured failure was not rendered');
@@ -1916,10 +2032,10 @@ summary = { active_task_id: null, latest_task_id: 'unknown-failed', tasks: [unkn
 await window.loadExtensions();
 if (element('extensionMessage').textContent.includes('raw_unknown')) throw new Error('unknown failure enums were rendered');
 calls.length = 0;
-const completed = fullTask('completed', 'completed', 'reverify_ownership_and_rotate_admin_key');
-summary = { active_task_id: null, latest_task_id: 'completed', tasks: [completed] };
-await window.loadExtensions();
-if (!calls.some(url => url.includes('/delivery'))) throw new Error('completed task did not check the separate one-time delivery endpoint');
+    const completed = fullTask('completed', 'completed', 'reverify_ownership_and_rotate_admin_key');
+    summary = { active_task_id: null, latest_task_id: 'completed', tasks: [completed] };
+    await window.loadExtensions();
+    if (calls.some(url => url.includes('/delivery'))) throw new Error('restored completed task auto-claimed one-time delivery');
 if (!element('extensionMessage').textContent.includes('extensions.recovery_rotate_admin_key')) throw new Error('credential recovery was not rendered');
 if (source.includes('localStorage')) throw new Error('extension task recovery uses localStorage');
 })();
@@ -1997,7 +2113,7 @@ if(element('extTestSshBtn').disabled)throw new Error('SSH test button did not un
     assert result.returncode == 0, result.stderr
 
 
-def test_fresh_completed_poll_displays_and_claims_delivery_once_in_node():
+def test_restored_active_task_that_completes_does_not_claim_delivery_without_attempt_proof_in_node():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''
 const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
@@ -2007,23 +2123,23 @@ global.window=global;global.document={getElementById:element,querySelector(){ret
 const timers=[];global.setInterval=fn=>{timers.push(fn);return fn};let nextStep=0,deliveryCalls=0;
 const running={id:'task-one',status:'running',progress:10,steps:[{id:'connect',status:'running'}],logs:[],result:null};const completed={id:'task-one',status:'completed',progress:100,steps:[{id:'verify',status:'success'}],logs:[],result:{instance:{id:'managed',managed:true},url:'http://console.example',api_url:'http://console.example/v1',admin_key_available:true}};let task=running;
 global._authFetch=async url=>{let body={};if(url==='/api/extensions/targets')body={targets:[]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={active_task_id:'task-one',latest_task_id:'task-one',tasks:[running]};else if(url==='/api/extensions/tasks/task-one')body=task;else if(url==='/api/extensions/tasks/task-one/delivery'){deliveryCalls+=1;body={admin_key:'one-time-key',instance:{handle:'i-'+"b".repeat(32),project:'chatgpt2api',managed:true,running:true,console_url:'https://console.example',api_url:'https://console.example/v1'}}}return {ok:true,text:async()=>JSON.stringify(body)}};
-eval(source);window.extensionLoadServices=async()=>{};window.extensionNext=step=>{nextStep=step};await window.loadExtensions();if(timers.length!==1)throw new Error('active poller missing');task=completed;await Promise.all([timers[0](),timers[0]()]);if(deliveryCalls!==1)throw new Error('delivery was not claimed exactly once');if(nextStep!==5)throw new Error('fresh delivery was not shown');if(element('extAdminKey').value!=='one-time-key'||element('extHandoff').classList.contains('hidden'))throw new Error('fresh delivery content was not visible');
+    eval(source);window.extensionLoadServices=async()=>{};window.extensionNext=step=>{nextStep=step};await window.loadExtensions();if(timers.length!==1)throw new Error('active poller missing');task=completed;await Promise.all([timers[0](),timers[0]()]);if(deliveryCalls!==0)throw new Error('restored active task claimed delivery without attempt proof');if(nextStep===5)throw new Error('restored task exposed delivery completion');if(element('extAdminKey').value||!element('extHandoff').classList.contains('hidden'))throw new Error('restored task exposed delivery content');
 })();
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
 
 
-def test_delivery_failure_is_not_overwritten_by_deploy_success_in_node():
+def test_restored_completion_uses_rotation_guidance_without_delivery_request_in_node():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''
 const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
 (async()=>{
 const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(id==='extHandoff'?['hidden']:[]);elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',href:'',disabled:false,readOnly:false,placeholder:'',dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){}})}return elements.get(id)}
 global.window=global;global.document={getElementById:element,querySelector(){return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});
-const completed={id:'task-one',status:'completed',progress:100,steps:[{id:'verify',status:'success'}],logs:[],result:{instance:{id:'managed',managed:true},url:'http://console.example',api_url:'http://console.example/v1',admin_key_available:true}};
+    const completed={id:'task-one',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',status:'success'}],recovery_action:'reverify_ownership_and_rotate_admin_key',logs:[],result:{instance:{id:'managed',managed:true},url:'http://console.example',api_url:'http://console.example/v1',admin_key_available:true}};
 global._authFetch=async url=>{let body={};if(url==='/api/extensions/targets')body={targets:[]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={active_task_id:null,latest_task_id:'task-one',tasks:[completed]};else if(url==='/api/extensions/tasks/task-one/delivery')return {ok:false,text:async()=>JSON.stringify({detail:'delivery unavailable'})};return {ok:true,text:async()=>JSON.stringify(body)}};
-eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();const output=element('extensionMessage').textContent;if(!output.includes('extensions.delivery_failed_prefix'))throw new Error('delivery failure was not shown');if(output.includes('extensions.deploy_complete'))throw new Error('deploy success overwrote delivery failure');if(element('extAdminKey').value)throw new Error('failed delivery populated a key');
+    eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();const output=element('extensionMessage').textContent;if(!output.includes('extensions.recovery_rotate_admin_key'))throw new Error('safe rotation guidance was not shown');if(output.includes('extensions.delivery_failed_prefix'))throw new Error('restore attempted delivery without proof');if(element('extAdminKey').value)throw new Error('restore populated a key');
 })();
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
@@ -2214,14 +2330,14 @@ const key='SHA256:AAAAAAAAAAAAAAAAAAAA';
 const target={id:'saved',name:'Saved',host:'vps.example',port:22,username:'root',host_key:key,chatgpt2api_port:33010};
 const discovery={ready:true,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'a'.repeat(64),complete:true,changed_fields:[]},capabilities:{can_deploy:true,can_admin:false,docker_available:true,compose_available:true},instances:[],deployment_modes:[{id:'compose',recommended:true,available:true}]};
 const plan={id:'plan-one',ready:true,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'b'.repeat(64),complete:true,changed_fields:[]},registers_locally:false,remote_write_expected:true,clone_requested:false,admin_required:false};
-let deployCalls=0,releaseDeploy;
-global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/discover')body=discovery;else if(url==='/api/extensions/deploy/plan')body={plan,discovery};else if(url==='/api/extensions/deploy'){deployCalls+=1;return await new Promise(resolve=>{releaseDeploy=()=>resolve({ok:true,status:200,text:async()=>JSON.stringify({task_id:'deploy-one'})})})}else if(url==='/api/extensions/tasks/deploy-one')body={id:'deploy-one',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',label:'Verify service',status:'success'}],created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action:'reverify_ownership_and_rotate_admin_key',failed_phase:null,error_code:null,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'c'.repeat(64),complete:true,changed_fields:[]}};else if(url.includes('/delivery'))return {ok:false,status:404,text:async()=>JSON.stringify({detail:'not available'})};else if(url==='/api/extensions/instances')body={instances:[]};return {ok:true,status:200,text:async()=>JSON.stringify(body)}};
+    let deployCalls=0,deliveryClaims=0,deployAttemptId='',releaseDeploy;
+    global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/test')body={ok:true,host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/discover')body=discovery;else if(url==='/api/extensions/deploy/plan')body={plan,discovery};else if(url==='/api/extensions/deploy'){deployCalls+=1;deployAttemptId=JSON.parse(options.body).deployment_attempt_id;return await new Promise(resolve=>{releaseDeploy=()=>resolve({ok:true,status:200,text:async()=>JSON.stringify({task_id:'deploy-one'})})})}else if(url==='/api/extensions/tasks/deploy-one')body={id:'deploy-one',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',label:'Verify service',status:'success'}],created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action:'reverify_ownership_and_rotate_admin_key',failed_phase:null,error_code:null,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'c'.repeat(64),complete:true,changed_fields:[]}};else if(url==='/api/extensions/tasks/deploy-one/delivery'){deliveryClaims+=1;if(JSON.parse(options.body).deployment_attempt_id!==deployAttemptId)throw new Error('delivery claim did not use initiating attempt');body={shown_once:false,instance:{handle:'i-'+"d".repeat(32),project:'chatgpt2api',managed:true,running:true,console_url:'https://console.example',api_url:'https://console.example/v1'}}}else if(url==='/api/extensions/instances')body={instances:[]};return {ok:true,status:200,text:async()=>JSON.stringify(body)}};
 eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();await window.extensionTestSSH(false);window.extensionNext(2);
 if(element('extGuidePrimaryBtn').textContent!=='extensions.discover')throw new Error('step 2 did not begin with discovery');
 await window.extensionPrimaryAction();if(element('extGuidePrimaryBtn').textContent!=='extensions.create_plan')throw new Error('discovery did not advance to plan creation');
 await window.extensionPrimaryAction();if(element('extGuidePrimaryBtn').textContent!=='extensions.confirm_deploy')throw new Error('plan did not advance to explicit deployment confirmation');
 const first=window.extensionPrimaryAction();const second=window.extensionPrimaryAction();for(let i=0;i<8&&!releaseDeploy;i+=1)await Promise.resolve();if(deployCalls!==1)throw new Error('double click created duplicate deployment requests');if(!element('extGuidePrimaryBtn').disabled||element('extGuidePrimaryBtn').textContent!=='status.processing')throw new Error('deployment in flight was not locked');releaseDeploy();await Promise.all([first,second]);if(timers.length!==1)throw new Error('deployment poller was not created once');
-let visited=[];const originalNext=window.extensionNext;window.extensionNext=step=>{visited.push(step);return originalNext(step)};await timers[0]();if(visited.includes(5)||visited.at(-1)!==3)throw new Error('deployment without one-time delivery falsely skipped to completion');if(!element('extSuccessBanner').classList.contains('hidden'))throw new Error('success banner appeared before private-network verification');
+    let visited=[];const originalNext=window.extensionNext;window.extensionNext=step=>{visited.push(step);return originalNext(step)};await timers[0]();if(deliveryClaims!==1)throw new Error('initiating flow did not claim its delivery exactly once');if(visited.includes(5)||visited.at(-1)!==3)throw new Error('deployment without one-time key falsely skipped to completion');if(!element('extSuccessBanner').classList.contains('hidden'))throw new Error('success banner appeared before private-network verification');
 })();
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)

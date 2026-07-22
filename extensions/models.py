@@ -112,6 +112,10 @@ class ExtensionDeployRequest(BaseModel):
     clone_scope: Literal["empty", "media", "working-copy"] = "empty"
 
 
+class ExtensionDeliveryClaimRequest(BaseModel):
+    deployment_attempt_id: str = Field(pattern=r"^[a-f0-9]{32}$", min_length=32, max_length=32)
+
+
 class ExtensionDiscoveryRequest(BaseModel):
     target: ExtensionTarget
     credential: SSHCredential

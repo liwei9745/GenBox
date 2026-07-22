@@ -984,9 +984,10 @@ def test_deploy_completion_opens_delivery_pane_without_falsely_finishing_network
     assert "el('extHandoff').classList.remove('hidden')" in completed_handler
     assert "if(delivery.available)" in completed_handler
     assert "extensionNext(delivery.admin_key?5:3)" in completed_handler
-    assert "if(!restoring)extensionNext(3)" in completed_handler
+    assert "delivery=restoring?{available:false,error:false}:await claimTaskDelivery(taskId,attemptId)" in completed_handler
+    assert "await restoreCompletedNetworkResume(taskId,t.recovery_action)" in completed_handler
     assert "extensions.deploy_complete_save_key_then_network" in completed_handler
-    assert "claimTaskDelivery(taskId)" in completed_handler
+    assert "claimTaskDelivery(taskId,attemptId)" in completed_handler
     assert "el('extConsoleUrl').value=access.console_url||''" in completed_handler
     assert "el('extApiUrl').value=access.api_url||''" in completed_handler
     assert "removeAttribute('href')" in completed_handler
@@ -1010,7 +1011,7 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert handler.index("await json(await _authFetch('/api/extensions/deploy'") < handler.index("clearSessionCredentials()")
     assert "attemptId=createDeploymentAttemptId()" in handler
     assert "deployment_attempt_id:attemptId" in handler
-    assert "await reconcileAmbiguousDeployment(requestOptions)" in handler
+    assert "await reconcileAmbiguousDeployment(requestOptions,attemptId)" in handler
     assert "if(deploymentAttemptConflict(e))" in handler
     assert "await recoverDeploymentIdentity(e)" in handler
     assert "if(deploymentNoTask(e)){recoverDefinitiveNoTask(e);return}" in handler
@@ -1354,13 +1355,13 @@ def test_deploy_task_reports_success(tmp_path, monkeypatch):
         assert recovered["status"] == "completed"
         assert "result" not in recovered
         assert recovered["recovery_action"] == "reverify_ownership_and_rotate_admin_key"
-        assert rebuilt.take_delivery(task_id) is None
-        delivered = manager.take_delivery(task_id)
+        assert rebuilt.take_delivery(task_id, DEPLOYMENT_ATTEMPT_ID) is None
+        delivered = manager.take_delivery(task_id, DEPLOYMENT_ATTEMPT_ID)
         assert delivered["admin_key"].startswith("gbx-")
         assert set(delivered["instance"]) == {
             "handle", "project", "managed", "running", "console_url", "api_url",
         }
-        assert manager.take_delivery(task_id) is None
+        assert manager.take_delivery(task_id, DEPLOYMENT_ATTEMPT_ID) is None
 
     asyncio.run(run())
 
@@ -2357,6 +2358,84 @@ def test_discovered_raw_i_prefixed_ids_remain_compatible_for_existing_and_clone_
         ), ambiguous)
 
 
+def test_discovered_raw_and_opaque_handle_collision_fails_closed_for_existing_and_clone(monkeypatch):
+    import main
+
+    collision = "i-collision"
+    target = ExtensionTarget(
+        id="target-collision", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33010,
+    )
+    credential = SSHCredential(password="session-only")
+    discovery = deployment_discovery(instances=[
+        {"id": collision, "image": "raw-image", "service_port": 33010},
+        {"id": "opaque-instance", "image": "opaque-image", "service_port": 33011},
+    ])
+    monkeypatch.setattr(
+        main, "public_instance_handle",
+        lambda _target_id, instance_id: collision if instance_id == "opaque-instance" else "i-other",
+    )
+
+    with pytest.raises(ValueError, match="deployment_instance_handle_invalid"):
+        main._resolve_plan_discovery_references(ExtensionPlanRequest(
+            target=target, credential=credential, strategy="existing",
+            instance_id=collision, service_port=33010,
+        ), discovery)
+    with pytest.raises(ValueError, match="deployment_instance_handle_invalid"):
+        main._resolve_plan_discovery_references(ExtensionPlanRequest(
+            target=target, credential=credential, strategy="isolated",
+            instance_id="new-instance", service_port=33012,
+            clone_source_id=collision, clone_scope="working-copy",
+        ), discovery)
+
+    monkeypatch.setattr(main, "public_instance_handle", lambda _target_id, _instance_id: collision)
+    same = main._resolve_plan_discovery_references(ExtensionPlanRequest(
+        target=target, credential=credential, strategy="existing",
+        instance_id=collision, service_port=33010,
+    ), deployment_discovery(instances=[discovery["instances"][0]]))
+    assert same.instance_id == collision
+
+
+def test_stored_raw_and_opaque_handle_collision_blocks_vault_and_reset(monkeypatch):
+    import main
+
+    collision = "i-collision"
+    raw = SimpleNamespace(id=collision, target_id="target-a", managed=True)
+    opaque = SimpleNamespace(id="opaque-instance", target_id="target-a", managed=True)
+    monkeypatch.setattr(main.extensions_store, "list_instances", lambda target_id="": [raw, opaque])
+    monkeypatch.setattr(
+        main, "public_instance_handle",
+        lambda _target_id, instance_id: collision if instance_id == "opaque-instance" else "i-other",
+    )
+
+    assert main._resolve_stored_instance_handle(collision) is None
+    assert main._resolve_stored_instance_handle(collision, "target-a") is None
+    with pytest.raises(HTTPException) as vault_error:
+        main._managed_vault_instance(collision)
+    assert vault_error.value.status_code == 404
+
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY,
+    )
+    request = ExtensionKeyResetRequest(
+        target=target, credential=SSHCredential(password="session-only"),
+        trust_host_key=True, expected_host_key=TEST_HOST_KEY, instance_id=collision,
+    )
+    monkeypatch.setattr(main, "_bind_confirmed_extension_target", lambda body: body)
+    monkeypatch.setattr(
+        main, "reset_managed_admin_key",
+        lambda _body: (_ for _ in ()).throw(AssertionError("collision reached remote reset")),
+    )
+    with pytest.raises(HTTPException) as reset_error:
+        asyncio.run(main.extension_reset_admin_key(request))
+    assert reset_error.value.status_code == 400
+
+    monkeypatch.setattr(main.extensions_store, "list_instances", lambda target_id="": [raw])
+    monkeypatch.setattr(main, "public_instance_handle", lambda _target_id, _instance_id: collision)
+    assert main._resolve_stored_instance_handle(collision) is raw
+
+
 @pytest.mark.parametrize("probe", [
     {"status": 1, "complete": False},
     {"status": 0, "complete": False},
@@ -3012,7 +3091,7 @@ def test_vps_password_fields_support_explicit_visibility_toggle_without_autofill
     assert "input.type=visible?'text':'password'" in extensions_js
     assert "button.setAttribute('aria-pressed',String(visible))" in extensions_js
     assert "sshTestInFlight||!requireCredential()" in extensions_js
-    assert "if(!restoring)extensionNext(3)" in extensions_js
+    assert "delivery=restoring?{available:false,error:false}:await claimTaskDelivery(taskId,attemptId)" in extensions_js
 
 
 def test_beginner_mode_hides_duplicate_workflow_buttons_until_advanced_is_opened():
