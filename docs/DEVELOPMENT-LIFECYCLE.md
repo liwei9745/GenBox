@@ -99,16 +99,19 @@ cleaned up only within its owned destination after evidence is captured.
 ## Stage 3: Implement And Verify
 
 Use the isolated clone for chatgpt2api sender changes and GenBox for receiver and
-deployment changes. Verification proceeds from focused tests to end-to-end use:
+deployment changes. Phase acceptance is scoped by `docs/ROADMAP.md`; the steps
+below are ordered capabilities, not a requirement that Phase 4 complete later
+phases or release gates. Verification proceeds from focused tests to end-to-end
+use:
 
 1. Unit and route tests.
 2. Local GenBox UI behavior.
 3. Private-network reachability.
 4. Single-image Push.
 5. Idempotent retry.
-6. Batch progress, interruption, and resume.
-7. Scheduled incremental scan and worker lease.
-8. Cleanup dry run; real cleanup remains disabled until its phase.
+6. Batch progress, interruption, and resume (**Phase 5**).
+7. Scheduled incremental scan and worker lease (**Phase 5**).
+8. Cleanup dry run; real cleanup remains disabled until **Phase 6**.
 
 Record commands and outcomes in `docs/STATUS.md`. A passing mock test does not
 replace live isolation or network evidence.
@@ -153,9 +156,15 @@ Preferred PR sequence:
 When direct code contribution is unsuitable, provide
 `docs/UPSTREAM-VIBE-CODING-GUIDE.md` as an implementation-ready proposal.
 
-## Completion Evidence
+## Phase Acceptance And Full Delivery Evidence
 
-A feature may be called complete only when the record includes:
+A roadmap phase may be called complete when its own acceptance criteria and
+required local/isolated evidence are satisfied. For Phase 4, this is the
+authorized isolated single-image E2E and its receiver/sender evidence; it does
+not include Phase 5 batch/scheduling, Phase 6 cleanup, or public release.
+
+Only a fully delivered cross-project feature, clean redeployment, or upstream
+proposal may be called complete when the record also includes:
 
 - Commit or diff identity.
 - Test commands and results.

@@ -148,9 +148,9 @@ Establish and verify a secure route from chatgpt2api to GenBox.
 
 **Status:** In Progress
 
-**Current boundary:** The GenBox Push v1 receiver exists and has local tests.
-The chatgpt2api sender, per-generation action, and real single-image receipt are
-not yet complete.
+**Current boundary:** In progress and not complete. The work is intentionally
+split into the following evidence-ordered slices; completion of one does not
+claim the next.
 
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`
@@ -159,6 +159,30 @@ not yet complete.
 
 Push one newly generated image from an isolated chatgpt2api development clone to
 GenBox and import it with metadata.
+
+### 4A: Code contract
+
+Implement and independently review the versioned deployment safety contract and
+the receiver/sender code paths it governs. Local tests and review are necessary
+but not real E2E evidence.
+
+### 4B: User workflow
+
+Provide the sender's per-generation Push action and truthful destination/status
+behavior for the isolated development workflow. It must not expose secrets or
+invent remote success.
+
+### 4C: Isolated single-image E2E
+
+With separate authorization, verify one newly generated image through the
+isolated clone and browser workflow, including authenticated receipt, matching
+SHA-256, available metadata, idempotent retry, source retention, and production
+non-mutation.
+
+### 4D: Evidence lock
+
+Freeze the accepted commit and sanitized evidence, perform independent review,
+and update status only when 4A-4C evidence supports the Phase 4 criteria.
 
 ### Deliverables
 

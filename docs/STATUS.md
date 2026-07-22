@@ -1,86 +1,56 @@
 # Current Project Status
 
-**Last updated:** 2026-07-19
-**Current branch:** `codex/phase3-private-network`
+**Last updated:** 2026-07-22
+**Current branch:** `codex/p4-deploy-plan-ux-fix`
 **Current phase:** Phase 4 Single-Image Push End To End — **In Progress**
 
-## Verified Current State
+## Current evidence
 
-- `VERIFIED 2026-07-19`: Phase 2 local acceptance remains complete, and the
-  isolated managed `chatgpt2api-dev` instance is running and presented with
-  usable console/API delivery information. The production source remains
-  outside the current mutation scope.
-- `USER-CONFIRMED 2026-07-19`: the Extension Center completed the guided
-  Tailscale flow and displayed `链路已连接`, `VPS 可访问`, a final Tailnet URL,
-  and the `PRIVATE LINK READY` success state.
-- `VERIFIED 2026-07-19`: `GET
-  /api/extensions/network/local/tailscale/status` reported the local client
-  installed, online, `Running`, and serving the development GenBox application
-  through the separate private-entry port.
-- `VERIFIED 2026-07-19`: `GET /api/extensions/targets` showed that the isolated
-  target contains a non-loopback, non-public `.ts.net` destination and a fresh
-  `network_verified_at` timestamp. The target record contains no enrollment
-  token or SSH credential.
-- `VERIFIED 2026-07-19`: the final HTTP-probe blocker was caused by discarding
-  the Tailscale Serve MagicDNS URL and probing the node's `100.x` address. The
-  same Serve returned HTTP 200 through MagicDNS and HTTP 404 through the raw IP.
-  The network task now validates, probes, returns, and stores the MagicDNS URL;
-  the `100.x` address remains limited to peer identity and reachability checks.
-- `VERIFIED 2026-07-19`: the completion panel now updates the value/status cell
-  instead of overwriting its label, and a saved `network_url` plus
-  `network_verified_at` restores verified display state after target reload.
-- `VERIFIED 2026-07-19`: focused network checks passed (`26 passed`); the full
-  suite passed (`247 passed`); JavaScript syntax checks, Python compilation, and
-  `git diff --check` passed.
-- `.planning/STATE.md` remains owner-controlled and was not modified, staged,
-  discarded, or committed by this work.
+- **VERIFIED 2026-07-22:** GenBox commit `21972ff89419acb80288efdfdaa8750b7809a136`
+  is a locally self-checked candidate, but it is independently **BLOCKED** for
+  Deployment Safety Contract v3 implementation. In particular, binding
+  multiplicity and complete TCP-listener payload handling must be enforced
+  before any deployment plan can advance.
+- **VERIFIED 2026-07-22:** the approved v3 contract is
+  [`docs/deployment-invariants.md`](deployment-invariants.md). It is a
+  design/implementation gate, not evidence of a deployment.
+- **VERIFIED 2026-07-22:** chatgpt2api sender implementation exists at
+  `f4a327d5599b020c66d4aab041a5fa0035d5effe`. Its existence does not prove
+  the GenBox receiver/deployment candidate or an end-to-end transfer.
+- **UNVERIFIED:** a real isolated-VPS, browser-driven, single-image Push end to
+  end. No local/mock test, status panel, plan, or sender commit substitutes for
+  an authenticated receipt, matching SHA-256, metadata result, idempotent retry,
+  source-retention result, and production non-mutation check.
+- **VERIFIED 2026-07-22:** the production chatgpt2api source remains outside
+  the current mutation scope. Host, port, container, and credential facts are
+  intentionally not recorded here without fresh dated discovery evidence.
 
-## Phase 2 Result
+## Phase 4 boundary
 
-Phase 2 is complete. The deployment experience has local test/review evidence
-and a real isolated managed instance with usable delivery information. This
-does not authorize mutation of any production source instance.
+Phase 4 is not complete. Its roadmap acceptance is phase-scoped: one newly
+generated image from an isolated development clone imports once with available
+metadata; retry is idempotent; failure retains the source; relevant receiver and
+sender tests pass. Batch/scheduling are Phase 5. Cleanup is Phase 6. A clean
+GitHub redeployment and upstream/release publication are separate authority and
+completion gates.
 
-## Phase 3 Result
+## Exact next step
 
-Phase 3 is complete for the Tailscale primary adapter:
+Implement Deployment Safety Contract v3 locally against the fixed candidate:
+enforce multiplicity-preserving binding comparison, complete TCP-listener
+evidence, closed strategy/path conditions, in-memory-only execution snapshots,
+public evidence manifests, reservation/CAS ordering, and post-creation
+ownership-marker handling. Add the contract-driven focused tests, freeze the
+commit, and obtain independent fixed-commit review. Do not start user
+deployment, remote discovery, or VPS/browser E2E without separate authorization.
 
-- local Tailscale and the separate GenBox Serve entry are verified;
-- the isolated VPS is enrolled and has a valid private address;
-- peer reachability succeeds;
-- the VPS-to-GenBox `/api/setup/status` application probe succeeds;
-- the final destination is a validated MagicDNS URL, not loopback, a raw
-  public address, or the service console URL;
-- enrollment and SSH session secrets are absent from persisted target data;
-- failures retain stage-specific, sanitized Chinese diagnostics and recovery
-  actions.
+## Resume constraints
 
-NetBird and Cloudflare remain non-executable alternatives and are not part of
-this completion claim.
-
-## Next Objective
-
-Begin Phase 4 Loop 1: complete one single-image Push from the isolated
-`chatgpt2api-dev` instance into the GenBox media library.
-
-1. Reconfirm the existing GenBox Push v1 receiver contract and source-key
-   provisioning without reusing the GenBox administrator key.
-2. In the chatgpt2api sender repository/worktree, implement the shared Push
-   client and destination status probe using the Phase 3 MagicDNS base URL.
-3. Add one per-generation Push action for the isolated development instance.
-4. Verify one image imports once with SHA-256 and available metadata; repeat the
-   same request to prove idempotency.
-5. Confirm every failure path retains the source image. Source deletion remains
-   disabled.
-
-## Resume Instructions
-
-1. Do not reinstall Tailscale, generate another Auth Key, or rerun Phase 3
-   unless the saved network verification becomes stale or the Tailnet changes.
-2. Keep the current private destination as non-secret target metadata. Keep the
-   Push key separate from URLs, browser storage, the GenBox administrator key,
-   and chatgpt2api management credentials.
-3. Use only the isolated `chatgpt2api-dev` instance for Phase 4 development and
-   end-to-end testing. Existing production services remain read-only.
-4. Before recording Phase 4 success, capture a sanitized receipt, SHA-256,
-   metadata result, idempotent retry result, and source-retention evidence.
+- Require SSH host-key verification; production is read-only and all development
+  resources must be isolated.
+- Keep administrator, Push, management, SSH, and enrollment secrets separate and
+  out of URLs, browser storage, Git, normal logs, screenshots, and status text.
+- Source deletion remains disabled unless an authenticated receipt, matching
+  SHA-256, `safe_to_delete_source=true`, and explicit user opt-in all exist.
+- Record any later isolated-E2E evidence as **VERIFIED**, **USER-CONFIRMED**, or
+  **UNVERIFIED** as appropriate; never describe local evidence as real E2E.

@@ -20,10 +20,12 @@ snapshot containing:
 - the one active objective and its explicit non-goals;
 - owner exclusions that no agent may modify, stage, discard, or commit.
 
-For the current Phase 3 work, `.planning/STATE.md` is an owner exclusion. A
-dirty worktree is not cleaned automatically. Recovery uses a new corrective
-commit or `git revert` of a known agent commit; agents never use reset or
-checkout to erase owner changes.
+`.planning/STATE.md` is task-scoped and owner-controlled, not a permanent
+project-wide exclusion. Do not read or modify it unless the task explicitly
+names it and assigns an owner; when assigned, it remains auxiliary recovery
+state and cannot override the formal documents. A dirty worktree is not cleaned
+automatically. Recovery uses a new corrective commit or `git revert` of a known
+agent commit; agents never use reset or checkout to erase owner changes.
 
 Reviewers inspect a fixed commit, fixed diff, or explicit file snapshot. The
 builder stops before review starts, the review range stays frozen, all review
@@ -31,11 +33,14 @@ results are collected, and only then may the single writer resume fixes.
 
 ## Single Active Objective Ledger
 
-Only one primary product slice may be `In Progress`. The current slice is
-Phase 3 Private Network Automation, starting with truthful Tailscale-only UI
-and recovery output. Phase 2 remains incomplete but is blocked/deferred while
-Phase 3 is the active dependency slice. A later phase cannot be started merely
+Only one primary product slice may be `In Progress`. Its identity comes from
+`docs/STATUS.md` and `docs/ROADMAP.md`; a later phase cannot be started merely
 to avoid an unresolved acceptance criterion.
+
+Every task reads the minimal capsule: `AGENTS.md`, `docs/STATUS.md`, the current
+roadmap phase, and that phase's explicit topic contract. Read decisions only
+when architecture/security is touched; read lifecycle only for VPS, release, or
+upstream work; read `.planning/STATE.md` only when explicitly assigned.
 
 Each loop records:
 
@@ -168,8 +173,9 @@ The default loop is:
 
 Every handoff includes changed files, frozen commit/diff, verification commands,
 evidence classification, known gaps, owner exclusions, and the next action. A
-commit contains one accepted loop and never stages `.planning/STATE.md`, runtime
-storage, credentials, media, logs, or unrelated owner changes.
+commit contains one accepted loop and never stages runtime storage, credentials,
+media, logs, or unrelated owner changes; `.planning/STATE.md` is staged only
+when it is explicitly task-owned and its auxiliary scope is verified.
 
 ## Smart GSD Policy
 
@@ -180,9 +186,9 @@ Before invoking any GSD skill:
 
 1. read its complete `SKILL.md` and every required workflow/reference;
 2. inspect its dispatch requirements and complete write set;
-3. reject it if it may modify protected `.planning/STATE.md`, historical
-   `.planning/ROADMAP.md`, unrelated phase directories, create unsafe worktrees,
-   auto-commit, or start parallel writers;
+3. reject it if it may modify `.planning/STATE.md` without explicit task-owner
+   authorization, historical `.planning/ROADMAP.md`, unrelated phase
+   directories, create unsafe worktrees, auto-commit, or start parallel writers;
 4. declare whether execution is typed GSD routing or the generic opaque-model
    workaround;
 5. declare allowed artifact paths and whether commits are forbidden.
