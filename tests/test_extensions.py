@@ -24,6 +24,7 @@ from extensions.models import (
 import extensions.store as store
 from extensions.orchestrator import (
     CLONE_SCRUB_KEYS,
+    DeploymentSnapshotChangedError,
     DeploymentPlanManager,
     ExtensionTaskManager,
     SSHAuthenticationError,
@@ -1651,6 +1652,10 @@ def test_deployment_without_docker_or_elevation_fails_before_remote_write(tmp_pa
     [
         ("status", "Up 25 hours"),
         ("data_size_mb", 141),
+        ("ports", "0.0.0.0:3000->80/tcp, :::3000->80/tcp"),
+        ("clone_available", False),
+        ("image", "mirror.example/chatgpt2api@sha256:" + ("a" * 64)),
+        ("environment.listening_ports", [3000, 3010]),
     ],
 )
 def test_empty_instance_confirmation_ignores_unrelated_volatile_instance_observations(
@@ -1687,7 +1692,10 @@ def test_empty_instance_confirmation_ignores_unrelated_volatile_instance_observa
         initial,
     )
     fresh = copy.deepcopy(initial)
-    fresh["instances"][0][field] = fresh_value
+    if field == "environment.listening_ports":
+        fresh["environment"]["listening_ports"] = fresh_value
+    else:
+        fresh["instances"][0][field] = fresh_value
 
     async def fake_discover(_request, *, path_checks=None):
         assert path_checks == plan["path_requirements"]
@@ -1710,6 +1718,183 @@ def test_empty_instance_confirmation_ignores_unrelated_volatile_instance_observa
         assert plan["id"] not in plan_manager.plans
 
     asyncio.run(run())
+
+
+def test_empty_plan_snapshot_drift_reports_sanitized_category_and_fields():
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33011,
+    )
+    source = {
+        "id": "source-app", "container_id": "source-container", "name": "source-app",
+        "image": "ghcr.io/yukkcat/chatgpt2api:latest", "source_image_id": "sha256:source-image",
+        "status": "Up 24 hours", "ports": "0.0.0.0:3000->80/tcp",
+        "published_ports": [3000], "service_port": 3000,
+        "compose_project": "source-project", "compose_service": "app",
+        "working_dir": "/srv/source", "data_dir": "/srv/source/data",
+        "config_file": "/srv/source/config.json", "data_size_mb": 140,
+        "clone_available": True, "managed": False, "ownership": "compose",
+    }
+    initial = deployment_discovery(instances=[source], listening_ports=[3000])
+    manager = DeploymentPlanManager()
+    plan = manager.create(
+        ExtensionPlanRequest(
+            target=target, credential=SSHCredential(password="session-only"),
+            strategy="isolated", clone_scope="empty", service_port=33011,
+        ),
+        initial,
+    )
+    fresh = copy.deepcopy(initial)
+    fresh["instances"][0]["source_image_id"] = "sha256:untrusted-value-must-not-escape"
+
+    with pytest.raises(DeploymentSnapshotChangedError) as excinfo:
+        manager.validate_fresh_snapshot(plan, fresh)
+
+    diagnostic = excinfo.value.diagnostic
+    assert diagnostic["code"] == "deployment_snapshot_changed"
+    assert diagnostic["stage"] == "fresh_discovery"
+    assert diagnostic["task_created"] is False
+    assert diagnostic["snapshot_category"] == "stable_snapshot"
+    assert diagnostic["changed_fields"] == ["instances.source_image_id"]
+    serialized = json.dumps(diagnostic, ensure_ascii=False)
+    assert "untrusted-value-must-not-escape" not in serialized
+    assert "host.example" not in serialized
+    assert "deploy-user" not in serialized
+
+
+@pytest.mark.parametrize(
+    ("drift", "category", "changed_field"),
+    [
+        ("requested_port", "requested_port", "environment.listening_ports"),
+        ("target_instance", "target_instance", "instances.id"),
+        ("docker_version", "stable_snapshot", "environment.docker_version"),
+        ("home_dir", "stable_snapshot", "environment.home_dir"),
+        ("container_id", "stable_snapshot", "instances.container_id"),
+        ("source_image_id", "stable_snapshot", "instances.source_image_id"),
+        ("published_ports", "stable_snapshot", "instances.published_ports"),
+        ("compose_project", "stable_snapshot", "instances.compose_project"),
+        ("data_dir", "stable_snapshot", "instances.data_dir"),
+        ("managed", "stable_snapshot", "instances.managed"),
+        ("ownership", "stable_snapshot", "instances.ownership"),
+        ("capability", "stable_snapshot", "privileges.can_deploy"),
+    ],
+)
+def test_empty_plan_snapshot_keeps_security_bindings_fail_closed(drift, category, changed_field):
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33011,
+    )
+    source = {
+        "id": "source-app", "container_id": "source-container", "name": "source-app",
+        "image": "ghcr.io/yukkcat/chatgpt2api:latest", "source_image_id": "sha256:source-image",
+        "status": "Up 24 hours", "ports": "0.0.0.0:3000->80/tcp",
+        "published_ports": [3000], "service_port": 3000,
+        "compose_project": "source-project", "compose_service": "app",
+        "working_dir": "/srv/source", "data_dir": "/srv/source/data",
+        "config_file": "/srv/source/config.json", "data_size_mb": 140,
+        "clone_available": True, "managed": False, "ownership": "compose",
+    }
+    initial = deployment_discovery(instances=[source], listening_ports=[3000])
+    manager = DeploymentPlanManager()
+    plan = manager.create(
+        ExtensionPlanRequest(
+            target=target, credential=SSHCredential(password="session-only"),
+            instance_id="chatgpt2api-dev", strategy="isolated",
+            clone_scope="empty", service_port=33011,
+        ),
+        initial,
+    )
+    fresh = copy.deepcopy(initial)
+    if drift == "requested_port":
+        fresh["environment"]["listening_ports"].append(33011)
+    elif drift == "target_instance":
+        fresh["instances"].append({
+            **source, "id": "chatgpt2api-dev", "container_id": "target-container",
+        })
+    elif drift in {"docker_version", "home_dir"}:
+        fresh["environment"][drift] = {
+            "docker_version": "28.0",
+            "home_dir": "/home/changed-user",
+        }[drift]
+    elif drift == "capability":
+        fresh["privileges"]["can_deploy"] = False
+    else:
+        fresh["instances"][0][drift] = {
+            "container_id": "changed-container",
+            "source_image_id": "sha256:changed-image",
+            "published_ports": [3001],
+            "compose_project": "changed-project",
+            "data_dir": "/srv/changed/data",
+            "managed": True,
+            "ownership": "managed",
+        }[drift]
+
+    with pytest.raises(DeploymentSnapshotChangedError) as excinfo:
+        manager.validate_fresh_snapshot(plan, fresh)
+
+    assert excinfo.value.diagnostic["snapshot_category"] == category
+    assert changed_field in excinfo.value.diagnostic["changed_fields"]
+
+
+@pytest.mark.parametrize("plan_kind", ["existing", "source_clone"])
+@pytest.mark.parametrize(
+    ("field", "fresh_value"),
+    [
+        ("status", "Up 25 hours"),
+        ("ports", "0.0.0.0:3000->80/tcp, :::3000->80/tcp"),
+        ("data_size_mb", 141),
+        ("clone_available", False),
+        ("image", "mirror.example/chatgpt2api@sha256:" + ("a" * 64)),
+        ("environment.listening_ports", [3000, 3010]),
+    ],
+)
+def test_existing_and_source_clone_snapshot_contracts_remain_exact(plan_kind, field, fresh_value):
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33011,
+    )
+    credential = SSHCredential(password="session-only", elevation="passwordless_sudo")
+    source = {
+        "id": "source-app", "container_id": "source-container", "name": "source-app",
+        "image": "ghcr.io/yukkcat/chatgpt2api:latest", "source_image_id": "sha256:source-image",
+        "status": "Up 24 hours", "ports": "0.0.0.0:3000->80/tcp",
+        "published_ports": [3000], "service_port": 3000,
+        "compose_project": "source-project", "compose_service": "app",
+        "working_dir": "/srv/source", "data_dir": "/srv/source/data",
+        "config_file": "/srv/source/config.json", "data_size_mb": 140,
+        "clone_available": True, "managed": False, "ownership": "compose",
+    }
+    initial = deployment_discovery(
+        instances=[source],
+        privileges=privilege_snapshot(elevation="passwordless_sudo", can_admin=True),
+        listening_ports=[3000],
+        path_conditions={
+            "install_dir_absent": True,
+            "clone_data_dir_present": True,
+            "clone_config_file_present": True,
+        },
+    )
+    manager = DeploymentPlanManager()
+    if plan_kind == "existing":
+        request = ExtensionPlanRequest(
+            target=target, credential=credential, instance_id="source-app",
+            strategy="existing", service_port=3000,
+        )
+    else:
+        request = ExtensionPlanRequest(
+            target=target, credential=credential, instance_id="chatgpt2api-dev",
+            strategy="isolated", service_port=33011, image=source["image"],
+            clone_source_id="source-app", clone_scope="working-copy",
+        )
+    plan = manager.create(request, initial)
+    fresh = copy.deepcopy(initial)
+    if field == "environment.listening_ports":
+        fresh["environment"]["listening_ports"] = fresh_value
+    else:
+        fresh["instances"][0][field] = fresh_value
+
+    with pytest.raises(DeploymentSnapshotChangedError):
+        manager.validate_fresh_snapshot(plan, fresh)
 
 
 @pytest.mark.parametrize("drift", [

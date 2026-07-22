@@ -223,12 +223,18 @@ def test_deploy_route_definitive_pre_task_failures_are_typed_no_task_diagnostics
 
     assert response.status_code in {400, 409}
     detail = response.json()["detail"]
-    assert detail["diagnostic"] == {
+    expected_diagnostic = {
         "code": code,
         "stage": stage,
         "retry_safe": False,
         "task_created": False,
     }
+    if scenario == "snapshot_drift":
+        expected_diagnostic.update({
+            "snapshot_category": "plan_snapshot",
+            "changed_fields": ["discovery_snapshot"],
+        })
+    assert detail["diagnostic"] == expected_diagnostic
     assert SECRET_SENTINEL not in response.text
     assert all(secret not in response.text for secret in ("vps.example", "deploy-user"))
 

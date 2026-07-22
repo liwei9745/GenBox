@@ -111,12 +111,25 @@ class DeploymentPlanUnavailableError(DeploymentNoTaskError):
 
 
 class DeploymentSnapshotChangedError(DeploymentNoTaskError):
-    def __init__(self):
+    _CATEGORIES = {
+        "plan_snapshot", "stable_snapshot", "capacity_threshold", "path_requirements",
+        "existing_instance", "requested_port", "target_instance",
+    }
+
+    def __init__(self, *, category: str = "stable_snapshot", changed_fields: list[str] | None = None):
         super().__init__(
             "deployment_snapshot_changed",
             code="deployment_snapshot_changed",
             stage="fresh_discovery",
         )
+        safe_category = category if category in self._CATEGORIES else "stable_snapshot"
+        safe_fields = sorted({
+            field for field in (changed_fields or [])
+            if isinstance(field, str) and re.fullmatch(r"[a-z][a-z0-9_.-]{0,79}", field)
+        })[:24]
+        self.diagnostic["snapshot_category"] = safe_category
+        if safe_fields:
+            self.diagnostic["changed_fields"] = safe_fields
 
 
 class DeploymentResourceReservations:
@@ -1152,6 +1165,23 @@ extension_tasks = ExtensionTaskManager()
 
 
 class DeploymentPlanManager:
+    _CAPABILITY_SNAPSHOT_FIELDS = (
+        "auth_kind", "elevation_contract", "is_root", "docker_access",
+        "elevated_docker_access", "passwordless_sudo", "password_sudo",
+        "can_admin", "can_deploy", "diagnostic_code",
+    )
+    _EXISTING_SNAPSHOT_FIELDS = (
+        "id", "container_id", "name", "image", "source_image_id", "status", "ports",
+        "published_ports", "service_port", "compose_project", "compose_service", "working_dir",
+        "data_dir", "config_file", "data_size_mb", "clone_available", "managed", "ownership",
+    )
+    _ENVIRONMENT_SNAPSHOT_FIELDS = (
+        "docker_version", "compose_version", "home_dir", "listening_ports",
+    )
+    _EMPTY_PLAN_OBSERVATION_FIELDS = (
+        "image", "status", "ports", "data_size_mb", "clone_available",
+    )
+
     def __init__(self):
         self.plans: dict[str, dict] = {}
         self.lock = threading.RLock()
@@ -1178,22 +1208,17 @@ class DeploymentPlanManager:
         privileges = discovery.get("privileges")
         if not isinstance(privileges, dict):
             return {}
-        fields = {
-            "auth_kind", "elevation_contract", "is_root", "docker_access",
-            "elevated_docker_access", "passwordless_sudo", "password_sudo",
-            "can_admin", "can_deploy", "diagnostic_code",
+        return {
+            key: copy.deepcopy(privileges.get(key))
+            for key in DeploymentPlanManager._CAPABILITY_SNAPSHOT_FIELDS
         }
-        return {key: copy.deepcopy(privileges.get(key)) for key in fields}
 
     @staticmethod
     def _existing_snapshot(existing: dict) -> dict[str, Any]:
-        fields = (
-            "id", "container_id", "name", "image", "source_image_id", "status", "ports",
-            "published_ports", "service_port",
-            "compose_project", "compose_service", "working_dir", "data_dir", "config_file",
-            "data_size_mb", "clone_available", "managed", "ownership",
-        )
-        return {key: copy.deepcopy(existing.get(key)) for key in fields}
+        return {
+            key: copy.deepcopy(existing.get(key))
+            for key in DeploymentPlanManager._EXISTING_SNAPSHOT_FIELDS
+        }
 
     @staticmethod
     def _environment_snapshot(environment: dict) -> dict[str, Any]:
@@ -1214,6 +1239,59 @@ class DeploymentPlanManager:
             "instances": instances,
             "privileges": cls._capability_snapshot(discovery),
         }
+
+    @staticmethod
+    def _snapshot_shape_valid(snapshot: Any) -> bool:
+        return (
+            isinstance(snapshot, dict)
+            and "host_key" in snapshot
+            and isinstance(snapshot.get("environment"), dict)
+            and isinstance(snapshot.get("instances"), list)
+            and isinstance(snapshot.get("privileges"), dict)
+        )
+
+    @classmethod
+    def _fresh_snapshot_projection(cls, plan: dict, snapshot: dict) -> dict[str, Any]:
+        projected = copy.deepcopy(snapshot)
+        if plan.get("strategy") != "existing" and plan.get("clone_scope") == "empty":
+            # Empty plans consume none of the unrelated instances' display or
+            # clone-eligibility observations. Requested-port occupancy is
+            # checked separately; structured identity, ports, paths, and
+            # source_image_id remain exact in this projection.
+            environment = projected.get("environment")
+            if isinstance(environment, dict):
+                environment.pop("listening_ports", None)
+            for instance in projected.get("instances", []):
+                if not isinstance(instance, dict):
+                    continue
+                for field in cls._EMPTY_PLAN_OBSERVATION_FIELDS:
+                    instance.pop(field, None)
+        return projected
+
+    @classmethod
+    def _snapshot_changed_fields(cls, expected: dict, actual: dict) -> list[str]:
+        changed: set[str] = set()
+        if expected.get("host_key") != actual.get("host_key"):
+            changed.add("host_key")
+        expected_environment = expected.get("environment", {})
+        actual_environment = actual.get("environment", {})
+        for field in cls._ENVIRONMENT_SNAPSHOT_FIELDS:
+            if expected_environment.get(field) != actual_environment.get(field):
+                changed.add(f"environment.{field}")
+        expected_instances = expected.get("instances", [])
+        actual_instances = actual.get("instances", [])
+        if len(expected_instances) != len(actual_instances):
+            changed.add("instances")
+        for expected_instance, actual_instance in zip(expected_instances, actual_instances):
+            for field in cls._EXISTING_SNAPSHOT_FIELDS:
+                if expected_instance.get(field) != actual_instance.get(field):
+                    changed.add(f"instances.{field}")
+        expected_privileges = expected.get("privileges", {})
+        actual_privileges = actual.get("privileges", {})
+        for field in cls._CAPABILITY_SNAPSHOT_FIELDS:
+            if expected_privileges.get(field) != actual_privileges.get(field):
+                changed.add(f"privileges.{field}")
+        return sorted(changed) or ["discovery_snapshot"]
 
     def _create(self, request: ExtensionPlanRequest, discovery: dict) -> dict:
         validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
@@ -1382,38 +1460,59 @@ class DeploymentPlanManager:
 
     def validate_fresh_snapshot(self, plan: dict, discovery: dict) -> None:
         expected = plan.get("discovery_snapshot")
-        if not isinstance(expected, dict):
-            raise DeploymentSnapshotChangedError()
-        actual = self._discovery_snapshot(discovery)
-        if plan.get("strategy") != "existing" and plan.get("clone_scope") == "empty":
-            expected = copy.deepcopy(expected)
-            actual = copy.deepcopy(actual)
-            for snapshot in (expected, actual):
-                for instance in snapshot.get("instances", []):
-                    instance.pop("status", None)
-                    instance.pop("data_size_mb", None)
-        if actual != expected:
-            raise DeploymentSnapshotChangedError()
-        required_disk_mb = int(plan.get("required_disk_mb") or 0)
-        disk_free_mb = int(discovery.get("environment", {}).get("disk_free_mb") or 0)
-        if disk_free_mb < required_disk_mb:
-            raise DeploymentSnapshotChangedError()
-        path_conditions = discovery.get("path_conditions", {})
-        if any(path_conditions.get(name) is not True for name in plan.get("path_requirements", {})):
-            raise DeploymentSnapshotChangedError()
+        if not self._snapshot_shape_valid(expected):
+            raise DeploymentSnapshotChangedError(
+                category="plan_snapshot",
+                changed_fields=["discovery_snapshot"],
+            )
+        environment = discovery.get("environment", {})
         if plan.get("strategy") == "existing":
             existing = next(
                 (item for item in discovery.get("instances", []) if item.get("id") == plan.get("instance_id")),
                 None,
             )
-            if not existing or existing.get("service_port") != plan.get("service_port"):
-                raise DeploymentSnapshotChangedError()
+            if not existing:
+                raise DeploymentSnapshotChangedError(
+                    category="existing_instance",
+                    changed_fields=["instances.id"],
+                )
+            if existing.get("service_port") != plan.get("service_port"):
+                raise DeploymentSnapshotChangedError(
+                    category="existing_instance",
+                    changed_fields=["instances.service_port"],
+                )
         else:
-            environment = discovery.get("environment", {})
             if plan.get("service_port") in environment.get("listening_ports", []):
-                raise DeploymentSnapshotChangedError()
+                raise DeploymentSnapshotChangedError(
+                    category="requested_port",
+                    changed_fields=["environment.listening_ports"],
+                )
             if any(item.get("id") == plan.get("instance_id") for item in discovery.get("instances", [])):
-                raise DeploymentSnapshotChangedError()
+                raise DeploymentSnapshotChangedError(
+                    category="target_instance",
+                    changed_fields=["instances.id"],
+                )
+        actual = self._discovery_snapshot(discovery)
+        expected = self._fresh_snapshot_projection(plan, expected)
+        actual = self._fresh_snapshot_projection(plan, actual)
+        if actual != expected:
+            raise DeploymentSnapshotChangedError(
+                category="stable_snapshot",
+                changed_fields=self._snapshot_changed_fields(expected, actual),
+            )
+        required_disk_mb = int(plan.get("required_disk_mb") or 0)
+        disk_free_mb = int(discovery.get("environment", {}).get("disk_free_mb") or 0)
+        if disk_free_mb < required_disk_mb:
+            raise DeploymentSnapshotChangedError(
+                category="capacity_threshold",
+                changed_fields=["environment.disk_free_mb"],
+            )
+        path_conditions = discovery.get("path_conditions", {})
+        if any(path_conditions.get(name) is not True for name in plan.get("path_requirements", {})):
+            raise DeploymentSnapshotChangedError(
+                category="path_requirements",
+                changed_fields=["path_conditions"],
+            )
 
     def take(self, plan_id: str, request: ExtensionDeployRequest) -> dict:
         with self.lock:
