@@ -91,7 +91,8 @@ def prepare_deployment_plan(monkeypatch, request: ExtensionDeployRequest):
         "host_key": target.host_key,
         "environment": {
             "docker_version": "27.0", "compose_version": "2.30",
-            "home_dir": f"/home/{target.username}", "listening_ports": [], "disk_free_mb": 5000,
+            "home_dir": f"/home/{target.username}", "listening_ports": [],
+            "listening_ports_probe": {"status": 0, "complete": True}, "disk_free_mb": 5000,
         },
         "privileges": privileges,
         "instances": [],
@@ -898,7 +899,8 @@ def test_concurrent_plans_for_same_resource_allow_one_task_and_retain_loser_plan
         "host_key": "SHA256:public-test",
         "environment": {
             "docker_version": "27.0", "compose_version": "2.30",
-            "home_dir": "/home/deploy-user", "listening_ports": [], "disk_free_mb": 5000,
+            "home_dir": "/home/deploy-user", "listening_ports": [],
+            "listening_ports_probe": {"status": 0, "complete": True}, "disk_free_mb": 5000,
         },
         "privileges": privileges,
         "instances": [],

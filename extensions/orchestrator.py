@@ -1172,11 +1172,12 @@ class DeploymentPlanManager:
     )
     _EXISTING_SNAPSHOT_FIELDS = (
         "id", "container_id", "name", "image", "source_image_id", "status", "ports",
-        "published_ports", "service_port", "compose_project", "compose_service", "working_dir",
+        "published_ports", "service_port", "port_bindings", "port_bindings_complete",
+        "compose_project", "compose_service", "working_dir",
         "data_dir", "config_file", "data_size_mb", "clone_available", "managed", "ownership",
     )
     _ENVIRONMENT_SNAPSHOT_FIELDS = (
-        "docker_version", "compose_version", "home_dir", "listening_ports",
+        "docker_version", "compose_version", "home_dir", "listening_ports", "listening_ports_probe",
     )
     _EMPTY_PLAN_OBSERVATION_FIELDS = (
         "image", "status", "ports", "data_size_mb", "clone_available",
@@ -1227,7 +1228,66 @@ class DeploymentPlanManager:
             "compose_version": copy.deepcopy(environment.get("compose_version")),
             "home_dir": copy.deepcopy(environment.get("home_dir")),
             "listening_ports": sorted(int(port) for port in environment.get("listening_ports", [])),
+            "listening_ports_probe": copy.deepcopy(environment.get("listening_ports_probe")),
         }
+
+    @staticmethod
+    def _listener_probe_complete(environment: dict) -> bool:
+        probe = environment.get("listening_ports_probe")
+        status = probe.get("status") if isinstance(probe, dict) else None
+        return (
+            isinstance(probe, dict)
+            and isinstance(status, int)
+            and not isinstance(status, bool)
+            and status == 0
+            and probe.get("complete") is True
+        )
+
+    @staticmethod
+    def _canonical_port_bindings(value: Any) -> list[dict[str, Any]] | None:
+        if not isinstance(value, list):
+            return None
+        canonical: set[tuple[str, int, int, str]] = set()
+        for binding in value:
+            if not isinstance(binding, dict):
+                return None
+            try:
+                host_ip = ipaddress.ip_address(str(binding.get("host_ip") or "")).compressed
+                host_port = int(binding.get("host_port"))
+                container_port = int(binding.get("container_port"))
+            except (TypeError, ValueError):
+                return None
+            protocol = str(binding.get("protocol") or "").lower()
+            if (
+                isinstance(binding.get("host_port"), bool)
+                or isinstance(binding.get("container_port"), bool)
+                or not 1 <= host_port <= 65535
+                or not 1 <= container_port <= 65535
+                or protocol not in {"tcp", "udp", "sctp"}
+            ):
+                return None
+            canonical.add((host_ip, host_port, container_port, protocol))
+        return [
+            {
+                "host_ip": host_ip,
+                "host_port": host_port,
+                "container_port": container_port,
+                "protocol": protocol,
+            }
+            for host_ip, host_port, container_port, protocol in sorted(canonical)
+        ]
+
+    @classmethod
+    def _port_bindings_complete(cls, discovery: dict) -> bool:
+        for instance in discovery.get("instances", []):
+            bindings = instance.get("port_bindings") if isinstance(instance, dict) else None
+            if (
+                not isinstance(instance, dict)
+                or instance.get("port_bindings_complete") is not True
+                or cls._canonical_port_bindings(bindings) != bindings
+            ):
+                return False
+        return True
 
     @classmethod
     def _discovery_snapshot(cls, discovery: dict) -> dict[str, Any]:
@@ -1312,6 +1372,11 @@ class DeploymentPlanManager:
             raise ValueError("发现结果与当前 SSH 认证种类不一致，请重新检测")
         if verified_capability.get("elevation_contract") != identity["elevation_contract"]:
             raise ValueError("发现结果与当前提权方式不一致，请重新检测")
+        if not self._port_bindings_complete(discovery):
+            raise DeploymentPlanConfirmationError(
+                "deployment_port_bindings_incomplete",
+                code="deployment_port_bindings_incomplete",
+            )
         if request.strategy == "existing":
             existing = next((item for item in discovery.get("instances", []) if item.get("id") == request.instance_id), None)
             if not existing:
@@ -1350,6 +1415,11 @@ class DeploymentPlanManager:
         if not IMAGE_PATTERN.fullmatch(request.image):
             raise ValueError("镜像引用格式无效")
         environment = discovery.get("environment", {})
+        if not self._listener_probe_complete(environment):
+            raise DeploymentPlanConfirmationError(
+                "deployment_listener_probe_incomplete",
+                code="deployment_listener_probe_incomplete",
+            )
         if not environment.get("docker_version") or not environment.get("compose_version"):
             raise ValueError("VPS 缺少 Docker 或 Docker Compose v2")
         if request.service_port in environment.get("listening_ports", []):
@@ -1383,7 +1453,7 @@ class DeploymentPlanManager:
             key: clone_source.get(key, "")
             for key in (
                 "id", "container_id", "name", "image", "status", "ports",
-                "published_ports", "service_port",
+                "published_ports", "service_port", "port_bindings", "port_bindings_complete",
                 "compose_project", "working_dir", "data_dir", "config_file",
                 "data_size_mb", "managed", "ownership",
             )
@@ -1466,6 +1536,11 @@ class DeploymentPlanManager:
                 changed_fields=["discovery_snapshot"],
             )
         environment = discovery.get("environment", {})
+        if not self._port_bindings_complete(discovery):
+            raise DeploymentSnapshotChangedError(
+                category="stable_snapshot",
+                changed_fields=["instances.port_bindings"],
+            )
         if plan.get("strategy") == "existing":
             existing = next(
                 (item for item in discovery.get("instances", []) if item.get("id") == plan.get("instance_id")),
@@ -1482,6 +1557,11 @@ class DeploymentPlanManager:
                     changed_fields=["instances.service_port"],
                 )
         else:
+            if not self._listener_probe_complete(environment):
+                raise DeploymentSnapshotChangedError(
+                    category="requested_port",
+                    changed_fields=["environment.listening_ports_probe"],
+                )
             if plan.get("service_port") in environment.get("listening_ports", []):
                 raise DeploymentSnapshotChangedError(
                     category="requested_port",

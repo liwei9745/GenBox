@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 
 from extensions.models import (
     ExtensionDeployRequest,
@@ -57,22 +58,46 @@ def privilege_snapshot(*, elevation="none", can_admin=False, auth_kind="password
     }
 
 
-def environment_snapshot(*, listening_ports=None, disk_free_mb=5000, home_dir="/home/deploy-user"):
+def environment_snapshot(
+    *, listening_ports=None, disk_free_mb=5000, home_dir="/home/deploy-user",
+    listening_ports_probe=None,
+):
     return {
         "docker_version": "27.0",
         "compose_version": "2.30",
         "home_dir": home_dir,
         "listening_ports": list(listening_ports or []),
+        "listening_ports_probe": copy.deepcopy(
+            {"status": 0, "complete": True}
+            if listening_ports_probe is None else listening_ports_probe
+        ),
         "disk_free_mb": disk_free_mb,
     }
 
 
-def deployment_discovery(*, instances=None, privileges=None, listening_ports=None, path_conditions=None):
+def deployment_discovery(
+    *, instances=None, privileges=None, listening_ports=None, path_conditions=None,
+    listening_ports_probe=None,
+):
+    normalized_instances = copy.deepcopy(list(instances or []))
+    for instance in normalized_instances:
+        if "port_bindings" not in instance:
+            instance["port_bindings"] = [
+                {
+                    "host_ip": "0.0.0.0", "host_port": port,
+                    "container_port": 80, "protocol": "tcp",
+                }
+                for port in instance.get("published_ports", [])
+            ]
+        instance.setdefault("port_bindings_complete", True)
     return {
         "host_key": TEST_HOST_KEY,
-        "environment": environment_snapshot(listening_ports=listening_ports),
+        "environment": environment_snapshot(
+            listening_ports=listening_ports,
+            listening_ports_probe=listening_ports_probe,
+        ),
         "privileges": privileges or privilege_snapshot(),
-        "instances": list(instances or []),
+        "instances": normalized_instances,
         "path_conditions": dict(path_conditions or {}),
     }
 
@@ -1478,7 +1503,7 @@ def test_existing_plan_binds_discovery_and_local_registration_preserves_managed_
         ),
         fresh_discovery,
     )
-    assert plan["existing_snapshot"] == discovered
+    assert plan["existing_snapshot"] == fresh_discovery["instances"][0]
     assert "session-secret" not in json.dumps(plan)
 
     class Result:
@@ -1735,7 +1760,10 @@ def test_empty_plan_snapshot_drift_reports_sanitized_category_and_fields():
         "config_file": "/srv/source/config.json", "data_size_mb": 140,
         "clone_available": True, "managed": False, "ownership": "compose",
     }
-    initial = deployment_discovery(instances=[source], listening_ports=[3000])
+    initial = deployment_discovery(
+        instances=[source], listening_ports=[3000],
+        path_conditions={"install_dir_absent": True},
+    )
     manager = DeploymentPlanManager()
     plan = manager.create(
         ExtensionPlanRequest(
@@ -1760,6 +1788,227 @@ def test_empty_plan_snapshot_drift_reports_sanitized_category_and_fields():
     assert "untrusted-value-must-not-escape" not in serialized
     assert "host.example" not in serialized
     assert "deploy-user" not in serialized
+
+
+@pytest.mark.parametrize("fresh_binding", [
+    {"host_ip": "127.0.0.1", "host_port": 3000, "container_port": 80, "protocol": "tcp"},
+    {"host_ip": "0.0.0.0", "host_port": 3000, "container_port": 80, "protocol": "udp"},
+    {"host_ip": "0.0.0.0", "host_port": 3000, "container_port": 81, "protocol": "tcp"},
+])
+def test_empty_plan_rejects_host_ip_protocol_or_container_port_binding_drift(fresh_binding):
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33011,
+    )
+    source = {
+        "id": "source-app", "container_id": "source-container", "name": "source-app",
+        "image": "ghcr.io/yukkcat/chatgpt2api:latest", "source_image_id": "sha256:source-image",
+        "status": "Up 24 hours", "ports": "0.0.0.0:3000->80/tcp",
+        "published_ports": [3000], "service_port": 3000,
+        "port_bindings": [{
+            "host_ip": "0.0.0.0", "host_port": 3000,
+            "container_port": 80, "protocol": "tcp",
+        }],
+        "port_bindings_complete": True,
+        "compose_project": "source-project", "compose_service": "app",
+        "working_dir": "/srv/source", "data_dir": "/srv/source/data",
+        "config_file": "/srv/source/config.json", "data_size_mb": 140,
+        "clone_available": True, "managed": False, "ownership": "compose",
+    }
+    initial = deployment_discovery(
+        instances=[source], listening_ports=[3000],
+        path_conditions={"install_dir_absent": True},
+    )
+    manager = DeploymentPlanManager()
+    plan = manager.create(ExtensionPlanRequest(
+        target=target, credential=SSHCredential(password="session-only"),
+        strategy="isolated", clone_scope="empty", service_port=33011,
+    ), initial)
+    fresh = copy.deepcopy(initial)
+    fresh["instances"][0]["port_bindings"] = [fresh_binding]
+
+    with pytest.raises(DeploymentSnapshotChangedError) as excinfo:
+        manager.validate_fresh_snapshot(plan, fresh)
+
+    assert excinfo.value.diagnostic["snapshot_category"] == "stable_snapshot"
+    assert excinfo.value.diagnostic["changed_fields"] == ["instances.port_bindings"]
+
+
+def test_empty_plan_accepts_raw_port_display_reordering_when_bindings_are_unchanged():
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33011,
+    )
+    source = {
+        "id": "source-app", "container_id": "source-container", "name": "source-app",
+        "image": "ghcr.io/yukkcat/chatgpt2api:latest", "source_image_id": "sha256:source-image",
+        "status": "Up 24 hours",
+        "ports": "0.0.0.0:3000->80/tcp, :::3000->80/tcp",
+        "published_ports": [3000], "service_port": 3000,
+        "port_bindings": [
+            {"host_ip": "0.0.0.0", "host_port": 3000, "container_port": 80, "protocol": "tcp"},
+            {"host_ip": "::", "host_port": 3000, "container_port": 80, "protocol": "tcp"},
+        ],
+        "port_bindings_complete": True,
+        "compose_project": "source-project", "compose_service": "app",
+        "working_dir": "/srv/source", "data_dir": "/srv/source/data",
+        "config_file": "/srv/source/config.json", "data_size_mb": 140,
+        "clone_available": True, "managed": False, "ownership": "compose",
+    }
+    initial = deployment_discovery(
+        instances=[source], listening_ports=[3000],
+        path_conditions={"install_dir_absent": True},
+    )
+    manager = DeploymentPlanManager()
+    plan = manager.create(ExtensionPlanRequest(
+        target=target, credential=SSHCredential(password="session-only"),
+        strategy="isolated", clone_scope="empty", service_port=33011,
+    ), initial)
+    fresh = copy.deepcopy(initial)
+    fresh["instances"][0]["ports"] = ":::3000->80/tcp, 0.0.0.0:3000->80/tcp"
+
+    manager.validate_fresh_snapshot(plan, fresh)
+
+
+def test_plan_creation_and_confirmation_fail_closed_without_canonical_bindings():
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33011,
+    )
+    source = {
+        "id": "source-app", "container_id": "source-container", "name": "source-app",
+        "image": "ghcr.io/yukkcat/chatgpt2api:latest", "source_image_id": "sha256:source-image",
+        "status": "Up 24 hours", "ports": "0.0.0.0:3000->80/tcp",
+        "published_ports": [3000], "service_port": 3000,
+        "port_bindings": [], "port_bindings_complete": False,
+        "compose_project": "source-project", "compose_service": "app",
+        "working_dir": "/srv/source", "data_dir": "/srv/source/data",
+        "config_file": "/srv/source/config.json", "data_size_mb": 140,
+        "clone_available": True, "managed": False, "ownership": "compose",
+    }
+    invalid = deployment_discovery(instances=[source], listening_ports=[3000])
+    manager = DeploymentPlanManager()
+    request = ExtensionPlanRequest(
+        target=target, credential=SSHCredential(password="session-only"),
+        strategy="isolated", clone_scope="empty", service_port=33011,
+    )
+    with pytest.raises(ValueError, match="deployment_port_bindings_incomplete"):
+        manager.create(request, invalid)
+
+    valid = copy.deepcopy(invalid)
+    valid["instances"][0]["port_bindings"] = [{
+        "host_ip": "0.0.0.0", "host_port": 3000,
+        "container_port": 80, "protocol": "tcp",
+    }]
+    valid["instances"][0]["port_bindings_complete"] = True
+    plan = manager.create(request, valid)
+    with pytest.raises(DeploymentSnapshotChangedError) as excinfo:
+        manager.validate_fresh_snapshot(plan, invalid)
+    assert excinfo.value.diagnostic["changed_fields"] == ["instances.port_bindings"]
+
+
+@pytest.mark.parametrize("probe", [
+    {"status": 1, "complete": False},
+    {"status": 0, "complete": False},
+    {"status": False, "complete": True},
+])
+def test_plan_creation_rejects_untrustworthy_listener_probe_with_sanitized_diagnostic(probe):
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33011,
+    )
+    manager = DeploymentPlanManager()
+    discovery = deployment_discovery(
+        listening_ports=[], listening_ports_probe=probe,
+        path_conditions={"install_dir_absent": True},
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        manager.create(ExtensionPlanRequest(
+            target=target, credential=SSHCredential(password="session-only"),
+            strategy="isolated", clone_scope="empty", service_port=33011,
+        ), discovery)
+
+    assert str(excinfo.value) == "deployment_listener_probe_incomplete"
+    assert excinfo.value.diagnostic == {
+        "code": "deployment_listener_probe_incomplete",
+        "stage": "plan_confirmation",
+        "retry_safe": False,
+        "task_created": False,
+    }
+    assert manager.plans == {}
+
+
+@pytest.mark.parametrize("probe_case", ["occupied", "incomplete", "failed", "garbled"])
+def test_deploy_route_rejects_occupied_or_untrustworthy_listener_probe_without_side_effects(
+    tmp_path, monkeypatch, probe_case,
+):
+    import main
+    from extensions import orchestrator
+
+    target = ExtensionTarget(
+        id="target-a", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33011,
+    )
+    credential = SSHCredential(password="session-only")
+    initial = deployment_discovery(
+        listening_ports=[3000], path_conditions={"install_dir_absent": True},
+    )
+    plan_manager = DeploymentPlanManager()
+    plan = plan_manager.create(ExtensionPlanRequest(
+        target=target, credential=credential, strategy="isolated",
+        clone_scope="empty", service_port=33011,
+    ), initial)
+    fresh = copy.deepcopy(initial)
+    if probe_case == "occupied":
+        fresh["environment"]["listening_ports"].append(33011)
+    else:
+        fresh["environment"]["listening_ports"] = []
+        fresh["environment"]["listening_ports_probe"] = {
+            "status": 1 if probe_case == "failed" else 0,
+            "complete": False,
+        }
+    remote_writes = []
+
+    async def fake_discover(_request, *, path_checks=None):
+        return copy.deepcopy(fresh)
+
+    async def forbidden_run(*_args, **_kwargs):
+        remote_writes.append(True)
+
+    async def run():
+        monkeypatch.setattr(orchestrator, "deployment_plans", plan_manager)
+        monkeypatch.setattr("extensions.discovery.discover_environment", fake_discover)
+        task_manager = ExtensionTaskManager(store_path=tmp_path / f"{probe_case}.json")
+        monkeypatch.setattr(task_manager, "_run", forbidden_run)
+        monkeypatch.setattr(main, "extension_tasks", task_manager)
+        monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+        body = ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
+            target=target, credential=credential, strategy="isolated",
+            clone_scope="empty", service_port=33011, confirmed_plan_id=plan["id"],
+        )
+        with pytest.raises(HTTPException) as excinfo:
+            await main.extension_start_deploy(body)
+
+        assert excinfo.value.status_code == 400
+        diagnostic = excinfo.value.detail["diagnostic"]
+        assert diagnostic["code"] == "deployment_snapshot_changed"
+        assert diagnostic["task_created"] is False
+        assert diagnostic["snapshot_category"] == "requested_port"
+        assert diagnostic["changed_fields"] == [
+            "environment.listening_ports" if probe_case == "occupied"
+            else "environment.listening_ports_probe"
+        ]
+        assert plan["id"] in plan_manager.plans
+        assert "_lease_token" not in plan_manager.plans[plan["id"]]
+        assert task_manager.tasks == {}
+        assert task_manager.runners == {}
+        assert task_manager.resource_reservations.active_count == 0
+        assert remote_writes == []
+        assert not (tmp_path / f"{probe_case}.json").exists()
+
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize(
@@ -1809,7 +2058,7 @@ def test_empty_plan_snapshot_keeps_security_bindings_fail_closed(drift, category
         fresh["environment"]["listening_ports"].append(33011)
     elif drift == "target_instance":
         fresh["instances"].append({
-            **source, "id": "chatgpt2api-dev", "container_id": "target-container",
+            **fresh["instances"][0], "id": "chatgpt2api-dev", "container_id": "target-container",
         })
     elif drift in {"docker_version", "home_dir"}:
         fresh["environment"][drift] = {
@@ -2046,6 +2295,7 @@ def test_isolated_working_copy_plan_requires_space_and_scrubs_push_state():
             "id": "chatgpt2api-warp", "image": "ghcr.io/yukkcat/chatgpt2api:latest",
             "data_dir": "/opt/chatgpt2api/data", "config_file": "/opt/chatgpt2api/config.json",
             "data_size_mb": 1200, "clone_available": True,
+            "port_bindings": [], "port_bindings_complete": True,
         }],
     }
     plan = manager.create(request, discovery)
@@ -2073,7 +2323,7 @@ def test_working_copy_plan_rejects_image_drift():
         "instances": [{
             "id": "chatgpt2api-warp", "image": "ghcr.io/yukkcat/chatgpt2api@sha256:abc",
             "data_dir": "/data", "config_file": "/config.json", "data_size_mb": 100,
-            "clone_available": True,
+            "clone_available": True, "port_bindings": [], "port_bindings_complete": True,
         }],
     }
 
@@ -2100,6 +2350,7 @@ def test_working_copy_plan_uses_existing_local_image_baseline():
             "id": "chatgpt2api-warp", "image": baseline_image,
             "source_image_id": "sha256:production-image", "data_dir": "/data",
             "config_file": "/config.json", "data_size_mb": 100, "clone_available": True,
+            "port_bindings": [], "port_bindings_complete": True,
         }],
     })
 
@@ -2143,6 +2394,7 @@ def test_clone_plan_rejects_insufficient_disk():
                     "id": "chatgpt2api-warp", "data_dir": "/data", "config_file": "/config.json",
                     "image": "ghcr.io/yukkcat/chatgpt2api:latest",
                     "data_size_mb": 1000, "clone_available": True,
+                    "port_bindings": [], "port_bindings_complete": True,
                 }],
         })
     except ValueError as exc:

@@ -1,6 +1,7 @@
 """Read-only VPS environment and chatgpt2api instance discovery."""
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 import shlex
@@ -75,6 +76,89 @@ def _parse_published_ports(value: str) -> list[int]:
     return sorted(ports)
 
 
+def _parse_canonical_port_bindings(value: str) -> tuple[list[dict[str, Any]], bool]:
+    if not isinstance(value, str) or not value.strip():
+        return [], False
+    try:
+        raw_bindings = json.loads(value)
+    except (TypeError, ValueError):
+        return [], False
+    if not isinstance(raw_bindings, dict):
+        return [], False
+    canonical: set[tuple[str, int, int, str]] = set()
+    for container_identity, bindings in raw_bindings.items():
+        match = re.fullmatch(r"(\d{1,5})/([A-Za-z0-9]+)", str(container_identity or ""))
+        if not match:
+            return [], False
+        container_port = int(match.group(1))
+        protocol = match.group(2).lower()
+        if not 1 <= container_port <= 65535 or protocol not in {"tcp", "udp", "sctp"}:
+            return [], False
+        if not isinstance(bindings, list) or not bindings:
+            return [], False
+        for binding in bindings:
+            if not isinstance(binding, dict):
+                return [], False
+            host_ip = str(binding.get("HostIp") or "").strip()
+            if host_ip.startswith("[") and host_ip.endswith("]"):
+                host_ip = host_ip[1:-1]
+            raw_host_port = binding.get("HostPort")
+            if isinstance(raw_host_port, bool):
+                return [], False
+            try:
+                host_ip = ipaddress.ip_address(host_ip).compressed
+                host_port = int(raw_host_port or 0)
+            except (TypeError, ValueError):
+                return [], False
+            if not 1 <= host_port <= 65535:
+                return [], False
+            canonical.add((host_ip, host_port, container_port, protocol))
+    return [
+        {
+            "host_ip": host_ip,
+            "host_port": host_port,
+            "container_port": container_port,
+            "protocol": protocol,
+        }
+        for host_ip, host_port, container_port, protocol in sorted(canonical)
+    ], True
+
+
+def _listener_port(value: str) -> int | None:
+    token = str(value or "").strip().rstrip(",")
+    if not token or ":" not in token:
+        return None
+    port_text = token.rsplit(":", 1)[-1]
+    if not port_text.isdigit():
+        return None
+    port = int(port_text)
+    return port if 1 <= port <= 65535 else None
+
+
+def _parse_listening_ports(status: int, value: str) -> tuple[list[int], bool]:
+    if status != 0:
+        return [], False
+    ports: set[int] = set()
+    for raw_line in str(value or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        lowered = line.lower()
+        if lowered.startswith(("active internet connections", "proto ", "state ", "netid ")):
+            continue
+        parts = line.split()
+        candidates = [line] if len(parts) == 1 else parts[3:5]
+        port = None
+        for candidate in candidates:
+            port = _listener_port(candidate)
+            if port is not None:
+                break
+        if port is None:
+            return [], False
+        ports.add(port)
+    return sorted(ports), True
+
+
 async def discover_environment(
     request: ExtensionDiscoveryRequest,
     *,
@@ -86,6 +170,7 @@ async def discover_environment(
     try:
         privileges = await _diagnose_privileges(connection, request.credential)
         facts: dict[str, str] = {}
+        fact_statuses: dict[str, int] = {}
         commands = {
             "os": "(. /etc/os-release 2>/dev/null && printf '%s %s' \"$ID\" \"$VERSION_ID\") || uname -s",
             "arch": "uname -m",
@@ -97,21 +182,21 @@ async def discover_environment(
             "compose": "docker compose version --short 2>/dev/null",
             "python": "python3 --version 2>/dev/null",
             "uv": "uv --version 2>/dev/null",
-            "ports": "(ss -H -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | awk '{print $4}'",
+            "ports": (
+                "if output=$(ss -H -ltn 2>/dev/null); then printf '%s\\n' \"$output\"; "
+                "elif output=$(netstat -ltn 2>/dev/null); then printf '%s\\n' \"$output\"; "
+                "else exit 1; fi"
+            ),
             "containers": "docker ps -a --no-trunc --format '{{json .}}' 2>/dev/null",
         }
         for key, command in commands.items():
             runner = _run_docker if key in {"docker", "compose", "containers"} else _run
             if runner is _run_docker:
-                _, facts[key] = await runner(connection, command, request.credential, privileges)
+                fact_statuses[key], facts[key] = await runner(connection, command, request.credential, privileges)
             else:
-                _, facts[key] = await runner(connection, command)
+                fact_statuses[key], facts[key] = await runner(connection, command)
 
-        ports = sorted({
-            int(match.group(1))
-            for line in facts["ports"].splitlines()
-            if (match := re.search(r":(\d+)$", line.strip()))
-        })
+        ports, ports_complete = _parse_listening_ports(fact_statuses["ports"], facts["ports"])
         path_conditions: dict[str, bool] = {}
         for name, check in (path_checks or {}).items():
             path = str(check.get("path") or "")
@@ -172,13 +257,15 @@ async def discover_environment(
                 f"genbox-chatgpt2api-source:{container_id[:12]}"
                 if image_id.startswith("sha256:") else configured_image or image
             )
-            _, structured_ports = await _run_docker(
+            structured_port_status, structured_ports = await _run_docker(
                 connection,
                 f"docker inspect --format '{{{{json .NetworkSettings.Ports}}}}' {shlex.quote(container_id)} 2>/dev/null",
                 request.credential,
                 privileges,
             )
             published_ports = _parse_published_ports(structured_ports)
+            port_bindings, port_bindings_complete = _parse_canonical_port_bindings(structured_ports)
+            port_bindings_complete = structured_port_status == 0 and port_bindings_complete
             _, data_dir = await _run_docker(connection, (
                 f"docker inspect --format '{{{{range .Mounts}}}}{{{{if eq .Destination \"/app/data\"}}}}"
                 f"{{{{.Source}}}}{{{{end}}}}{{{{end}}}}' {container_id} 2>/dev/null"
@@ -213,6 +300,8 @@ async def discover_environment(
                 "ports": str(item.get("Ports") or ""),
                 "published_ports": published_ports,
                 "service_port": published_ports[0] if len(published_ports) == 1 else None,
+                "port_bindings": port_bindings,
+                "port_bindings_complete": port_bindings_complete,
                 "compose_project": compose_project,
                 "compose_service": compose_service,
                 "working_dir": working_dir,
@@ -254,6 +343,10 @@ async def discover_environment(
                 "home_dir": facts["home"],
                 "docker_version": facts["docker"], "compose_version": facts["compose"],
                 "python_version": facts["python"], "uv_version": facts["uv"], "listening_ports": ports,
+                "listening_ports_probe": {
+                    "status": fact_statuses["ports"],
+                    "complete": ports_complete,
+                },
             },
             "instances": instances,
             "path_conditions": path_conditions,

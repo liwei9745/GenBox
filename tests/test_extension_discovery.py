@@ -1,7 +1,14 @@
 import asyncio
 import shlex
 
-from extensions.discovery import _parse_published_ports, discover_environment
+import pytest
+
+from extensions.discovery import (
+    _parse_canonical_port_bindings,
+    _parse_listening_ports,
+    _parse_published_ports,
+    discover_environment,
+)
 from extensions.models import ExtensionDiscoveryRequest, ExtensionTarget, SSHCredential
 
 
@@ -18,6 +25,48 @@ def test_structured_docker_port_parser_requires_unique_valid_host_ports():
         '{"80/tcp":[{"HostPort":"33010"}],"443/tcp":[{"HostPort":"33443"}]}'
     ) == [33010, 33443]
     assert _parse_published_ports("not-json") == []
+
+
+def test_canonical_docker_bindings_include_exposure_identity_and_are_deterministic():
+    bindings, complete = _parse_canonical_port_bindings(
+        '{"443/UDP":[{"HostIp":"::1","HostPort":"33443"}],'
+        '"80/tcp":[{"HostIp":"0.0.0.0","HostPort":"33010"},'
+        '{"HostIp":"127.0.0.1","HostPort":"33010"}]}'
+    )
+
+    assert complete is True
+    assert bindings == [
+        {"host_ip": "0.0.0.0", "host_port": 33010, "container_port": 80, "protocol": "tcp"},
+        {"host_ip": "127.0.0.1", "host_port": 33010, "container_port": 80, "protocol": "tcp"},
+        {"host_ip": "::1", "host_port": 33443, "container_port": 443, "protocol": "udp"},
+    ]
+
+
+@pytest.mark.parametrize("value", [
+    "",
+    "not-json",
+    '{"80/tcp":[{"HostPort":"33010"}]}',
+    '{"80/tcp":[{"HostIp":"0.0.0.0","HostPort":true}]}',
+    '{"invalid":[{"HostIp":"0.0.0.0","HostPort":"33010"}]}',
+    '{"80/tcp":null}',
+])
+def test_canonical_docker_bindings_fail_closed_when_identity_is_incomplete(value):
+    bindings, complete = _parse_canonical_port_bindings(value)
+    assert bindings == []
+    assert complete is False
+
+
+@pytest.mark.parametrize(("status", "output", "ports", "complete"), [
+    (0, "", [], True),
+    (0, "0.0.0.0:22\n:::33010", [22, 33010], True),
+    (0, "LISTEN 0 128 0.0.0.0:22 0.0.0.0:*", [22], True),
+    (1, "", [], False),
+    (0, "unsupported listener output", [], False),
+])
+def test_listener_probe_never_treats_failure_or_garbled_output_as_no_listeners(
+    status, output, ports, complete,
+):
+    assert _parse_listening_ports(status, output) == (ports, complete)
 
 
 def test_docker_helper_retries_failed_size_probe_with_sudo():
@@ -163,7 +212,13 @@ def test_discovery_is_read_only_and_classifies_existing_instance(monkeypatch):
         assert result["instances"][0]["source_image_id"] == "sha256:source-image"
         assert result["instances"][0]["service_port"] == 3000
         assert result["instances"][0]["published_ports"] == [3000]
+        assert result["instances"][0]["port_bindings_complete"] is True
+        assert result["instances"][0]["port_bindings"] == [{
+            "host_ip": "0.0.0.0", "host_port": 3000,
+            "container_port": 80, "protocol": "tcp",
+        }]
         assert result["environment"]["listening_ports"] == [22, 3000]
+        assert result["environment"]["listening_ports_probe"] == {"status": 0, "complete": True}
         assert not any(token in command for command in commands for token in (" rm ", " stop ", " down", " up "))
 
     asyncio.run(run())
