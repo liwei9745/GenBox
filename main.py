@@ -78,7 +78,7 @@ from extensions.models import (
 )
 from extensions.orchestrator import (
     DeploymentAttemptConflictError, DeploymentNoTaskError, SSHAuthenticationError, SSHConnectionError,
-    deployment_plans, extension_tasks, public_instance_handle, reset_managed_admin_key,
+    deployment_plans, extension_tasks, public_instance_access, public_instance_handle, reset_managed_admin_key,
     probe_host_key,
     test_connection as test_extension_connection,
 )
@@ -3679,15 +3679,23 @@ def _safe_extension_ssh_error(exc: Exception, *, error: str, code: str, stage: s
 
 
 def _resolve_discovered_instance_handle(target_id: str, handle: str, discovery: dict) -> dict:
-    matches = [
+    handle_matches = [
         item for item in discovery.get("instances", [])
         if isinstance(item, dict)
         and isinstance(item.get("id"), str)
         and hmac.compare_digest(public_instance_handle(target_id, item["id"]), handle)
     ]
-    if len(matches) != 1:
+    if len(handle_matches) == 1:
+        return handle_matches[0]
+    if handle_matches:
         raise ValueError("deployment_instance_handle_invalid")
-    return matches[0]
+    raw_matches = [
+        item for item in discovery.get("instances", [])
+        if isinstance(item, dict) and item.get("id") == handle
+    ]
+    if len(raw_matches) == 1:
+        return raw_matches[0]
+    raise ValueError("deployment_instance_handle_invalid")
 
 
 def _resolve_plan_discovery_references(body: ExtensionPlanRequest, discovery: dict) -> ExtensionPlanRequest:
@@ -3723,13 +3731,7 @@ def _resolve_stored_instance_handle(instance_handle: str, target_id: str = ""):
 
 
 def _public_instance_projection(instance) -> dict:
-    status = str(instance.status or "").lower()
-    return {
-        "handle": public_instance_handle(instance.target_id, instance.id),
-        "project": instance.project,
-        "managed": instance.managed is True,
-        "running": status.startswith("up") or status in {"running", "healthy"},
-    }
+    return public_instance_access(instance)
 
 
 @app.post("/api/extensions/ssh/test")
@@ -3803,7 +3805,6 @@ async def extension_start_deploy(body: ExtensionDeployRequest):
     try:
         validate_deployment_capability(body.project_id, body.strategy, body.deployment_mode)
         body = _bind_confirmed_extension_target(body, plan_confirmation=True)
-        body = deployment_plans.resolve_public_references(body)
         task_id = await extension_tasks.create(body)
         return {"task_id": task_id}
     except HTTPException:
@@ -3927,10 +3928,16 @@ async def extension_task_list():
 
 @app.post("/api/extensions/tasks/{task_id}/delivery")
 async def extension_task_delivery(task_id: str):
-    key = extension_tasks.take_delivery(task_id)
-    if not key:
+    delivery = extension_tasks.take_delivery(task_id)
+    if not delivery:
         raise HTTPException(status_code=404, detail="一次性交付信息不存在或已读取")
-    return {"admin_key": key, "shown_once": True}
+    response = {
+        "instance": delivery["instance"],
+        "shown_once": bool(delivery.get("admin_key")),
+    }
+    if delivery.get("admin_key"):
+        response["admin_key"] = delivery["admin_key"]
+    return response
 
 
 @app.get("/api/extensions/instances")

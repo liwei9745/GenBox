@@ -37,6 +37,7 @@ from extensions.orchestrator import (
     _password_sudo_command,
     deployment_plans,
     probe_host_key,
+    public_instance_access,
     public_instance_handle,
 )
 
@@ -978,16 +979,16 @@ def test_network_recovery_and_auth_key_layout_stack_at_phone_width():
 
 def test_deploy_completion_opens_delivery_pane_without_falsely_finishing_network():
     script = (Path(__file__).parents[1] / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
-    completed_handler = script.split("renderTask=async function", 1)[1].split("selectDeploymentAttemptTask=", 1)[0]
+    completed_handler = script.split("renderTask=async function", 1)[1].split("reconcileAmbiguousDeployment=", 1)[0]
 
     assert "el('extHandoff').classList.remove('hidden')" in completed_handler
     assert "if(delivery.available)" in completed_handler
-    assert "extensionNext(5)" in completed_handler
+    assert "extensionNext(delivery.admin_key?5:3)" in completed_handler
     assert "if(!restoring)extensionNext(3)" in completed_handler
     assert "extensions.deploy_complete_save_key_then_network" in completed_handler
     assert "claimTaskDelivery(taskId)" in completed_handler
-    assert "el('extConsoleUrl').value=''" in completed_handler
-    assert "el('extApiUrl').value=''" in completed_handler
+    assert "el('extConsoleUrl').value=access.console_url||''" in completed_handler
+    assert "el('extApiUrl').value=access.api_url||''" in completed_handler
     assert "removeAttribute('href')" in completed_handler
     assert "t.result" not in completed_handler
     assert "t.host_key" not in completed_handler
@@ -1009,7 +1010,7 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert handler.index("await json(await _authFetch('/api/extensions/deploy'") < handler.index("clearSessionCredentials()")
     assert "attemptId=createDeploymentAttemptId()" in handler
     assert "deployment_attempt_id:attemptId" in handler
-    assert "await reconcileAmbiguousDeployment(knownTaskIds)" in handler
+    assert "await reconcileAmbiguousDeployment(requestOptions)" in handler
     assert "if(deploymentAttemptConflict(e))" in handler
     assert "await recoverDeploymentIdentity(e)" in handler
     assert "if(deploymentNoTask(e)){recoverDefinitiveNoTask(e);return}" in handler
@@ -1018,12 +1019,13 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "deployment_snapshot_changed:'fresh_discovery'" in script
     assert "deployment_resource_conflict:'resource_reservation'" in script
     assert "deployment_plan_identity_mismatch" in script
-    assert "selectDeploymentAttemptTask(summary,knownTaskIds)" in script
-    assert "!knownTaskIds[task.id]" in script
+    assert "retryDeploymentAttemptWithTimeout(probeState,requestOptions)" in script
+    assert "selectDeploymentAttemptTask" not in script
+    assert "!knownTaskIds[task.id]" not in script
     assert "task.deployment_attempt_id" not in script
-    selector = script.split("selectDeploymentAttemptTask=function", 1)[1].split("reconcileAmbiguousDeployment=", 1)[0]
-    assert "active_task_id" not in selector
-    assert "latest_task_id" not in selector
+    reconciler = script.split("reconcileAmbiguousDeployment=", 1)[1].split("window.extensionStartDeploy", 1)[0]
+    assert "active_task_id" not in reconciler
+    assert "latest_task_id" not in reconciler
     assert "message(i18nText('extensions.deploy_task_reconcile_pending'),true)" in script
     assert "deployment_plan_service_port_changed:'extensions.deploy_plan_service_port_changed'" in error_mapper
     assert "deployment_plan_image_changed:'extensions.deploy_plan_image_changed'" in error_mapper
@@ -1354,7 +1356,10 @@ def test_deploy_task_reports_success(tmp_path, monkeypatch):
         assert recovered["recovery_action"] == "reverify_ownership_and_rotate_admin_key"
         assert rebuilt.take_delivery(task_id) is None
         delivered = manager.take_delivery(task_id)
-        assert delivered.startswith("gbx-")
+        assert delivered["admin_key"].startswith("gbx-")
+        assert set(delivered["instance"]) == {
+            "handle", "project", "managed", "running", "console_url", "api_url",
+        }
         assert manager.take_delivery(task_id) is None
 
     asyncio.run(run())
@@ -2214,8 +2219,10 @@ def test_extension_plan_discovery_and_instance_routes_expose_only_public_product
     }
     assert plan_response["discovery"] == discovery_response
     assert set(instance_response["instances"][0]) == {
-        "handle", "project", "managed", "running",
+        "handle", "project", "managed", "running", "console_url", "api_url",
     }
+    assert instance_response["instances"][0]["console_url"] == "https://sentinel.example/console"
+    assert instance_response["instances"][0]["api_url"] == "https://sentinel.example/api"
 
     serialized = json.dumps({
         "discovery": discovery_response,
@@ -2224,10 +2231,43 @@ def test_extension_plan_discovery_and_instance_routes_expose_only_public_product
     }, ensure_ascii=False)
     for sentinel in (
         "sentinel-host.example", fingerprint, "sentinel-user", "/srv/sentinel",
-        "https://sentinel.example", "sentinel-image", "34567", "127.0.0.1",
+        "sentinel-image", "34567", "127.0.0.1",
         "sentinel-compose", "sentinel-container", "sentinel-session-secret",
     ):
         assert sentinel not in serialized
+
+
+def test_public_instance_access_dto_rejects_credential_or_query_bearing_urls():
+    instance = SimpleNamespace(
+        id="managed-app", target_id="target-a", project="chatgpt2api",
+        managed=True, status="running",
+        console_url="https://user:password@service.example/console",
+        api_url="https://service.example/v1?token=secret",
+        install_dir="/srv/private", data_dir="/srv/private/data",
+        image="registry.invalid/private", container_id="raw-container",
+    )
+
+    public = public_instance_access(instance)
+    assert set(public) == {
+        "handle", "project", "managed", "running", "console_url", "api_url",
+    }
+    assert public["console_url"] == ""
+    assert public["api_url"] == ""
+    serialized = json.dumps(public)
+    assert all(value not in serialized for value in (
+        "password", "token", "/srv/private", "registry.invalid", "raw-container", "target-a",
+    ))
+
+
+def test_public_instance_access_dto_allowlists_bounded_project_identifier():
+    base = {
+        "id": "managed-app", "target_id": "target-a", "managed": True,
+        "status": "running", "console_url": "", "api_url": "",
+    }
+
+    assert public_instance_access(SimpleNamespace(**base, project="provider-2"))["project"] == "provider-2"
+    for unsafe in ("Provider", "<img src=x>", "-provider", "p" * 65):
+        assert public_instance_access(SimpleNamespace(**base, project=unsafe))["project"] == "chatgpt2api"
 
 
 def test_opaque_instance_handles_round_trip_into_existing_plan_confirmation():
@@ -2277,6 +2317,44 @@ def test_opaque_instance_handles_round_trip_into_existing_plan_confirmation():
     assert confirmation.instance_id == existing["id"]
     assert confirmation.service_port == existing["service_port"]
     assert confirmation.image == existing["image"]
+
+
+def test_discovered_raw_i_prefixed_ids_remain_compatible_for_existing_and_clone_paths():
+    import main
+
+    target = ExtensionTarget(
+        id="target-raw-i", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY, chatgpt2api_port=33010,
+    )
+    credential = SSHCredential(password="session-only")
+    image = "example.invalid/app@sha256:" + "d" * 64
+    discovery = deployment_discovery(instances=[
+        {"id": "i-existing-raw", "image": image, "service_port": 33010},
+        {"id": "i-clone-source", "image": image, "service_port": 33011},
+    ])
+
+    existing = main._resolve_plan_discovery_references(ExtensionPlanRequest(
+        target=target, credential=credential, strategy="existing",
+        instance_id="i-existing-raw", service_port=33010, image=image,
+    ), discovery)
+    assert existing.instance_id == "i-existing-raw"
+    assert existing.service_port == 33010
+
+    clone = main._resolve_plan_discovery_references(ExtensionPlanRequest(
+        target=target, credential=credential, strategy="isolated",
+        instance_id="clone-target", service_port=33012, image=image,
+        clone_source_id="i-clone-source", clone_scope="working-copy",
+    ), discovery)
+    assert clone.clone_source_id == "i-clone-source"
+    assert clone.image == image
+
+    ambiguous = copy.deepcopy(discovery)
+    ambiguous["instances"].append(copy.deepcopy(ambiguous["instances"][0]))
+    with pytest.raises(ValueError, match="deployment_instance_handle_invalid"):
+        main._resolve_plan_discovery_references(ExtensionPlanRequest(
+            target=target, credential=credential, strategy="existing",
+            instance_id="i-existing-raw", service_port=33010, image=image,
+        ), ambiguous)
 
 
 @pytest.mark.parametrize("probe", [
@@ -2829,8 +2907,10 @@ def test_deployed_services_cards_use_non_secret_fields_only():
     assert "item.managed" in card_block
     assert "item.running" in card_block
     assert "data-instance-handle" in card_block
-    assert "console_url" not in card_block
-    assert "api_url" not in card_block
+    assert "item.console_url" in card_block
+    assert "item.api_url" in card_block
+    assert "common.open_console" in card_block
+    assert "extensionCopyServiceUrl" in card_block
     assert "service_port" not in card_block
     assert "admin_key" not in card_block
     css = (Path(__file__).parents[1] / "static" / "css" / "extensions.css").read_text(encoding="utf-8")

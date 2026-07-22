@@ -16,6 +16,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from extensions.models import ExtensionDeployRequest, ExtensionKeyResetRequest, ExtensionPlanRequest, ExtensionTarget, ExtensionTestRequest, SSHCredential
 from extensions.capabilities import validate_deployment_capability
@@ -40,6 +41,47 @@ def public_instance_handle(target_id: str, instance_id: str) -> str:
     payload = f"{target_id}\0{instance_id}".encode("utf-8")
     digest = hmac.new(_PUBLIC_INSTANCE_HANDLE_KEY, payload, hashlib.sha256).hexdigest()[:32]
     return f"i-{digest}"
+
+
+def _public_access_url(value: Any) -> str:
+    try:
+        parsed = urlsplit(str(value or "").strip())
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            return ""
+        parsed.port
+    except ValueError:
+        return ""
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+
+
+def _public_project(value: Any) -> str:
+    project = str(value or "").strip()
+    if len(project) > 64 or re.fullmatch(r"[a-z0-9][a-z0-9-]*", project) is None:
+        return "chatgpt2api"
+    return project
+
+
+def public_instance_access(instance: Any) -> dict[str, Any]:
+    """Return the complete allowlisted, non-secret instance/access DTO."""
+    status = str(getattr(instance, "status", "") or "").lower()
+    return {
+        "handle": public_instance_handle(
+            str(getattr(instance, "target_id", "") or ""),
+            str(getattr(instance, "id", "") or ""),
+        ),
+        "project": _public_project(getattr(instance, "project", "")),
+        "managed": getattr(instance, "managed", False) is True,
+        "running": status.startswith("up") or status in {"running", "healthy"},
+        "console_url": _public_access_url(getattr(instance, "console_url", "")),
+        "api_url": _public_access_url(getattr(instance, "api_url", "")),
+    }
 
 
 class SSHAuthenticationError(PermissionError):
@@ -603,7 +645,7 @@ class ExtensionTaskManager:
         self.lock = threading.RLock()
         self.tasks: dict[str, dict] = {task["id"]: task for task in self.store.load() if task.get("id")}
         self.runners: dict[str, asyncio.Task] = {}
-        self.deliveries: dict[str, str] = {}
+        self.deliveries: dict[str, dict[str, Any]] = {}
         self.resource_reservations = resource_reservations or DeploymentResourceReservations()
         self.task_reservations: dict[str, str] = {}
         self.deployment_attempts: dict[str, dict[str, Any]] = {}
@@ -640,7 +682,7 @@ class ExtensionTaskManager:
             for state in self.tasks.values():
                 if state.get("status") in {"queued", "running"}:
                     state["status"] = "interrupted"
-                    state["recovery_action"] = "regenerate_plan_and_reprovide_credentials"
+                    state["recovery_action"] = TaskStore.interrupted_recovery_action(state.get("phase"))
                     state["updated_at"] = self._now()
                     changed = True
             before = len(self.tasks)
@@ -725,6 +767,7 @@ class ExtensionTaskManager:
                     self.deployment_attempts.pop(request.deployment_attempt_id, None)
 
     async def _create_owned(self, request: ExtensionDeployRequest, context_fingerprint: str) -> str:
+        request = deployment_plans.resolve_public_references(request)
         validate_deployment_capability(request.project_id, request.strategy, request.deployment_mode)
         lease_token, leased_plan = deployment_plans.lease(request.confirmed_plan_id, request)
         reservation_token = ""
@@ -817,6 +860,9 @@ class ExtensionTaskManager:
             runner = self.runners.get(task_id)
             if not runner or runner.done():
                 return False
+            # Stop the runner first: a failed public-state save must never leave
+            # the credential-bearing remote workflow executing.
+            runner.cancel()
             state["status"] = "cancelled"
             state.pop("result", None)
             state["failed_phase"] = None
@@ -825,22 +871,33 @@ class ExtensionTaskManager:
             self.deliveries.pop(task_id, None)
             state["updated_at"] = self._now()
             self._persist()
-            runner.cancel()
             return True
 
-    def take_delivery(self, task_id: str) -> str | None:
+    def take_delivery(self, task_id: str) -> dict[str, Any] | None:
         with self.lock:
             state = self.tasks.get(task_id)
             if not state or state.get("status") != "completed":
                 self.deliveries.pop(task_id, None)
                 return None
-            key = self.deliveries.pop(task_id, None)
-            if not key:
+            delivery = self.deliveries.get(task_id)
+            if not isinstance(delivery, dict):
                 return None
-            state["recovery_action"] = "reverify_ownership_and_rotate_admin_key"
+            previous_recovery_action = state.get("recovery_action")
+            previous_updated_at = state.get("updated_at")
+            self.deliveries.pop(task_id, None)
+            state["recovery_action"] = (
+                "reverify_ownership_and_rotate_admin_key"
+                if delivery.get("admin_key") else None
+            )
             state["updated_at"] = self._now()
-            self._persist()
-            return key
+            try:
+                self._persist()
+            except BaseException:
+                state["recovery_action"] = previous_recovery_action
+                state["updated_at"] = previous_updated_at
+                self.deliveries[task_id] = delivery
+                raise
+            return copy.deepcopy(delivery)
 
     def list_summary(self) -> dict:
         with self.lock:
@@ -933,7 +990,11 @@ class ExtensionTaskManager:
                         raise asyncio.CancelledError
                     state["progress"] = 100
                     state["status"] = "completed"
-                    state["recovery_action"] = "reverify_ownership_and_rotate_admin_key"
+                    self.deliveries[task_id] = {
+                        "admin_key": None,
+                        "instance": public_instance_access(instance),
+                    }
+                    state["recovery_action"] = None
                     state["updated_at"] = self._now()
                     self._persist()
                 return
@@ -1134,7 +1195,10 @@ class ExtensionTaskManager:
                     raise asyncio.CancelledError
                 state["progress"] = 100
                 state["status"] = "completed"
-                self.deliveries[task_id] = admin_key
+                self.deliveries[task_id] = {
+                    "admin_key": admin_key,
+                    "instance": public_instance_access(instance),
+                }
                 state["recovery_action"] = "reverify_ownership_and_rotate_admin_key"
                 state["updated_at"] = self._now()
                 self._persist()

@@ -43,6 +43,7 @@ class TaskStore:
         self.path = Path(path or EXTENSION_TASKS_FILE)
         self.lock = threading.RLock()
         self.warning: str | None = None
+        self._writes_blocked = False
 
     def load(self) -> list[dict[str, Any]]:
         with self.lock:
@@ -58,12 +59,12 @@ class TaskStore:
                     raise ValueError("invalid task store payload")
                 schema_version = payload.get("schema_version")
                 if schema_version == TASK_STORE_SCHEMA_VERSION:
-                    if not all(self._valid_task(task) for task in tasks):
+                    if not all(self._valid_task(task) for task in tasks) or not self._unique_task_ids(tasks):
                         raise ValueError("invalid task store record")
                     return [self.public_task(task) for task in tasks]
                 if schema_version == LEGACY_TASK_STORE_SCHEMA_VERSION:
                     migrated = [self._migrate_legacy_task(task) for task in tasks]
-                    if not all(self._valid_task(task) for task in migrated):
+                    if not all(self._valid_task(task) for task in migrated) or not self._unique_task_ids(migrated):
                         raise ValueError("invalid legacy task store record")
                     recognized_legacy = True
                     self._write_tasks(migrated)
@@ -72,16 +73,24 @@ class TaskStore:
                 raise ValueError("unsupported task store schema")
             except Exception:
                 if recognized_legacy:
+                    self._writes_blocked = True
                     self.warning = "Previous deployment task state requires safe migration before it can be shown."
                     return []
-                self._quarantine_invalid_file()
-                self.warning = "Previous deployment task state could not be read and was preserved safely."
+                quarantined = self._quarantine_invalid_file()
+                self._writes_blocked = not quarantined
+                self.warning = (
+                    "Previous deployment task state could not be read; the original remains in place and writes are blocked."
+                    if self._writes_blocked
+                    else "Previous deployment task state could not be read and was preserved safely."
+                )
                 return []
 
     def save(self, tasks: list[dict[str, Any]]) -> None:
         with self.lock:
+            if self._writes_blocked:
+                raise RuntimeError("deployment task store writes are blocked until preserved state is resolved")
             public_tasks = [self.public_task(task) for task in tasks]
-            if not all(self._valid_task(task) for task in public_tasks):
+            if not all(self._valid_task(task) for task in public_tasks) or not self._unique_task_ids(public_tasks):
                 raise ValueError("invalid task store record")
             self._write_tasks(public_tasks)
 
@@ -99,14 +108,28 @@ class TaskStore:
             if temporary.exists():
                 temporary.unlink()
 
-    def _quarantine_invalid_file(self) -> None:
+    def _quarantine_invalid_file(self) -> bool:
         if not self.path.exists():
-            return
+            return True
         quarantine = self.path.with_name(f"{self.path.name}.invalid.{uuid.uuid4().hex}.json")
         try:
             os.replace(self.path, quarantine)
         except OSError:
-            pass
+            return False
+        return True
+
+    @staticmethod
+    def _unique_task_ids(tasks: list[dict[str, Any]]) -> bool:
+        task_ids = [task.get("id") for task in tasks]
+        return len(task_ids) == len(set(task_ids))
+
+    @staticmethod
+    def interrupted_recovery_action(phase: Any) -> str:
+        if phase in {"connect", "docker"}:
+            return "regenerate_plan_and_reprovide_credentials"
+        if phase == "prepare":
+            return "inspect_owned_partial_deployment_and_regenerate_plan"
+        return "inspect_owned_instance_and_regenerate_plan"
 
     @classmethod
     def public_task(cls, task: dict[str, Any]) -> dict[str, Any]:
@@ -160,7 +183,7 @@ class TaskStore:
             status = "interrupted"
             failed_phase = None
             error_code = None
-            recovery_action = "regenerate_plan_and_reprovide_credentials"
+            recovery_action = cls.interrupted_recovery_action(task.get("phase"))
         elif status == "completed":
             failed_phase = None
             error_code = None
@@ -256,7 +279,11 @@ class TaskStore:
             if failed_phase is not None or error_code is not None:
                 return False
             allowed_actions = {
-                "interrupted": {"regenerate_plan_and_reprovide_credentials"},
+                "interrupted": {
+                    "regenerate_plan_and_reprovide_credentials",
+                    "inspect_owned_partial_deployment_and_regenerate_plan",
+                    "inspect_owned_instance_and_regenerate_plan",
+                },
                 "completed": {None, "reverify_ownership_and_rotate_admin_key"},
                 "queued": {None},
                 "running": {None},
