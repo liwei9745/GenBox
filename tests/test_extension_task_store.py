@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,8 +19,14 @@ from extensions.orchestrator import (
     DeploymentResourceConflictError,
     DeploymentResourceReservations,
     ExtensionTaskManager,
+    _resume_target_handle,
+    public_instance_handle,
 )
-from extensions.task_store import TASK_STORE_SCHEMA_VERSION, TaskStore
+from extensions.task_store import (
+    PREVIOUS_TASK_STORE_SCHEMA_VERSION,
+    TASK_STORE_SCHEMA_VERSION,
+    TaskStore,
+)
 
 
 DEPLOYMENT_ATTEMPT_ID = "0123456789abcdef0123456789abcdef"
@@ -236,6 +243,13 @@ def test_deployment_attempt_correlation_is_memory_only_and_restart_uses_opaque_t
         manager = ExtensionTaskManager(store_path=path)
         monkeypatch.setattr(manager, "_run", blocked_runner)
         task_id = await manager.create(request)
+        binding = manager.resume_bindings[task_id]
+        assert set(binding) == {"target_handle", "instance_handle", "managed_required"}
+        assert binding["target_handle"].startswith("t-")
+        assert binding["instance_handle"].startswith("i-")
+        assert binding["managed_required"] is True
+        assert request.target.id not in json.dumps(binding)
+        assert request.instance_id not in json.dumps(binding)
         manager.runners[task_id].cancel()
         with pytest.raises(asyncio.CancelledError):
             await manager.runners[task_id]
@@ -245,6 +259,7 @@ def test_deployment_attempt_correlation_is_memory_only_and_restart_uses_opaque_t
         assert "deployment_attempt_id" not in recovered.get(task_id)
         assert "deployment_attempt_id" not in recovered.list_summary()["tasks"][0]
         assert recovered.runners == {}
+        assert recovered.resume_bindings == {}
 
         persisted = path.read_text(encoding="utf-8")
         assert DEPLOYMENT_ATTEMPT_ID not in persisted
@@ -391,7 +406,7 @@ def test_task_store_and_task_routes_expose_only_the_explicit_public_projection(t
         assert sentinel not in responses
 
 
-def test_legacy_v1_tasks_are_sanitized_and_atomically_rewritten_to_v2(tmp_path, monkeypatch):
+def test_legacy_v1_tasks_are_sanitized_and_atomically_rewritten_to_v3(tmp_path, monkeypatch):
     path = tmp_path / "extension_tasks.json"
     replace_calls = []
     real_replace = os.replace
@@ -437,7 +452,7 @@ def test_legacy_v1_tasks_are_sanitized_and_atomically_rewritten_to_v2(tmp_path, 
     monkeypatch.setattr("extensions.task_store.os.replace", record_replace)
     loaded = TaskStore(path).load()
 
-    assert TASK_STORE_SCHEMA_VERSION == 2
+    assert TASK_STORE_SCHEMA_VERSION == 3
     assert {item["id"]: item["status"] for item in loaded} == {
         "legacy-running": "interrupted",
         "legacy-completed": "completed",
@@ -449,11 +464,96 @@ def test_legacy_v1_tasks_are_sanitized_and_atomically_rewritten_to_v2(tmp_path, 
         "reverify_ownership_and_rotate_admin_key"
     )
     rewritten = path.read_text(encoding="utf-8")
-    assert json.loads(rewritten)["schema_version"] == 2
+    assert json.loads(rewritten)["schema_version"] == 3
     assert replace_calls[-1][1] == path and replace_calls[-1][2] is True
     assert not list(tmp_path.glob("extension_tasks.json.invalid.*.json"))
     for sentinel in sentinels.values():
         assert sentinel not in rewritten
+
+
+def test_v2_phase_recovery_is_atomically_normalized_to_v3(tmp_path, monkeypatch):
+    path = tmp_path / "extension_tasks.json"
+    records = [
+        TaskStore.public_task(task("cancel-prepare", "cancelled", phase="prepare")),
+        TaskStore.public_task(task("cancel-verify", "cancelled", phase="verify")),
+        TaskStore.public_task(task(
+            "cancel-connect", "cancelled", phase="connect",
+            recovery_action="inspect_owned_instance_and_regenerate_plan",
+        )),
+        TaskStore.public_task(task(
+            "interrupted-verify", "interrupted", phase="verify",
+            recovery_action="regenerate_plan_and_reprovide_credentials",
+        )),
+    ]
+    path.write_text(json.dumps({
+        "schema_version": PREVIOUS_TASK_STORE_SCHEMA_VERSION,
+        "tasks": records,
+    }), encoding="utf-8")
+    replace_calls = []
+    real_replace = os.replace
+
+    def record_replace(source, target):
+        replace_calls.append((Path(source), Path(target), Path(source).exists()))
+        return real_replace(source, target)
+
+    monkeypatch.setattr("extensions.task_store.os.replace", record_replace)
+    store = TaskStore(path)
+    loaded = {record["id"]: record for record in store.load()}
+
+    assert PREVIOUS_TASK_STORE_SCHEMA_VERSION == 2
+    assert loaded["cancel-prepare"]["recovery_action"] == (
+        "inspect_owned_partial_deployment_and_regenerate_plan"
+    )
+    assert loaded["cancel-verify"]["recovery_action"] == (
+        "inspect_owned_instance_and_regenerate_plan"
+    )
+    assert loaded["cancel-connect"]["recovery_action"] is None
+    assert loaded["interrupted-verify"]["recovery_action"] == (
+        "inspect_owned_instance_and_regenerate_plan"
+    )
+    rewritten = json.loads(path.read_text(encoding="utf-8"))
+    assert rewritten["schema_version"] == TASK_STORE_SCHEMA_VERSION
+    assert replace_calls[-1][1] == path and replace_calls[-1][2] is True
+    assert not list(tmp_path.glob("*.tmp"))
+    assert "phase-aware recovery" in (store.warning or "")
+
+
+def test_invalid_v2_public_record_is_quarantined_without_migration(tmp_path):
+    path = tmp_path / "invalid-v2.json"
+    record = TaskStore.public_task(task("invalid-v2"))
+    record["raw_target_id"] = "must-not-be-normalized"
+    original = json.dumps({
+        "schema_version": PREVIOUS_TASK_STORE_SCHEMA_VERSION,
+        "tasks": [record],
+    })
+    path.write_text(original, encoding="utf-8")
+
+    assert TaskStore(path).load() == []
+    quarantined = list(tmp_path.glob("invalid-v2.json.invalid.*.json"))
+    assert len(quarantined) == 1
+    assert quarantined[0].read_text(encoding="utf-8") == original
+    assert not path.exists()
+
+
+def test_v2_atomic_rewrite_failure_preserves_original_and_blocks_writes(tmp_path, monkeypatch):
+    path = tmp_path / "v2-write-failure.json"
+    original = json.dumps({
+        "schema_version": PREVIOUS_TASK_STORE_SCHEMA_VERSION,
+        "tasks": [TaskStore.public_task(task("cancel-v2", "cancelled", phase="verify"))],
+    })
+    path.write_text(original, encoding="utf-8")
+
+    def fail_replace(_source, _target):
+        raise OSError("injected v2 atomic rewrite failure")
+
+    monkeypatch.setattr("extensions.task_store.os.replace", fail_replace)
+    store = TaskStore(path)
+    assert store.load() == []
+    assert store.warning == "Previous deployment task state requires safe migration before it can be shown."
+    assert path.read_text(encoding="utf-8") == original
+    assert not list(tmp_path.glob("v2-write-failure.json.invalid.*.json"))
+    with pytest.raises(RuntimeError, match="writes are blocked"):
+        store.save([task("must-not-overwrite")])
 
 
 @pytest.mark.parametrize(("phase", "expected"), [
@@ -500,7 +600,10 @@ def test_completed_failed_and_cancelled_tasks_survive_manager_rebuild(tmp_path):
             failed_phase="pull", error_code="image_prepare_failed",
             recovery_action="check_image_access_and_regenerate_plan",
         ),
-        "cancelled": task("cancelled", "cancelled", "2026-07-17T00:00:01.000Z", error="cancelled"),
+        "cancelled": task(
+            "cancelled", "cancelled", "2026-07-17T00:00:01.000Z", error="cancelled",
+            recovery_action="inspect_owned_instance_and_regenerate_plan",
+        ),
     }
     manager._persist()
 
@@ -547,7 +650,9 @@ def test_post_write_restart_requires_owned_resource_inspection(tmp_path):
         )
 
 
-@pytest.mark.parametrize("schema_version", [1, TASK_STORE_SCHEMA_VERSION])
+@pytest.mark.parametrize("schema_version", [
+    1, PREVIOUS_TASK_STORE_SCHEMA_VERSION, TASK_STORE_SCHEMA_VERSION,
+])
 def test_duplicate_task_ids_fail_closed_and_quarantine_on_load(tmp_path, schema_version):
     path = tmp_path / f"duplicates-v{schema_version}.json"
     original = json.dumps({
@@ -694,7 +799,10 @@ def test_task_store_save_rejects_invalid_recovery_without_overwriting_existing_f
 def test_task_store_accepts_only_legal_interrupted_and_completed_recovery_actions(tmp_path):
     path = tmp_path / "extension_tasks.json"
     records = [
-        task("interrupted", "interrupted", recovery_action="regenerate_plan_and_reprovide_credentials"),
+        task(
+            "interrupted", "interrupted", phase="connect",
+            recovery_action="regenerate_plan_and_reprovide_credentials",
+        ),
         task("completed-none", "completed", recovery_action=None),
         task("completed-rotate", "completed", recovery_action="reverify_ownership_and_rotate_admin_key"),
     ]
@@ -705,6 +813,26 @@ def test_task_store_accepts_only_legal_interrupted_and_completed_recovery_action
     assert loaded["interrupted"]["recovery_action"] == "regenerate_plan_and_reprovide_credentials"
     assert loaded["completed-none"]["recovery_action"] is None
     assert loaded["completed-rotate"]["recovery_action"] == "reverify_ownership_and_rotate_admin_key"
+
+
+@pytest.mark.parametrize(("status", "phase", "recovery_action"), [
+    ("cancelled", "connect", "inspect_owned_instance_and_regenerate_plan"),
+    ("cancelled", "prepare", None),
+    ("cancelled", "verify", "inspect_owned_partial_deployment_and_regenerate_plan"),
+    ("interrupted", "connect", "inspect_owned_instance_and_regenerate_plan"),
+    ("interrupted", "prepare", "regenerate_plan_and_reprovide_credentials"),
+    ("interrupted", "verify", "inspect_owned_partial_deployment_and_regenerate_plan"),
+])
+def test_current_schema_requires_exact_phase_aware_recovery_pairing(
+    tmp_path, status, phase, recovery_action,
+):
+    path = tmp_path / f"strict-{status}-{phase}.json"
+    with pytest.raises(ValueError, match="invalid task store record"):
+        TaskStore(path).save([task(
+            f"strict-{status}-{phase}", status, phase=phase,
+            recovery_action=recovery_action,
+        )])
+    assert not path.exists()
 
 
 def test_deployment_failure_registry_contains_only_exact_public_contract():
@@ -762,9 +890,15 @@ def test_delivery_is_once_only_and_restart_requires_credential_recovery(tmp_path
             "api_url": "http://service.example/v1",
         },
     }
+    manager.resume_bindings["delivery"] = {
+        "target_handle": "t-" + "a" * 32,
+        "instance_handle": "i-" + "a" * 32,
+        "managed_required": True,
+    }
     manager._persist()
     assert "gbx-secret-delivery" not in path.read_text(encoding="utf-8")
     assert manager.take_delivery("delivery", DEPLOYMENT_ATTEMPT_ID)["admin_key"] == "gbx-secret-delivery"
+    assert "delivery" in manager.resume_bindings
     assert manager.take_delivery("delivery", DEPLOYMENT_ATTEMPT_ID) is None
     assert "result" not in manager.get("delivery")
     assert manager.get("delivery")["recovery_action"] == "reverify_ownership_and_rotate_admin_key"
@@ -870,6 +1004,117 @@ def test_two_tabs_cannot_cross_claim_delivery_and_each_initiator_consumes_once(t
     assert client.post(
         "/api/extensions/tasks/task-b/delivery", json={"deployment_attempt_id": "b" * 32},
     ).status_code == 404
+
+
+def test_resume_route_requires_exact_ephemeral_binding_and_returns_only_safe_access(tmp_path, monkeypatch):
+    path = tmp_path / "resume-binding.json"
+    manager = ExtensionTaskManager(store_path=path)
+    manager.tasks["historical"] = task("historical", recovery_action="reverify_ownership_and_rotate_admin_key")
+    manager.resume_bindings["historical"] = {
+        "target_handle": _resume_target_handle("target-a"),
+        "instance_handle": public_instance_handle("target-a", "instance-a"),
+        "managed_required": True,
+    }
+    manager.deliveries["historical"] = {
+        "deployment_attempt_id": DEPLOYMENT_ATTEMPT_ID,
+        "admin_key": "must-remain-unclaimed",
+        "instance": {"handle": "i-opaque"},
+    }
+    matching = SimpleNamespace(
+        id="instance-a", target_id="target-a", project="chatgpt2api",
+        status="running", managed=True, ownership="managed",
+        console_url="https://console.example", api_url="https://console.example/v1",
+    )
+    unrelated_instance = SimpleNamespace(
+        id="instance-b", target_id="target-b", project="chatgpt2api",
+        status="running", managed=True, ownership="managed",
+        console_url="https://unrelated.example", api_url="https://unrelated.example/v1",
+    )
+    monkeypatch.setattr(
+        "extensions.orchestrator.extensions_store.list_instances",
+        lambda target_id="": [matching] if target_id == "target-a" else [unrelated_instance],
+    )
+    manager._persist()
+    monkeypatch.setattr(main, "extension_tasks", manager)
+    client = TestClient(main.app, base_url="http://testserver")
+
+    assert client.post("/api/extensions/tasks/historical/resume").status_code == 422
+    assert client.post(
+        "/api/extensions/tasks/historical/resume", json={"target_id": "../invalid"},
+    ).status_code == 422
+    unrelated = client.post(
+        "/api/extensions/tasks/historical/resume", json={"target_id": "target-b"},
+    )
+    assert unrelated.status_code == 200
+    assert unrelated.json() == {"resumable": False}
+    resumed = client.post(
+        "/api/extensions/tasks/historical/resume", json={"target_id": "target-a"},
+    )
+    assert resumed.status_code == 200
+    assert resumed.json() == {
+        "resumable": True,
+        "instance": {
+            "handle": public_instance_handle("target-a", "instance-a"),
+            "project": "chatgpt2api", "managed": True, "running": True,
+            "console_url": "https://console.example",
+            "api_url": "https://console.example/v1",
+        },
+    }
+    assert manager.deliveries["historical"]["admin_key"] == "must-remain-unclaimed"
+    persisted = path.read_text(encoding="utf-8")
+    assert "target-a" not in persisted
+    assert "instance-a" not in persisted
+    assert "target_handle" not in persisted
+    assert "instance_handle" not in persisted
+
+    rebuilt = ExtensionTaskManager(store_path=path)
+    monkeypatch.setattr(main, "extension_tasks", rebuilt)
+    assert rebuilt.resume_bindings == {}
+    assert client.post(
+        "/api/extensions/tasks/historical/resume", json={"target_id": "target-a"},
+    ).json() == {"resumable": False}
+
+
+def test_resume_binding_fails_closed_for_stale_ineligible_and_ambiguous_instances(tmp_path, monkeypatch):
+    manager = ExtensionTaskManager(store_path=tmp_path / "resume-fail-closed.json")
+    manager.tasks["historical"] = task("historical")
+    manager.resume_bindings["historical"] = {
+        "target_handle": _resume_target_handle("target-a"),
+        "instance_handle": public_instance_handle("target-a", "instance-a"),
+        "managed_required": True,
+    }
+
+    def instance(*, instance_id="instance-a", status="running", managed=True, ownership="managed"):
+        return SimpleNamespace(
+            id=instance_id, target_id="target-a", project="chatgpt2api",
+            status=status, managed=managed, ownership=ownership,
+            console_url="https://console.example", api_url="https://console.example/v1",
+        )
+
+    monkeypatch.setattr(
+        "extensions.orchestrator.extensions_store.list_instances", lambda _target_id="": [],
+    )
+    assert manager.resume_access("historical", "target-a") is None
+
+    for candidate in (
+        instance(instance_id="replacement-instance"),
+        instance(managed=False, ownership=""),
+        instance(status="stopped"),
+        instance(ownership="unverified"),
+    ):
+        monkeypatch.setattr(
+            "extensions.orchestrator.extensions_store.list_instances",
+            lambda _target_id="", candidate=candidate: [candidate],
+        )
+        assert manager.resume_access("historical", "target-a") is None
+
+    duplicate = instance()
+    monkeypatch.setattr(
+        "extensions.orchestrator.extensions_store.list_instances",
+        lambda _target_id="": [instance(), duplicate],
+    )
+    assert manager.resume_access("historical", "target-a") is None
+    assert manager.resume_access("historical", "target-b") is None
 
 
 def test_cancel_route_persists_state_and_rejects_second_cancel(tmp_path, monkeypatch):
@@ -1025,11 +1270,13 @@ def test_retention_prunes_delivery_and_runner_orphans(tmp_path):
         for index in range(51)
     }
     manager.deliveries["done-00"] = "pruned-delivery"
+    manager.resume_bindings["done-00"] = {"opaque": "pruned-binding"}
     manager.runners["done-00"] = Runner()
     manager._persist()
 
     assert "done-00" not in manager.tasks
     assert "done-00" not in manager.deliveries
+    assert "done-00" not in manager.resume_bindings
     assert "done-00" not in manager.runners
     assert manager.take_delivery("done-00", DEPLOYMENT_ATTEMPT_ID) is None
 
@@ -1099,7 +1346,7 @@ def test_cancelled_task_never_delivers_even_if_key_was_injected(tmp_path):
     manager = ExtensionTaskManager(store_path=tmp_path / "extension_tasks.json")
     manager.tasks["cancelled"] = task("cancelled", "cancelled", result={
         "admin_key_available": True, "instance": {"id": "instance-a", "managed": True},
-    })
+    }, recovery_action="inspect_owned_instance_and_regenerate_plan")
     manager.deliveries["cancelled"] = "injected-delivery"
     manager._persist()
 
@@ -1867,7 +2114,9 @@ def test_first_and_post_consumption_refresh_never_claim_and_target_scoped_networ
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''
 const fs = require('fs');
-const source = fs.readFileSync(process.argv[1], 'utf8');
+let source = fs.readFileSync(process.argv[1], 'utf8');
+const marker=source.lastIndexOf('})();');
+source=source.slice(0,marker)+`window.__resumeState=function(){return currentDeployment};`+source.slice(marker);
 (async () => {
 const elements = new Map();
 function element(id){
@@ -1882,8 +2131,8 @@ function element(id){
 }
     let nextStep = 0;
     let deliveryCalls = 0;
-    let deliveryConsumed = false;
-    let instanceLookups = 0;
+    let resumeChecks = 0;
+    let resumeAllowed = true;
 let sshCalls = 0;
 const completed={id:'delivery-task',status:'completed',phase:'verify',progress:100,steps:[{id:'verify',label:'Verify service',status:'success'}],created_at:'2026-07-17T00:00:00.000Z',updated_at:'2026-07-17T00:00:01.000Z',recovery_action:'reverify_ownership_and_rotate_admin_key',failed_phase:null,error_code:null,evidence_manifest:{contract_version:'phase4-v3',snapshot_digest:'a'.repeat(64),complete:true,changed_fields:[]}};
 const summary={active_task_id:null,latest_task_id:'delivery-task',tasks:[completed]};
@@ -1895,22 +2144,21 @@ global.escHtml=value=>String(value||'');
 global.extensionNext=step=>{nextStep=step};
 global.clearInterval=()=>{};
 global.setInterval=()=>({});
-global._authFetch=async url=>{
+global._authFetch=async (url,options={})=>{
   let body={};
   if(url==='/api/extensions/targets')body={targets:[{id:'saved',name:'Saved VPS',host:'vps.example',port:22,username:'root',host_key:'SHA256:test',chatgpt2api_port:33010}]};
   else if(url==='/api/extensions/catalog')body={categories:[],items:[]};
   else if(url==='/api/extensions/targets/batch')body={target_ids:[]};
       else if(url==='/api/extensions/tasks')body=summary;
-      else if(url==='/api/extensions/instances?target_id=saved'){
-        instanceLookups+=1;
-        body={instances:[
-          {handle:'i-'+"a".repeat(32),project:'chatgpt2api',managed:true,running:true,console_url:'https://first.example',api_url:'https://first.example/v1'},
-          {handle:'i-'+"b".repeat(32),project:'chatgpt2api',managed:true,running:true,console_url:'https://second.example',api_url:'https://second.example/v1'}
-        ]};
+      else if(url==='/api/extensions/tasks/delivery-task/resume'){
+        resumeChecks+=1;
+        if(options.method!=='POST'||options.headers['Content-Type']!=='application/json')throw new Error('resume was not a JSON POST');
+        const request=JSON.parse(options.body);
+        if(Object.keys(request).length!==1||request.target_id!=='saved')throw new Error('resume target body mismatch');
+        body=resumeAllowed?{resumable:true,instance:{handle:'i-'+"a".repeat(32),project:'chatgpt2api',managed:true,running:true,console_url:'https://first.example',api_url:'https://first.example/v1'}}:{resumable:false};
       }
       else if(url==='/api/extensions/tasks/delivery-task/delivery'){
         deliveryCalls+=1;
-        if(deliveryConsumed)return {ok:false,status:404,text:async()=>JSON.stringify({detail:'already consumed'})};
         body={admin_key:'one-time-key',shown_once:true,instance:{handle:'i-'+"a".repeat(32),project:'chatgpt2api',managed:true,running:true,console_url:'https://console.example',api_url:'https://console.example/v1'}};
   }
   else if(url==='/api/extensions/ssh/test')sshCalls+=1;
@@ -1925,11 +2173,14 @@ const originalNext=window.extensionNext;
     if(element('extAdminKey').value||!element('extHandoff').classList.contains('hidden'))throw new Error('refresh exposed delivery content');
     if(!element('extensionMessage').textContent.includes('extensions.recovery_rotate_admin_key'))throw new Error('refresh did not show safe key recovery');
     await window.extensionLoadTarget('saved');
-    if(instanceLookups!==1||nextStep!==3)throw new Error('selected target did not enable target-scoped network resume');
-    deliveryConsumed=true;
+    if(resumeChecks!==1||nextStep!==3)throw new Error('selected target did not enable exact network resume');
+    if(!window.__resumeState()||window.__resumeState().instance_handle!=='i-'+"a".repeat(32))throw new Error('validated opaque instance was not bound');
+    resumeAllowed=false;
     await window.loadExtensions();
     if(deliveryCalls!==0)throw new Error('later refresh auto-claimed a one-time delivery');
-    if(nextStep!==3||sshCalls!==0)throw new Error('target-scoped completion resume changed steps or triggered SSH');
+    if(resumeChecks!==2||window.__resumeState()!==null)throw new Error('failed exact validation retained or fabricated a deployment');
+    if(nextStep!==3||sshCalls!==0)throw new Error('exact completion resume changed steps or triggered SSH');
+if(source.includes('/api/extensions/instances?target_id='))throw new Error('resume still infers ownership from target instance listing');
 if(source.includes('localStorage'))throw new Error('delivery flow uses localStorage');
 })();
 '''

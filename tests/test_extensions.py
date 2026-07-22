@@ -980,6 +980,7 @@ def test_network_recovery_and_auth_key_layout_stack_at_phone_width():
 def test_deploy_completion_opens_delivery_pane_without_falsely_finishing_network():
     script = (Path(__file__).parents[1] / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
     completed_handler = script.split("renderTask=async function", 1)[1].split("reconcileAmbiguousDeployment=", 1)[0]
+    resume_handler = script.split("async function restoreCompletedNetworkResume", 1)[1].split("renderTask=async function", 1)[0]
 
     assert "el('extHandoff').classList.remove('hidden')" in completed_handler
     assert "if(delivery.available)" in completed_handler
@@ -994,6 +995,12 @@ def test_deploy_completion_opens_delivery_pane_without_falsely_finishing_network
     assert "t.result" not in completed_handler
     assert "t.host_key" not in completed_handler
     assert "t.logs" not in completed_handler
+    assert "'/api/extensions/tasks/'+taskId+'/resume'" in resume_handler
+    assert "method:'POST'" in resume_handler
+    assert "JSON.stringify({target_id:targetId})" in resume_handler
+    assert "data.resumable!==true" in resume_handler
+    assert "instance_handle:access.handle" in resume_handler
+    assert "/api/extensions/instances?target_id=" not in script
 
 
 def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_states():
@@ -1010,6 +1017,7 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "clearSessionCredentials()" in handler
     assert handler.index("await json(await _authFetch('/api/extensions/deploy'") < handler.index("clearSessionCredentials()")
     assert "attemptId=createDeploymentAttemptId()" in handler
+    assert handler.index("historicalCompletion=null") < handler.index("deploymentInFlight=true")
     assert "deployment_attempt_id:attemptId" in handler
     assert "await reconcileAmbiguousDeployment(requestOptions,attemptId)" in handler
     assert "if(deploymentAttemptConflict(e))" in handler

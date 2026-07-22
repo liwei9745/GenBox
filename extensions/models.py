@@ -116,6 +116,10 @@ class ExtensionDeliveryClaimRequest(BaseModel):
     deployment_attempt_id: str = Field(pattern=r"^[a-f0-9]{32}$", min_length=32, max_length=32)
 
 
+class ExtensionTaskResumeRequest(BaseModel):
+    target_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
 class ExtensionDiscoveryRequest(BaseModel):
     target: ExtensionTarget
     credential: SSHCredential

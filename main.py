@@ -73,6 +73,7 @@ import sync.store as sync_store
 from extensions.models import (
     ExtensionBatchTargetsRequest, ExtensionDeployRequest, ExtensionDiscoveryRequest,
     ExtensionDeliveryClaimRequest, ExtensionHostKeyConfirmRequest, ExtensionHostKeyProbeRequest, ExtensionKeyResetRequest,
+    ExtensionTaskResumeRequest,
     ExtensionPlanRequest, ExtensionTestRequest,
     ManagedCredentialUpsertRequest, VaultPasswordRequest,
 )
@@ -3945,6 +3946,14 @@ async def extension_task_delivery(task_id: str, body: ExtensionDeliveryClaimRequ
     if delivery.get("admin_key"):
         response["admin_key"] = delivery["admin_key"]
     return response
+
+
+@app.post("/api/extensions/tasks/{task_id}/resume")
+async def extension_task_resume(task_id: str, body: ExtensionTaskResumeRequest):
+    instance = extension_tasks.resume_access(task_id, body.target_id)
+    if instance is None:
+        return {"resumable": False}
+    return {"resumable": True, "instance": instance}
 
 
 @app.get("/api/extensions/instances")

@@ -15,7 +15,8 @@ from config import STORAGE_DIR
 from extensions.deployment_failures import VALID_FAILURE_COMBINATIONS
 
 
-TASK_STORE_SCHEMA_VERSION = 2
+TASK_STORE_SCHEMA_VERSION = 3
+PREVIOUS_TASK_STORE_SCHEMA_VERSION = 2
 LEGACY_TASK_STORE_SCHEMA_VERSION = 1
 EXTENSION_TASKS_FILE = Path(os.environ.get("GENBOX_EXTENSION_TASKS_FILE", STORAGE_DIR / "extension_tasks.json"))
 TASK_STATUSES = {"queued", "running", "completed", "failed", "cancelled", "interrupted"}
@@ -49,7 +50,7 @@ class TaskStore:
         with self.lock:
             if not self.path.exists():
                 return []
-            recognized_legacy = False
+            recognized_migration = False
             try:
                 payload = json.loads(self.path.read_text(encoding="utf-8"))
                 if not isinstance(payload, dict):
@@ -62,17 +63,27 @@ class TaskStore:
                     if not all(self._valid_task(task) for task in tasks) or not self._unique_task_ids(tasks):
                         raise ValueError("invalid task store record")
                     return [self.public_task(task) for task in tasks]
+                if schema_version == PREVIOUS_TASK_STORE_SCHEMA_VERSION:
+                    if not all(self._valid_task(task, legacy_phase_recovery=True) for task in tasks):
+                        raise ValueError("invalid previous task store record")
+                    migrated = [self._migrate_v2_task(task) for task in tasks]
+                    if not all(self._valid_task(task) for task in migrated) or not self._unique_task_ids(migrated):
+                        raise ValueError("invalid previous task store record")
+                    recognized_migration = True
+                    self._write_tasks(migrated)
+                    self.warning = "Previous deployment tasks were upgraded with phase-aware recovery state."
+                    return migrated
                 if schema_version == LEGACY_TASK_STORE_SCHEMA_VERSION:
                     migrated = [self._migrate_legacy_task(task) for task in tasks]
                     if not all(self._valid_task(task) for task in migrated) or not self._unique_task_ids(migrated):
                         raise ValueError("invalid legacy task store record")
-                    recognized_legacy = True
+                    recognized_migration = True
                     self._write_tasks(migrated)
                     self.warning = "Previous deployment tasks were recovered with public-only state."
                     return migrated
                 raise ValueError("unsupported task store schema")
             except Exception:
-                if recognized_legacy:
+                if recognized_migration:
                     self._writes_blocked = True
                     self.warning = "Previous deployment task state requires safe migration before it can be shown."
                     return []
@@ -222,6 +233,15 @@ class TaskStore:
             "evidence_manifest": task.get("evidence_manifest") or cls._recovery_manifest(str(task.get("id") or "")),
         })
 
+    @classmethod
+    def _migrate_v2_task(cls, task: dict[str, Any]) -> dict[str, Any]:
+        migrated = cls.public_task(task)
+        if migrated.get("status") == "interrupted":
+            migrated["recovery_action"] = cls.interrupted_recovery_action(migrated.get("phase"))
+        elif migrated.get("status") == "cancelled":
+            migrated["recovery_action"] = cls.cancelled_recovery_action(migrated.get("phase"))
+        return migrated
+
     @staticmethod
     def _recovery_manifest(task_id: str) -> dict[str, Any]:
         digest = hashlib.sha256(f"legacy-public-task:{task_id}".encode("utf-8")).hexdigest()
@@ -232,8 +252,8 @@ class TaskStore:
             "changed_fields": ["legacy.task_state"],
         }
 
-    @staticmethod
-    def _valid_task(task: dict[str, Any]) -> bool:
+    @classmethod
+    def _valid_task(cls, task: dict[str, Any], *, legacy_phase_recovery: bool = False) -> bool:
         if set(task) != PUBLIC_TASK_FIELDS:
             return False
         if not isinstance(task.get("id"), str) or not task["id"].strip():
@@ -287,20 +307,33 @@ class TaskStore:
             if failed_phase is not None or error_code is not None:
                 return False
             allowed_actions = {
-                "interrupted": {
-                    "regenerate_plan_and_reprovide_credentials",
-                    "inspect_owned_partial_deployment_and_regenerate_plan",
-                    "inspect_owned_instance_and_regenerate_plan",
-                },
                 "completed": {None, "reverify_ownership_and_rotate_admin_key"},
                 "queued": {None},
                 "running": {None},
-                "cancelled": {
-                    None,
-                    "inspect_owned_partial_deployment_and_regenerate_plan",
-                    "inspect_owned_instance_and_regenerate_plan",
-                },
             }
-            if recovery_action not in allowed_actions[task["status"]]:
+            status = task["status"]
+            if status == "interrupted":
+                expected = cls.interrupted_recovery_action(task.get("phase"))
+                if legacy_phase_recovery:
+                    valid = recovery_action in {
+                        "regenerate_plan_and_reprovide_credentials",
+                        "inspect_owned_partial_deployment_and_regenerate_plan",
+                        "inspect_owned_instance_and_regenerate_plan",
+                    }
+                else:
+                    valid = recovery_action == expected
+            elif status == "cancelled":
+                expected = cls.cancelled_recovery_action(task.get("phase"))
+                if legacy_phase_recovery:
+                    valid = recovery_action in {
+                        None,
+                        "inspect_owned_partial_deployment_and_regenerate_plan",
+                        "inspect_owned_instance_and_regenerate_plan",
+                    }
+                else:
+                    valid = recovery_action == expected
+            else:
+                valid = recovery_action in allowed_actions[status]
+            if not valid:
                 return False
         return True

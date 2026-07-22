@@ -43,6 +43,12 @@ def public_instance_handle(target_id: str, instance_id: str) -> str:
     return f"i-{digest}"
 
 
+def _resume_target_handle(target_id: str) -> str:
+    payload = b"genbox-resume-target-v1\0" + target_id.encode("utf-8")
+    digest = hmac.new(_PUBLIC_INSTANCE_HANDLE_KEY, payload, hashlib.sha256).hexdigest()[:32]
+    return f"t-{digest}"
+
+
 def _public_access_url(value: Any) -> str:
     try:
         parsed = urlsplit(str(value or "").strip())
@@ -646,6 +652,7 @@ class ExtensionTaskManager:
         self.tasks: dict[str, dict] = {task["id"]: task for task in self.store.load() if task.get("id")}
         self.runners: dict[str, asyncio.Task] = {}
         self.deliveries: dict[str, dict[str, Any]] = {}
+        self.resume_bindings: dict[str, dict[str, Any]] = {}
         self.resource_reservations = resource_reservations or DeploymentResourceReservations()
         self.task_reservations: dict[str, str] = {}
         self.deployment_attempts: dict[str, dict[str, Any]] = {}
@@ -668,6 +675,7 @@ class ExtensionTaskManager:
             task_id = task["id"]
             self.tasks.pop(task_id, None)
             self.deliveries.pop(task_id, None)
+            self.resume_bindings.pop(task_id, None)
             self.runners.pop(task_id, None)
             for attempt_id, record in list(self.attempt_tasks.items()):
                 if record.get("task_id") == task_id:
@@ -791,6 +799,7 @@ class ExtensionTaskManager:
         previous_tasks = None
         previous_runners = None
         previous_deliveries = None
+        previous_resume_bindings = None
         previous_task_reservations = None
         previous_attempt_tasks = None
         try:
@@ -799,6 +808,7 @@ class ExtensionTaskManager:
                 previous_tasks = copy.deepcopy(self.tasks)
                 previous_runners = dict(self.runners)
                 previous_deliveries = dict(self.deliveries)
+                previous_resume_bindings = copy.deepcopy(self.resume_bindings)
                 previous_task_reservations = dict(self.task_reservations)
                 previous_attempt_tasks = copy.deepcopy(self.attempt_tasks)
                 self.tasks[task_id] = TaskStore.public_task({
@@ -810,6 +820,14 @@ class ExtensionTaskManager:
                 })
                 self.task_reservations[task_id] = reservation_token
                 self._persist()
+                self.resume_bindings[task_id] = {
+                    "target_handle": _resume_target_handle(request.target.id),
+                    "instance_handle": public_instance_handle(
+                        request.target.id,
+                        str(plan.get("instance_id") or request.instance_id),
+                    ),
+                    "managed_required": plan.get("strategy") != "existing",
+                }
                 self.attempt_tasks[request.deployment_attempt_id] = {
                     "context_fingerprint": context_fingerprint,
                     "task_id": task_id,
@@ -823,6 +841,7 @@ class ExtensionTaskManager:
                     self.tasks = previous_tasks
                     self.runners = previous_runners or {}
                     self.deliveries = previous_deliveries or {}
+                    self.resume_bindings = previous_resume_bindings or {}
                     self.task_reservations = previous_task_reservations or {}
                     self.attempt_tasks = previous_attempt_tasks or {}
                 if runner is not None:
@@ -907,6 +926,53 @@ class ExtensionTaskManager:
             public_delivery = copy.deepcopy(delivery)
             public_delivery.pop("deployment_attempt_id", None)
             return public_delivery
+
+    def resume_access(self, task_id: str, target_id: str) -> dict[str, Any] | None:
+        with self.lock:
+            state = self.tasks.get(task_id)
+            binding = self.resume_bindings.get(task_id)
+            if state is None or state.get("status") != "completed" or not isinstance(binding, dict):
+                return None
+            target_handle = binding.get("target_handle")
+            instance_handle = binding.get("instance_handle")
+            managed_required = binding.get("managed_required")
+            if (
+                not isinstance(target_handle, str)
+                or not isinstance(instance_handle, str)
+                or not isinstance(managed_required, bool)
+                or not hmac.compare_digest(target_handle, _resume_target_handle(target_id))
+            ):
+                return None
+            try:
+                instances = extensions_store.list_instances(target_id)
+            except Exception:
+                return None
+            matches = []
+            for instance in instances:
+                candidate_target_id = str(getattr(instance, "target_id", "") or "")
+                candidate_instance_id = str(getattr(instance, "id", "") or "")
+                if not hmac.compare_digest(
+                    target_handle,
+                    _resume_target_handle(candidate_target_id),
+                ):
+                    continue
+                if hmac.compare_digest(
+                    instance_handle,
+                    public_instance_handle(candidate_target_id, candidate_instance_id),
+                ):
+                    matches.append(instance)
+            if len(matches) != 1:
+                return None
+            instance = matches[0]
+            access = public_instance_access(instance)
+            if access.get("running") is not True:
+                return None
+            if managed_required and (
+                access.get("managed") is not True
+                or str(getattr(instance, "ownership", "") or "") != "managed"
+            ):
+                return None
+            return copy.deepcopy(access)
 
     def list_summary(self) -> dict:
         with self.lock:
