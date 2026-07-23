@@ -72,6 +72,7 @@ from sync.ingest import (
     PUSH_CONTRACT_VERSION,
     authenticate_push_source,
     push_max_image_bytes,
+    validate_source_sha256,
     validate_image_payload,
     validate_remote_path,
 )
@@ -3514,6 +3515,7 @@ async def sync_import(body: dict = {}):
 async def sync_push_image(
     image: UploadFile = File(...),
     remote_path: str = Form(...),
+    source_sha256: str = Form(""),
     created_at: str = Form(""),
     prompt: str = Form(""),
     model: str = Form(""),
@@ -3541,6 +3543,12 @@ async def sync_push_image(
         metadata = validate_image_payload(payload, image.content_type or "")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        expected_source_sha256 = validate_source_sha256(source_sha256)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="invalid source_sha256") from exc
+    if expected_source_sha256 and expected_source_sha256 != metadata["sha256"]:
+        raise HTTPException(status_code=422, detail="source_sha256 does not match image")
 
     with push_commit_lock:
         manifest = SyncManifest()

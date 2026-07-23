@@ -53,12 +53,16 @@ Multipart fields:
 
 - `image`: image bytes.
 - `remote_path`: stable source-relative path, required.
+- `source_sha256`: sender-computed SHA-256, optional; when supplied it must
+  match the uploaded bytes.
 - `created_at`: source creation time, optional.
 - `prompt`: generation prompt, optional.
 - `model`: model identity, optional.
 
 GenBox validates credentials, media type, image structure, size, and content
 hash before importing. The endpoint must remain safe for idempotent retry.
+When `source_sha256` is supplied, a malformed or mismatched value is rejected
+before any receiver state is committed.
 
 `GET /api/sync/push/status` uses the same authenticated source headers and
 returns the v1 contract version plus the maximum image byte limit used by that

@@ -15,11 +15,22 @@ MAX_PUSH_IMAGE_BYTES = int(os.getenv("GENBOX_PUSH_MAX_BYTES", str(25 * 1024 * 10
 PUSH_CONTRACT_VERSION = "v1"
 SOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 WINDOWS_DRIVE_PATTERN = re.compile(r"^[A-Za-z]:")
+SHA256_PATTERN = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
 def push_max_image_bytes() -> int:
     """Return the byte limit used by this running receiver process."""
     return MAX_PUSH_IMAGE_BYTES
+
+
+def validate_source_sha256(value: str) -> str:
+    """Validate an optional sender-provided digest without trusting it."""
+    normalized = str(value or "")
+    if not normalized:
+        return ""
+    if not SHA256_PATTERN.fullmatch(normalized):
+        raise ValueError("source_sha256 must be a canonical SHA-256 digest")
+    return normalized.lower()
 
 
 def load_push_keys(raw: Optional[str] = None) -> Dict[str, str]:

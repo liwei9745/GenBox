@@ -12,7 +12,7 @@
   SSH host-key algorithm plus `SHA256:` fingerprint pair; pairing does not
   replace SSH credentials or mandatory host-key verification.
 - **VERIFIED 2026-07-23:** focused and full local verification completed with
-  `497 passed`. Independent fixed-commit architecture, security, and regression
+  `500 passed`. Independent fixed-commit architecture, security, and regression
   reviews each returned **APPROVE**. This is local evidence only.
 - **VERIFIED 2026-07-23:** local Docker preflight succeeded from image
   `genbox-p4-local:dae8d84`
@@ -341,6 +341,22 @@ supplies the target owner/scope and canonical SSH host-key pair.
   and no narrow-screen overflow; the lab was stopped afterward.
 - **Boundary:** this is destination probe/receiver contract evidence only. It
   does not prove sender UI behavior, network reachability, or remote E2E.
+
+## Local sender-hash mismatch gate (2026-07-24)
+
+- **Evidence class:** `LOCAL` only. Push accepts an optional canonical
+  `source_sha256` from a sender. When present, GenBox compares it with the
+  uploaded bytes before touching gallery, manifest, or content indexes; absent
+  values remain compatible with existing v1 senders.
+- **Verification:** focused sync/Push tests passed `42`; the full local suite
+  passed `500`; matching, malformed, and mismatched digest cases are covered.
+  Python compilation, all four frontend bundle syntax checks, and
+  `git diff --check` passed. Local browser loading at
+  `http://127.0.0.1:8892/#/extensions` returned HTTP 200 with zero page errors
+  and no narrow-screen overflow; the lab was stopped afterward.
+- **Boundary:** this is receiver-side pre-commit validation only. It does not
+  prove sender source retention, sender UI, network reachability, isolated VPS,
+  or production behavior.
 
 ## Local P4 guide translation cleanup (2026-07-23)
 

@@ -63,17 +63,21 @@ def _push(
     created_at: str = "2026-07-19T12:34:56+08:00",
     prompt: str = "a red square",
     model: str = "gpt-image-2",
+    source_sha256: str = "",
 ):
+    data = {
+        "remote_path": remote_path,
+        "created_at": created_at,
+        "prompt": prompt,
+        "model": model,
+    }
+    if source_sha256:
+        data["source_sha256"] = source_sha256
     return client.post(
         "/api/sync/push",
         headers=_headers() if headers is None else headers,
         files={"image": ("image.png", payload, content_type)},
-        data={
-            "remote_path": remote_path,
-            "created_at": created_at,
-            "prompt": prompt,
-            "model": model,
-        },
+        data=data,
     )
 
 
@@ -309,6 +313,35 @@ def test_rejected_invalid_image_does_not_commit_receiver_state(push_environment)
     assert not manifest_mod.MANIFEST_FILE.exists()
     assert not manifest_mod.LOCAL_INDEX_FILE.exists()
     assert not manifest_mod.LOCAL_MD5_INDEX_FILE.exists()
+
+
+def test_matching_source_sha256_is_accepted(push_environment):
+    payload = _png_bytes("teal")
+
+    response = _push(
+        TestClient(main.app),
+        payload,
+        remote_path="2026/07/19/hashed.png",
+        source_sha256=hashlib.sha256(payload).hexdigest().upper(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "imported"
+
+
+@pytest.mark.parametrize("source_sha256", ["0" * 64, "not-a-sha256"])
+def test_mismatched_or_malformed_source_sha256_does_not_commit(push_environment, source_sha256):
+    payload = _png_bytes("teal")
+    response = _push(
+        TestClient(main.app),
+        payload,
+        remote_path="2026/07/19/hashed-rejected.png",
+        source_sha256=source_sha256,
+    )
+
+    assert response.status_code == 422
+    assert list(push_environment.glob("*.png")) == []
+    assert not manifest_mod.MANIFEST_FILE.exists()
 
 
 def test_push_preserves_png_metadata_and_exposes_gallery_source_fields(push_environment):
