@@ -639,20 +639,30 @@
     "extensions.ssh_optional_notice":{"zh-CN":"凭据已填写。SSH 诊断是可选项，不是私网检测的前置条件。","en":"Credentials are ready. SSH diagnosis is optional and not a private-link prerequisite."},
     "extensions.ssh_deploy_notice":{"zh-CN":"主机指纹已确认。现在测试 SSH 与部署权限，通过后即可继续部署。","en":"The host key is confirmed. Test SSH and deployment access before continuing."},
     "extensions.read_confirm_host_key":{"zh-CN":"读取并确认主机指纹","en":"Read and confirm host key"},
-    "extensions.host_key_setup_notice":{"zh-CN":"请先读取并核对 VPS 的公开主机指纹；此操作不使用密码，也不会执行远程命令。","en":"First read and verify the VPS public host key. This does not use the password or run remote commands."},
+    "extensions.host_key_setup_notice":{"zh-CN":"请在步骤 1 读取主机身份，并通过服务商控制台或既有可信记录独立核对算法和完整指纹。","en":"In Step 1, read the host identity and independently verify both the algorithm and full fingerprint against the provider console or an existing trusted record."},
     "extensions.host_key_title":{"zh-CN":"确认 VPS 的 SSH 主机指纹","en":"Confirm the VPS SSH host key"},
     "extensions.host_key_probe_help":{"zh-CN":"这里只读取服务器公开身份，不验证密码、不执行命令。","en":"This reads only the server public identity. It does not verify a password or run commands."},
+    "extensions.host_key_candidate_title":{"zh-CN":"待核对的 SSH 主机身份","en":"Candidate SSH host identity"},
+    "extensions.host_key_independent_check":{"zh-CN":"请通过服务商控制台或既有可信记录，独立核对下面的算法和完整指纹。","en":"Independently verify the algorithm and full fingerprint below against the provider console or an existing trusted record."},
+    "extensions.host_key_algorithm":{"zh-CN":"算法","en":"Algorithm"},
+    "extensions.host_key_fingerprint":{"zh-CN":"完整 SHA-256 指纹","en":"Full SHA-256 fingerprint"},
+    "extensions.host_key_confirmation_scope":{"zh-CN":"确认只保存服务器公开身份，不代表 SSH 认证、部署或网络连接已经完成。","en":"Confirmation saves only the server public identity; it does not mean SSH authentication, deployment, or networking is complete."},
+    "extensions.confirm_host_key_pair":{"zh-CN":"算法和指纹均已独立核对","en":"I independently verified both values"},
+    "extensions.read_again":{"zh-CN":"重新读取","en":"Read again"},
+    "extensions.host_key_return_title":{"zh-CN":"请先完成步骤 1 的主机身份确认","en":"Complete host identity confirmation in Step 1"},
+    "extensions.host_key_return_help":{"zh-CN":"请返回步骤 1，独立核对算法和完整指纹；步骤 2 部署与步骤 3 本机网络准备仍需按顺序完成。","en":"Return to Step 1 and independently verify the algorithm and full fingerprint. Step 2 deployment and Step 3 local network setup still remain in order."},
+    "extensions.return_step1_host_key":{"zh-CN":"返回步骤 1 核对主机身份","en":"Return to Step 1"},
     "extensions.read_host_key":{"zh-CN":"读取主机指纹","en":"Read host key"},
     "extensions.confirm_host_key":{"zh-CN":"我已核对并确认","en":"I reviewed and confirm"},
     "extensions.host_key_not_read":{"zh-CN":"尚未读取主机指纹","en":"Host key not read yet"},
     "extensions.reading_host_key":{"zh-CN":"正在读取 VPS 的公开 SSH 主机指纹，不会提交密码。","en":"Reading the public SSH host key without sending a password."},
-    "extensions.host_key_invalid_response":{"zh-CN":"VPS 没有返回有效的 SHA-256 主机指纹。","en":"The VPS did not return a valid SHA-256 host key."},
-    "extensions.host_key_review":{"zh-CN":"请核对显示的 SHA-256 指纹；确认后会保存公开指纹，但不会测试密码。","en":"Review the SHA-256 fingerprint. Confirming saves the public key without testing credentials."},
+    "extensions.host_key_invalid_response":{"zh-CN":"VPS 没有返回受支持的主机密钥算法和规范 SHA-256 指纹。","en":"The VPS did not return a supported host-key algorithm and canonical SHA-256 fingerprint."},
+    "extensions.host_key_review":{"zh-CN":"候选主机身份已留在步骤 1。请独立核对算法和完整指纹；确认不代表 SSH 认证、部署或网络完成。","en":"The candidate host identity remains in Step 1. Independently verify the algorithm and full fingerprint; confirmation does not complete SSH authentication, deployment, or networking."},
     "extensions.host_key_confirmed":{"zh-CN":"SSH 主机指纹已独立确认并保存。现在可以开始检测私网链路。","en":"The SSH host key was confirmed and saved independently. You can now check the private link."},
     "extensions.host_key_confirmed_for_deploy":{"zh-CN":"SSH 主机指纹已保存。现在请测试 SSH 与部署权限。","en":"The SSH host key was saved. Now test SSH and deployment access."},
-    "extensions.host_key_confirm_in_network":{"zh-CN":"请在“配置连接”步骤独立读取并确认主机指纹；无需先测试 SSH 密码。","en":"Read and confirm the host key in Configure Connection. Password testing is not required first."},
+    "extensions.host_key_confirm_in_network":{"zh-CN":"请返回步骤 1，独立核对主机密钥算法和完整指纹。","en":"Return to Step 1 and independently verify the host-key algorithm and full fingerprint."},
     "extensions.deployment_target_mismatch":{"zh-CN":"该服务部署在另一台 VPS，请选择对应的服务器后继续。","en":"This service is deployed on another VPS. Select its server before continuing."},
-    "extensions.host_key_required_here":{"zh-CN":"开始私网检测前，只需在本页读取并确认主机指纹，不需要返回测试 SSH。","en":"Read and confirm the host key on this page before checking the private link. Do not return to SSH testing."},
+    "extensions.host_key_required_here":{"zh-CN":"开始私网检测前，请返回步骤 1 完成主机身份确认。","en":"Before checking the private link, return to Step 1 and complete host identity confirmation."},
     "extensions.discovery_failed_prefix":{"zh-CN":"环境检测失败：","en":"Environment discovery failed: "},
     "extensions.confirm_fingerprint_first":{"zh-CN":"请先确认 SSH 主机指纹。","en":"Confirm the SSH host fingerprint first."},
     "extensions.source_container":{"zh-CN":"源容器","en":"Source container"},
@@ -1414,6 +1424,8 @@
   MESSAGES['extensions.connect_and_test'] = {"zh-CN":"连接并自动测试","en":"Connect and test"};
   MESSAGES['extensions.guide_step4_title'] = {"zh-CN":"连接 VPS 并自动测试","en":"Connect the VPS and test automatically"};
   MESSAGES['extensions.guide_step4_host_missing'] = {"zh-CN":"还没有确认这台 VPS 的公开身份。","en":"This VPS identity is not confirmed yet."};
+  MESSAGES['extensions.guide_step4_return_host'] = {"zh-CN":"返回步骤 1，独立核对主机密钥算法和完整指纹。","en":"Return to Step 1 and independently verify the host-key algorithm and full fingerprint."};
+  MESSAGES['extensions.guide_step4_return_after'] = {"zh-CN":"确认后仍会按顺序完成部署与本机网络准备，不会跳过步骤 2 或 3。","en":"After confirmation, deployment and local network setup still continue in order; Steps 2 and 3 are not skipped."};
   MESSAGES['extensions.guide_step4_read_host'] = {"zh-CN":"读取主机指纹。此操作不验证密码。","en":"Read the host key without testing credentials."};
   MESSAGES['extensions.guide_step4_confirm_host'] = {"zh-CN":"核对页面显示的主机指纹并确认。","en":"Review and confirm the displayed host key."};
   MESSAGES['extensions.guide_step4_host_ready'] = {"zh-CN":"VPS 身份已确认。","en":"The VPS identity is confirmed."};

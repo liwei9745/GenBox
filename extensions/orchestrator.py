@@ -18,7 +18,16 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from extensions.models import ExtensionDeployRequest, ExtensionKeyResetRequest, ExtensionPlanRequest, ExtensionTarget, ExtensionTestRequest, SSHCredential
+from extensions.models import (
+    HOST_KEY_ALGORITHMS,
+    ExtensionDeployRequest,
+    ExtensionKeyResetRequest,
+    ExtensionPlanRequest,
+    ExtensionTarget,
+    ExtensionTestRequest,
+    SSHCredential,
+    is_canonical_host_key_trust,
+)
 from extensions.capabilities import validate_deployment_capability
 from extensions.deployment_failures import deployment_failure
 import extensions.store as extensions_store
@@ -217,7 +226,11 @@ class DeploymentResourceReservations:
         target_scopes = {
             ("target_id", str(plan.get("target_id") or "").strip().casefold()),
             ("endpoint", cls._normalized_host(plan.get("host")), int(plan.get("ssh_port") or 0)),
-            ("host_key", str(plan.get("host_fingerprint") or "").strip()),
+            (
+                "host_key",
+                str(plan.get("host_key_algorithm") or "").strip(),
+                str(plan.get("host_fingerprint") or "").strip(),
+            ),
         }
         target_scopes = {scope for scope in target_scopes if any(scope[1:])}
         resources = {
@@ -267,11 +280,34 @@ CLONE_SCRUB_KEYS = {
 }
 
 
-def _fingerprint(key: Any) -> str:
+def _host_key_identity(key: Any) -> tuple[str, str]:
     exported = key.export_public_key(format_name="openssh")
-    blob = base64.b64decode(exported.split()[1])
+    fields = exported.split()
+    if len(fields) < 2:
+        raise SSHConnectionError(
+            "SSH server did not return a recognizable host public key.",
+            code="ssh_host_key_unavailable",
+            stage="host_key_verification",
+        )
+    algorithm_value = fields[0]
+    algorithm = (
+        algorithm_value.decode("ascii", errors="strict")
+        if isinstance(algorithm_value, bytes)
+        else str(algorithm_value)
+    )
+    if algorithm not in HOST_KEY_ALGORITHMS:
+        raise SSHConnectionError(
+            "The SSH server returned an unsupported host-key algorithm.",
+            code="ssh_host_key_algorithm_unsupported",
+            stage="host_key_verification",
+        )
+    blob = base64.b64decode(fields[1], validate=True)
     digest = base64.b64encode(hashlib.sha256(blob).digest()).decode().rstrip("=")
-    return f"SHA256:{digest}"
+    return algorithm, f"SHA256:{digest}"
+
+
+def _fingerprint(key: Any) -> str:
+    return _host_key_identity(key)[1]
 
 
 def _clone_config_scrub_script() -> str:
@@ -417,16 +453,25 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
     has_private_key = bool(request.credential.private_key)
     if has_password == has_private_key:
         raise ValueError("请选择且只选择一种 SSH 凭据：密码或私钥")
+    expected_algorithm = request.expected_host_key_algorithm or request.target.host_key_algorithm
+    expected = request.expected_host_key or request.target.host_key
+    if not is_canonical_host_key_trust(expected_algorithm, expected):
+        raise SSHConnectionError(
+            "缺少完整、有效的 SSH 主机密钥算法和指纹，已拒绝连接。",
+            code="ssh_host_key_trust_incomplete",
+            stage="host_key_verification",
+        )
     try:
         import asyncssh
     except ImportError as exc:
         raise RuntimeError("缺少 asyncssh 依赖，请重新安装 requirements.txt") from exc
-    expected = request.expected_host_key or request.target.host_key
 
     class _FingerprintClient(asyncssh.SSHClient):
-        def __init__(self, expected_fingerprint: str = "", password: str = ""):
+        def __init__(self, expected_algorithm: str, expected_fingerprint: str, password: str = ""):
+            self.expected_algorithm = expected_algorithm
             self.expected_fingerprint = expected_fingerprint
             self._password = password
+            self.algorithm = ""
             self.fingerprint = ""
             self.transport_connected = False
             self.host_key_verified = False
@@ -454,10 +499,10 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
             return self._password
 
         def validate_host_public_key(self, host: str, addr: str, port: int, key: Any) -> bool:
-            self.fingerprint = _fingerprint(key)
-            self.host_key_verified = bool(self.expected_fingerprint) and hmac.compare_digest(
-                self.expected_fingerprint, self.fingerprint,
-            )
+            self.algorithm, self.fingerprint = _host_key_identity(key)
+            algorithm_matches = hmac.compare_digest(self.expected_algorithm, self.algorithm)
+            fingerprint_matches = hmac.compare_digest(self.expected_fingerprint, self.fingerprint)
+            self.host_key_verified = algorithm_matches and fingerprint_matches
             return self.host_key_verified
 
     base_kwargs: dict[str, Any] = {
@@ -474,10 +519,8 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
         "client_keys": None,
     }
 
-    if not expected:
-        return None, await probe_host_key(request.target)
-
     trusted_client = _FingerprintClient(
+        expected_algorithm,
         expected,
         request.credential.password if not request.credential.private_key else "",
     )
@@ -545,6 +588,8 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
                 "connection_lost_during_auth": trusted_client.connection_lost_during_auth,
             },
         ) from exc
+    except SSHConnectionError:
+        raise
     except asyncssh.HostKeyNotVerifiable as exc:
         raise SSHConnectionError(
             "VPS 当前 SSH 主机指纹与已确认记录不一致，已拒绝继续连接。",
@@ -572,7 +617,7 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
     return connection, trusted_client.fingerprint
 
 
-async def probe_host_key(target: ExtensionTarget) -> str:
+async def probe_host_key(target: ExtensionTarget) -> tuple[str, str]:
     """Read a server public SSH identity without attempting authentication."""
     try:
         import asyncssh
@@ -620,18 +665,21 @@ async def probe_host_key(target: ExtensionTarget) -> str:
             code="ssh_host_key_unavailable",
             stage="host_key_probe",
         )
-    return _fingerprint(key)
+    try:
+        return _host_key_identity(key)
+    except SSHConnectionError as exc:
+        exc.diagnostic["stage"] = "host_key_probe"
+        raise
 
 
 async def test_connection(request: ExtensionTestRequest) -> dict:
     connection, fingerprint = await _connect(request)
-    if connection is None:
-        return {"ok": False, "needs_host_key_confirmation": True, "host_key": fingerprint}
     try:
         result = await asyncio.wait_for(connection.run("printf genbox-connected", check=True), timeout=15)
         privileges = await _diagnose_privileges(connection, request.credential)
         return {
             "ok": result.stdout == "genbox-connected",
+            "host_key_algorithm": request.expected_host_key_algorithm or request.target.host_key_algorithm,
             "host_key": fingerprint,
             "privileges": privileges,
         }
@@ -707,6 +755,7 @@ class ExtensionTaskManager:
             "host": request.target.host,
             "ssh_port": request.target.port,
             "username": request.target.username.strip(),
+            "host_key_algorithm": request.expected_host_key_algorithm or request.target.host_key_algorithm,
             "host_fingerprint": request.expected_host_key or request.target.host_key,
             "auth_kind": _authentication_kind(request.credential),
             "elevation_contract": _elevation_contract(request.credential),
@@ -1374,12 +1423,14 @@ class DeploymentPlanManager:
 
     @staticmethod
     def _identity_fields(request: ExtensionPlanRequest | ExtensionDeployRequest) -> dict[str, Any]:
+        algorithm = request.expected_host_key_algorithm or request.target.host_key_algorithm
         fingerprint = request.expected_host_key or request.target.host_key
         return {
             "target_id": request.target.id,
             "host": request.target.host,
             "ssh_port": request.target.port,
             "username": request.target.username.strip(),
+            "host_key_algorithm": algorithm,
             "host_fingerprint": fingerprint,
             "auth_kind": _authentication_kind(request.credential),
             "elevation_contract": _elevation_contract(request.credential),
@@ -1723,6 +1774,7 @@ class DeploymentPlanManager:
         instances = [cls._existing_snapshot(item) for item in discovery.get("instances", [])]
         instances.sort(key=lambda item: (str(item.get("id") or ""), str(item.get("container_id") or "")))
         return {
+            "host_key_algorithm": copy.deepcopy(discovery.get("host_key_algorithm")),
             "host_key": copy.deepcopy(discovery.get("host_key")),
             "environment": cls._environment_snapshot(discovery.get("environment", {})),
             "instances": instances,
@@ -1733,6 +1785,7 @@ class DeploymentPlanManager:
     def _snapshot_shape_valid(snapshot: Any) -> bool:
         return (
             isinstance(snapshot, dict)
+            and "host_key_algorithm" in snapshot
             and "host_key" in snapshot
             and isinstance(snapshot.get("environment"), dict)
             and isinstance(snapshot.get("instances"), list)
@@ -1763,6 +1816,8 @@ class DeploymentPlanManager:
     @classmethod
     def _snapshot_changed_fields(cls, expected: dict, actual: dict) -> list[str]:
         changed: set[str] = set()
+        if expected.get("host_key_algorithm") != actual.get("host_key_algorithm"):
+            changed.add("host_key_algorithm")
         if expected.get("host_key") != actual.get("host_key"):
             changed.add("host_key")
         expected_environment = expected.get("environment", {})
@@ -1796,12 +1851,20 @@ class DeploymentPlanManager:
         if not request.target.id:
             raise ValueError("请先保存 VPS 配置，再生成部署计划")
         identity = self._identity_fields(request)
-        if not identity["host_fingerprint"]:
+        if not is_canonical_host_key_trust(
+            identity["host_key_algorithm"], identity["host_fingerprint"]
+        ):
             raise ValueError("请先确认 SSH 主机指纹，再生成部署计划")
+        discovered_algorithm = str(
+            discovery.get("host_key_algorithm") or identity["host_key_algorithm"]
+        )
         discovered_host_key = str(discovery.get("host_key") or identity["host_fingerprint"])
-        if discovered_host_key != identity["host_fingerprint"]:
+        algorithm_matches = hmac.compare_digest(discovered_algorithm, identity["host_key_algorithm"])
+        fingerprint_matches = hmac.compare_digest(discovered_host_key, identity["host_fingerprint"])
+        if not (algorithm_matches and fingerprint_matches):
             raise ValueError("发现结果与已确认 SSH 主机指纹不一致")
         discovery = copy.deepcopy(discovery)
+        discovery["host_key_algorithm"] = discovered_algorithm
         discovery["host_key"] = discovered_host_key
         verified_capability = self._capability_snapshot(discovery)
         if not verified_capability.get("can_deploy"):
@@ -2072,7 +2135,8 @@ class DeploymentPlanManager:
             raise ValueError("部署计划正在进行远程复核，请勿重复提交")
         identity_request = request
         plan_has_bound_identity = all(key in plan for key in (
-            "host", "ssh_port", "username", "host_fingerprint", "auth_kind", "elevation_contract",
+            "host", "ssh_port", "username", "host_key_algorithm", "host_fingerprint",
+            "auth_kind", "elevation_contract",
         ))
         if plan_has_bound_identity and request.trust_host_key:
             live_target = extensions_store.get_target(request.target.id)
@@ -2083,6 +2147,7 @@ class DeploymentPlanManager:
                 )
             identity_request = request.model_copy(update={
                 "target": live_target,
+                "expected_host_key_algorithm": live_target.host_key_algorithm,
                 "expected_host_key": live_target.host_key,
             })
         current_identity = self._identity_fields(identity_request)

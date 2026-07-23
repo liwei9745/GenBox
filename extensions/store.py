@@ -1,4 +1,5 @@
 import json
+import hmac
 import os
 import time
 import uuid
@@ -97,6 +98,7 @@ def save_target_metadata(data: dict) -> ExtensionTarget:
         and str(submitted.get("username", existing.username)) == existing.username
     )
     trust_state = {
+        "host_key_algorithm": existing.host_key_algorithm if same_identity else "",
         "host_key": existing.host_key if same_identity else "",
         "available_networks": existing.available_networks if same_identity else [],
         "network_url": existing.network_url if same_identity else "",
@@ -117,21 +119,31 @@ def save_target_metadata(data: dict) -> ExtensionTarget:
     return target
 
 
-def confirm_target_host_key(expected: ExtensionTarget, fingerprint: str) -> ExtensionTarget:
-    """Persist a probed key only if the target identity is unchanged since probing."""
+def confirm_target_host_key(
+    expected: ExtensionTarget,
+    algorithm: str,
+    fingerprint: str,
+) -> ExtensionTarget:
+    """Persist a probed identity pair only if target and trust state are unchanged."""
     config = load_config()
     current = next((item for item in config.targets if item.id == expected.id), None)
     if not current:
         raise ValueError("target_missing")
-    if (
-        current.host != expected.host
-        or current.port != expected.port
-        or current.username != expected.username
-        or current.host_key != expected.host_key
-    ):
+    comparisons = (
+        hmac.compare_digest(current.host, expected.host),
+        hmac.compare_digest(str(current.port), str(expected.port)),
+        hmac.compare_digest(current.username, expected.username),
+        hmac.compare_digest(current.host_key_algorithm, expected.host_key_algorithm),
+        hmac.compare_digest(current.host_key, expected.host_key),
+    )
+    if not all(comparisons):
         raise ValueError("target_changed")
     now = time.strftime("%Y-%m-%d %H:%M:%S")
-    confirmed = current.model_copy(update={"host_key": fingerprint, "updated_at": now})
+    confirmed = current.model_copy(update={
+        "host_key_algorithm": algorithm,
+        "host_key": fingerprint,
+        "updated_at": now,
+    })
     config.targets = [item for item in config.targets if item.id != current.id] + [confirmed]
     save_config(config)
     return confirmed

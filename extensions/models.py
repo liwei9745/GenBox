@@ -3,12 +3,30 @@
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
 
+HOST_KEY_ALGORITHMS = frozenset({
+    "ssh-ed25519",
+    "ecdsa-sha2-nistp256",
+    "ssh-rsa",
+})
+HOST_KEY_FINGERPRINT_PATTERN = r"^SHA256:[A-Za-z0-9+/]{43}$"
+
+
+def is_canonical_host_key_trust(algorithm: str, fingerprint: str) -> bool:
+    import re
+
+    return (
+        algorithm in HOST_KEY_ALGORITHMS
+        and re.fullmatch(HOST_KEY_FINGERPRINT_PATTERN, fingerprint or "") is not None
+    )
+
+
 class ExtensionTarget(BaseModel):
     id: str
     name: str
     host: str
     port: int = Field(default=22, ge=1, le=65535)
     username: str
+    host_key_algorithm: str = ""
     host_key: str = ""
     primary_network: Literal["tailscale", "netbird", "cloudflare"] = "tailscale"
     available_networks: list[Literal["tailscale", "netbird", "cloudflare"]] = Field(default_factory=list)
@@ -67,7 +85,8 @@ class ExtensionHostKeyProbeRequest(BaseModel):
 
 
 class ExtensionHostKeyConfirmRequest(ExtensionHostKeyProbeRequest):
-    fingerprint: str = Field(pattern=r"^SHA256:[A-Za-z0-9+/]{20,96}={0,2}$", max_length=128)
+    algorithm: Literal["ssh-ed25519", "ecdsa-sha2-nistp256", "ssh-rsa"]
+    fingerprint: str = Field(pattern=HOST_KEY_FINGERPRINT_PATTERN, min_length=50, max_length=50)
 
 
 class SSHCredential(BaseModel):
@@ -101,6 +120,7 @@ class ExtensionDeployRequest(BaseModel):
     target: ExtensionTarget
     credential: SSHCredential
     trust_host_key: bool = False
+    expected_host_key_algorithm: str = ""
     expected_host_key: str = ""
     image: str = "ghcr.io/yukkcat/chatgpt2api:latest"
     instance_id: str = Field(default="chatgpt2api-dev", pattern=r"^[a-z0-9][a-z0-9-]{1,39}$")
@@ -124,6 +144,7 @@ class ExtensionDiscoveryRequest(BaseModel):
     target: ExtensionTarget
     credential: SSHCredential
     trust_host_key: bool = False
+    expected_host_key_algorithm: str = ""
     expected_host_key: str = ""
 
 
@@ -172,6 +193,7 @@ class ExtensionTestRequest(BaseModel):
     target: ExtensionTarget
     credential: SSHCredential
     trust_host_key: bool = False
+    expected_host_key_algorithm: str = ""
     expected_host_key: str = ""
 
 
@@ -179,6 +201,7 @@ class NetworkConnectRequest(BaseModel):
     target: ExtensionTarget
     credential: SSHCredential
     trust_host_key: bool = False
+    expected_host_key_algorithm: str = ""
     expected_host_key: str = ""
     provider: Literal["tailscale", "netbird", "cloudflare"]
     enrollment_token: SecretStr = Field(default_factory=lambda: SecretStr(""), max_length=4096)

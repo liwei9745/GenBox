@@ -448,6 +448,7 @@ async def discover_environment(
         )
         return {
             "ok": True,
+            "host_key_algorithm": request.expected_host_key_algorithm or request.target.host_key_algorithm,
             "host_key": fingerprint,
             "privileges": privileges,
             "environment": {

@@ -18,10 +18,11 @@ from extensions.models import (
     ExtensionHostKeyProbeRequest,
     ExtensionKeyResetRequest,
     ExtensionPlanRequest,
-    ExtensionTarget,
+    ExtensionTarget as ExtensionTargetModel,
     ExtensionTestRequest,
     NetworkConnectRequest,
     SSHCredential,
+    is_canonical_host_key_trust,
 )
 import extensions.store as store
 from extensions.orchestrator import (
@@ -42,9 +43,17 @@ from extensions.orchestrator import (
 )
 
 
-TEST_HOST_KEY = "SHA256:AAAAAAAAAAAAAAAAAAAA"
+TEST_HOST_KEY_ALGORITHM = "ssh-ed25519"
+TEST_HOST_KEY = "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 DEPLOYMENT_ATTEMPT_ID = "0123456789abcdef0123456789abcdef"
 PHASE4_PATH_CONDITIONS_VERSION = "phase4-v3"
+
+
+def ExtensionTarget(**values):
+    """Build a fully trusted target unless a test explicitly exercises legacy trust."""
+    if values.get("host_key") == TEST_HOST_KEY and "host_key_algorithm" not in values:
+        values["host_key_algorithm"] = TEST_HOST_KEY_ALGORITHM
+    return ExtensionTargetModel(**values)
 
 
 def isolated_empty_path_conditions(**overrides):
@@ -137,6 +146,7 @@ def deployment_discovery(
             ]
         instance.setdefault("port_bindings_complete", True)
     return {
+        "host_key_algorithm": TEST_HOST_KEY_ALGORITHM,
         "host_key": TEST_HOST_KEY,
         "environment": environment_snapshot(
             listening_ports=listening_ports,
@@ -200,11 +210,12 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
     )
 
     async def run():
-        connection, fingerprint = await _connect(request)
-        assert connection is None
-        assert fingerprint.startswith("SHA256:")
+        algorithm, fingerprint = await probe_host_key(request.target)
+        assert algorithm == TEST_HOST_KEY_ALGORITHM
+        assert is_canonical_host_key_trust(algorithm, fingerprint)
         assert probe_calls == [{"host": "vps.example", "port": 22, "config": []}]
 
+        request.expected_host_key_algorithm = algorithm
         request.expected_host_key = fingerprint
         connection, trusted_fingerprint = await _connect(request)
         assert connection is not None
@@ -218,6 +229,7 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
         key_request = ExtensionTestRequest(
             target=request.target,
             credential=SSHCredential(private_key="private-key", passphrase="key-passphrase"),
+            expected_host_key_algorithm=algorithm,
             expected_host_key=fingerprint,
         )
         key_connection, key_fingerprint = await _connect(key_request)
@@ -268,7 +280,8 @@ def test_mismatched_ssh_host_key_is_rejected_before_authentication():
                     username="test-user",
                 ),
                 credential=SSHCredential(password="test-password"),
-                expected_host_key="SHA256:not-the-loopback-server-key",
+                expected_host_key_algorithm=TEST_HOST_KEY_ALGORITHM,
+                expected_host_key="SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
             )
             try:
                 await _connect(request)
@@ -276,6 +289,53 @@ def test_mismatched_ssh_host_key_is_rejected_before_authentication():
                 assert exc.diagnostic["code"] == "ssh_host_key_mismatch"
             else:
                 raise AssertionError("mismatched host key was accepted")
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    asyncio.run(run())
+    assert authentication_callbacks == []
+
+
+def test_mismatched_ssh_host_key_algorithm_is_rejected_before_authentication():
+    import asyncssh
+    from extensions.orchestrator import _fingerprint
+
+    authentication_callbacks = []
+    server_key = asyncssh.generate_private_key("ssh-ed25519")
+
+    class LoopbackServer(asyncssh.SSHServer):
+        def begin_auth(self, username):
+            authentication_callbacks.append("begin_auth")
+            return True
+
+        def password_auth_supported(self):
+            authentication_callbacks.append("password_auth_supported")
+            return True
+
+    async def run():
+        server = await asyncssh.listen(
+            "127.0.0.1",
+            0,
+            server_factory=LoopbackServer,
+            server_host_keys=[server_key],
+        )
+        try:
+            request = ExtensionTestRequest(
+                target=ExtensionTarget(
+                    id="loopback-algorithm",
+                    name="Loopback",
+                    host="127.0.0.1",
+                    port=server.get_port(),
+                    username="test-user",
+                ),
+                credential=SSHCredential(password="test-password"),
+                expected_host_key_algorithm="ecdsa-sha2-nistp256",
+                expected_host_key=_fingerprint(server_key),
+            )
+            with pytest.raises(SSHConnectionError) as caught:
+                await _connect(request)
+            assert caught.value.diagnostic["code"] == "ssh_host_key_mismatch"
         finally:
             server.close()
             await server.wait_closed()
@@ -319,6 +379,7 @@ def test_password_callback_authenticates_against_real_asyncssh_server():
                     username="test-user",
                 ),
                 credential=SSHCredential(password="test-password"),
+                expected_host_key_algorithm=TEST_HOST_KEY_ALGORITHM,
                 expected_host_key=_fingerprint(server_key),
             )
             connection, fingerprint = await _connect(request)
@@ -580,6 +641,7 @@ def test_password_auth_rejection_is_sanitized_and_does_not_claim_password_is_wro
     async def run():
         from extensions.orchestrator import _fingerprint
 
+        request.expected_host_key_algorithm = TEST_HOST_KEY_ALGORITHM
         request.expected_host_key = _fingerprint(Key())
         try:
             await _connect(request)
@@ -630,10 +692,12 @@ def test_password_auth_rejection_reports_when_password_was_not_selected(monkeypa
     request = ExtensionTestRequest(
         target=ExtensionTarget(
             id="vps", name="VPS", host="vps.example", username="root",
-            host_key="SHA256:test",
+            host_key_algorithm=TEST_HOST_KEY_ALGORITHM,
+            host_key=TEST_HOST_KEY,
         ),
         credential=SSHCredential(password="ssh-secret"),
-        expected_host_key="SHA256:test",
+        expected_host_key_algorithm=TEST_HOST_KEY_ALGORITHM,
+        expected_host_key=TEST_HOST_KEY,
     )
 
     async def run():
@@ -670,13 +734,15 @@ def test_extension_ssh_route_returns_structured_sanitized_auth_diagnostic(monkey
     monkeypatch.setattr(main, "test_extension_connection", reject)
     saved_target = ExtensionTarget(
         id="vps", name="VPS", host="vps.example", username="root",
-        host_key="SHA256:test",
+        host_key_algorithm=TEST_HOST_KEY_ALGORITHM,
+        host_key=TEST_HOST_KEY,
     )
     monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: saved_target)
     request = ExtensionTestRequest(
         target=saved_target,
         credential=SSHCredential(password="ssh-secret"),
-        expected_host_key="SHA256:test",
+        expected_host_key_algorithm=TEST_HOST_KEY_ALGORITHM,
+        expected_host_key=TEST_HOST_KEY,
     )
 
     async def run():
@@ -687,9 +753,12 @@ def test_extension_ssh_route_returns_structured_sanitized_auth_diagnostic(monkey
             assert exc.detail["error"] == "safe authentication message"
             assert exc.detail["diagnostic"]["code"] == "ssh_auth_rejected"
             assert exc.detail["diagnostic"]["password_requested"] is True
-            assert "ssh-secret" not in json.dumps(exc.detail)
-            assert "vps.example" not in json.dumps(exc.detail)
-            assert "root" not in json.dumps(exc.detail)
+            serialized = json.dumps(exc.detail)
+            assert "ssh-secret" not in serialized
+            assert "vps.example" not in serialized
+            assert "root" not in serialized
+            assert TEST_HOST_KEY_ALGORITHM not in serialized
+            assert TEST_HOST_KEY not in serialized
         else:
             raise AssertionError("route did not return the structured SSH diagnostic")
 
@@ -698,14 +767,21 @@ def test_extension_ssh_route_returns_structured_sanitized_auth_diagnostic(monkey
 
 def test_host_key_probe_request_has_no_credential_fields():
     assert set(ExtensionHostKeyProbeRequest.model_fields) == {"target_id"}
-    assert set(ExtensionHostKeyConfirmRequest.model_fields) == {"target_id", "fingerprint"}
+    assert set(ExtensionHostKeyConfirmRequest.model_fields) == {"target_id", "algorithm", "fingerprint"}
     for fingerprint in ("", "MD5:bad", "SHA256:short", "SHA256:bad value"):
         try:
-            ExtensionHostKeyConfirmRequest(target_id="saved", fingerprint=fingerprint)
+            ExtensionHostKeyConfirmRequest(
+                target_id="saved", algorithm=TEST_HOST_KEY_ALGORITHM, fingerprint=fingerprint
+            )
         except ValueError:
             pass
         else:
             raise AssertionError("a malformed host fingerprint was accepted")
+    for algorithm in ("", "rsa-sha2-512", "ssh-dss"):
+        with pytest.raises(ValueError):
+            ExtensionHostKeyConfirmRequest(
+                target_id="saved", algorithm=algorithm, fingerprint=TEST_HOST_KEY
+            )
 
 
 def test_probe_host_key_uses_kex_only_helper_without_identity_or_credentials(monkeypatch):
@@ -724,11 +800,12 @@ def test_probe_host_key_uses_kex_only_helper_without_identity_or_credentials(mon
     )
     monkeypatch.setitem(sys.modules, "asyncssh", fake_asyncssh)
 
-    fingerprint = asyncio.run(probe_host_key(ExtensionTarget(
+    algorithm, fingerprint = asyncio.run(probe_host_key(ExtensionTarget(
         id="probe", name="Probe", host="safe.example", username="ubuntu",
     )))
 
-    assert fingerprint.startswith("SHA256:")
+    assert algorithm == TEST_HOST_KEY_ALGORITHM
+    assert is_canonical_host_key_trust(algorithm, fingerprint)
     assert calls == [{"host": "safe.example", "port": 22, "config": []}]
     assert "username" not in calls[0]
     assert "credential" not in calls[0]
@@ -738,38 +815,46 @@ def test_probe_host_key_uses_kex_only_helper_without_identity_or_credentials(mon
 def test_host_key_confirm_reprobes_and_persists_only_matching_fingerprint(monkeypatch):
     import main
 
-    fingerprint = "SHA256:AAAAAAAAAAAAAAAAAAAA"
+    algorithm = TEST_HOST_KEY_ALGORITHM
+    fingerprint = TEST_HOST_KEY
     target = ExtensionTarget(
         id="saved", name="Saved", host="safe.example", username="ubuntu",
     )
     saved = []
 
     monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
-    monkeypatch.setattr(main, "probe_host_key", lambda _target: asyncio.sleep(0, result=fingerprint))
+    monkeypatch.setattr(
+        main, "probe_host_key", lambda _target: asyncio.sleep(0, result=(algorithm, fingerprint))
+    )
     monkeypatch.setattr(
         main.extensions_store,
         "confirm_target_host_key",
-        lambda expected, value: saved.append((expected, value)) or expected.model_copy(update={"host_key": value}),
+        lambda expected, alg, value: saved.append((expected, alg, value)) or expected.model_copy(
+            update={"host_key_algorithm": alg, "host_key": value}
+        ),
     )
 
     result = asyncio.run(main.extension_confirm_ssh_host_key(
-        ExtensionHostKeyConfirmRequest(target_id="saved", fingerprint=fingerprint)
+        ExtensionHostKeyConfirmRequest(
+            target_id="saved", algorithm=algorithm, fingerprint=fingerprint
+        )
     ))
 
     assert result["target"]["host_key"] == fingerprint
-    assert saved == [(target, fingerprint)]
+    assert result["target"]["host_key_algorithm"] == algorithm
+    assert saved == [(target, algorithm, fingerprint)]
 
 
 def test_host_key_confirm_rejects_changed_or_previously_conflicting_key(monkeypatch):
     import main
     from fastapi import HTTPException
 
-    observed = "SHA256:AAAAAAAAAAAAAAAAAAAA"
-    submitted = "SHA256:BBBBBBBBBBBBBBBBBBBB"
+    observed = TEST_HOST_KEY
+    submitted = "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
     writes = []
 
     async def current_key(_target):
-        return observed
+        return TEST_HOST_KEY_ALGORITHM, observed
 
     monkeypatch.setattr(main, "probe_host_key", current_key)
     monkeypatch.setattr(main.extensions_store, "upsert_target", lambda data: writes.append(data))
@@ -777,12 +862,16 @@ def test_host_key_confirm_rejects_changed_or_previously_conflicting_key(monkeypa
     for stored_key, requested_key in (("", submitted), (submitted, observed)):
         target = ExtensionTarget(
             id="saved", name="Saved", host="safe.example", username="ubuntu",
+            host_key_algorithm=TEST_HOST_KEY_ALGORITHM if stored_key else "",
             host_key=stored_key,
         )
         monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id, item=target: item)
         try:
             asyncio.run(main.extension_confirm_ssh_host_key(
-                ExtensionHostKeyConfirmRequest(target_id="saved", fingerprint=requested_key)
+                ExtensionHostKeyConfirmRequest(
+                    target_id="saved", algorithm=TEST_HOST_KEY_ALGORITHM,
+                    fingerprint=requested_key,
+                )
             ))
         except HTTPException as exc:
             assert exc.status_code == 409
@@ -792,13 +881,48 @@ def test_host_key_confirm_rejects_changed_or_previously_conflicting_key(monkeypa
     assert writes == []
 
 
+def test_host_key_confirm_rejects_algorithm_drift(monkeypatch):
+    import main
+    from fastapi import HTTPException
+
+    target = ExtensionTarget(
+        id="saved", name="Saved", host="safe.example", username="ubuntu",
+    )
+    writes = []
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    monkeypatch.setattr(
+        main,
+        "probe_host_key",
+        lambda _target: asyncio.sleep(
+            0, result=(TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY)
+        ),
+    )
+    monkeypatch.setattr(
+        main.extensions_store,
+        "confirm_target_host_key",
+        lambda *args: writes.append(args),
+    )
+
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(main.extension_confirm_ssh_host_key(
+            ExtensionHostKeyConfirmRequest(
+                target_id="saved",
+                algorithm="ecdsa-sha2-nistp256",
+                fingerprint=TEST_HOST_KEY,
+            )
+        ))
+
+    assert caught.value.status_code == 409
+    assert writes == []
+
+
 def test_extension_ssh_route_hides_unclassified_raw_exception(monkeypatch):
     import main
     from fastapi import HTTPException
 
     target = ExtensionTarget(
         id="vps", name="VPS", host="hidden.example", username="hidden-user",
-        host_key="SHA256:AAAAAAAAAAAAAAAAAAAA",
+        host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY,
     )
 
     async def reject(_request):
@@ -832,7 +956,7 @@ def test_post_connect_routes_hide_unclassified_remote_exceptions(monkeypatch):
 
     target = ExtensionTarget(
         id="saved", name="Saved", host="safe.example", username="ubuntu",
-        host_key="SHA256:AAAAAAAAAAAAAAAAAAAA",
+        host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY,
     )
     credential = SSHCredential(password="test-secret")
     raw = "hidden-user hidden.example 192.0.2.77 ssh-secret remote-output"
@@ -1080,26 +1204,33 @@ def test_target_store_roundtrip_and_delete(tmp_path, monkeypatch):
 
 def test_browser_target_save_cannot_set_or_replace_host_key(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
-    injected = "SHA256:BBBBBBBBBBBBBBBBBBBB"
-    confirmed = "SHA256:AAAAAAAAAAAAAAAAAAAA"
+    injected = "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    confirmed = TEST_HOST_KEY
 
     created = store.save_target_metadata({
         "id": "saved", "name": "Saved", "host": "safe.example", "port": 22,
-        "username": "ubuntu", "host_key": injected,
+        "username": "ubuntu", "host_key_algorithm": "ssh-rsa", "host_key": injected,
     })
+    assert created.host_key_algorithm == ""
     assert created.host_key == ""
 
-    store.upsert_target({**created.model_dump(), "host_key": confirmed})
+    store.upsert_target({
+        **created.model_dump(),
+        "host_key_algorithm": TEST_HOST_KEY_ALGORITHM,
+        "host_key": confirmed,
+    })
     unchanged = store.save_target_metadata({
         **created.model_dump(), "name": "Renamed", "host_key": injected,
     })
     assert unchanged.name == "Renamed"
+    assert unchanged.host_key_algorithm == TEST_HOST_KEY_ALGORITHM
     assert unchanged.host_key == confirmed
 
     changed = store.save_target_metadata({
         **unchanged.model_dump(), "host": "new.example", "host_key": injected,
     })
     assert changed.host == "new.example"
+    assert changed.host_key_algorithm == ""
     assert changed.host_key == ""
 
 
@@ -1117,7 +1248,8 @@ def test_browser_target_save_cannot_inject_network_verification_and_identity_cha
     assert injected.primary_network == "tailscale"
 
     verified = store.upsert_target({
-        **injected.model_dump(), "host_key": "SHA256:AAAAAAAAAAAAAAAAAAAA",
+        **injected.model_dump(), "host_key_algorithm": TEST_HOST_KEY_ALGORITHM,
+        "host_key": TEST_HOST_KEY,
         "available_networks": ["tailscale"], "network_url": "http://100.64.0.20:8893",
         "network_verified_at": "2026-07-19 12:00:00",
     })
@@ -1125,12 +1257,14 @@ def test_browser_target_save_cannot_inject_network_verification_and_identity_cha
         **verified.model_dump(), "name": "Renamed",
         "network_url": "http://100.64.0.99:8893", "network_verified_at": "2099-01-01 00:00:00",
     })
+    assert renamed.host_key_algorithm == verified.host_key_algorithm
     assert renamed.host_key == verified.host_key
     assert renamed.available_networks == ["tailscale"]
     assert renamed.network_url == verified.network_url
     assert renamed.network_verified_at == verified.network_verified_at
 
     changed = store.save_target_metadata({**renamed.model_dump(), "host": "new.example"})
+    assert changed.host_key_algorithm == ""
     assert changed.host_key == ""
     assert changed.available_networks == []
     assert changed.network_url == ""
@@ -1143,21 +1277,69 @@ def test_host_key_confirmation_store_fails_closed_on_concurrent_identity_change(
         "id": "saved", "name": "Saved", "host": "safe.example", "port": 22,
         "username": "ubuntu",
     })
-    fingerprint = "SHA256:AAAAAAAAAAAAAAAAAAAA"
-    confirmed = store.confirm_target_host_key(original, fingerprint)
+    fingerprint = TEST_HOST_KEY
+    confirmed = store.confirm_target_host_key(original, TEST_HOST_KEY_ALGORITHM, fingerprint)
+    assert confirmed.host_key_algorithm == TEST_HOST_KEY_ALGORITHM
     assert confirmed.host_key == fingerprint
 
     expected = confirmed
     store.save_target_metadata({**confirmed.model_dump(), "host": "changed.example"})
     try:
-        store.confirm_target_host_key(expected, fingerprint)
+        store.confirm_target_host_key(expected, TEST_HOST_KEY_ALGORITHM, fingerprint)
     except ValueError as exc:
         assert str(exc) == "target_changed"
     else:
         raise AssertionError("a stale probe overwrote a concurrently changed target")
     current = store.get_target("saved")
     assert current.host == "changed.example"
+    assert current.host_key_algorithm == ""
     assert current.host_key == ""
+
+
+def test_host_key_confirmation_store_fails_closed_on_concurrent_trust_pair_change(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    original = store.upsert_target({
+        "id": "saved", "name": "Saved", "host": "safe.example", "port": 22,
+        "username": "ubuntu",
+    })
+    expected = store.confirm_target_host_key(
+        original, TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY
+    )
+    changed = store.upsert_target({
+        **expected.model_dump(),
+        "host_key_algorithm": "ecdsa-sha2-nistp256",
+        "host_key": "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    })
+
+    with pytest.raises(ValueError, match="^target_changed$"):
+        store.confirm_target_host_key(
+            expected, TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY
+        )
+
+    current = store.get_target("saved")
+    assert current.host_key_algorithm == changed.host_key_algorithm
+    assert current.host_key == changed.host_key
+
+
+def test_legacy_fingerprint_only_target_is_untrusted_and_rejected_before_remote_work(monkeypatch):
+    import main
+    from fastapi import HTTPException
+
+    legacy = ExtensionTarget(
+        id="legacy", name="Legacy", host="safe.example", port=22,
+        username="ubuntu", host_key_algorithm="", host_key=TEST_HOST_KEY,
+    )
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: legacy)
+    submitted = ExtensionTestRequest(
+        target=legacy,
+        credential=SSHCredential(password="session-only"),
+    )
+
+    with pytest.raises(HTTPException) as caught:
+        main._bind_confirmed_extension_target(submitted)
+
+    assert caught.value.status_code == 409
+    assert "指纹" in str(caught.value.detail)
 
 
 def test_all_ssh_routes_bind_to_the_server_confirmed_target(monkeypatch):
@@ -1166,7 +1348,7 @@ def test_all_ssh_routes_bind_to_the_server_confirmed_target(monkeypatch):
 
     confirmed = ExtensionTarget(
         id="saved", name="Saved", host="safe.example", port=22, username="ubuntu",
-        host_key="SHA256:AAAAAAAAAAAAAAAAAAAA",
+        host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY,
     )
     submitted = confirmed.model_copy(update={
         "host": "attacker.example",
@@ -1210,7 +1392,7 @@ def test_confirmed_target_binding_overrides_client_trust_fields(monkeypatch):
 
     confirmed = ExtensionTarget(
         id="saved", name="Saved", host="safe.example", port=22, username="ubuntu",
-        host_key="SHA256:AAAAAAAAAAAAAAAAAAAA",
+        host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY,
     )
     monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: confirmed)
     submitted = ExtensionDiscoveryRequest(
@@ -1222,6 +1404,7 @@ def test_confirmed_target_binding_overrides_client_trust_fields(monkeypatch):
 
     bound = main._bind_confirmed_extension_target(submitted)
     assert bound.target == confirmed
+    assert bound.expected_host_key_algorithm == confirmed.host_key_algorithm
     assert bound.expected_host_key == confirmed.host_key
     assert bound.trust_host_key is True
 
@@ -1308,7 +1491,7 @@ def test_deploy_task_reports_success(tmp_path, monkeypatch):
             pass
 
     async def fake_connect(request):
-        return Connection(), "SHA256:test"
+        return Connection(), TEST_HOST_KEY
 
     async def run():
         from extensions import orchestrator
@@ -1405,7 +1588,7 @@ def test_working_copy_password_sudo_waits_for_ssh_input(tmp_path, monkeypatch):
     connection = Connection()
 
     async def fake_connect(request):
-        return connection, "SHA256:test"
+        return connection, TEST_HOST_KEY
 
     async def run():
         from extensions import orchestrator
@@ -1472,7 +1655,7 @@ def test_password_sudo_command_preserves_shell_quoting():
 
 def test_deployment_plan_rejects_port_conflict():
     manager = DeploymentPlanManager()
-    target = ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", host_key=TEST_HOST_KEY)
+    target = ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY)
     request = ExtensionPlanRequest(
         target=target, credential=SSHCredential(password="secret"), service_port=33010,
     )
@@ -1490,7 +1673,7 @@ def test_deployment_plan_rejects_port_conflict():
 
 def test_deployment_plan_is_scoped_and_non_destructive():
     manager = DeploymentPlanManager()
-    target = ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", host_key=TEST_HOST_KEY)
+    target = ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY)
     request = ExtensionPlanRequest(
         target=target, credential=SSHCredential(password="secret"), service_port=33010,
     )
@@ -1636,7 +1819,8 @@ def test_existing_plan_rejects_missing_ambiguous_or_mismatched_structured_port(
 ):
     target = ExtensionTarget(
         id="target-a", name="VPS", host="host.example", username="deploy-user",
-        host_key=TEST_HOST_KEY, chatgpt2api_port=requested_port,
+        host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY,
+        chatgpt2api_port=requested_port,
     )
     existing = {
         "id": "external-app", "container_id": "container-a", "name": "external-app",
@@ -2163,11 +2347,13 @@ def test_extension_plan_discovery_and_instance_routes_expose_only_public_product
     import main
 
     monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
-    fingerprint = "SHA256:PUBLICBOUNDARYSENTINEL"
+    algorithm = TEST_HOST_KEY_ALGORITHM
+    fingerprint = "SHA256:PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP"
     image = "registry.invalid/sentinel-image@sha256:" + "a" * 64
     target = store.upsert_target({
         "id": "public-target", "name": "VPS", "host": "sentinel-host.example",
-        "port": 2222, "username": "sentinel-user", "host_key": fingerprint,
+        "port": 2222, "username": "sentinel-user",
+        "host_key_algorithm": algorithm, "host_key": fingerprint,
         "chatgpt2api_port": 34567,
     })
     discovered_instance = {
@@ -2184,6 +2370,7 @@ def test_extension_plan_discovery_and_instance_routes_expose_only_public_product
         "clone_available": True,
     }
     discovery = deployment_discovery(instances=[discovered_instance])
+    discovery["host_key_algorithm"] = algorithm
     discovery["host_key"] = fingerprint
     discovery["environment"]["home_dir"] = "/home/sentinel-user"
     plan_manager = DeploymentPlanManager()
@@ -2825,7 +3012,7 @@ def test_legacy_blank_username_quarantines_only_that_target_and_preserves_instan
 
 def test_isolated_working_copy_plan_requires_space_and_scrubs_push_state():
     manager = DeploymentPlanManager()
-    target = ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", host_key=TEST_HOST_KEY)
+    target = ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY)
     request = ExtensionPlanRequest(
         target=target, credential=SSHCredential(password="secret", elevation="passwordless_sudo"), service_port=33010,
         clone_source_id="chatgpt2api-warp", clone_scope="working-copy",
@@ -2856,7 +3043,7 @@ def test_isolated_working_copy_plan_requires_space_and_scrubs_push_state():
 def test_working_copy_plan_rejects_image_drift():
     manager = DeploymentPlanManager()
     request = ExtensionPlanRequest(
-        target=ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", host_key=TEST_HOST_KEY),
+        target=ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY),
         credential=SSHCredential(password="secret", elevation="passwordless_sudo"), service_port=33010,
         image="ghcr.io/yukkcat/chatgpt2api:latest",
         clone_source_id="chatgpt2api-warp", clone_scope="working-copy",
@@ -2883,7 +3070,7 @@ def test_working_copy_plan_uses_existing_local_image_baseline():
     manager = DeploymentPlanManager()
     baseline_image = "genbox-chatgpt2api-source:abc123456789"
     request = ExtensionPlanRequest(
-        target=ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", host_key=TEST_HOST_KEY),
+        target=ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY),
         credential=SSHCredential(password="secret", elevation="passwordless_sudo"), service_port=33010,
         image=baseline_image, clone_source_id="chatgpt2api-warp", clone_scope="working-copy",
     )
@@ -2927,7 +3114,7 @@ def test_clone_config_scrub_removes_inherited_push_identity_and_keys(tmp_path):
 def test_clone_plan_rejects_insufficient_disk():
     manager = DeploymentPlanManager()
     request = ExtensionPlanRequest(
-        target=ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", host_key=TEST_HOST_KEY),
+        target=ExtensionTarget(id="t", name="VPS", host="host.example", username="deploy-user", host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY),
         credential=SSHCredential(password="secret", elevation="passwordless_sudo"), service_port=33010,
         clone_source_id="chatgpt2api-warp", clone_scope="media",
     )

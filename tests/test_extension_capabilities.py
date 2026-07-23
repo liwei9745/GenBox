@@ -6,7 +6,12 @@ from fastapi.testclient import TestClient
 import main
 from extensions.capabilities import DEPLOYMENT_CAPABILITIES, validate_deployment_capability
 from extensions.catalog import public_catalog
-from extensions.models import ExtensionDeployRequest, ExtensionPlanRequest, ExtensionTarget, SSHCredential
+from extensions.models import (
+    ExtensionDeployRequest,
+    ExtensionPlanRequest,
+    ExtensionTarget as ExtensionTargetModel,
+    SSHCredential,
+)
 from extensions.orchestrator import (
     DeploymentAttemptConflictError,
     DeploymentPlanManager,
@@ -18,6 +23,8 @@ from extensions.orchestrator import (
 SECRET_SENTINEL = "capability-test-secret-must-not-leak"
 DEPLOYMENT_ATTEMPT_ID = "0123456789abcdef0123456789abcdef"
 PINNED_IMAGE = "ghcr.io/yukkcat/chatgpt2api@sha256:" + ("a" * 64)
+TEST_HOST_KEY_ALGORITHM = "ssh-ed25519"
+TEST_HOST_KEY = "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 UNSUPPORTED_PROJECT_IDS = [
     "unknown-project",
     "gemini2api-liwei9745",
@@ -25,6 +32,13 @@ UNSUPPORTED_PROJECT_IDS = [
     "grok2api",
     "kiro2api",
 ]
+
+
+def ExtensionTarget(**values):
+    if values.get("host_key") and "host_key_algorithm" not in values:
+        values["host_key_algorithm"] = TEST_HOST_KEY_ALGORITHM
+        values["host_key"] = TEST_HOST_KEY
+    return ExtensionTargetModel(**values)
 
 
 def privilege_snapshot():
@@ -61,7 +75,8 @@ def environment_snapshot(*, listening_ports=None, disk_free_mb=5000):
 
 def deployment_discovery(*, listening_ports=None, disk_free_mb=5000):
     return {
-        "host_key": "SHA256:AAAAAAAAAAAAAAAAAAAA",
+        "host_key_algorithm": TEST_HOST_KEY_ALGORITHM,
+        "host_key": TEST_HOST_KEY,
         "environment": environment_snapshot(
             listening_ports=listening_ports, disk_free_mb=disk_free_mb,
         ),

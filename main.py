@@ -76,6 +76,7 @@ from extensions.models import (
     ExtensionTaskResumeRequest,
     ExtensionPlanRequest, ExtensionTestRequest,
     ManagedCredentialUpsertRequest, VaultPasswordRequest,
+    is_canonical_host_key_trust,
 )
 from extensions.orchestrator import (
     DeploymentAttemptConflictError, DeploymentNoTaskError, SSHAuthenticationError, SSHConnectionError,
@@ -3636,7 +3637,9 @@ def _bind_confirmed_extension_target(body, *, plan_confirmation: bool = False):
     saved_target = extensions_store.get_target(body.target.id)
     if not saved_target:
         raise HTTPException(status_code=404, detail="请先保存 VPS，再执行远程操作")
-    if not saved_target.host_key:
+    if not is_canonical_host_key_trust(
+        saved_target.host_key_algorithm, saved_target.host_key
+    ):
         raise HTTPException(status_code=409, detail="请先读取并确认 SSH 主机指纹")
     if (
         body.target.host != saved_target.host
@@ -3659,6 +3662,7 @@ def _bind_confirmed_extension_target(body, *, plan_confirmation: bool = False):
         raise HTTPException(status_code=409, detail="VPS 连接信息已变化，请重新保存并确认主机指纹")
     return body.model_copy(update={
         "target": saved_target,
+        "expected_host_key_algorithm": saved_target.host_key_algorithm,
         "expected_host_key": saved_target.host_key,
         "trust_host_key": True,
     })
@@ -3768,7 +3772,7 @@ async def extension_probe_ssh_host_key(body: ExtensionHostKeyProbeRequest):
     if not target:
         raise HTTPException(status_code=404, detail="请先保存 VPS，再读取主机指纹")
     try:
-        fingerprint = await probe_host_key(target)
+        algorithm, fingerprint = await probe_host_key(target)
     except SSHConnectionError as exc:
         raise HTTPException(
             status_code=400,
@@ -3782,7 +3786,11 @@ async def extension_probe_ssh_host_key(body: ExtensionHostKeyProbeRequest):
                 "diagnostic": {"code": "ssh_host_key_probe_failed", "stage": "host_key_probe", "retry_safe": False},
             },
         ) from exc
-    return {"target_id": target.id, "fingerprint": fingerprint}
+    return {
+        "target_id": target.id,
+        "algorithm": algorithm,
+        "fingerprint": fingerprint,
+    }
 
 
 @app.post("/api/extensions/ssh/host-key/confirm")
@@ -3791,18 +3799,25 @@ async def extension_confirm_ssh_host_key(body: ExtensionHostKeyConfirmRequest):
     if not target:
         raise HTTPException(status_code=404, detail="请先保存 VPS，再确认主机指纹")
     try:
-        current_fingerprint = await probe_host_key(target)
+        current_algorithm, current_fingerprint = await probe_host_key(target)
     except SSHConnectionError as exc:
         raise HTTPException(
             status_code=400,
             detail={"error": str(exc), "diagnostic": exc.diagnostic},
         ) from exc
-    if not hmac.compare_digest(body.fingerprint, current_fingerprint):
-        raise HTTPException(status_code=409, detail="VPS 主机指纹在确认前发生变化，已拒绝保存")
-    if target.host_key and not hmac.compare_digest(target.host_key, current_fingerprint):
-        raise HTTPException(status_code=409, detail="VPS 已保存的主机指纹与当前值不一致，已拒绝覆盖")
+    algorithm_matches = hmac.compare_digest(body.algorithm, current_algorithm)
+    fingerprint_matches = hmac.compare_digest(body.fingerprint, current_fingerprint)
+    if not (algorithm_matches and fingerprint_matches):
+        raise HTTPException(status_code=409, detail="VPS 主机身份在确认前发生变化，已拒绝保存")
+    if is_canonical_host_key_trust(target.host_key_algorithm, target.host_key):
+        saved_algorithm_matches = hmac.compare_digest(target.host_key_algorithm, current_algorithm)
+        saved_fingerprint_matches = hmac.compare_digest(target.host_key, current_fingerprint)
+        if not (saved_algorithm_matches and saved_fingerprint_matches):
+            raise HTTPException(status_code=409, detail="VPS 已保存的主机身份与当前值不一致，已拒绝覆盖")
     try:
-        saved = extensions_store.confirm_target_host_key(target, current_fingerprint)
+        saved = extensions_store.confirm_target_host_key(
+            target, current_algorithm, current_fingerprint
+        )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail="VPS 连接信息在确认期间发生变化，已拒绝保存指纹") from exc
     return {"target": saved.model_dump()}

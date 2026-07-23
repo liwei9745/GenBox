@@ -853,7 +853,19 @@
               <label class="extension-checkbox"><input id="extReuseSshPassword" type="checkbox" onchange="extensionCredentialChanged()"><span data-i18n="extensions.reuse_ssh_password">本次请求显式使用 SSH 密码作为 sudo 密码</span></label>
             </fieldset>
             <p id="extCredentialNotice" class="extension-credential-notice" role="status"><span data-i18n="extensions.ssh_not_saved_notice">保存 VPS 连接信息，但不保存 SSH 密码、私钥或 sudo 密码；关闭页面或重启后需要重新输入。</span></p>
-            <div id="extHostKeyConfirm" class="extension-confirm hidden" role="alert"></div>
+            <section id="extHostKeyConfirm" class="extension-confirm hidden" aria-live="polite">
+              <b data-i18n="extensions.host_key_candidate_title">待核对的 SSH 主机身份</b>
+              <p data-i18n="extensions.host_key_independent_check">请通过服务商控制台或既有可信记录，独立核对下面的算法和完整指纹。</p>
+              <dl>
+                <dt data-i18n="extensions.host_key_algorithm">算法</dt><dd><code id="extHostKeyAlgorithmValue"></code></dd>
+                <dt data-i18n="extensions.host_key_fingerprint">完整 SHA-256 指纹</dt><dd><code id="extHostKeyFingerprintValue"></code></dd>
+              </dl>
+              <p data-i18n="extensions.host_key_confirmation_scope">确认只保存服务器公开身份，不代表 SSH 认证、部署或网络连接已经完成。</p>
+              <div class="extension-actions">
+                <button type="button" class="btn-secondary" onclick="extensionProbeHostKey()" data-i18n="extensions.read_again">重新读取</button>
+                <button type="button" class="btn-primary" id="extHostKeyConfirmBtn" onclick="extensionConfirmHostKey()" disabled data-i18n="extensions.confirm_host_key_pair">算法和指纹均已独立核对</button>
+              </div>
+            </section>
             <div class="extension-actions extension-advanced-only"><button class="btn-secondary" id="extStepHostKeyBtn" onclick="extensionStartHostKeySetup()" disabled><span data-i18n="extensions.read_confirm_host_key">读取并确认主机指纹</span></button><button class="btn-secondary" id="extTestSshBtn" onclick="extensionTestSSH()" disabled><span id="extTestSshLabel" data-i18n="extensions.ssh_deploy_diagnostic">测试 SSH 与部署权限</span></button><button class="btn-primary" id="extSshNextBtn" onclick="extensionSshNext()" disabled><span id="extSshNextLabel" data-i18n="common.next">下一步</span></button></div>
           </div>
           <div class="extension-pane hidden" data-pane="2">
@@ -948,12 +960,11 @@
                 <a class="extension-mobile-qr" href="https://tailscale.com/download" target="_blank" rel="noopener noreferrer" aria-label="打开 Tailscale 官方下载页" data-i18n-aria-label="extensions.mobile_download_label"><img src="/static/assets/tailscale-mobile-download-qr.png" alt="Tailscale 官方下载页二维码" width="168" height="168"><span><span data-i18n="extensions.scan_download">扫码打开官方下载页</span></span></a>
               </section>
               <section id="extNetworkHostKey" class="extension-confirm hidden" aria-live="polite">
-                <b data-i18n="extensions.host_key_title">确认 VPS 的 SSH 主机指纹</b>
-                <p data-i18n="extensions.host_key_probe_help">这里只读取服务器公开身份，不验证密码、不执行命令。</p>
+                <b data-i18n="extensions.host_key_return_title">请先完成步骤 1 的主机身份确认</b>
+                <p data-i18n="extensions.host_key_return_help">步骤 4 不会跳过部署与本机网络准备；请返回步骤 1，独立核对算法和完整指纹后再按顺序继续。</p>
                 <code id="extNetworkHostKeyValue"></code>
-                <div class="extension-actions extension-advanced-only">
-                  <button type="button" class="btn-secondary" id="extNetworkHostKeyProbeBtn" onclick="extensionProbeHostKey()" data-i18n="extensions.read_host_key">读取主机指纹</button>
-                  <button type="button" class="btn-primary hidden" id="extNetworkHostKeyConfirmBtn" onclick="extensionConfirmHostKey()" data-i18n="extensions.confirm_host_key">我已核对并确认</button>
+                <div class="extension-actions">
+                  <button type="button" class="btn-primary" id="extNetworkHostKeyProbeBtn" onclick="extensionReturnHostKeySetup()" data-i18n="extensions.return_step1_host_key">返回步骤 1 核对主机身份</button>
                 </div>
               </section>
               <div class="extension-progress"><div><span id="extNetworkProgressLabel"><span data-i18n="extensions.waiting_connection">等待连接</span></span><span id="extNetworkProgressPercent">0%</span></div><div class="extension-progress-track"><div id="extNetworkProgressFill"></div></div></div>
