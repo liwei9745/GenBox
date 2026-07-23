@@ -118,6 +118,11 @@ GenBox should retain, when available:
 - Prompt and model.
 - SHA-256 and import time.
 
+The receiver may also preserve the source content SHA-256 in GenBox-owned image
+metadata so a restart can rebuild content identity from the durable manifest.
+This is an internal recovery aid, not a substitute for the authenticated
+receipt hash or permission to delete the sender's source.
+
 At minimum, imported images must be identifiable in the media library as remote
 chatgpt2api media. Tag naming and filtering behavior require UI acceptance tests.
 

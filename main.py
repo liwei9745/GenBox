@@ -3240,6 +3240,7 @@ def _save_synced_image(data: bytes, deployment_name: str, remote_path: str,
         metadata.add_text("Model", model or "remote-sync")
         metadata.add_text("CreatedAt", remote_created_at or ts)
         metadata.add_text("SourcePath", remote_path)
+        metadata.add_text("SourceSHA256", sha256_bytes(data))
         metadata.add_text("Source", "cloud")
         metadata.add_text("SourceDeployment", deployment_name)
         metadata.add_text("Tags", "cloud-sync")
@@ -3550,6 +3551,8 @@ async def sync_push_image(
         else:
             local_index = LocalImageIndex()
             local_index.ensure_sha256_index()
+            local_index.index.update(manifest.local_sha256_index(GALLERY_DIR))
+            local_index.save()
             if local_index.contains_hash(metadata["sha256"]):
                 filename = local_index.index[metadata["sha256"]]
                 status = "duplicate-local"

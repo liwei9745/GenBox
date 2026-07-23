@@ -145,6 +145,25 @@ def test_local_sha256_index_discovers_existing_files(tmp_path, monkeypatch):
     assert idx.contains_hash(hashlib.sha256(image.read_bytes()).hexdigest()) is True
 
 
+def test_manifest_hash_restore_is_confined_to_existing_gallery_files(tmp_path, monkeypatch):
+    gallery = tmp_path / "gallery"
+    gallery.mkdir()
+    monkeypatch.setattr(manifest_mod, "GALLERY_DIR", gallery)
+    monkeypatch.setattr(manifest_mod, "MANIFEST_FILE", tmp_path / "sync_manifest.json")
+    inside = gallery / "inside.png"
+    outside = tmp_path / "outside.png"
+    inside.write_bytes(b"inside")
+    outside.write_bytes(b"outside")
+
+    manifest = manifest_mod.SyncManifest()
+    inside_digest = hashlib.sha256(b"source-inside").hexdigest()
+    outside_digest = hashlib.sha256(b"source-outside").hexdigest()
+    manifest.add("source", "inside.png", str(inside), inside_digest, 6, "")
+    manifest.add("source", "outside.png", str(outside), outside_digest, 7, "")
+
+    assert manifest.local_sha256_index(gallery) == {inside_digest: "inside.png"}
+
+
 def test_local_md5_index(tmp_path, monkeypatch):
     gallery = tmp_path / "gallery"
     gallery.mkdir()

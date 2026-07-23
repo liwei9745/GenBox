@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import Image, PngImagePlugin
 
 import main
 import sync.manifest as manifest_mod
@@ -194,6 +194,43 @@ def test_push_route_imports_then_is_idempotent_and_deduplicates_by_content(push_
     assert len(list(push_environment.glob("*.png"))) == 1
 
 
+def test_push_content_deduplication_survives_local_index_rebuild(push_environment):
+    client = TestClient(main.app)
+    payload = _png_bytes("purple")
+
+    first = _push(client, payload, remote_path="2026/07/19/first.png").json()
+    assert first["status"] == "imported"
+
+    manifest_mod.LOCAL_INDEX_FILE.unlink()
+    manifest_mod.LOCAL_MD5_INDEX_FILE.unlink()
+
+    repeated_from_new_path = _push(
+        client,
+        payload,
+        remote_path="2026/07/19/second.png",
+    ).json()
+
+    assert repeated_from_new_path["status"] == "duplicate-local"
+    assert repeated_from_new_path["local_file"] == first["local_file"]
+    assert len(list(push_environment.glob("*.png"))) == 1
+
+
+def test_push_does_not_trust_uncommitted_source_hash_metadata(push_environment):
+    client = TestClient(main.app)
+    payload = _png_bytes("orange")
+    forged_path = push_environment / "uncommitted.png"
+    forged_metadata = PngImagePlugin.PngInfo()
+    forged_metadata.add_text("SourceSHA256", hashlib.sha256(payload).hexdigest())
+    with Image.open(io.BytesIO(payload)) as image:
+        image.save(forged_path, format="PNG", pnginfo=forged_metadata)
+
+    receipt = _push(client, payload, remote_path="2026/07/19/verified.png").json()
+
+    assert receipt["status"] == "imported"
+    assert receipt["local_file"] != forged_path.name
+    assert len(list(push_environment.glob("*.png"))) == 2
+
+
 def test_push_changed_content_at_same_source_path_creates_a_new_receipt(push_environment):
     client = TestClient(main.app)
     remote_path = "2026/07/19/image.png"
@@ -245,9 +282,10 @@ def test_push_preserves_png_metadata_and_exposes_gallery_source_fields(push_envi
     created_at = "2026-07-19T12:34:56+08:00"
     prompt = "保留 UTF-8 提示词"
     model = "gpt-image-2"
+    payload = _png_bytes("blue")
     receipt = _push(
         client,
-        _png_bytes("blue"),
+        payload,
         created_at=created_at,
         prompt=prompt,
         model=model,
@@ -259,6 +297,7 @@ def test_push_preserves_png_metadata_and_exposes_gallery_source_fields(push_envi
         assert image.info["Model"] == model
         assert image.info["CreatedAt"] == created_at
         assert image.info["SourcePath"] == "2026/07/19/image.png"
+        assert image.info["SourceSHA256"] == hashlib.sha256(payload).hexdigest()
         assert image.info["SourceDeployment"] == SOURCE_ID
         assert image.info["Source"] == "cloud"
         assert image.info["Tags"] == "cloud-sync"

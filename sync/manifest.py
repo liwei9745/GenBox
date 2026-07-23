@@ -103,6 +103,27 @@ class SyncManifest:
         }
         self.save()
 
+    def local_sha256_index(self, gallery_dir: Path) -> Dict[str, str]:
+        """Return durable source hashes whose committed files still exist in the gallery."""
+        gallery_root = gallery_dir.resolve()
+        restored: Dict[str, str] = {}
+        for entry in self.entries.values():
+            digest = entry.get("sha256")
+            if (
+                not isinstance(digest, str)
+                or len(digest) != 64
+                or any(char not in "0123456789abcdefABCDEF" for char in digest)
+            ):
+                continue
+            try:
+                local_path = Path(str(entry.get("local_path") or "")).resolve()
+                local_path.relative_to(gallery_root)
+            except (OSError, ValueError):
+                continue
+            if local_path.is_file() and local_path.suffix.lower() == ".png":
+                restored[digest.lower()] = local_path.name
+        return restored
+
 
 # ──────────────────────────────────────────────────────────────
 # 本地内容去重索引（增量）
