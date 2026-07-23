@@ -68,7 +68,12 @@ from providers import generate_multi, enhance_prompt_with_llm, enhance_prompt_wi
 from sync.models import RemoteImageRecord, SyncCandidate, SyncDeployment
 from sync.client import ChatGPT2APIClient, sha256_bytes
 from sync.manifest import SyncManifest, LocalImageIndex
-from sync.ingest import authenticate_push_source, validate_image_payload, validate_remote_path
+from sync.ingest import (
+    PUSH_CONTRACT_VERSION,
+    authenticate_push_source,
+    validate_image_payload,
+    validate_remote_path,
+)
 import sync.store as sync_store
 from extensions.models import (
     ExtensionBatchTargetsRequest, ExtensionDeployRequest, ExtensionDiscoveryRequest,
@@ -3574,6 +3579,7 @@ async def sync_push_image(
 
         return {
             "ok": True,
+            "contract_version": PUSH_CONTRACT_VERSION,
             "status": status,
             "source_id": x_genbox_source,
             "remote_path": remote_path,
@@ -3599,6 +3605,7 @@ async def sync_push_status(
         raise HTTPException(status_code=401, detail="无效的推送来源或 API Key")
     return {
         "ok": True,
+        "contract_version": PUSH_CONTRACT_VERSION,
         "source_id": x_genbox_source,
         "max_image_bytes": int(os.getenv("GENBOX_PUSH_MAX_BYTES", str(25 * 1024 * 1024))),
     }

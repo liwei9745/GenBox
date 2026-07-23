@@ -12,6 +12,7 @@ from PIL import Image
 
 
 MAX_PUSH_IMAGE_BYTES = int(os.getenv("GENBOX_PUSH_MAX_BYTES", str(25 * 1024 * 1024)))
+PUSH_CONTRACT_VERSION = "v1"
 SOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 WINDOWS_DRIVE_PATTERN = re.compile(r"^[A-Za-z]:")
 

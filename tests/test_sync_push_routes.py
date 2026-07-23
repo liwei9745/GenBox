@@ -11,6 +11,7 @@ from PIL import Image, PngImagePlugin
 
 import main
 import sync.manifest as manifest_mod
+from sync.ingest import PUSH_CONTRACT_VERSION
 
 
 SOURCE_ID = "chatgpt2api-dev"
@@ -18,6 +19,7 @@ PUSH_KEY = "dummy-push-key-for-tests"
 ADMIN_KEY = "dummy-admin-key-for-tests"
 REQUIRED_RECEIPT_FIELDS = {
     "ok",
+    "contract_version",
     "status",
     "source_id",
     "remote_path",
@@ -81,6 +83,7 @@ def test_push_status_route_authentication(push_environment):
     ok = client.get("/api/sync/push/status", headers=_headers())
     assert ok.status_code == 200
     assert ok.json()["ok"] is True
+    assert ok.json()["contract_version"] == PUSH_CONTRACT_VERSION
     assert ok.json()["source_id"] == SOURCE_ID
 
     wrong = client.get("/api/sync/push/status", headers=_headers(key="wrong-key"))
@@ -166,6 +169,7 @@ def test_push_route_imports_then_is_idempotent_and_deduplicates_by_content(push_
     assert first_receipt == {
         **first_receipt,
         "ok": True,
+        "contract_version": PUSH_CONTRACT_VERSION,
         "status": "imported",
         "source_id": SOURCE_ID,
         "remote_path": "2026/07/19/image.png",
@@ -182,6 +186,7 @@ def test_push_route_imports_then_is_idempotent_and_deduplicates_by_content(push_
     assert repeated.status_code == 200
     repeated_receipt = repeated.json()
     assert REQUIRED_RECEIPT_FIELDS <= repeated_receipt.keys()
+    assert repeated_receipt["contract_version"] == PUSH_CONTRACT_VERSION
     assert repeated_receipt["status"] == "already-imported"
     assert repeated_receipt["local_file"] == first_receipt["local_file"]
 
@@ -189,6 +194,7 @@ def test_push_route_imports_then_is_idempotent_and_deduplicates_by_content(push_
     assert duplicate.status_code == 200
     duplicate_receipt = duplicate.json()
     assert REQUIRED_RECEIPT_FIELDS <= duplicate_receipt.keys()
+    assert duplicate_receipt["contract_version"] == PUSH_CONTRACT_VERSION
     assert duplicate_receipt["status"] == "duplicate-local"
     assert duplicate_receipt["local_file"] == first_receipt["local_file"]
     assert len(list(push_environment.glob("*.png"))) == 1

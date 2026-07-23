@@ -52,13 +52,13 @@ completion gates.
 
 ## Exact next step
 
-Keep L2 paused. The GenBox receiver contract is frozen at `dda0ea8`, with the
-P4 guide translation follow-up at `c75488b`; the next
-local feature requires explicit authorization to edit the separate dirty
-`chatgpt2api-dev` sender worktree and add its per-generation Push action. Do not
-edit that worktree or run sender network calls without that authorization. The
-next remote step remains separately authorized isolated-VPS discovery only after
-the user supplies the target owner/scope and canonical SSH host-key pair.
+Keep L2 paused. The GenBox receiver contract now includes local-file integrity
+and an explicit v1 Push receipt/probe contract; the next local feature requires
+explicit authorization to edit the separate dirty `chatgpt2api-dev` sender
+worktree and add its per-generation Push action. Do not edit that worktree or
+run sender network calls without that authorization. The next remote step
+remains separately authorized isolated-VPS discovery only after the user
+supplies the target owner/scope and canonical SSH host-key pair.
 
 ## Resume constraints
 
@@ -293,6 +293,21 @@ the user supplies the target owner/scope and canonical SSH host-key pair.
   pairing material, or deployment action.
 - **Lifecycle:** the local lab was stopped after the smoke check. This is UI
   loading/responsive evidence only and does not claim browser Push E2E.
+
+## Local Push v1 receipt contract (2026-07-23)
+
+- **Evidence class:** `LOCAL` only. The authenticated Push status probe and
+  every successful single-image receipt now declare `contract_version: "v1"`.
+  This gives a sender a stable additive compatibility signal without exposing
+  credentials or changing the source-retention decision.
+- **Verification:** focused sync/Push tests passed `37`; the full local suite
+  passed `495`; Python compilation for `main.py`, `sync/ingest.py`, and
+  `sync/manifest.py` passed; all four frontend bundle syntax checks passed.
+  A local browser smoke at `#/extensions` returned HTTP 200 with zero page
+  errors and no narrow-screen horizontal overflow.
+- **Boundary:** this is receiver-side contract evidence only. The sender's
+  per-generation action, authenticated cross-project transfer, isolated VPS,
+  and production non-mutation remain unverified.
 
 ## Local P4 guide translation cleanup (2026-07-23)
 

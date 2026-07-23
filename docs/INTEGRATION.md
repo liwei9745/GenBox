@@ -64,6 +64,7 @@ hash before importing. The endpoint must remain safe for idempotent retry.
 
 A successful receipt includes enough information for the sender to verify:
 
+- Push contract version (`v1` for the current receiver).
 - Request succeeded.
 - GenBox accepted or had already imported the same content.
 - GenBox-computed SHA-256 matches the sender's bytes.
