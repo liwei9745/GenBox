@@ -7,6 +7,7 @@ import secrets
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from config import STORAGE_DIR
@@ -25,6 +26,47 @@ PAIRING_PROTOCOL_VERSION = "GENBOX-PAIR/1"
 PAIRING_TTL_SECONDS = 300
 _PAIRING_ID_BYTES = 18
 _PAIRING_CHALLENGE_BYTES = 24
+
+
+@contextmanager
+def _config_lock():
+    """Serialize config read/compare/write sections across threads and workers."""
+    lock_path = EXTENSIONS_FILE.with_name(f".{EXTENSIONS_FILE.name}.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = lock_path.open("a+b")
+    try:
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() == 0:
+            handle.write(b"\0")
+            handle.flush()
+        handle.seek(0)
+        if os.name == "nt":
+            import msvcrt
+
+            while True:
+                try:
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+                    break
+                except OSError:
+                    time.sleep(0.05)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
 
 
 def target_identity_digest(target: ExtensionTarget) -> str:
@@ -206,81 +248,83 @@ def save_config(config: ExtensionConfig) -> None:
 
 
 def upsert_target(data: dict) -> ExtensionTarget:
-    config = load_config()
-    target_id = str(data.get("id") or uuid.uuid4().hex[:8])
-    now = time.strftime("%Y-%m-%d %H:%M:%S")
-    existing = next((item for item in config.targets if item.id == target_id), None)
-    submitted_identity = (
-        str(data.get("host", existing.host if existing else "")),
-        int(data.get("port", existing.port if existing else 22)),
-        str(data.get("username", existing.username if existing else "")),
-    )
-    same_identity = bool(existing) and submitted_identity == (existing.host, existing.port, existing.username)
-    generation = max(
-        int(config.target_generations.get(target_id, 0)),
-        int(existing.identity_version) if existing else 0,
-    )
-    if not existing or not same_identity:
-        generation += 1
-    generation = max(1, generation)
-    target = ExtensionTarget(
-        **{
-            **(existing.model_dump() if existing else {}),
-            **data,
-            "id": target_id,
-            "identity_version": generation,
-            "created_at": existing.created_at if existing else now,
-            "updated_at": now,
-        }
-    )
-    config.targets = [item for item in config.targets if item.id != target_id] + [target]
-    config.target_generations[target_id] = generation
-    save_config(config)
-    return target
+    with _config_lock():
+        config = load_config()
+        target_id = str(data.get("id") or uuid.uuid4().hex[:8])
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        existing = next((item for item in config.targets if item.id == target_id), None)
+        submitted_identity = (
+            str(data.get("host", existing.host if existing else "")),
+            int(data.get("port", existing.port if existing else 22)),
+            str(data.get("username", existing.username if existing else "")),
+        )
+        same_identity = bool(existing) and submitted_identity == (existing.host, existing.port, existing.username)
+        generation = max(
+            int(config.target_generations.get(target_id, 0)),
+            int(existing.identity_version) if existing else 0,
+        )
+        if not existing or not same_identity:
+            generation += 1
+        generation = max(1, generation)
+        target = ExtensionTarget(
+            **{
+                **(existing.model_dump() if existing else {}),
+                **data,
+                "id": target_id,
+                "identity_version": generation,
+                "created_at": existing.created_at if existing else now,
+                "updated_at": now,
+            }
+        )
+        config.targets = [item for item in config.targets if item.id != target_id] + [target]
+        config.target_generations[target_id] = generation
+        save_config(config)
+        return target
 
 
 def save_target_metadata(data: dict) -> ExtensionTarget:
     """Save browser-editable target metadata without accepting trust material."""
-    config = load_config()
-    target_id = str(data.get("id") or uuid.uuid4().hex[:8])
-    now = time.strftime("%Y-%m-%d %H:%M:%S")
-    existing = next((item for item in config.targets if item.id == target_id), None)
-    browser_fields = {"name", "host", "port", "username", "chatgpt2api_port"}
-    submitted = {key: value for key, value in data.items() if key in browser_fields}
-    same_identity = bool(existing) and (
-        str(submitted.get("host", existing.host)) == existing.host
-        and int(submitted.get("port", existing.port)) == existing.port
-        and str(submitted.get("username", existing.username)) == existing.username
-    )
-    generation = max(
-        int(config.target_generations.get(target_id, 0)),
-        int(existing.identity_version) if existing else 0,
-    )
-    if not existing or not same_identity:
-        generation += 1
-    generation = max(1, generation)
-    trust_state = {
-        "host_key_algorithm": existing.host_key_algorithm if same_identity else "",
-        "host_key": existing.host_key if same_identity else "",
-        "available_networks": existing.available_networks if same_identity else [],
-        "network_url": existing.network_url if same_identity else "",
-        "network_verified_at": existing.network_verified_at if same_identity else "",
-    }
-    target = ExtensionTarget(
-        **{
-            **(existing.model_dump() if existing else {}),
-            **submitted,
-            "id": target_id,
-            **trust_state,
-            "identity_version": generation,
-            "created_at": existing.created_at if existing else now,
-            "updated_at": now,
+    with _config_lock():
+        config = load_config()
+        target_id = str(data.get("id") or uuid.uuid4().hex[:8])
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        existing = next((item for item in config.targets if item.id == target_id), None)
+        browser_fields = {"name", "host", "port", "username", "chatgpt2api_port"}
+        submitted = {key: value for key, value in data.items() if key in browser_fields}
+        same_identity = bool(existing) and (
+            str(submitted.get("host", existing.host)) == existing.host
+            and int(submitted.get("port", existing.port)) == existing.port
+            and str(submitted.get("username", existing.username)) == existing.username
+        )
+        generation = max(
+            int(config.target_generations.get(target_id, 0)),
+            int(existing.identity_version) if existing else 0,
+        )
+        if not existing or not same_identity:
+            generation += 1
+        generation = max(1, generation)
+        trust_state = {
+            "host_key_algorithm": existing.host_key_algorithm if same_identity else "",
+            "host_key": existing.host_key if same_identity else "",
+            "available_networks": existing.available_networks if same_identity else [],
+            "network_url": existing.network_url if same_identity else "",
+            "network_verified_at": existing.network_verified_at if same_identity else "",
         }
-    )
-    config.targets = [item for item in config.targets if item.id != target_id] + [target]
-    config.target_generations[target_id] = generation
-    save_config(config)
-    return target
+        target = ExtensionTarget(
+            **{
+                **(existing.model_dump() if existing else {}),
+                **submitted,
+                "id": target_id,
+                **trust_state,
+                "identity_version": generation,
+                "created_at": existing.created_at if existing else now,
+                "updated_at": now,
+            }
+        )
+        config.targets = [item for item in config.targets if item.id != target_id] + [target]
+        config.target_generations[target_id] = generation
+        save_config(config)
+        return target
 
 
 def confirm_target_host_key(
@@ -289,29 +333,30 @@ def confirm_target_host_key(
     fingerprint: str,
 ) -> ExtensionTarget:
     """Persist a probed identity pair only if target and trust state are unchanged."""
-    config = load_config()
-    current = next((item for item in config.targets if item.id == expected.id), None)
-    if not current:
-        raise ValueError("target_missing")
-    comparisons = (
-        hmac.compare_digest(current.host, expected.host),
-        hmac.compare_digest(str(current.port), str(expected.port)),
-        hmac.compare_digest(current.username, expected.username),
-        hmac.compare_digest(str(current.identity_version), str(expected.identity_version)),
-        hmac.compare_digest(current.host_key_algorithm, expected.host_key_algorithm),
-        hmac.compare_digest(current.host_key, expected.host_key),
-    )
-    if not all(comparisons):
-        raise ValueError("target_changed")
-    now = time.strftime("%Y-%m-%d %H:%M:%S")
-    confirmed = current.model_copy(update={
-        "host_key_algorithm": algorithm,
-        "host_key": fingerprint,
-        "updated_at": now,
-    })
-    config.targets = [item for item in config.targets if item.id != current.id] + [confirmed]
-    save_config(config)
-    return confirmed
+    with _config_lock():
+        config = load_config()
+        current = next((item for item in config.targets if item.id == expected.id), None)
+        if not current:
+            raise ValueError("target_missing")
+        comparisons = (
+            hmac.compare_digest(current.host, expected.host),
+            hmac.compare_digest(str(current.port), str(expected.port)),
+            hmac.compare_digest(current.username, expected.username),
+            hmac.compare_digest(str(current.identity_version), str(expected.identity_version)),
+            hmac.compare_digest(current.host_key_algorithm, expected.host_key_algorithm),
+            hmac.compare_digest(current.host_key, expected.host_key),
+        )
+        if not all(comparisons):
+            raise ValueError("target_changed")
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        confirmed = current.model_copy(update={
+            "host_key_algorithm": algorithm,
+            "host_key": fingerprint,
+            "updated_at": now,
+        })
+        config.targets = [item for item in config.targets if item.id != current.id] + [confirmed]
+        save_config(config)
+        return confirmed
 
 
 def list_targets() -> list[ExtensionTarget]:
@@ -338,13 +383,14 @@ def save_batch_target_ids(target_ids: list[str]) -> list[str]:
 
 
 def delete_target(target_id: str) -> bool:
-    config = load_config()
-    remaining = [item for item in config.targets if item.id != target_id]
-    if len(remaining) == len(config.targets):
-        return False
-    config.targets = remaining
-    save_config(config)
-    return True
+    with _config_lock():
+        config = load_config()
+        remaining = [item for item in config.targets if item.id != target_id]
+        if len(remaining) == len(config.targets):
+            return False
+        config.targets = remaining
+        save_config(config)
+        return True
 
 
 def upsert_instance(data: dict) -> ExtensionInstance:

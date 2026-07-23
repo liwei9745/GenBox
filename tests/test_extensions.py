@@ -4,6 +4,7 @@ import json
 import re
 import subprocess
 import sys
+import threading
 from html.parser import HTMLParser
 from types import SimpleNamespace
 from pathlib import Path
@@ -1047,6 +1048,44 @@ if(!source.includes('pairing!==hostKeyPairing||sequence!==hostKeyProbeSequence')
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_confirm_target_host_key_is_cross_thread_compare_and_swap(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    store.host_key_pairings.clear()
+    first = store.save_target_metadata({
+        "id": "race", "name": "VPS", "host": "safe.example", "port": 22, "username": "ubuntu",
+    })
+    expected_a = store.get_target("race")
+    expected_b = store.get_target("race")
+    barrier = threading.Barrier(2)
+    results = []
+
+    def worker(expected, fingerprint):
+        barrier.wait()
+        try:
+            saved = store.confirm_target_host_key(expected, TEST_HOST_KEY_ALGORITHM, fingerprint)
+            results.append(("saved", saved.host_key))
+        except ValueError as exc:
+            results.append(("error", str(exc)))
+
+    threads = [
+        threading.Thread(target=worker, args=(expected_a, "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")),
+        threading.Thread(target=worker, args=(expected_b, "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    current = store.get_target("race")
+    saved = [item for item in results if item[0] == "saved"]
+    failed = [item for item in results if item == ("error", "target_changed")]
+    assert current is not None
+    assert current.identity_version == first.identity_version
+    assert len(saved) == 1
+    assert len(failed) == 1
+    assert current.host_key == saved[0][1]
 
 
 def test_extension_ssh_route_hides_unclassified_raw_exception(monkeypatch):
