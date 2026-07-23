@@ -74,6 +74,21 @@ The user selects an available catalog item, follows environment discovery and
 network steps, reviews a deployment plan, deploys an isolated service, and
 receives its status, console URL, API URL, login guidance, and one-time secrets.
 
+### First-Time VPS Trust For Personal Users
+
+For a personal user who already has a trusted SSH terminal session, the planned
+default is a simple trusted SSH-session pairing flow. After saving the VPS host,
+port, and username, GenBox will present one fixed, one-line helper and accept a
+one-line response pasted back by the user. The page reports the result in plain
+language and keeps the technical host identity in advanced details. This is
+planned work, not a current capability.
+
+The already trusted terminal session or its known-host record is a user-supplied
+trust anchor for the initial pairing; it does not prove VPS ownership and does
+not replace SSH credentials. Users without an accessible trusted session use a
+safe advanced fallback such as their provider console or an existing known-host
+record. A provider-account verification flow is outside the current scope.
+
 ### Find And Repair A Compatible Service
 
 After the core delivery phases, the user can see installed apps, environment-
@@ -145,3 +160,5 @@ health checks, delivery information, rollback, and tests are implemented.
   whether the source is safe to delete.
 - **Delivery information**: service URLs, login guidance, and one-time secrets
   presented after deployment.
+- **Trusted SSH-session pairing**: planned first-time host-identity confirmation
+  using a user-operated helper in an already trusted SSH terminal session.

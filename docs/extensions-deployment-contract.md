@@ -171,3 +171,34 @@ The wizard keeps one active primary network. Successfully verified providers are
 remembered as available networks so a later phase can add one-click switching and
 recovery. Switching must re-run endpoint and HTTP checks before replacing the
 stored Push URL.
+
+### Trusted SSH-Session Pairing (Planned)
+
+The current host-identity flow asks the user to manually confirm the canonical
+SSH host-key algorithm and `SHA256:` fingerprint pair. The next local Phase 4
+increment will make trusted SSH-session pairing the personal-user default. Once
+the host, port, and username are saved, a user who already trusts an SSH
+terminal session may run a GenBox-generated fixed one-line helper there and
+paste its one-line response into GenBox. The normal UI reports success plainly;
+the technical identity belongs in advanced details.
+
+This is a planned protocol, not a current endpoint or command. It uses a
+short-lived, single-use, in-memory challenge bound to the saved target identity
+version and candidate host-key pair. Completion re-probes and rejects mismatch,
+expiry, replay, target edits, unsupported algorithms, malformed responses, and
+conflicts with saved trust records. The start and completion requests accept no
+SSH credential and cause no GenBox remote command. The helper is backend-owned
+and fixed/versioned; the browser never supplies shell.
+
+An existing terminal session or known-host record is a user-supplied external
+trust anchor, not VPS ownership evidence and not a password or key substitute.
+The canonical trust pair is the only permitted saved outcome. Transient
+challenge, helper, and response transport is allowed only through future
+dedicated authenticated, CSRF-protected pairing endpoints; no endpoint name or
+path is specified or implemented here. Pairing material must not appear in
+public task, status, instance, or diagnostic projections; durable target,
+TaskStore, or runtime records; ordinary logs; browser storage; screenshots,
+URLs; or Git. Cancellation saves nothing. Users without an OpenSSH-compatible
+readable trusted session, including custom host-key paths, fall back to
+provider-console, known-host, or manual advanced verification.
+Provider-account verification is out of scope.

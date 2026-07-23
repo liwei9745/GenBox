@@ -1,7 +1,9 @@
 # Deployment Safety Contract
 
 **Version:** Phase 4 v3
-**Status:** Accepted design contract; implementation and independent review pending
+**Status:** Accepted normative contract; locally implemented and independently
+reviewed at `656e4c7`. Isolated VPS/browser evidence remains pending and
+**UNVERIFIED**.
 
 This is the normative deployment-safety specification for Phase 4. It does not
 claim that a local test or a plan is an isolated-VPS end-to-end result.
@@ -10,7 +12,7 @@ claim that a local test or a plan is an isolated-VPS end-to-end result.
 
 | ID | Requirement and protected failure |
 |---|---|
-| DEP-INV-001 | SSH host-key verification and fixed adapter commands are mandatory; the browser supplies structured intent, never shell. This prevents target substitution and command injection. |
+| DEP-INV-001 | SSH host-key verification and fixed adapter commands are mandatory. A trusted SSH host identity is the canonical `(algorithm, SHA256:fingerprint)` pair; the browser supplies structured intent, never shell. This prevents target substitution and command injection. |
 | DEP-INV-002 | Production sources are read-only. A development deployment uses distinct directory, data, container, Compose project, port, management key, and Push identity. This prevents production mutation and resource overlap. |
 | DEP-INV-003 | Docker bindings are a canonical, multiplicity-preserving multiset of `(host_ip, host_port, container_port, protocol)`. Set conversion is forbidden. |
 | DEP-INV-004 | Phase 4 TCP listener evidence is a separate complete canonical multiset of `(tcp, host_port)` from reliable `ss`/`netstat` evidence. It neither infers address/container-port exposure nor generalizes to UDP. |
@@ -30,7 +32,7 @@ condition/completeness evidence; `D` display-only or ignored.
 
 | Field | Isolated-empty | Existing | Isolated source-clone |
 |---|---|---|---|
-| Target ID and SSH host fingerprint | E | E | E |
+| Target ID and SSH host-key algorithm plus SHA-256 fingerprint pair | E | E | E |
 | Adapter capability/version and privilege contract | E+C | E+C | E+C |
 | TCP listener payload | M+C | C | M+C |
 | Docker bindings for discovered instances | M+C | M+C | M+C |

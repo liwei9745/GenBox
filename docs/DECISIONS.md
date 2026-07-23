@@ -401,3 +401,56 @@ new independent fixed-commit review before it can support acceptance evidence.
 Local/mock results cannot replace isolated-VPS evidence, and no public task,
 diagnostic, or browser surface may become an alternate store for operational
 identities or secrets.
+
+## ADR-018: Personal Users Pair Through An Existing Trusted SSH Session
+
+**Status:** Accepted
+**Date:** 2026-07-23
+
+### Context
+
+The current local Phase 4 implementation requires a user to manually confirm a
+canonical SSH host-key algorithm plus `SHA256:` fingerprint before credentials
+can be used. That remains a valid fail-closed safety boundary, but asking a
+personal user to understand and independently compare a long fingerprint is a
+poor default experience. SSH credentials alone cannot prove that GenBox reached
+the intended host.
+
+### Decision
+
+The next Phase 4 local increment will implement trusted SSH-session pairing as
+the personal-user default for first-time host trust. After the user saves a
+target host, port, and username, GenBox will create a short-lived, single-use,
+in-memory challenge bound to the saved target identity version and candidate
+host-key algorithm/fingerprint pair. The user runs a GenBox-generated fixed,
+versioned one-line helper in an SSH terminal session they already trust and
+pastes its one-line response into GenBox.
+
+Pairing completion re-probes the host and rejects mismatched identity, expired
+or replayed challenge, edited target, unsupported algorithm, malformed response,
+or conflict with an existing saved trust record. It persists only the canonical
+algorithm/fingerprint pair and never weakens host-key verification. Start and
+completion endpoints accept no SSH credential and cause no GenBox remote
+command. The helper is backend-owned, never browser-provided shell.
+
+The trusted terminal session or known-host record is an external trust anchor
+supplied by the user. It is neither evidence of VPS ownership nor a substitute
+for SSH credentials. The existing manual provider-console or known-host check
+remains an advanced fallback for users without an accessible, readable,
+OpenSSH-compatible trusted session or with custom host-key paths. Cancellation
+persists nothing. Provider-account verification is out of scope.
+
+### Consequences
+
+The primary UI can say that server identity has been verified and reserve the
+algorithm/fingerprint for advanced details. The pairing challenge, helper,
+response, credentials, raw pairing observations, and command text may travel
+only through future dedicated authenticated, CSRF-protected pairing endpoints;
+their names and paths are unspecified and unimplemented. They must not enter
+public task, status, instance, or diagnostic projections; durable target,
+TaskStore, or runtime records; ordinary logs; browser storage; screenshots,
+URLs; or Git. The canonical trust pair is the only permitted saved outcome.
+This is an accepted future implementation contract; it does not claim that
+pairing endpoints or a helper exist today. It requires local tests and an
+independent fixed-commit review before separately authorized isolated
+VPS/browser single-image E2E work resumes.

@@ -69,7 +69,12 @@ small PRs or a feature proposal after all prior gates pass.
 
 ## Stage 1: Read-Only Discovery
 
-1. Confirm the intended VPS and SSH host key.
+1. Confirm the intended VPS and canonical SSH host-key algorithm/fingerprint
+   pair. Current behavior is manual advanced confirmation. The planned
+   personal-user default is trusted SSH-session pairing: the user runs a fixed
+   GenBox helper in an SSH terminal session they already trust and pastes its
+   one-line response back. It is a future local implementation gate, not
+   authority to connect, authenticate, or run remote commands.
 2. Record the exact source container, Compose project, image, mounts, ports,
    labels, health, and data size.
 3. Record destination capacity and port conflicts.
@@ -83,6 +88,23 @@ Required evidence:
 - Destination directory, port, Compose project, and instance ID.
 - Required space calculation.
 - Rollback and cleanup target limited to the new destination.
+
+Trusted SSH-session pairing must use a short-lived, single-use, in-memory
+challenge bound to the saved target identity version and candidate canonical
+host-key pair. Completion re-probes and rejects mismatch, expiry, replay,
+target edit, unsupported algorithm, malformed response, or conflict with saved
+trust before authentication or remote work. Its endpoints accept no SSH
+credential and initiate no GenBox remote command; the helper is backend-owned
+and fixed/versioned, never browser-provided shell. Transient challenge, helper,
+and response transport is allowed only through future dedicated authenticated,
+CSRF-protected pairing endpoints; no endpoint name or path is specified or
+implemented here. Do not place pairing material in public task, status,
+instance, or diagnostic projections; durable target, TaskStore, or runtime
+records; ordinary logs; browser storage; screenshots; URLs; or Git. The
+canonical trust pair is the only permitted saved outcome.
+Users without a readable OpenSSH-compatible trusted session or with a custom
+host-key path must use provider-console, known-host, or manual advanced
+verification. Cancellation saves nothing.
 
 ## Stage 2: Create The Development Clone
 

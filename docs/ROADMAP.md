@@ -162,9 +162,19 @@ GenBox and import it with metadata.
 
 ### 4A: Code contract
 
-Implement and independently review the versioned deployment safety contract and
-the receiver/sender code paths it governs. Local tests and review are necessary
-but not real E2E evidence.
+The Deployment Safety Contract v3 is locally implemented and independently
+reviewed at commit `656e4c7`; manual host-identity confirmation binds a
+canonical algorithm plus `SHA256:` fingerprint. Local tests and review are
+necessary but not real E2E evidence.
+
+The next 4A increment is the planned personal-user trusted SSH-session pairing
+gate. Document, implement, locally test, and independently fixed-commit review
+the short-lived, single-use pairing exchange before any separately authorized
+isolated VPS/browser E2E. It must preserve mandatory host-key verification,
+re-probe the canonical identity pair before trust is saved, accept no SSH
+credential, run no GenBox remote command, and expose neither pairing material
+nor raw host identities through persisted or public surfaces. Manual
+provider-console/known-host verification remains the advanced fallback.
 
 ### 4B: User workflow
 
@@ -174,10 +184,11 @@ invent remote success.
 
 ### 4C: Isolated single-image E2E
 
-With separate authorization, verify one newly generated image through the
-isolated clone and browser workflow, including authenticated receipt, matching
-SHA-256, available metadata, idempotent retry, source retention, and production
-non-mutation.
+Only after the personal-user pairing gate is implemented and independently
+reviewed, and with separate authorization, verify one newly generated image
+through the isolated clone and browser workflow, including authenticated receipt,
+matching SHA-256, available metadata, idempotent retry, source retention, and
+production non-mutation.
 
 ### 4D: Evidence lock
 
