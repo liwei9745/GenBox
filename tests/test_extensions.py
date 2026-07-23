@@ -1050,6 +1050,23 @@ if(!source.includes('pairing!==hostKeyPairing||sequence!==hostKeyProbeSequence')
     assert result.returncode == 0, result.stderr
 
 
+def test_pairing_ui_has_expiry_cleanup_and_recovery_state():
+    root = Path(__file__).parents[1]
+    source = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    markup = (root / "static" / "index.html").read_text(encoding="utf-8")
+    styles = (root / "static" / "css" / "extensions.css").read_text(encoding="utf-8")
+
+    assert "hostKeyPairingTimer" in source
+    assert "expireHostKeyPairing" in source
+    assert "hostKeyPairingSubmitting" in source
+    assert "response.disabled=!backendOnline||!hostKeyPairing||hostKeyPairingSubmitting" in source
+    assert "extHostKeyPairingCancelBtn" in markup
+    assert "extensions.host_key_pairing_expired" in source
+    assert 'id="extHostKeyPairingState"' in markup
+    assert "extension-pairing-command-row" in styles
+    assert "@media(max-width:700px)" in styles
+
+
 def test_confirm_target_host_key_is_cross_thread_compare_and_swap(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
     store.host_key_pairings.clear()

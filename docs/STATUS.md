@@ -153,22 +153,32 @@ read-only.
   local UI checks. The deployment wizard and Push receiver remain gated by
   their existing contracts; L2 stays paused until separately resumed.
 
-## Local pairing-panel layout fix (2026-07-23)
+## Host-key pairing UX strategy and local verification (2026-07-23)
 
-- **Evidence class:** `LOCAL` only. No pairing command was generated or
-  executed, and no SSH/VPS/remote action was performed.
-- **Finding/fix:** at the 987px browser viewport, the pairing command and
-  response fields inherited inline label sizing and visually overlapped. The
-  pairing wrapper now uses an independent grid, full-width bounded textareas,
-  long-command wrapping, and wrapping action buttons in
-  `static/css/extensions.css`.
-- **Browser result:** Playwright geometry regression on the local Lab measured
-  a 659px pairing panel; both labels occupied separate rows and
-  `overlap=false`. Long command text stayed within each textarea.
-- **Verification:** `node --check static/js/extensions.js` and `git diff --check`
-  passed. A full pytest attempt was blocked before test setup because the
-  restricted environment denied creation of pytest temporary directories; this
-  is an environment limitation, not a test assertion failure.
-- **Next local entry:** refresh the Lab page and verify the pairing panel at
-  desktop and narrow widths. Keep the generated-command and SSH controls
-  untouched unless L2 is explicitly resumed with verified target identity.
+- **Evidence class:** `LOCAL` only. `docs/P4-HOST-KEY-PAIRING-UX-STRATEGY.md`
+  records the mature-product research, novice-user flow, state model, recovery
+  paths, accessibility, and security boundaries. The backend canonical host-key
+  algorithm allowlist and full `SHA256:` fingerprint comparison remain intact.
+- **Finding/fix:** the pairing panel now presents one two-step task, a distinct
+  copy-command button, a paste-result field, an explicit `提交验证结果` action,
+  submission locking, a short-lived countdown, expiry cleanup, restart/error
+  recovery, keyboard-safe native controls, and narrow-screen stacking. Pairing
+  command/response material is cleared on completion, expiry, cancellation, and
+  target changes.
+- **Browser result:** local authenticated browser loaded `#/extensions` and
+  exposed the pairing panel, two numbered steps, copy entry, submit entry, and
+  manual fallback. A local-only dummy target was removed after the check. The
+  generation attempt stopped at the local SSH host-probe prerequisite before
+  authentication; no VPS, remote container, production instance, or remote
+  command was touched, and no pairing response or fingerprint was persisted.
+- **Verification:** `node --check static/js/extensions.js` and
+  `node --check static/js/i18n.js` passed; `git diff --check` passed;
+  `python -m pytest -q tests/test_extensions.py tests/test_extension_task_store.py`
+  -> `285 passed`; `python -m pytest -q` -> `487 passed`. Focused static tests
+  cover expiry cleanup, submitting/recovery state, copy/paste controls, and
+  narrow-screen CSS. The earlier local geometry regression measured separate
+  command/response rows with `overlap=false`.
+- **Next local entry:** keep L2 paused. Any further browser smoke must use only
+  the local runtime and must not submit credentials, generate a real pairing
+  command, or initiate SSH. Reopen L2 only after separately verified isolated
+  target identity and canonical host-key trust are supplied.
