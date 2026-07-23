@@ -142,7 +142,11 @@ function _hideLogin() {
 }
 function _setLoginError(visible) {
   var error = document.getElementById('loginError');
-  if (error) error.style.display = visible ? 'block' : 'none';
+  if (!error) return;
+  error.style.display = visible ? 'block' : 'none';
+  if (error.classList && typeof error.classList.toggle === 'function') {
+    error.classList.toggle('hidden', !visible);
+  }
 }
 function _setLoginPending(pending) {
   var page = document.getElementById('loginPage');
