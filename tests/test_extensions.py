@@ -3441,6 +3441,7 @@ def test_i18n_module_and_page_markers_exist():
     assert "url.searchParams.set('lang', next)" in i18n_js
     assert 'global.location.replace(url.toString())' in i18n_js
     assert 'i18nText(' in app_js
+    assert 'extensions.guide_connect_title' in i18n_js
     assert 'ipVisibilityIcon' in app_js
     assert '>??</button>' not in app_js
     assert 'var upDays = Math.floor(upSec / 86400);' in app_js

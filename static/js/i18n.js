@@ -1369,6 +1369,7 @@
   MESSAGES['extensions.step_configure'] = {"zh-CN":"连接并测试","en":"Connect and test"};
   MESSAGES['extensions.step_verify'] = {"zh-CN":"完成","en":"Finish"};
   MESSAGES['extensions.guide_kicker'] = {"zh-CN":"当前只做一件事","en":"One action at a time"};
+  MESSAGES['extensions.guide_connect_title'] = {"zh-CN":"先连接你的服务器","en":"Connect your server first"};
   MESSAGES['extensions.guide_found'] = {"zh-CN":"系统已发现","en":"GenBox found"};
   MESSAGES['extensions.guide_action'] = {"zh-CN":"你现在只需","en":"Your only action"};
   MESSAGES['extensions.guide_after'] = {"zh-CN":"完成后会","en":"Then GenBox will"};
