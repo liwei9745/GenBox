@@ -17,6 +17,11 @@ SOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 WINDOWS_DRIVE_PATTERN = re.compile(r"^[A-Za-z]:")
 
 
+def push_max_image_bytes() -> int:
+    """Return the byte limit used by this running receiver process."""
+    return MAX_PUSH_IMAGE_BYTES
+
+
 def load_push_keys(raw: Optional[str] = None) -> Dict[str, str]:
     """Load a source-id to API-key map from GENBOX_PUSH_KEYS JSON."""
     value = os.getenv("GENBOX_PUSH_KEYS", "") if raw is None else raw
@@ -66,8 +71,9 @@ def validate_remote_path(remote_path: str) -> str:
 def validate_image_payload(payload: bytes, content_type: str = "") -> dict:
     if not payload:
         raise ValueError("empty image payload")
-    if len(payload) > MAX_PUSH_IMAGE_BYTES:
-        raise ValueError(f"image exceeds {MAX_PUSH_IMAGE_BYTES} byte limit")
+    max_bytes = push_max_image_bytes()
+    if len(payload) > max_bytes:
+        raise ValueError(f"image exceeds {max_bytes} byte limit")
     if content_type and not content_type.lower().startswith("image/"):
         raise ValueError("content type must be image/*")
     try:

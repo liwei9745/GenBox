@@ -329,6 +329,19 @@ supplies the target owner/scope and canonical SSH host-key pair.
   not implement the sender's per-generation action or establish isolated-VPS,
   cross-project, or production evidence.
 
+## Local Push limit probe consistency (2026-07-24)
+
+- **Evidence class:** `LOCAL` only. The v1 status probe now reports the same
+  process-level image byte limit used by `validate_image_payload`, so a sender
+  cannot receive a preflight limit that differs from the active receiver.
+- **Verification:** the focused sync/Push suite passed `39`; the full local
+  suite passed `497`; Python compilation, all four frontend bundle syntax
+  checks, and `git diff --check` passed. Local browser loading at
+  `http://127.0.0.1:8892/#/extensions` remained HTTP 200 with zero page errors
+  and no narrow-screen overflow; the lab was stopped afterward.
+- **Boundary:** this is destination probe/receiver contract evidence only. It
+  does not prove sender UI behavior, network reachability, or remote E2E.
+
 ## Local P4 guide translation cleanup (2026-07-23)
 
 - **Evidence class:** `LOCAL` only, frozen at commit `c75488b`. The extension

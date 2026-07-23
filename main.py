@@ -71,6 +71,7 @@ from sync.manifest import SyncManifest, LocalImageIndex
 from sync.ingest import (
     PUSH_CONTRACT_VERSION,
     authenticate_push_source,
+    push_max_image_bytes,
     validate_image_payload,
     validate_remote_path,
 )
@@ -3607,7 +3608,7 @@ async def sync_push_status(
         "ok": True,
         "contract_version": PUSH_CONTRACT_VERSION,
         "source_id": x_genbox_source,
-        "max_image_bytes": int(os.getenv("GENBOX_PUSH_MAX_BYTES", str(25 * 1024 * 1024))),
+        "max_image_bytes": push_max_image_bytes(),
     }
 
 

@@ -60,6 +60,11 @@ Multipart fields:
 GenBox validates credentials, media type, image structure, size, and content
 hash before importing. The endpoint must remain safe for idempotent retry.
 
+`GET /api/sync/push/status` uses the same authenticated source headers and
+returns the v1 contract version plus the maximum image byte limit used by that
+running receiver process. A sender should use this probe for destination
+compatibility and keep its source when the probe or Push request fails.
+
 ## Receipt Requirements
 
 A successful receipt includes enough information for the sender to verify:

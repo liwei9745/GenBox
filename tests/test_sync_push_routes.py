@@ -11,7 +11,7 @@ from PIL import Image, PngImagePlugin
 
 import main
 import sync.manifest as manifest_mod
-from sync.ingest import PUSH_CONTRACT_VERSION
+from sync.ingest import PUSH_CONTRACT_VERSION, push_max_image_bytes
 
 
 SOURCE_ID = "chatgpt2api-dev"
@@ -85,6 +85,7 @@ def test_push_status_route_authentication(push_environment):
     assert ok.json()["ok"] is True
     assert ok.json()["contract_version"] == PUSH_CONTRACT_VERSION
     assert ok.json()["source_id"] == SOURCE_ID
+    assert ok.json()["max_image_bytes"] == push_max_image_bytes()
 
     wrong = client.get("/api/sync/push/status", headers=_headers(key="wrong-key"))
     assert wrong.status_code == 401
