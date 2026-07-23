@@ -54,16 +54,38 @@ The receiver-only requirement-by-requirement evidence matrix is maintained in
 `docs/P4-SINGLE-IMAGE-PUSH-LOCAL-EVIDENCE.md`. It explicitly separates LOCAL
 receiver proof from sender, isolated-VPS, and production claims.
 
+## Local sender per-generation workflow (2026-07-24)
+
+- **Evidence class:** `LOCAL` only. After explicit user authorization, the
+  separate dirty `chatgpt2api-dev` worktree was preserved and updated in place;
+  no existing dirty changes were discarded.
+- **Implementation:** Studio result cards now expose a per-image
+  `Push to GenBox` action only when a local relative image path is available.
+  The UI reports generation and transfer independently, locks the action while
+  uploading, supports idempotent retry, and reports failure with source-retained
+  recovery guidance. No API key, receipt body, or image bytes are rendered or
+  persisted by the Studio state.
+- **Protocol gate:** the sender sends `source_sha256`, requires receiver
+  `contract_version: v1` and a positive `max_image_bytes` probe, and accepts a
+  Push only when the v1 receipt SHA-256 matches the uploaded bytes.
+- **Verification:** sender focused tests -> `11 passed`; sender local full
+  pytest -> `11 passed`; `web-vue` `npm run build` passed; `git diff --check`
+  passed. Tests use only local mocks and a test-only process environment value.
+- **Browser:** local GenBox lab at `http://127.0.0.1:8892/#/extensions`
+  loaded with title `GenBox`, zero page errors, and `scrollWidth=390` at a
+  390px viewport. This is local page/responsive evidence only; no pairing,
+  SSH, Push, or credential action was submitted.
+- **Boundary:** no SSH, VPS, remote container, production instance, network
+  deployment, or live sender-to-GenBox request was performed. Sender changes
+  are committed separately at `78135e1`; this local evidence does not upgrade
+  isolated VPS or cross-project E2E status.
+
 ## Exact next step
 
-Keep L2 paused. The GenBox receiver contract now includes local-file integrity
-including legacy manifest byte verification and an explicit v1 Push
-receipt/probe contract; the next local feature requires
-explicit authorization to edit the separate dirty `chatgpt2api-dev` sender
-worktree and add its per-generation Push action. Do not edit that worktree or
-run sender network calls without that authorization. The next remote step
-remains separately authorized isolated-VPS discovery only after the user
-supplies the target owner/scope and canonical SSH host-key pair.
+Keep L2 paused. The next local entry is an independent review of sender Studio
+behavior and the committed protocol boundary. Then, if separately authorized,
+perform isolated-VPS discovery with a confirmed canonical SSH host-key pair.
+Do not treat this LOCAL evidence as VPS or production verification.
 
 ## Resume constraints
 
