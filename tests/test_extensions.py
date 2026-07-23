@@ -1017,6 +1017,38 @@ def test_host_key_pairing_rejects_target_mutation_without_persisting(monkeypatch
     assert caught.value.status_code == 409
 
 
+def test_target_identity_generation_survives_delete_and_recreate(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    first = store.save_target_metadata({
+        "id": "reused", "name": "VPS", "host": "safe.example", "port": 22, "username": "ubuntu",
+    })
+    first_digest = store.target_identity_digest(first)
+    assert first.identity_version == 1
+    assert store.delete_target(first.id) is True
+    recreated = store.save_target_metadata({
+        "id": "reused", "name": "VPS", "host": "safe.example", "port": 22, "username": "ubuntu",
+    })
+    assert recreated.identity_version == 2
+    assert store.target_identity_digest(recreated) != first_digest
+    with pytest.raises(ValueError, match="target_changed"):
+        store.confirm_target_host_key(first, TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY)
+
+
+def test_pairing_ui_has_manual_fallback_and_trusted_visibility_guards():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+if(!source.includes("el('extHostKeyPairingManualBtn')"))throw new Error('manual fallback control missing');
+if(!source.includes('hostKeyPairingFallback=true'))throw new Error('pairing failure does not enter fallback state');
+if(!source.includes("manual.classList.toggle('hidden',!hostKeyPairingFallback)"))throw new Error('manual fallback is not surfaced');
+if(!source.includes("visible=!!currentTargetId&&!targetDirty&&!trustedHostKey"))throw new Error('pairing visibility is not trust guarded');
+if(!source.includes('sequence!==hostKeyProbeSequence||targetId!==currentTargetId||targetDirty'))throw new Error('pairing start response is not target-bound');
+if(!source.includes('pairing!==hostKeyPairing||sequence!==hostKeyProbeSequence'))throw new Error('pairing completion response is not target-bound');
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_extension_ssh_route_hides_unclassified_raw_exception(monkeypatch):
     import main
     from fastapi import HTTPException

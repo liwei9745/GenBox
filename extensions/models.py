@@ -26,6 +26,7 @@ class ExtensionTarget(BaseModel):
     host: str
     port: int = Field(default=22, ge=1, le=65535)
     username: str
+    identity_version: int = Field(default=0, ge=0)
     host_key_algorithm: str = ""
     host_key: str = ""
     primary_network: Literal["tailscale", "netbird", "cloudflare"] = "tailscale"
@@ -74,6 +75,7 @@ class ExtensionConfig(BaseModel):
     targets: list[ExtensionTarget] = Field(default_factory=list)
     instances: list[ExtensionInstance] = Field(default_factory=list)
     batch_target_ids: list[str] = Field(default_factory=list)
+    target_generations: dict[str, int] = Field(default_factory=dict)
 
 
 class ExtensionBatchTargetsRequest(BaseModel):

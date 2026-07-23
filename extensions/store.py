@@ -28,8 +28,8 @@ _PAIRING_CHALLENGE_BYTES = 24
 
 
 def target_identity_digest(target: ExtensionTarget) -> str:
-    """Return a stable digest for the editable identity fields only."""
-    value = "\x1f".join((target.id, target.host, str(target.port), target.username))
+    """Return a digest that changes when a target identity generation changes."""
+    value = "\x1f".join((target.id, target.host, str(target.port), target.username, str(target.identity_version)))
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
@@ -181,10 +181,20 @@ def load_config() -> ExtensionConfig:
     batch_target_ids = raw.get("batch_target_ids", [])
     if not isinstance(batch_target_ids, list):
         batch_target_ids = []
+    raw_generations = raw.get("target_generations", {})
+    if not isinstance(raw_generations, dict):
+        raw_generations = {}
+    target_generations = {
+        str(key): int(value) for key, value in raw_generations.items()
+        if str(value).isdigit() and int(value) >= 0
+    }
+    for target in targets:
+        target_generations[target.id] = max(target_generations.get(target.id, 0), target.identity_version)
     return ExtensionConfig(
         targets=targets,
         instances=instances,
         batch_target_ids=[str(item) for item in batch_target_ids],
+        target_generations=target_generations,
     )
 
 
@@ -200,16 +210,31 @@ def upsert_target(data: dict) -> ExtensionTarget:
     target_id = str(data.get("id") or uuid.uuid4().hex[:8])
     now = time.strftime("%Y-%m-%d %H:%M:%S")
     existing = next((item for item in config.targets if item.id == target_id), None)
+    submitted_identity = (
+        str(data.get("host", existing.host if existing else "")),
+        int(data.get("port", existing.port if existing else 22)),
+        str(data.get("username", existing.username if existing else "")),
+    )
+    same_identity = bool(existing) and submitted_identity == (existing.host, existing.port, existing.username)
+    generation = max(
+        int(config.target_generations.get(target_id, 0)),
+        int(existing.identity_version) if existing else 0,
+    )
+    if not existing or not same_identity:
+        generation += 1
+    generation = max(1, generation)
     target = ExtensionTarget(
         **{
             **(existing.model_dump() if existing else {}),
             **data,
             "id": target_id,
+            "identity_version": generation,
             "created_at": existing.created_at if existing else now,
             "updated_at": now,
         }
     )
     config.targets = [item for item in config.targets if item.id != target_id] + [target]
+    config.target_generations[target_id] = generation
     save_config(config)
     return target
 
@@ -227,6 +252,13 @@ def save_target_metadata(data: dict) -> ExtensionTarget:
         and int(submitted.get("port", existing.port)) == existing.port
         and str(submitted.get("username", existing.username)) == existing.username
     )
+    generation = max(
+        int(config.target_generations.get(target_id, 0)),
+        int(existing.identity_version) if existing else 0,
+    )
+    if not existing or not same_identity:
+        generation += 1
+    generation = max(1, generation)
     trust_state = {
         "host_key_algorithm": existing.host_key_algorithm if same_identity else "",
         "host_key": existing.host_key if same_identity else "",
@@ -240,11 +272,13 @@ def save_target_metadata(data: dict) -> ExtensionTarget:
             **submitted,
             "id": target_id,
             **trust_state,
+            "identity_version": generation,
             "created_at": existing.created_at if existing else now,
             "updated_at": now,
         }
     )
     config.targets = [item for item in config.targets if item.id != target_id] + [target]
+    config.target_generations[target_id] = generation
     save_config(config)
     return target
 
@@ -263,6 +297,7 @@ def confirm_target_host_key(
         hmac.compare_digest(current.host, expected.host),
         hmac.compare_digest(str(current.port), str(expected.port)),
         hmac.compare_digest(current.username, expected.username),
+        hmac.compare_digest(str(current.identity_version), str(expected.identity_version)),
         hmac.compare_digest(current.host_key_algorithm, expected.host_key_algorithm),
         hmac.compare_digest(current.host_key, expected.host_key),
     )
