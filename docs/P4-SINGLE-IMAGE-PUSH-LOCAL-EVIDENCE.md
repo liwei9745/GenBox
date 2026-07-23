@@ -1,13 +1,13 @@
 # P4 Single-Image Push Local Evidence
 
 **Date:** 2026-07-24
-**Scope:** GenBox receiver worktree only
+**Scope:** GenBox receiver worktree plus explicitly separated local sender evidence
 **Evidence class:** `LOCAL`
 
-This matrix distinguishes verified receiver behavior from the sender and
-isolated-VPS work that remains outside this worktree. It does not claim a
-chatgpt2api sender implementation, a private-network connection, or a real
-end-to-end transfer.
+This matrix distinguishes verified receiver behavior, the separately committed
+sender contract, and isolated-VPS work that remains unverified. Local mock
+evidence is not a private-network connection or a real isolated end-to-end
+transfer.
 
 ## Receiver Contract
 
@@ -37,8 +37,8 @@ end-to-end transfer.
 | Concurrent identical requests commit one local file | `test_concurrent_identical_pushes_create_one_gallery_file` | VERIFIED | In-process test concurrency only. |
 | Restart/index recovery does not trust forged or changed local state | `test_push_content_deduplication_survives_local_index_rebuild`, `test_push_does_not_trust_uncommitted_source_hash_metadata`, `test_push_does_not_ack_modified_committed_file`, `test_legacy_manifest_entry_still_requires_matching_source_bytes` | VERIFIED | Local gallery and manifest only. |
 | Invalid image, oversize image, malformed hash, and wrong identity avoid a receiver commit | Push-route rejection tests | VERIFIED | Does not prove sender source retention or retry policy. |
-| Per-generation Push action and transfer status UI | Sender worktree | UNVERIFIED | Requires explicit sender-worktree authorization. |
-| Sender source retention on authentication, network, invalid-image, and receipt-hash failure | Sender worktree | UNVERIFIED | Receiver cannot delete or preserve sender files. |
+| Per-generation Push action and transfer status UI | Sender commits `78135e1`, `0320b62`; sender focused suite `12 passed` | VERIFIED | LOCAL sender evidence only; no live receiver request. |
+| Sender source retention on authentication, network, invalid-image, and receipt-hash failure | Sender focused mock tests; failed state records path, SHA-256, attempts, and bounded error | VERIFIED | LOCAL mock receiver only; receiver cannot prove sender filesystem behavior. |
 | Isolated clone, private-network transfer, retry, and production non-mutation | Isolated VPS session | UNVERIFIED | Requires separately authorized L2/L3 evidence. |
 
 ## Verification Snapshot
@@ -52,6 +52,20 @@ python -m pytest -q tests/test_sync.py tests/test_sync_push_routes.py
 python -m pytest -q
 501 passed
 
+Sender worktree local checks:
+
+```text
+CHATGPT2API_AUTH_KEY=<test-only process value> python -m pytest -q
+12 passed
+npm run build
+passed
+```
+
+The sender mock suite covers v1 probe compatibility, `source_sha256`, receipt
+hash mismatch, authentication/network failure, source retention, persisted
+failure state, and idempotent retry. It does not connect to GenBox over a live
+network.
+
 python -m py_compile main.py sync/ingest.py sync/manifest.py
 node --check static/js/extensions.js
 node --check static/js/i18n.js
@@ -61,15 +75,15 @@ git diff --check
 ```
 
 The local development lab served
-`http://127.0.0.1:8892/#/extensions` to Playwright with HTTP 200, no page
-errors, and no horizontal overflow at `390x844`. No credentials, pairing
-material, Push request, SSH action, VPS connection, remote container action, or
-production action was submitted. The lab was stopped after the check.
+`http://127.0.0.1:8892/#/extensions` to Playwright with HTTP 200, title
+`GenBox`, no page errors, and no horizontal overflow at `390x844`. No
+credentials, pairing material, Push request, SSH action, VPS connection,
+remote container action, or production action was submitted.
 
 ## Next Gate
 
-Keep L2 paused. The next feature is the sender-side per-generation action in
-the separate dirty `chatgpt2api-dev` worktree. It requires explicit
-authorization, preservation of its existing changes, and a local/mock receiver
-only. Isolated-VPS discovery remains a separate authorized step after the
-target owner/scope and canonical SSH host-key pair are supplied.
+Keep L2 paused. The sender-side per-generation action and durable failure state
+are locally implemented in commits `78135e1` and `0320b62`; the next local gate is an independent browser
+smoke using a mock receiver and a final secret/data review. Isolated-VPS
+discovery remains a separate authorized step after the target owner/scope and
+canonical SSH host-key pair are supplied.

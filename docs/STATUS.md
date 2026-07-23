@@ -68,8 +68,8 @@ receiver proof from sender, isolated-VPS, and production claims.
 - **Protocol gate:** the sender sends `source_sha256`, requires receiver
   `contract_version: v1` and a positive `max_image_bytes` probe, and accepts a
   Push only when the v1 receipt SHA-256 matches the uploaded bytes.
-- **Verification:** sender focused tests -> `11 passed`; sender local full
-  pytest -> `11 passed`; `web-vue` `npm run build` passed; `git diff --check`
+- **Verification:** sender focused tests -> `12 passed`; sender local full
+  pytest -> `12 passed`; `web-vue` `npm run build` passed; `git diff --check`
   passed. Tests use only local mocks and a test-only process environment value.
 - **Browser:** local GenBox lab at `http://127.0.0.1:8892/#/extensions`
   loaded with title `GenBox`, zero page errors, and `scrollWidth=390` at a
@@ -77,8 +77,8 @@ receiver proof from sender, isolated-VPS, and production claims.
   SSH, Push, or credential action was submitted.
 - **Boundary:** no SSH, VPS, remote container, production instance, network
   deployment, or live sender-to-GenBox request was performed. Sender changes
-  are committed separately at `78135e1`; this local evidence does not upgrade
-  isolated VPS or cross-project E2E status.
+  are committed separately at `78135e1` and `0320b62`; this local evidence does
+  not upgrade isolated VPS or cross-project E2E status.
 
 ## Exact next step
 
