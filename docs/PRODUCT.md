@@ -79,12 +79,13 @@ receives its status, console URL, API URL, login guidance, and one-time secrets.
 
 ### First-Time VPS Trust For Personal Users
 
-For a personal user who already has a trusted SSH terminal session, the planned
-default is a simple trusted SSH-session pairing flow. After saving the VPS host,
-port, and username, GenBox will present one fixed, one-line helper and accept a
+For a personal user who already has a trusted SSH terminal session, GenBox now
+provides a local trusted SSH-session pairing flow. After saving the target host,
+port, and username, GenBox presents one fixed, one-line helper and accepts a
 one-line response pasted back by the user. The page reports the result in plain
-language and keeps the technical host identity in advanced details. This is
-planned work, not a current capability.
+language and keeps the technical host identity in advanced details. This local
+capability is covered by local tests; isolated-VPS and cross-project E2E
+verification remain pending.
 
 The already trusted terminal session or its known-host record is a user-supplied
 trust anchor for the initial pairing; it does not prove VPS ownership and does
@@ -183,8 +184,9 @@ health checks, delivery information, rollback, and tests are implemented.
   whether the source is safe to delete.
 - **Delivery information**: service URLs, login guidance, and one-time secrets
   presented after deployment.
-- **Trusted SSH-session pairing**: planned first-time host-identity confirmation
-  using a user-operated helper in an already trusted SSH terminal session.
+- **Trusted SSH-session pairing**: local first-time host-identity confirmation
+  using a user-operated helper in an already trusted SSH terminal session;
+  isolated-VPS verification remains a separate gate.
 - **Message channel**: an external conversation surface such as Telegram,
   Feishu, or a later approved platform that may receive notifications or submit
   fixed GenBox intents after explicit binding.

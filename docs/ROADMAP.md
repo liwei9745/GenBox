@@ -168,14 +168,14 @@ canonical algorithm plus `SHA256:` fingerprint. Local tests and review are
 necessary but not real E2E evidence.
 
 The personal-user trusted SSH-session pairing gate is implemented and reviewed
-locally in commits `5397141`, `6f8c710`, and `b037c9d`. It preserves mandatory
-host-key verification, re-probes the canonical identity pair before trust is
-saved, accepts no SSH credential, runs no GenBox remote command, and exposes
-neither pairing material nor raw host identities through persisted or public
-surfaces. Manual provider-console/known-host verification remains the advanced
-fallback. The next 4A step is to use the verified local Docker deployment shape
-as the candidate for isolated VPS reproduction; local evidence still does not
-count as VPS/browser E2E.
+locally in commits `997e78c`, `5394c42`, and `72edab0`, with the local source
+browser evidence recorded at `f965063`. It preserves mandatory host-key
+verification, re-probes the canonical identity pair before trust is saved,
+accepts no SSH credential, runs no GenBox remote command, and exposes neither
+pairing material nor raw host identities through persisted or public surfaces.
+Manual provider-console/known-host verification remains the advanced fallback.
+The next 4A step is still isolated VPS reproduction of the verified local
+Docker shape; local evidence does not count as VPS or cross-project E2E.
 
 ### 4B: User workflow
 

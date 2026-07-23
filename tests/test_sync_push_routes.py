@@ -173,6 +173,10 @@ def test_push_route_imports_then_is_idempotent_and_deduplicates_by_content(push_
         "safe_to_delete_source": True,
     }
     assert first_receipt["local_file"]
+    saved_file = push_environment / first_receipt["local_file"]
+    assert saved_file.is_file()
+    with Image.open(saved_file) as saved_image:
+        assert saved_image.size == (4, 3)
 
     repeated = _push(client, payload)
     assert repeated.status_code == 200

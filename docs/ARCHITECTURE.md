@@ -31,9 +31,10 @@ GenBox owns:
 - The extension catalog and guided deployment UI.
 - VPS target metadata, SSH host-key confirmation, environment discovery, fixed
   deployment plans, and GenBox-managed instance records.
-- A future personal-user trusted SSH-session pairing flow for initial host
-  identity confirmation. It will be separate from SSH authentication and does
-  not replace mandatory host-key verification.
+- A local personal-user trusted SSH-session pairing flow for initial host
+  identity confirmation. It is separate from SSH authentication and does not
+  replace mandatory host-key verification; isolated-VPS use remains a separate
+  evidence gate.
 - Network-adapter orchestration and connectivity verification.
 - The image Push receiving API and existing remote Pull workflow.
 - Image validation, hashing, deduplication, import, tags, and receipts.
@@ -99,26 +100,25 @@ GenBox. It never sends arbitrary shell. GenBox builds a fixed command plan,
 performs read-only discovery, checks conflicts and capacity, binds execution to
 a short-lived plan, and runs approved commands over SSH.
 
-The current first-time host-identity flow is manual confirmation of a canonical
-host-key algorithm and `SHA256:` fingerprint pair. A planned personal-user
-default, trusted SSH-session pairing, will start only after the target host,
-port, and username are saved. It will issue a short-lived, single-use in-memory
-challenge bound to that target identity version and candidate host-key pair. A
-user runs a backend-owned fixed/versioned helper in an SSH terminal they already
-trust, then pastes its one-line response into GenBox. The exchange must re-probe
-and reject a host-key mismatch, expiry, replay, target edit, malformed response,
-unsupported algorithm, or conflict with an existing saved trust record before
-persisting the same canonical pair.
+The current first-time host-identity flow supports manual confirmation of a
+canonical host-key algorithm and `SHA256:` fingerprint pair, plus a local
+personal-user trusted SSH-session pairing path. Pairing starts only after the
+target host, port, and username are saved. It issues a short-lived, single-use
+in-memory challenge bound to that target identity version and candidate host-key
+pair. A user runs a backend-owned fixed/versioned helper in an SSH terminal they
+already trust, then pastes its one-line response into GenBox. The exchange
+re-probes and rejects a host-key mismatch, expiry, replay, target edit,
+malformed response, unsupported algorithm, or conflict with an existing saved
+trust record before persisting the same canonical pair.
 
-This planned exchange accepts no SSH credential, executes no GenBox remote
+This local exchange accepts no SSH credential, executes no GenBox remote
 command, and accepts no browser-provided shell. Challenges, helper commands,
 responses, credentials, and raw pairing observations are transient only. Their
-transport is allowed only through future dedicated authenticated,
-CSRF-protected pairing endpoints; no endpoint name or path is specified or
-implemented here. Pairing material must not enter public task, status, instance,
-or diagnostic projections; durable target, TaskStore, or runtime records;
-ordinary logs; browser storage; screenshots; URLs; or Git. The canonical trust
-pair is the only permitted saved result. Cancellation saves nothing. Users
+transport uses dedicated authenticated, CSRF-protected pairing endpoints.
+Pairing material must not enter public task, status, instance, or diagnostic
+projections; durable target, TaskStore, or runtime records; ordinary logs;
+browser storage; screenshots; URLs; or Git. The canonical trust pair is the
+only permitted saved result. Cancellation saves nothing. Users
 without a readable OpenSSH-compatible trusted session, including custom
 host-key paths, use provider-console, known-host, or manual advanced
 verification instead.

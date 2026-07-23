@@ -213,3 +213,22 @@ user supplies the target owner/scope and canonical SSH host-key pair.
 - **Next local entry:** obtain explicit authorization before editing the dirty
   sender worktree; then add the per-generation action and focused tests there,
   preserving all existing changes and using only a local/mock receiver.
+
+## Local source-browser loop (2026-07-23)
+
+- **Evidence class:** `LOCAL` only. The local development lab was started from
+  commit `f965063` at `http://127.0.0.1:8892`; no SSH, VPS, remote container,
+  sender, or production operation was performed.
+- **Browser result:** `#/extensions` loaded with title `GenBox`. A temporary
+  non-routable `example.invalid` target was used only to expose the pairing
+  panel; the two numbered steps, copy-command entry, paste-result entry, and
+  explicit submit affordance were present. No pairing command was generated and
+  no host probe was submitted.
+- **Responsive result:** at a temporary `390x844` viewport the page stayed at
+  `scrollWidth=390` with no horizontal overflow. The viewport override was
+  reset afterward, and the temporary target was removed through the local API.
+- **Residual browser note:** the console emitted existing missing-i18n-key
+  warnings but no page errors. They are outside the P4 receiver contract and
+  remain a follow-up cleanup item.
+- **Next local entry:** keep the receiver contract frozen; any further browser
+  check must remain local and must not start pairing or submit credentials.
