@@ -50,6 +50,10 @@ tests pass. Batch/scheduling are Phase 5. Cleanup is Phase 6. Clean GitHub
 redeployment and upstream/release publication are separate authority and
 completion gates.
 
+The receiver-only requirement-by-requirement evidence matrix is maintained in
+`docs/P4-SINGLE-IMAGE-PUSH-LOCAL-EVIDENCE.md`. It explicitly separates LOCAL
+receiver proof from sender, isolated-VPS, and production claims.
+
 ## Exact next step
 
 Keep L2 paused. The GenBox receiver contract now includes local-file integrity
