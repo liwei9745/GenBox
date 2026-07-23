@@ -6,15 +6,23 @@
 
 ## Current evidence
 
-- **VERIFIED 2026-07-23:** GenBox commit
-  `656e4c773eda6990f3c7a2f5e4ea68286db87593` locally implements Deployment
-  Safety Contract v3 and the host-identity UX correction. The saved trust record
-  is the canonical SSH host-key algorithm plus `SHA256:` fingerprint pair.
-  Current first-time confirmation remains manual; this commit does not implement
-  trusted SSH-session pairing.
+- **VERIFIED 2026-07-23:** GenBox commits `5397141`, `6f8c710`, and `b037c9d`
+  locally implement the personal-user trusted SSH-session pairing path on top of
+  Deployment Safety Contract v3. The saved trust record remains the canonical
+  SSH host-key algorithm plus `SHA256:` fingerprint pair; pairing does not
+  replace SSH credentials or mandatory host-key verification.
 - **VERIFIED 2026-07-23:** focused and full local verification completed with
-  `480 passed`. Independent fixed-commit architecture, security, and regression
+  `486 passed`. Independent fixed-commit architecture, security, and regression
   reviews each returned **APPROVE**. This is local evidence only.
+- **VERIFIED 2026-07-23:** local Docker preflight succeeded from image
+  `genbox-p4-local:dae8d84`
+  (`sha256:62120b3124bf05c5eff4b85f7211804804bbcf617258460bbc8bc4aebe17680`).
+  The isolated container was exposed only on `127.0.0.1:18991`, passed its
+  Docker healthcheck, and returned `/api/setup/status` with production
+  authentication enabled. A temporary 1x1 PNG Push returned `imported`; the
+  identical retry returned `already-imported` with the same SHA-256. This proves
+  local receiver build/startup, authenticated Push, and idempotency only; it is
+  not VPS, private-network, browser, sender, or production evidence.
 - **VERIFIED 2026-07-22:** chatgpt2api sender implementation exists at
   `f4a327d5599b020c66d4aab041a5fa0035d5effe`. Its existence does not prove the
   GenBox receiver/deployment candidate or an end-to-end transfer.
@@ -37,25 +45,22 @@ completion gates.
 
 ## Exact next step
 
-Implement trusted SSH-session pairing locally for personal users. A user with an
-already trusted SSH terminal session will run a GenBox-generated fixed one-line
-helper and paste its one-line response back. The future exchange must be
-short-lived, single-use, in-memory, bound to the saved target identity version
-and candidate canonical host-key pair, and re-probe before saving trust. Add
-focused tests, freeze a commit, and obtain independent fixed-commit review.
-Only then seek separate authorization for remote discovery or isolated
-VPS/browser single-image E2E.
+Use the verified local Docker shape as the deployment candidate. Freeze the
+sanitized receiver commit and image/config contract, then perform read-only
+discovery against the explicitly isolated VPS development clone. Reproduce the
+same container shape there before attempting the separately authorized
+browser-driven single-image E2E. Production remains read-only.
 
 ## Resume constraints
 
 - Require SSH host-key verification; production is read-only and all development
   resources must be isolated.
-- Trusted SSH-session pairing is planned, not implemented. Its external trusted
-  terminal/known-host record is an initial trust anchor, not VPS ownership
-  evidence or an SSH credential substitute. Do not record its challenge,
-  response, command, raw pairing observations, or credentials in
-  persisted/public state, logs, browser storage, screenshots, URLs, or Git.
-  The canonical trust pair is the only permitted saved outcome.
+- Trusted SSH-session pairing is implemented locally and independently reviewed,
+  but its external trusted terminal/known-host record remains an initial trust
+  anchor, not VPS ownership evidence or an SSH credential substitute. Do not
+  record its challenge, response, command, raw pairing observations, or
+  credentials in persisted/public state, logs, browser storage, screenshots,
+  URLs, or Git. The canonical trust pair is the only permitted saved outcome.
 - Keep administrator, Push, management, SSH, and enrollment secrets separate
   and out of URLs, browser storage, Git, ordinary logs, screenshots, and status
   text.

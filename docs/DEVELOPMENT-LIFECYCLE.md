@@ -121,19 +121,26 @@ cleaned up only within its owned destination after evidence is captured.
 ## Stage 3: Implement And Verify
 
 Use the isolated clone for chatgpt2api sender changes and GenBox for receiver and
-deployment changes. Phase acceptance is scoped by `docs/ROADMAP.md`; the steps
-below are ordered capabilities, not a requirement that Phase 4 complete later
-phases or release gates. Verification proceeds from focused tests to end-to-end
-use:
+deployment changes. Before touching a VPS, build and run the receiver in an
+isolated local Docker container and record its image, health, configuration
+shape, authenticated Push result, and idempotent retry. This local preflight
+reduces avoidable remote iterations but does not prove VPS reachability or
+cross-project completion. Phase acceptance is scoped by `docs/ROADMAP.md`; the
+steps below are ordered capabilities, not a requirement that Phase 4 complete
+later phases or release gates. Verification proceeds from focused tests to
+end-to-end use:
 
 1. Unit and route tests.
 2. Local GenBox UI behavior.
-3. Private-network reachability.
-4. Single-image Push.
-5. Idempotent retry.
-6. Batch progress, interruption, and resume (**Phase 5**).
-7. Scheduled incremental scan and worker lease (**Phase 5**).
-8. Cleanup dry run; real cleanup remains disabled until **Phase 6**.
+3. Local Docker build, startup, health, authenticated Push, and idempotent
+   retry.
+4. Isolated VPS reproduction of the same container shape.
+5. Private-network reachability.
+6. Single-image Push.
+7. Idempotent retry.
+8. Batch progress, interruption, and resume (**Phase 5**).
+9. Scheduled incremental scan and worker lease (**Phase 5**).
+10. Cleanup dry run; real cleanup remains disabled until **Phase 6**.
 
 Record commands and outcomes in `docs/STATUS.md`. A passing mock test does not
 replace live isolation or network evidence.
