@@ -12,7 +12,7 @@
   SSH host-key algorithm plus `SHA256:` fingerprint pair; pairing does not
   replace SSH credentials or mandatory host-key verification.
 - **VERIFIED 2026-07-23:** focused and full local verification completed with
-  `496 passed`. Independent fixed-commit architecture, security, and regression
+  `497 passed`. Independent fixed-commit architecture, security, and regression
   reviews each returned **APPROVE**. This is local evidence only.
 - **VERIFIED 2026-07-23:** local Docker preflight succeeded from image
   `genbox-p4-local:dae8d84`
@@ -316,12 +316,15 @@ supplies the target owner/scope and canonical SSH host-key pair.
   `local_sha256` are still accepted for compatibility only after the gallery
   file is rehashed and matches their recorded source SHA-256. Missing or
   malformed source hashes fail closed.
-- **Verification:** focused sync/Push tests passed `38`; the full local suite
-  passed `496`; Python compilation and all four frontend bundle syntax checks
+- **Verification:** focused sync/Push tests passed `39`; the full local suite
+  passed `497`; Python compilation and all four frontend bundle syntax checks
   passed; `git diff --check` passed. A local Playwright smoke at
   `http://127.0.0.1:8892/#/extensions` returned HTTP 200 with zero page errors
   and `scrollWidth=innerWidth=390` at the narrow viewport. The lab was stopped
   afterward.
+- **Failure boundary:** an invalid-image rejection is covered locally and
+  leaves the receiver gallery, manifest, and content indexes untouched. This
+  is not sender-side source-retention or network-failure evidence.
 - **Boundary:** this closes a receiver-side local integrity gap only. It does
   not implement the sender's per-generation action or establish isolated-VPS,
   cross-project, or production evidence.

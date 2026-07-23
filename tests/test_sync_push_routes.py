@@ -298,6 +298,18 @@ def test_push_route_rejects_non_image_and_wrong_content_type(push_environment):
     assert wrong_content_type.status_code == 422
 
 
+def test_rejected_invalid_image_does_not_commit_receiver_state(push_environment):
+    client = TestClient(main.app)
+
+    response = _push(client, b"not an image", remote_path="2026/07/19/rejected.png")
+
+    assert response.status_code == 422
+    assert list(push_environment.glob("*.png")) == []
+    assert not manifest_mod.MANIFEST_FILE.exists()
+    assert not manifest_mod.LOCAL_INDEX_FILE.exists()
+    assert not manifest_mod.LOCAL_MD5_INDEX_FILE.exists()
+
+
 def test_push_preserves_png_metadata_and_exposes_gallery_source_fields(push_environment):
     client = TestClient(main.app)
     created_at = "2026-07-19T12:34:56+08:00"
