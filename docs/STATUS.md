@@ -12,7 +12,7 @@
   SSH host-key algorithm plus `SHA256:` fingerprint pair; pairing does not
   replace SSH credentials or mandatory host-key verification.
 - **VERIFIED 2026-07-23:** focused and full local verification completed with
-  `491 passed`. Independent fixed-commit architecture, security, and regression
+  `494 passed`. Independent fixed-commit architecture, security, and regression
   reviews each returned **APPROVE**. This is local evidence only.
 - **VERIFIED 2026-07-23:** local Docker preflight succeeded from image
   `genbox-p4-local:dae8d84`
@@ -52,12 +52,12 @@ completion gates.
 
 ## Exact next step
 
-Keep L2 paused. In the local-only loop, perform a read-only contract review of
-the separate `chatgpt2api-dev` sender worktree: verify the existing Push service,
-destination test, receipt handling, and whether a per-generation action is
-present. Do not edit that dirty worktree or run sender network calls. The next
-remote step remains separately authorized isolated-VPS discovery only after the
-user supplies the target owner/scope and canonical SSH host-key pair.
+Keep L2 paused. The GenBox receiver contract is frozen at `dda0ea8`; the next
+local feature requires explicit authorization to edit the separate dirty
+`chatgpt2api-dev` sender worktree and add its per-generation Push action. Do not
+edit that worktree or run sender network calls without that authorization. The
+next remote step remains separately authorized isolated-VPS discovery only after
+the user supplies the target owner/scope and canonical SSH host-key pair.
 
 ## Resume constraints
 
@@ -232,3 +232,24 @@ user supplies the target owner/scope and canonical SSH host-key pair.
   remain a follow-up cleanup item.
 - **Next local entry:** keep the receiver contract frozen; any further browser
   check must remain local and must not start pairing or submit credentials.
+
+## Local receiver hash-index resilience (2026-07-23)
+
+- **Evidence class:** `LOCAL` only, frozen at commit `dda0ea8`. GenBox now
+  records the non-secret source content SHA-256 in receiver-owned PNG metadata
+  and restores confirmed hashes from the atomic `SyncManifest` when rebuilding
+  the local index after a restart.
+- **Integrity boundary:** manifest entries are accepted only when their SHA-256
+  is canonical, their file exists, and the resolved file remains inside the
+  configured gallery. Standalone or forged image metadata is not trusted as a
+  receipt and cannot produce a false `duplicate-local` result.
+- **Verification:** the focused sync/Push suite passed `36` tests; the full
+  local suite passed `494` tests. Coverage includes index deletion/rebuild,
+  cross-path idempotency after rebuild, path confinement, forged metadata
+  rejection, metadata retention, and concurrent identical Pushes.
+- **Boundary:** this strengthens receiver-side local evidence only. It does not
+  implement the sender's per-generation action and does not upgrade the
+  isolated-VPS or cross-project E2E evidence.
+- **Next local entry:** obtain explicit sender-worktree authorization, preserve
+  its existing dirty changes, and use only a local/mock receiver for sender
+  development.
