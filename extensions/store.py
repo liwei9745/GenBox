@@ -1,14 +1,144 @@
 import json
+import hashlib
 import hmac
 import os
+import re
+import secrets
+import threading
 import time
 import uuid
+from dataclasses import dataclass
 
 from config import STORAGE_DIR
-from extensions.models import ExtensionConfig, ExtensionInstance, ExtensionTarget
+from extensions.models import (
+    ExtensionConfig,
+    ExtensionInstance,
+    ExtensionTarget,
+    is_canonical_host_key_trust,
+)
 
 
 EXTENSIONS_FILE = STORAGE_DIR / "extensions.json"
+
+
+PAIRING_PROTOCOL_VERSION = "GENBOX-PAIR/1"
+PAIRING_TTL_SECONDS = 300
+_PAIRING_ID_BYTES = 18
+_PAIRING_CHALLENGE_BYTES = 24
+
+
+def target_identity_digest(target: ExtensionTarget) -> str:
+    """Return a stable digest for the editable identity fields only."""
+    value = "\x1f".join((target.id, target.host, str(target.port), target.username))
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class HostKeyPairing:
+    pairing_id: str
+    challenge: str
+    target_id: str
+    target_identity: str
+    algorithm: str
+    fingerprint: str
+    expires_at: float
+
+
+class HostKeyPairingManager:
+    """Short-lived, single-use pairing state; deliberately never persisted."""
+
+    def __init__(self, ttl_seconds: int = PAIRING_TTL_SECONDS):
+        self.ttl_seconds = int(ttl_seconds)
+        self._lock = threading.Lock()
+        self._records: dict[str, HostKeyPairing] = {}
+
+    def _prune(self, now: float) -> None:
+        self._records = {
+            key: record for key, record in self._records.items()
+            if record.expires_at > now
+        }
+
+    def create(self, target: ExtensionTarget, algorithm: str, fingerprint: str) -> HostKeyPairing:
+        if not is_canonical_host_key_trust(algorithm, fingerprint):
+            raise ValueError("unsupported_host_key")
+        now = time.time()
+        record = HostKeyPairing(
+            pairing_id=secrets.token_urlsafe(_PAIRING_ID_BYTES),
+            challenge=secrets.token_urlsafe(_PAIRING_CHALLENGE_BYTES),
+            target_id=target.id,
+            target_identity=target_identity_digest(target),
+            algorithm=algorithm,
+            fingerprint=fingerprint,
+            expires_at=now + self.ttl_seconds,
+        )
+        with self._lock:
+            self._prune(now)
+            self._records[record.pairing_id] = record
+        return record
+
+    def consume(self, pairing_id: str) -> HostKeyPairing | None:
+        """Atomically consume a record, including on validation failure."""
+        now = time.time()
+        with self._lock:
+            self._prune(now)
+            return self._records.pop(pairing_id, None)
+
+    def discard(self, pairing_id: str) -> None:
+        with self._lock:
+            self._records.pop(pairing_id, None)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._records.clear()
+
+
+host_key_pairings = HostKeyPairingManager()
+
+_PAIRING_KEY_PATHS = {
+    "ssh-ed25519": "/etc/ssh/ssh_host_ed25519_key.pub",
+    "ecdsa-sha2-nistp256": "/etc/ssh/ssh_host_ecdsa_key.pub",
+    "ssh-rsa": "/etc/ssh/ssh_host_rsa_key.pub",
+}
+_PAIRING_RESPONSE_RE = re.compile(
+    r"^GENBOX-PAIR/1 pairing_id=([A-Za-z0-9_-]{20,128}) "
+    r"challenge=([A-Za-z0-9_-]{20,128}) "
+    r"algorithm=(ssh-ed25519|ecdsa-sha2-nistp256|ssh-rsa) "
+    r"fingerprint=(SHA256:[A-Za-z0-9+/]{43})$"
+)
+
+
+def build_host_key_pairing_helper(record: HostKeyPairing) -> str:
+    """Build a fixed command; only generated opaque values are interpolated."""
+    path = _PAIRING_KEY_PATHS.get(record.algorithm)
+    if not path:
+        raise ValueError("unsupported_host_key")
+    # Keep this one line and shell-portable across the supported OpenSSH VPS images.
+    return (
+        "f='" + path + "'; [ -r \"$f\" ] || exit 1; "
+        "k=$(ssh-keygen -lf \"$f\" -E sha256 2>/dev/null | awk 'NR==1 {print $2}'); "
+        "a=$(awk 'NR==1 {print $1}' \"$f\"); "
+        "case \"$a\" in ssh-ed25519|ecdsa-sha2-nistp256|ssh-rsa) ;; *) exit 1 ;; esac; "
+        "[ -n \"$k\" ] || exit 1; "
+        "printf 'GENBOX-PAIR/1 pairing_id=%s challenge=%s algorithm=%s fingerprint=%s\\n' '"
+        + record.pairing_id + "' '" + record.challenge + "' \"$a\" \"$k\""
+    )
+
+
+def parse_host_key_pairing_response(value: str) -> dict[str, str] | None:
+    """Parse exactly one generated response line, never arbitrary shell/text."""
+    if not isinstance(value, str) or len(value) > 512:
+        return None
+    # A pasted terminal line may carry its final newline; other whitespace is invalid.
+    match = _PAIRING_RESPONSE_RE.fullmatch(value.rstrip("\r\n"))
+    if not match:
+        return None
+    pairing_id, challenge, algorithm, fingerprint = match.groups()
+    return {
+        "pairing_id": pairing_id,
+        "challenge": challenge,
+        "algorithm": algorithm,
+        "fingerprint": fingerprint,
+    }
 
 
 def load_config() -> ExtensionConfig:

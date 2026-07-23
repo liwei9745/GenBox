@@ -15,6 +15,8 @@ from extensions.models import (
     ExtensionDeployRequest,
     ExtensionDiscoveryRequest,
     ExtensionHostKeyConfirmRequest,
+    ExtensionHostKeyPairingCompleteRequest,
+    ExtensionHostKeyPairingStartRequest,
     ExtensionHostKeyProbeRequest,
     ExtensionKeyResetRequest,
     ExtensionPlanRequest,
@@ -914,6 +916,105 @@ def test_host_key_confirm_rejects_algorithm_drift(monkeypatch):
 
     assert caught.value.status_code == 409
     assert writes == []
+
+
+def test_host_key_pairing_round_trip_is_transient_and_reprobes(monkeypatch):
+    import main
+
+    target = ExtensionTarget(id="pair", name="Pair", host="safe.example", username="ubuntu")
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    monkeypatch.setattr(
+        main,
+        "probe_host_key",
+        lambda _target: asyncio.sleep(0, result=(TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY)),
+    )
+    saved = []
+    monkeypatch.setattr(
+        main.extensions_store,
+        "confirm_target_host_key",
+        lambda expected, alg, value: saved.append((expected, alg, value)) or expected.model_copy(
+            update={"host_key_algorithm": alg, "host_key": value}
+        ),
+    )
+    main.host_key_pairings.clear()
+    started = asyncio.run(main.extension_start_ssh_host_key_pairing(
+        ExtensionHostKeyPairingStartRequest(target_id="pair")
+    ))
+    assert started["protocol"] == "GENBOX-PAIR/1"
+    assert started["candidate"] == {"algorithm": TEST_HOST_KEY_ALGORITHM, "fingerprint": TEST_HOST_KEY}
+    assert "ssh-secret" not in started["helper_command"]
+    assert "/etc/ssh/ssh_host_ed25519_key.pub" in started["helper_command"]
+    response = (
+        "GENBOX-PAIR/1 pairing_id=" + started["pairing_id"] + " "
+        "challenge=" + main.host_key_pairings._records[started["pairing_id"]].challenge + " "
+        "algorithm=ssh-ed25519 fingerprint=" + TEST_HOST_KEY
+    )
+    completed = asyncio.run(main.extension_complete_ssh_host_key_pairing(
+        ExtensionHostKeyPairingCompleteRequest(pairing_id=started["pairing_id"], response=response)
+    ))
+    assert completed["verified"] is True
+    assert saved and saved[0][1:] == (TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY)
+    assert started["pairing_id"] not in main.host_key_pairings._records
+
+
+def test_host_key_pairing_rejects_malformed_response_and_consumes(monkeypatch):
+    import main
+    from fastapi import HTTPException
+
+    target = ExtensionTarget(id="pair", name="Pair", host="safe.example", username="ubuntu")
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    monkeypatch.setattr(
+        main,
+        "probe_host_key",
+        lambda _target: asyncio.sleep(0, result=(TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY)),
+    )
+    main.host_key_pairings.clear()
+    started = asyncio.run(main.extension_start_ssh_host_key_pairing(
+        ExtensionHostKeyPairingStartRequest(target_id="pair")
+    ))
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(main.extension_complete_ssh_host_key_pairing(
+            ExtensionHostKeyPairingCompleteRequest(
+                pairing_id=started["pairing_id"], response="arbitrary shell; echo secret"
+            )
+        ))
+    assert caught.value.status_code == 400
+    with pytest.raises(HTTPException) as replay:
+        asyncio.run(main.extension_complete_ssh_host_key_pairing(
+            ExtensionHostKeyPairingCompleteRequest(
+                pairing_id=started["pairing_id"], response="arbitrary shell; echo secret"
+            )
+        ))
+    assert replay.value.status_code == 409
+
+
+def test_host_key_pairing_rejects_target_mutation_without_persisting(monkeypatch):
+    import main
+    from fastapi import HTTPException
+
+    target = ExtensionTarget(id="pair", name="Pair", host="safe.example", username="ubuntu")
+    current = {"target": target}
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: current["target"])
+    monkeypatch.setattr(
+        main,
+        "probe_host_key",
+        lambda _target: asyncio.sleep(0, result=(TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY)),
+    )
+    main.host_key_pairings.clear()
+    started = asyncio.run(main.extension_start_ssh_host_key_pairing(
+        ExtensionHostKeyPairingStartRequest(target_id="pair")
+    ))
+    record = main.host_key_pairings._records[started["pairing_id"]]
+    current["target"] = target.model_copy(update={"host": "changed.example"})
+    response = (
+        "GENBOX-PAIR/1 pairing_id=" + started["pairing_id"] + " "
+        "challenge=" + record.challenge + " algorithm=ssh-ed25519 fingerprint=" + TEST_HOST_KEY
+    )
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(main.extension_complete_ssh_host_key_pairing(
+            ExtensionHostKeyPairingCompleteRequest(pairing_id=started["pairing_id"], response=response)
+        ))
+    assert caught.value.status_code == 409
 
 
 def test_extension_ssh_route_hides_unclassified_raw_exception(monkeypatch):

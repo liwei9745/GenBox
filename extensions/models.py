@@ -89,6 +89,15 @@ class ExtensionHostKeyConfirmRequest(ExtensionHostKeyProbeRequest):
     fingerprint: str = Field(pattern=HOST_KEY_FINGERPRINT_PATTERN, min_length=50, max_length=50)
 
 
+class ExtensionHostKeyPairingStartRequest(ExtensionHostKeyProbeRequest):
+    """Start a transient trusted-terminal host identity pairing."""
+
+
+class ExtensionHostKeyPairingCompleteRequest(BaseModel):
+    pairing_id: str = Field(pattern=r"^[A-Za-z0-9_-]{20,128}$", min_length=20, max_length=128)
+    response: str = Field(min_length=20, max_length=512)
+
+
 class SSHCredential(BaseModel):
     password: str = ""
     private_key: str = ""

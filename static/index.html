@@ -853,6 +853,12 @@
               <label class="extension-checkbox"><input id="extReuseSshPassword" type="checkbox" onchange="extensionCredentialChanged()"><span data-i18n="extensions.reuse_ssh_password">本次请求显式使用 SSH 密码作为 sudo 密码</span></label>
             </fieldset>
             <p id="extCredentialNotice" class="extension-credential-notice" role="status"><span data-i18n="extensions.ssh_not_saved_notice">保存 VPS 连接信息，但不保存 SSH 密码、私钥或 sudo 密码；关闭页面或重启后需要重新输入。</span></p>
+            <section id="extHostKeyPairing" class="extension-confirm" aria-live="polite">
+              <b data-i18n="extensions.host_key_pairing_title">用已登录的 SSH 终端快速验证</b>
+              <p data-i18n="extensions.host_key_pairing_help">在你已经登录这台 VPS 的 SSH 窗口中运行下面这一行命令，再把输出粘贴回来。不需要在这里填写 SSH 密码。</p>
+              <div id="extHostKeyPairingStart" class="extension-actions"><button type="button" class="btn-primary" id="extHostKeyPairingStartBtn" onclick="extensionStartHostKeyPairing()" data-i18n="extensions.host_key_pairing_start">生成配对命令</button><button type="button" class="btn-secondary hidden" id="extHostKeyPairingManualBtn" onclick="extensionStartHostKeySetup()" data-i18n="extensions.host_key_pairing_manual">改用手动核对</button></div>
+              <div id="extHostKeyPairingCommandWrap" class="hidden"><label><span data-i18n="extensions.host_key_pairing_command">在 SSH 窗口运行这一行</span><textarea id="extHostKeyPairingCommand" readonly rows="3" autocomplete="off"></textarea></label><label><span data-i18n="extensions.host_key_pairing_response">粘贴命令输出</span><textarea id="extHostKeyPairingResponse" rows="2" autocomplete="off" spellcheck="false"></textarea></label><div class="extension-actions"><button type="button" class="btn-secondary" onclick="extensionCancelHostKeyPairing()" data-i18n="common.cancel">取消</button><button type="button" class="btn-primary" id="extHostKeyPairingCompleteBtn" onclick="extensionCompleteHostKeyPairing()" data-i18n="extensions.host_key_pairing_complete">完成验证</button></div><p id="extHostKeyPairingExpiry" class="extension-credential-notice" role="status"></p></div>
+            </section>
             <section id="extHostKeyConfirm" class="extension-confirm hidden" aria-live="polite">
               <b data-i18n="extensions.host_key_candidate_title">待核对的 SSH 主机身份</b>
               <p data-i18n="extensions.host_key_independent_check">请通过服务商控制台或既有可信记录，独立核对下面的算法和完整指纹。</p>

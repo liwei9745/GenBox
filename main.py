@@ -72,7 +72,8 @@ from sync.ingest import authenticate_push_source, validate_image_payload, valida
 import sync.store as sync_store
 from extensions.models import (
     ExtensionBatchTargetsRequest, ExtensionDeployRequest, ExtensionDiscoveryRequest,
-    ExtensionDeliveryClaimRequest, ExtensionHostKeyConfirmRequest, ExtensionHostKeyProbeRequest, ExtensionKeyResetRequest,
+    ExtensionDeliveryClaimRequest, ExtensionHostKeyConfirmRequest, ExtensionHostKeyPairingCompleteRequest,
+    ExtensionHostKeyPairingStartRequest, ExtensionHostKeyProbeRequest, ExtensionKeyResetRequest,
     ExtensionTaskResumeRequest,
     ExtensionPlanRequest, ExtensionTestRequest,
     ManagedCredentialUpsertRequest, VaultPasswordRequest,
@@ -87,6 +88,12 @@ from extensions.orchestrator import (
 from extensions.discovery import discover_environment
 from extensions.capabilities import validate_deployment_capability
 import extensions.store as extensions_store
+from extensions.store import (
+    build_host_key_pairing_helper,
+    parse_host_key_pairing_response,
+    target_identity_digest,
+    host_key_pairings,
+)
 from extensions.credential_vault import credential_vault
 from extensions.catalog import public_catalog
 from extensions.models import NetworkConnectRequest
@@ -3791,6 +3798,69 @@ async def extension_probe_ssh_host_key(body: ExtensionHostKeyProbeRequest):
         "algorithm": algorithm,
         "fingerprint": fingerprint,
     }
+
+
+@app.post("/api/extensions/ssh/host-key/pair/start")
+async def extension_start_ssh_host_key_pairing(body: ExtensionHostKeyPairingStartRequest):
+    """Create a one-time helper for a user-trusted SSH terminal session."""
+    target = extensions_store.get_target(body.target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="请先保存 VPS，再开始配对")
+    try:
+        algorithm, fingerprint = await probe_host_key(target)
+        record = host_key_pairings.create(target, algorithm, fingerprint)
+        helper = build_host_key_pairing_helper(record)
+    except SSHConnectionError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "无法开始 SSH 主机身份配对，请稍后重试",
+                "diagnostic": {"code": "ssh_host_key_pair_start_failed", "stage": "host_key_pair_start", "retry_safe": False},
+            },
+        ) from exc
+    return {
+        "protocol": "GENBOX-PAIR/1",
+        "pairing_id": record.pairing_id,
+        "expires_at": int(record.expires_at),
+        "expires_in_seconds": max(0, int(record.expires_at - time.time())),
+        "helper_command": helper,
+        "candidate": {"algorithm": algorithm, "fingerprint": fingerprint},
+    }
+
+
+@app.post("/api/extensions/ssh/host-key/pair/complete")
+async def extension_complete_ssh_host_key_pairing(body: ExtensionHostKeyPairingCompleteRequest):
+    """Validate and consume a helper response before persisting host trust."""
+    record = host_key_pairings.consume(body.pairing_id)
+    if not record:
+        raise HTTPException(status_code=409, detail="配对已过期、取消或已经使用")
+    parsed = parse_host_key_pairing_response(body.response)
+    target = extensions_store.get_target(record.target_id)
+    if not parsed or parsed["pairing_id"] != record.pairing_id or parsed["challenge"] != record.challenge:
+        raise HTTPException(status_code=400, detail="配对回执格式或挑战值无效")
+    if not target or target_identity_digest(target) != record.target_identity:
+        raise HTTPException(status_code=409, detail="VPS 连接信息已修改，请重新开始配对")
+    if parsed["algorithm"] != record.algorithm or parsed["fingerprint"] != record.fingerprint:
+        raise HTTPException(status_code=409, detail="SSH 主机身份与本次配对候选值不一致")
+    try:
+        current_algorithm, current_fingerprint = await probe_host_key(target)
+    except SSHConnectionError as exc:
+        raise HTTPException(status_code=400, detail={"error": str(exc), "diagnostic": exc.diagnostic}) from exc
+    if current_algorithm != record.algorithm or current_fingerprint != record.fingerprint:
+        raise HTTPException(status_code=409, detail="SSH 主机身份在配对期间发生变化，未保存")
+    if is_canonical_host_key_trust(target.host_key_algorithm, target.host_key):
+        if target.host_key_algorithm != record.algorithm or target.host_key != record.fingerprint:
+            raise HTTPException(status_code=409, detail="VPS 已保存的主机身份与本次配对不一致")
+    try:
+        saved = extensions_store.confirm_target_host_key(target, record.algorithm, record.fingerprint)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="VPS 连接信息在配对期间发生变化，未保存") from exc
+    return {"target": saved.model_dump(), "verified": True}
 
 
 @app.post("/api/extensions/ssh/host-key/confirm")
