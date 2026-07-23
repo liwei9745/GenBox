@@ -152,3 +152,23 @@ read-only.
 - **Next local entry:** use the authenticated browser baseline for any further
   local UI checks. The deployment wizard and Push receiver remain gated by
   their existing contracts; L2 stays paused until separately resumed.
+
+## Local pairing-panel layout fix (2026-07-23)
+
+- **Evidence class:** `LOCAL` only. No pairing command was generated or
+  executed, and no SSH/VPS/remote action was performed.
+- **Finding/fix:** at the 987px browser viewport, the pairing command and
+  response fields inherited inline label sizing and visually overlapped. The
+  pairing wrapper now uses an independent grid, full-width bounded textareas,
+  long-command wrapping, and wrapping action buttons in
+  `static/css/extensions.css`.
+- **Browser result:** Playwright geometry regression on the local Lab measured
+  a 659px pairing panel; both labels occupied separate rows and
+  `overlap=false`. Long command text stayed within each textarea.
+- **Verification:** `node --check static/js/extensions.js` and `git diff --check`
+  passed. A full pytest attempt was blocked before test setup because the
+  restricted environment denied creation of pytest temporary directories; this
+  is an environment limitation, not a test assertion failure.
+- **Next local entry:** refresh the Lab page and verify the pairing panel at
+  desktop and narrow widths. Keep the generated-command and SSH controls
+  untouched unless L2 is explicitly resumed with verified target identity.
