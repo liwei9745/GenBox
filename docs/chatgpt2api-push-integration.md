@@ -16,6 +16,7 @@ GenBox 保留现有“本地主动拉取”模式作为无入站网络条件下�
 - Header `X-GenBox-Key`: 与来源身份绑定的独立 API Key
 - File `image`: 图片二进制，默认最大 25 MiB
 - Form `remote_path`: chatgpt2api 中的稳定相对路径，必填
+- Form `source_sha256`: 发送端预计算的图片 SHA-256，可选；提供时必须与上传字节匹配
 - Form `created_at`, `prompt`, `model`: 可选元数据
 
 GenBox 通过 `GENBOX_PUSH_KEYS` 配置来源身份：
@@ -27,10 +28,13 @@ GENBOX_PUSH_KEYS={"chatgpt2api-vps":"replace-with-a-long-random-key"}
 该路径不接受或要求 `X-Admin-Key`。专用来源密钥泄漏时可以只吊销一个 VPS，
 而不影响 GenBox 管理员会话。
 
-当前成功响应包含 `sha256`、`local_file` 和
+当前成功响应包含 `contract_version="v1"`、`sha256`、`local_file` 和
 `safe_to_delete_source=true`。该字段只表示 GenBox 已安全提交本次内容，不表示发送端
 应默认删除源文件；发送端仍必须检查用户独立 opt-in、回执哈希和源文件当前哈希。相同
 `source_id + remote_path + sha256` 重试会返回 `already-imported`，不会重复落库。
+发送端可先调用带同样认证 Header 的 `GET /api/sync/push/status`，获得 v1 协议版本和
+当前运行进程的图片字节上限；预检或推送失败时必须保留源文件。若提供的
+`source_sha256` 格式错误或与图片不匹配，GenBox 会在写入任何接收端状态前返回 422。
 
 ## chatgpt2api 侧设计
 
