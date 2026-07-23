@@ -176,6 +176,24 @@ def test_push_route_imports_then_is_idempotent_and_deduplicates_by_content(push_
     assert len(list(push_environment.glob("*.png"))) == 1
 
 
+def test_push_changed_content_at_same_source_path_creates_a_new_receipt(push_environment):
+    client = TestClient(main.app)
+    remote_path = "2026/07/19/image.png"
+
+    first = _push(client, _png_bytes("red"), remote_path=remote_path).json()
+    changed = _push(client, _png_bytes("blue"), remote_path=remote_path).json()
+    repeated_changed = _push(client, _png_bytes("blue"), remote_path=remote_path).json()
+
+    assert first["status"] == "imported"
+    assert changed["status"] == "imported"
+    assert changed["sha256"] != first["sha256"]
+    assert changed["local_file"] != first["local_file"]
+    assert repeated_changed["status"] == "already-imported"
+    assert repeated_changed["sha256"] == changed["sha256"]
+    assert repeated_changed["local_file"] == changed["local_file"]
+    assert len(list(push_environment.glob("*.png"))) == 2
+
+
 @pytest.mark.parametrize(
     "remote_path",
     [

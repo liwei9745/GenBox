@@ -182,6 +182,13 @@ read-only.
   the request but controls were not re-rendered until the response. The submit
   path now immediately disables response, copy, restart, and submit controls;
   this is covered by the local mock test.
+- **Receiver contract follow-up:** a local Push test now covers changed content
+  at the same source path: a new SHA-256 receives a new local file and receipt,
+  while retrying that new content remains `already-imported`. The sender-side
+  per-generation action remains outside this repository; no cross-project E2E
+  claim is made.
+- **Verification update:** `python -m pytest -q tests/test_sync_push_routes.py
+  tests/test_sync.py` -> `32 passed`; `python -m pytest -q` -> `490 passed`.
 - **Next local entry:** keep L2 paused. Any further browser smoke must use only
   the local runtime and must not submit credentials, generate a real pairing
   command, or initiate SSH. Reopen L2 only after separately verified isolated
