@@ -66,6 +66,14 @@ hash mismatch, authentication/network failure, source retention, persisted
 failure state, and idempotent retry. It does not connect to GenBox over a live
 network.
 
+Sender Studio browser smoke used the local Vite page at `127.0.0.1:5173` with
+Playwright-routed mock API responses only. A synthetic completed image exposed
+the per-generation button; the first click was disabled while pending and then
+showed the success receipt state, while a second mock failure showed retry and
+source-retained recovery. The captured requests contained only the expected
+relative image path. The page had zero errors and `scrollWidth=430` at a 430px
+viewport. This is LOCAL UI/mock evidence, not a live sender-to-GenBox transfer.
+
 python -m py_compile main.py sync/ingest.py sync/manifest.py
 node --check static/js/extensions.js
 node --check static/js/i18n.js
@@ -82,8 +90,8 @@ remote container action, or production action was submitted.
 
 ## Next Gate
 
-Keep L2 paused. The sender-side per-generation action and durable failure state
-are locally implemented in commits `78135e1` and `0320b62`; the next local gate is an independent browser
-smoke using a mock receiver and a final secret/data review. Isolated-VPS
+Keep L2 paused. The sender-side per-generation action, durable failure state,
+and local mock browser smoke are implemented in commits `78135e1` and `0320b62`.
+The next local gate is a final secret/data review of those commits; isolated-VPS
 discovery remains a separate authorized step after the target owner/scope and
 canonical SSH host-key pair are supplied.

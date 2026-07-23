@@ -75,6 +75,12 @@ receiver proof from sender, isolated-VPS, and production claims.
   loaded with title `GenBox`, zero page errors, and `scrollWidth=390` at a
   390px viewport. This is local page/responsive evidence only; no pairing,
   SSH, Push, or credential action was submitted.
+- **Sender browser smoke:** local Vite at `127.0.0.1:5173` used only
+  Playwright-routed mock API responses. A synthetic completed image exercised
+  the per-generation button through pending, success, and retry/source-retained
+  failure states; captured Push requests contained only the expected relative
+  path, with zero page errors and `scrollWidth=430` at a 430px viewport.
+  This remains LOCAL UI/mock evidence, not live cross-project E2E.
 - **Boundary:** no SSH, VPS, remote container, production instance, network
   deployment, or live sender-to-GenBox request was performed. Sender changes
   are committed separately at `78135e1` and `0320b62`; this local evidence does
@@ -82,8 +88,8 @@ receiver proof from sender, isolated-VPS, and production claims.
 
 ## Exact next step
 
-Keep L2 paused. The next local entry is an independent review of sender Studio
-behavior and the committed protocol boundary. Then, if separately authorized,
+Keep L2 paused. The next local entry is a final secret/data review of the
+committed sender Studio and protocol boundary. Then, if separately authorized,
 perform isolated-VPS discovery with a confirmed canonical SSH host-key pair.
 Do not treat this LOCAL evidence as VPS or production verification.
 
