@@ -41,6 +41,9 @@ source code and command-line instructions.
    environment, license, and risk metadata.
 9. Provide an advisory-first Repair Copilot that explains sanitized diagnoses
    and offers only user-authorized, adapter-allowlisted repair actions.
+10. Add optional message-channel notifications and capability-scoped bot
+    interaction so users can observe and trigger selected GenBox workflows
+    without turning a chat channel into a general remote shell.
 
 ## Primary User Journeys
 
@@ -96,6 +99,22 @@ appropriate recommendations, and the full catalog. When a managed app fails,
 deterministic checks run first; Repair Copilot may then explain sanitized
 evidence and propose a bounded action for explicit approval and health recheck.
 
+### Operate Through A Message Channel
+
+After the core transfer and deployment workflows are verified, the user may bind
+an optional message channel such as Telegram, Feishu, or a later approved
+platform. GenBox can send status updates, completed image or video results,
+deployment notices, and retry prompts to that channel. The user can then invoke
+selected fixed actions such as starting a saved generation preset, checking task
+status, or requesting a bounded image-import workflow from a trusted remote
+source.
+
+Message-channel interaction is a convenience layer over existing GenBox
+capabilities, not a replacement for backend authorization or workflow safety.
+It does not grant arbitrary shell access, does not make a third-party chat
+identity equal to a GenBox administrator, and does not bypass existing review,
+network, or deletion constraints.
+
 ## Service Catalog Scope
 
 ### API Proxies And Model Gateways
@@ -144,6 +163,10 @@ health checks, delivery information, rollback, and tests are implemented.
 - Treating a UI placeholder or command plan as a completed provider adapter.
 - Letting a catalog manifest, recommendation, or AI response grant deployment or
   repair capability without a verified backend adapter.
+- Treating a third-party message account, bot session, or platform OAuth result
+  as equivalent to GenBox administrator authentication.
+- Letting a message channel submit arbitrary shell, unrestricted VPS commands,
+  or other unbounded remote mutations.
 - Training on raw operational logs or sending secrets, personal data, user media,
   prompts, host identities, or credentials to a diagnostic model.
 - Giving AI arbitrary shell access, direct root control, or permission to mutate
@@ -162,3 +185,8 @@ health checks, delivery information, rollback, and tests are implemented.
   presented after deployment.
 - **Trusted SSH-session pairing**: planned first-time host-identity confirmation
   using a user-operated helper in an already trusted SSH terminal session.
+- **Message channel**: an external conversation surface such as Telegram,
+  Feishu, or a later approved platform that may receive notifications or submit
+  fixed GenBox intents after explicit binding.
+- **Channel binding**: an explicit link between a GenBox user or workspace and a
+  specific external message identity plus its permitted capabilities.

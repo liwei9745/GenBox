@@ -422,3 +422,44 @@ AI advice into general remote administration.
 - Every mutation is user-authorized, ownership-scoped, allowlisted, auditable,
   rollback-aware, and followed by a deterministic health check.
 - Failed verification stops the workflow and presents a safe recovery state.
+
+## Phase 13: Multi-Channel Notifications And Bot Interaction
+
+**Status:** Planned
+
+**Topic contract:** `docs/message-channel-contract.md`
+
+### Goal
+
+Add optional message-channel entry points for observation and bounded task
+control without weakening GenBox's existing authorization, deployment, Push, or
+repair safety rules.
+
+### Deliverables
+
+- A versioned channel registry with capability, auth, media, and risk metadata.
+- An outbound event outbox for non-secret notifications such as generation
+  completion, import success, deployment readiness, and retryable failures.
+- An inbound gateway for authenticated webhook or bot callbacks with signature,
+  replay-window, and rate-limit checks.
+- A channel auth broker and explicit channel-binding model that keeps external
+  message identities separate from GenBox administrator identity.
+- Capability-scoped command handlers for selected existing workflows such as
+  saved image generation, video generation kickoff, task status lookup, and
+  bounded remote import requests.
+- One independently verified consumer-friendly channel first, likely Telegram,
+  before more administrator-mediated or region-specific channels such as Feishu
+  or QQ.
+
+### Acceptance Criteria
+
+- A message-channel identity cannot bypass GenBox administrator auth, Push auth,
+  deployment ownership, or repair approval boundaries.
+- No message path accepts arbitrary shell, unrestricted VPS commands, or other
+  unbounded remote mutation.
+- All inbound actions map to explicit backend-owned intents with the same safety
+  checks used by the browser UI.
+- Unsupported or partially integrated channels remain explicit planned states,
+  not implied capabilities.
+- Message-channel credentials, callback payloads, raw media, and user prompts
+  follow the same secret and privacy boundaries as existing GenBox APIs.

@@ -39,6 +39,8 @@ GenBox owns:
 - Image validation, hashing, deduplication, import, tags, and receipts.
 - Display and one-click copy of non-sensitive service access information.
 - One-time delivery of newly generated service credentials.
+- A future message-channel hub for outbound notifications, inbound fixed bot
+  actions, channel bindings, and per-channel capability enforcement.
 
 ### chatgpt2api Repository
 
@@ -63,6 +65,32 @@ GenBox receiver completion does not imply chatgpt2api sender completion.
 - `storage/`: runtime files. Secrets and user data in this directory must not be
   committed.
 - `tests/`: unit and route-level behavior tests.
+
+## Future Message Channel Architecture
+
+Future message-channel support extends GenBox with a bounded messaging layer. It
+does not replace the browser UI, Push API, or deployment adapters.
+
+- `Channel registry`: versioned metadata describing each supported channel's
+  capabilities, auth model, callback transport, media limits, and risk labels.
+- `Auth broker`: channel-specific binding flows for user identity, bot or app
+  credentials, and workspace-scoped permission grants. It does not force
+  Telegram, Feishu, QQ, or later channels into a fake universal OAuth model.
+- `Outbound event outbox`: durable, non-secret GenBox events such as
+  `image_imported`, `generation_completed`, `deployment_ready`, or
+  `pull_failed`, fanned out asynchronously to allowed channels.
+- `Inbound gateway`: authenticated webhook or bot-callback entry points that
+  validate signatures, replay windows, rate limits, and channel bindings before
+  mapping a message to a fixed GenBox intent.
+- `Capability-scoped command handlers`: bounded actions such as starting a saved
+  generation preset, checking task status, or requesting a verified import flow.
+  They call existing backend workflows and never accept arbitrary shell.
+
+Initial planning assumes a consumer-friendly Telegram path, a more
+administrator-mediated Feishu path, and a later QQ path whose bot and login
+ecosystems remain distinct. Platform-specific implementation facts must be
+re-verified against official documentation at coding time because they can
+change independently of GenBox.
 
 ## Extension Deployment Architecture
 
@@ -174,6 +202,11 @@ is a two-way synchronization system with conflict resolution.
 - Each sender uses a stable source ID and independently revocable Push key.
 - SSH credentials and network enrollment tokens are session secrets, not
   ordinary target metadata.
+- Message-channel bot tokens, app secrets, signing secrets, and refresh tokens
+  are separate from GenBox administrator credentials, Push keys, and SSH
+  credentials.
+- A bound message identity authorizes only its granted channel capabilities. It
+  does not implicitly become a GenBox administrator or deployment owner.
 - New service management credentials are written to the remote instance and
   delivered once by default. With explicit per-instance opt-in, managed-service
   credentials may also be stored in the local encrypted vault under `storage/`;
@@ -214,3 +247,13 @@ schedulers from processing the same plan concurrently.
 The UI sends validated intent, not shell source. The adapter owns fixed commands,
 parameter validation, secret redaction, timeouts, success checks, and recovery
 messages. The SSH orchestrator verifies the host key and executes the plan.
+
+## Message-Channel Control Flow
+
+`External channel -> authenticated inbound gateway -> capability-scoped GenBox intent -> existing workflow`
+
+The channel adapter validates the external signature and binding, normalizes the
+message into a fixed GenBox intent, and hands it to an existing workflow such as
+generation, import, or status lookup. No message channel may invent new remote
+execution paths, bypass current GenBox authorization checks, or submit arbitrary
+shell or unreviewed repair actions.

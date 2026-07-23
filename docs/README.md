@@ -30,6 +30,7 @@ This is the documentation hub beyond the main README. Start with usage and upgra
 | [跨项目集成协议](INTEGRATION.md) | GenBox 与 chatgpt2api 开发者 | 身份认证、Push/Pull、回执、幂等和删除条件 |
 | [Push 集成设计](chatgpt2api-push-integration.md) | 后续发送端开发者 | 发送端工作拆分、批量/定时传输和安全清理设计 |
 | [扩展部署契约](extensions-deployment-contract.md) | 扩展适配器开发者 | VPS 发现、部署计划、网络准备、交付与回滚边界 |
+| [消息通道契约](message-channel-contract.md) | 未来消息通道与 Bot 适配开发者 | 通知、Bot 指令、鉴权、绑定、回调与安全边界 |
 | [新手引导 UI 契约](ONBOARDING-UI-CONTRACT.md) | 产品与前端维护者 | 标题系统、能力介绍和 onboarding 信息顺序 |
 
 ## 项目开发 / Project Development

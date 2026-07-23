@@ -454,3 +454,56 @@ This is an accepted future implementation contract; it does not claim that
 pairing endpoints or a helper exist today. It requires local tests and an
 independent fixed-commit review before separately authorized isolated
 VPS/browser single-image E2E work resumes.
+
+## ADR-019: Message Channels Are Event-Driven Adapters With Capability-Scoped Commands
+
+**Status:** Accepted
+**Date:** 2026-07-23
+
+### Context
+
+Future users want to receive GenBox events and trigger selected actions through
+message channels such as Telegram, Feishu, or later approved platforms. These
+platforms do not share one auth or delivery model: some favor consumer bot and
+login flows, others require tenant or administrator approval, and some separate
+their bot and login ecosystems entirely. If GenBox treats them as interchangeable
+"chat login" providers or lets them submit free-form commands, message-channel
+support would erode the same safety boundaries already established for
+deployment, Push, and repair.
+
+### Decision
+
+Future message-channel support will use an event-driven adapter model with four
+separate responsibilities:
+
+- a versioned channel registry for capability and risk metadata
+- a channel-specific auth broker for binding users or workspaces to external
+  message identities
+- an outbound event outbox for non-secret notifications
+- an authenticated inbound gateway that maps validated callbacks to fixed
+  backend-owned GenBox intents
+
+Message-channel identity is not GenBox administrator identity. A channel binding
+grants only its explicit capabilities and must not imply deployment ownership,
+Push source identity, or repair authorization. Inbound channel actions may call
+existing workflows such as saved generation presets, task status lookup, or a
+bounded import request, but they may not submit arbitrary shell, unrestricted
+VPS commands, or free-form repair mutations.
+
+Platform-specific auth models remain distinct. GenBox must not force Telegram,
+Feishu, QQ, or later channels into a fake universal OAuth abstraction that
+hides their trust and review differences. The first implementation should prove
+one independently verified channel end to end before expanding to additional
+channels.
+
+### Consequences
+
+- Message channels become a separate future phase, not a shortcut around Phase 4
+  image-transfer evidence.
+- Channel tokens, app secrets, signing secrets, callback payloads, and bound
+  user identities follow the same secret, logging, browser-storage, and Git
+  restrictions as other GenBox credentials.
+- Unsupported channels remain explicit planned states until their auth, webhook,
+  media, rate-limit, and recovery contracts are implemented.
+- High-risk actions may require an additional GenBox confirmation layer even
+  after the message channel itself is authenticated.
