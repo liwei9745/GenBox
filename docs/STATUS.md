@@ -12,7 +12,7 @@
   SSH host-key algorithm plus `SHA256:` fingerprint pair; pairing does not
   replace SSH credentials or mandatory host-key verification.
 - **VERIFIED 2026-07-23:** focused and full local verification completed with
-  `500 passed`. Independent fixed-commit architecture, security, and regression
+  `501 passed`. Independent fixed-commit architecture, security, and regression
   reviews each returned **APPROVE**. This is local evidence only.
 - **VERIFIED 2026-07-23:** local Docker preflight succeeded from image
   `genbox-p4-local:dae8d84`
@@ -357,6 +357,21 @@ supplies the target owner/scope and canonical SSH host-key pair.
 - **Boundary:** this is receiver-side pre-commit validation only. It does not
   prove sender source retention, sender UI, network reachability, isolated VPS,
   or production behavior.
+
+## Local Push limit rejection follow-up (2026-07-24)
+
+- **Evidence class:** `LOCAL` only. The authenticated status probe's
+  `max_image_bytes` is now tested against the actual rejection path: when a
+  payload exceeds the active process limit, Push returns `422` and leaves the
+  receiver gallery unchanged.
+- **Verification:** focused sync/Push tests passed `43`; the full local suite
+  passed `501`; Python compilation, all four frontend bundle syntax checks,
+  and `git diff --check` passed. Local browser loading at
+  `http://127.0.0.1:8892/#/extensions` remained HTTP 200 with zero page errors
+  and no narrow-screen overflow; the lab was stopped afterward.
+- **Boundary:** this is receiver-side capacity/error evidence only. It does
+  not prove sender retry policy, source retention, network reachability, or
+  remote/production behavior.
 
 ## Local P4 guide translation cleanup (2026-07-23)
 

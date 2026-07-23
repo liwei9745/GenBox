@@ -11,6 +11,7 @@ from PIL import Image, PngImagePlugin
 
 import main
 import sync.manifest as manifest_mod
+import sync.ingest as ingest_mod
 from sync.ingest import PUSH_CONTRACT_VERSION, push_max_image_bytes
 
 
@@ -96,6 +97,21 @@ def test_push_status_route_authentication(push_environment):
 
     missing = client.get("/api/sync/push/status")
     assert missing.status_code == 401
+
+
+def test_push_status_limit_matches_runtime_rejection(push_environment, monkeypatch):
+    payload = _png_bytes("orange")
+    limit = len(payload) - 1
+    monkeypatch.setattr(ingest_mod, "MAX_PUSH_IMAGE_BYTES", limit)
+    client = TestClient(main.app)
+
+    status = client.get("/api/sync/push/status", headers=_headers())
+    rejected = _push(client, payload, remote_path="2026/07/19/too-large.png")
+
+    assert status.status_code == 200
+    assert status.json()["max_image_bytes"] == limit
+    assert rejected.status_code == 422
+    assert list(push_environment.glob("*.png")) == []
 
 
 def test_production_push_auth_is_separate_from_admin_auth(push_environment, monkeypatch):
