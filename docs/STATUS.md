@@ -12,7 +12,7 @@
   SSH host-key algorithm plus `SHA256:` fingerprint pair; pairing does not
   replace SSH credentials or mandatory host-key verification.
 - **VERIFIED 2026-07-23:** focused and full local verification completed with
-  `494 passed`. Independent fixed-commit architecture, security, and regression
+  `495 passed`. Independent fixed-commit architecture, security, and regression
   reviews each returned **APPROVE**. This is local evidence only.
 - **VERIFIED 2026-07-23:** local Docker preflight succeeded from image
   `genbox-p4-local:dae8d84`
@@ -255,6 +255,44 @@ the user supplies the target owner/scope and canonical SSH host-key pair.
 - **Next local entry:** obtain explicit sender-worktree authorization, preserve
   its existing dirty changes, and use only a local/mock receiver for sender
   development.
+
+## Local receiver hash-index integrity follow-up (2026-07-23)
+
+- **Evidence class:** `LOCAL` only. The receiver now records the SHA-256 of the
+  bytes actually written to the gallery in each manifest entry and validates
+  that digest before acknowledging `already-imported` or restoring a durable
+  source-hash index.
+- **Integrity behavior:** a stale persisted index is rehashed and discarded
+  when a gallery file changes. A modified file therefore cannot create a false
+  `duplicate-local` receipt; the incoming image is imported as a new local
+  file. Manifest paths remain confined to the configured gallery and legacy
+  entries without a local digest retain compatibility while still requiring a
+  valid in-gallery file.
+- **Verification:** `python -m pytest -q tests/test_sync_push_routes.py
+  tests/test_sync.py` -> `37 passed`; `python -m pytest -q` -> `495 passed`;
+  `node --check static/js/extensions.js`, `node --check static/js/i18n.js`,
+  and `git diff --check` passed.
+- **Boundary:** this is receiver-side local evidence only. It does not add the
+  sender's per-generation action, establish an isolated VPS, or provide a
+  cross-project/production E2E claim.
+- **Next local entry:** keep L2 paused. The next feature still requires
+  explicit authorization to edit the separate dirty `chatgpt2api-dev`
+  worktree; use only a local/mock receiver there and preserve its existing
+  changes.
+
+## Local browser verification after receiver follow-up (2026-07-23)
+
+- **Evidence class:** `LOCAL` only. The repository lifecycle manager started
+  the current worktree on `http://127.0.0.1:8892`; no SSH, VPS, remote
+  container, production, or network deployment action was performed.
+- **Browser result:** local Playwright loaded
+  `http://127.0.0.1:8892/#/extensions` with HTTP 200 and page title `GenBox`;
+  the extension navigation and page nodes were present. At `390x844`,
+  `scrollWidth` equaled `innerWidth` (`390`), so no horizontal overflow was
+  observed. The session was unauthenticated and submitted no credentials,
+  pairing material, or deployment action.
+- **Lifecycle:** the local lab was stopped after the smoke check. This is UI
+  loading/responsive evidence only and does not claim browser Push E2E.
 
 ## Local P4 guide translation cleanup (2026-07-23)
 

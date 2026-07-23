@@ -231,6 +231,21 @@ def test_push_does_not_trust_uncommitted_source_hash_metadata(push_environment):
     assert len(list(push_environment.glob("*.png"))) == 2
 
 
+def test_push_does_not_ack_modified_committed_file(push_environment):
+    client = TestClient(main.app)
+    remote_path = "2026/07/19/modified.png"
+    payload = _png_bytes("red")
+
+    first = _push(client, payload, remote_path=remote_path).json()
+    (push_environment / first["local_file"]).write_bytes(_png_bytes("black"))
+
+    repaired = _push(client, payload, remote_path=remote_path).json()
+
+    assert repaired["status"] == "imported"
+    assert repaired["local_file"] != first["local_file"]
+    assert len(list(push_environment.glob("*.png"))) == 2
+
+
 def test_push_changed_content_at_same_source_path_creates_a_new_receipt(push_environment):
     client = TestClient(main.app)
     remote_path = "2026/07/19/image.png"

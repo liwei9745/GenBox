@@ -156,8 +156,8 @@ def test_manifest_hash_restore_is_confined_to_existing_gallery_files(tmp_path, m
     outside.write_bytes(b"outside")
 
     manifest = manifest_mod.SyncManifest()
-    inside_digest = hashlib.sha256(b"source-inside").hexdigest()
-    outside_digest = hashlib.sha256(b"source-outside").hexdigest()
+    inside_digest = hashlib.sha256(b"inside").hexdigest()
+    outside_digest = hashlib.sha256(b"outside").hexdigest()
     manifest.add("source", "inside.png", str(inside), inside_digest, 6, "")
     manifest.add("source", "outside.png", str(outside), outside_digest, 7, "")
 

@@ -27,6 +27,14 @@ LOCAL_MD5_INDEX_FILE = GALLERY_DIR / ".md5_index.json"
 MANIFEST_VERSION = 1
 
 
+def _is_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdefABCDEF" for char in value)
+    )
+
+
 def _atomic_write_json(path: Path, data: Any) -> None:
     """Write JSON through a same-directory temporary file and atomic replace."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -94,33 +102,57 @@ class SyncManifest:
 
     def add(self, deployment_id: str, path: str, local_path: str, sha256: str,
             size: int, remote_created_at: str):
+        local_digest = ""
+        try:
+            candidate = Path(local_path)
+            if candidate.is_file():
+                local_digest = sha256_bytes(candidate.read_bytes())
+        except OSError:
+            pass
         self.entries[f"{deployment_id}::{path}"] = {
             "local_path": local_path,
             "sha256": sha256,
+            "local_sha256": local_digest,
             "size": size,
             "remote_created_at": remote_created_at,
             "synced_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
         self.save()
 
+    @staticmethod
+    def _safe_gallery_path(entry: Dict[str, Any], gallery_dir: Path) -> Optional[Path]:
+        gallery_root = gallery_dir.resolve()
+        try:
+            local_path = Path(str(entry.get("local_path") or "")).resolve()
+            local_path.relative_to(gallery_root)
+        except (OSError, ValueError):
+            return None
+        if not local_path.is_file() or local_path.suffix.lower() != ".png":
+            return None
+        return local_path
+
+    def local_file_is_current(self, entry: Dict[str, Any], gallery_dir: Path) -> bool:
+        """Check that a committed gallery file still matches its recorded bytes."""
+        local_path = self._safe_gallery_path(entry, gallery_dir)
+        if local_path is None:
+            return False
+        expected = entry.get("local_sha256")
+        if not _is_sha256(expected):
+            return True  # Legacy entries predate the local-file digest.
+        try:
+            return sha256_bytes(local_path.read_bytes()) == expected.lower()
+        except OSError:
+            return False
+
     def local_sha256_index(self, gallery_dir: Path) -> Dict[str, str]:
         """Return durable source hashes whose committed files still exist in the gallery."""
-        gallery_root = gallery_dir.resolve()
         restored: Dict[str, str] = {}
         for entry in self.entries.values():
             digest = entry.get("sha256")
-            if (
-                not isinstance(digest, str)
-                or len(digest) != 64
-                or any(char not in "0123456789abcdefABCDEF" for char in digest)
-            ):
+            if not _is_sha256(digest) or not self.local_file_is_current(entry, gallery_dir):
                 continue
-            try:
-                local_path = Path(str(entry.get("local_path") or "")).resolve()
-                local_path.relative_to(gallery_root)
-            except (OSError, ValueError):
-                continue
-            if local_path.is_file() and local_path.suffix.lower() == ".png":
+            local_path = self._safe_gallery_path(entry, gallery_dir)
+            if local_path is not None:
                 restored[digest.lower()] = local_path.name
         return restored
 
@@ -178,12 +210,21 @@ class LocalImageIndex:
         self.save()
 
     def ensure_sha256_index(self):
-        """Incrementally hash gallery files that are not yet in the SHA-256 index."""
+        """Validate indexed bytes, then hash gallery files missing from the index."""
         current_files = {f.name for f in GALLERY_DIR.glob("*.png")}
-        self.index = {
-            digest: filename for digest, filename in self.index.items()
-            if filename in current_files
-        }
+        validated: Dict[str, str] = {}
+        for digest, filename in self.index.items():
+            if not _is_sha256(digest) or not isinstance(filename, str):
+                continue
+            if filename not in current_files:
+                continue
+            path = GALLERY_DIR / filename
+            try:
+                if sha256_bytes(path.read_bytes()) == digest.lower():
+                    validated[digest.lower()] = filename
+            except OSError:
+                continue
+        self.index = validated
         known_files = set(self.index.values())
         for path in GALLERY_DIR.glob("*.png"):
             if path.name not in known_files:

@@ -3539,12 +3539,14 @@ async def sync_push_image(
     with push_commit_lock:
         manifest = SyncManifest()
         existing = manifest.get(f"{x_genbox_source}::{remote_path}")
-        existing_path = Path(existing.get("local_path", "")) if existing else None
+        existing_path = (
+            manifest._safe_gallery_path(existing, GALLERY_DIR) if existing else None
+        )
         if (
             existing
             and existing.get("sha256") == metadata["sha256"]
-            and existing_path
-            and existing_path.is_file()
+            and existing_path is not None
+            and manifest.local_file_is_current(existing, GALLERY_DIR)
         ):
             filename = existing_path.name
             status = "already-imported"
