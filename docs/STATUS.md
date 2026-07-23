@@ -1,6 +1,6 @@
 # Current Project Status
 
-**Last updated:** 2026-07-23
+**Last updated:** 2026-07-24
 **Current branch:** `codex/p4-deploy-plan-ux-eai`
 **Current phase:** Phase 4 Single-Image Push End To End - **In Progress**
 
@@ -12,7 +12,7 @@
   SSH host-key algorithm plus `SHA256:` fingerprint pair; pairing does not
   replace SSH credentials or mandatory host-key verification.
 - **VERIFIED 2026-07-23:** focused and full local verification completed with
-  `495 passed`. Independent fixed-commit architecture, security, and regression
+  `496 passed`. Independent fixed-commit architecture, security, and regression
   reviews each returned **APPROVE**. This is local evidence only.
 - **VERIFIED 2026-07-23:** local Docker preflight succeeded from image
   `genbox-p4-local:dae8d84`
@@ -53,7 +53,8 @@ completion gates.
 ## Exact next step
 
 Keep L2 paused. The GenBox receiver contract now includes local-file integrity
-and an explicit v1 Push receipt/probe contract; the next local feature requires
+including legacy manifest byte verification and an explicit v1 Push
+receipt/probe contract; the next local feature requires
 explicit authorization to edit the separate dirty `chatgpt2api-dev` sender
 worktree and add its per-generation Push action. Do not edit that worktree or
 run sender network calls without that authorization. The next remote step
@@ -265,9 +266,9 @@ supplies the target owner/scope and canonical SSH host-key pair.
 - **Integrity behavior:** a stale persisted index is rehashed and discarded
   when a gallery file changes. A modified file therefore cannot create a false
   `duplicate-local` receipt; the incoming image is imported as a new local
-  file. Manifest paths remain confined to the configured gallery and legacy
-  entries without a local digest retain compatibility while still requiring a
-  valid in-gallery file.
+  file. Manifest paths remain confined to the configured gallery. Legacy
+  entries without a local digest retain compatibility only when the file bytes
+  still match their recorded source SHA-256.
 - **Verification:** `python -m pytest -q tests/test_sync_push_routes.py
   tests/test_sync.py` -> `37 passed`; `python -m pytest -q` -> `495 passed`;
   `node --check static/js/extensions.js`, `node --check static/js/i18n.js`,
@@ -308,6 +309,22 @@ supplies the target owner/scope and canonical SSH host-key pair.
 - **Boundary:** this is receiver-side contract evidence only. The sender's
   per-generation action, authenticated cross-project transfer, isolated VPS,
   and production non-mutation remain unverified.
+
+## Local legacy manifest integrity follow-up (2026-07-24)
+
+- **Evidence class:** `LOCAL` only. Legacy `SyncManifest` entries that predate
+  `local_sha256` are still accepted for compatibility only after the gallery
+  file is rehashed and matches their recorded source SHA-256. Missing or
+  malformed source hashes fail closed.
+- **Verification:** focused sync/Push tests passed `38`; the full local suite
+  passed `496`; Python compilation and all four frontend bundle syntax checks
+  passed; `git diff --check` passed. A local Playwright smoke at
+  `http://127.0.0.1:8892/#/extensions` returned HTTP 200 with zero page errors
+  and `scrollWidth=innerWidth=390` at the narrow viewport. The lab was stopped
+  afterward.
+- **Boundary:** this closes a receiver-side local integrity gap only. It does
+  not implement the sender's per-generation action or establish isolated-VPS,
+  cross-project, or production evidence.
 
 ## Local P4 guide translation cleanup (2026-07-23)
 

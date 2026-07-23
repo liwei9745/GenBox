@@ -137,10 +137,15 @@ class SyncManifest:
         if local_path is None:
             return False
         expected = entry.get("local_sha256")
-        if not _is_sha256(expected):
-            return True  # Legacy entries predate the local-file digest.
+        source_digest = entry.get("sha256")
+        if not _is_sha256(expected) and not _is_sha256(source_digest):
+            return False
         try:
-            return sha256_bytes(local_path.read_bytes()) == expected.lower()
+            actual = sha256_bytes(local_path.read_bytes())
+            # Legacy entries predate local_sha256, so their source digest is
+            # the only available byte-integrity evidence.
+            expected_digest = expected if _is_sha256(expected) else source_digest
+            return actual == str(expected_digest).lower()
         except OSError:
             return False
 

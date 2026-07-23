@@ -164,6 +164,27 @@ def test_manifest_hash_restore_is_confined_to_existing_gallery_files(tmp_path, m
     assert manifest.local_sha256_index(gallery) == {inside_digest: "inside.png"}
 
 
+def test_legacy_manifest_entry_still_requires_matching_source_bytes(tmp_path, monkeypatch):
+    gallery = tmp_path / "gallery"
+    gallery.mkdir()
+    monkeypatch.setattr(manifest_mod, "GALLERY_DIR", gallery)
+    monkeypatch.setattr(manifest_mod, "MANIFEST_FILE", tmp_path / "sync_manifest.json")
+    image = gallery / "legacy.png"
+    original = b"legacy image bytes"
+    image.write_bytes(original)
+    source_digest = hashlib.sha256(original).hexdigest()
+
+    manifest = manifest_mod.SyncManifest()
+    manifest.entries["source::legacy.png"] = {
+        "local_path": str(image),
+        "sha256": source_digest,
+    }
+
+    assert manifest.local_sha256_index(gallery) == {source_digest: "legacy.png"}
+    image.write_bytes(b"tampered legacy bytes")
+    assert manifest.local_sha256_index(gallery) == {}
+
+
 def test_local_md5_index(tmp_path, monkeypatch):
     gallery = tmp_path / "gallery"
     gallery.mkdir()
