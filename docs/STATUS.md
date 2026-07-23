@@ -52,7 +52,8 @@ completion gates.
 
 ## Exact next step
 
-Keep L2 paused. The GenBox receiver contract is frozen at `dda0ea8`; the next
+Keep L2 paused. The GenBox receiver contract is frozen at `dda0ea8`, with the
+P4 guide translation follow-up at `c75488b`; the next
 local feature requires explicit authorization to edit the separate dirty
 `chatgpt2api-dev` sender worktree and add its per-generation Push action. Do not
 edit that worktree or run sender network calls without that authorization. The
@@ -227,9 +228,10 @@ the user supplies the target owner/scope and canonical SSH host-key pair.
 - **Responsive result:** at a temporary `390x844` viewport the page stayed at
   `scrollWidth=390` with no horizontal overflow. The viewport override was
   reset afterward, and the temporary target was removed through the local API.
-- **Residual browser note:** the console emitted existing missing-i18n-key
-  warnings but no page errors. They are outside the P4 receiver contract and
-  remain a follow-up cleanup item.
+- **Residual browser note:** the P4 `extensions.guide_connect_title` warning
+  was fixed in `c75488b`; the remaining `prompt.shuffle` and
+  `dashboard.no_activity` warnings are outside the P4 contract. No page errors
+  were observed.
 - **Next local entry:** keep the receiver contract frozen; any further browser
   check must remain local and must not start pairing or submit credentials.
 
@@ -253,3 +255,18 @@ the user supplies the target owner/scope and canonical SSH host-key pair.
 - **Next local entry:** obtain explicit sender-worktree authorization, preserve
   its existing dirty changes, and use only a local/mock receiver for sender
   development.
+
+## Local P4 guide translation cleanup (2026-07-23)
+
+- **Evidence class:** `LOCAL` only, frozen at commit `c75488b`. The extension
+  guide title now has an explicit Chinese/English translation entry instead of
+  relying on the source HTML fallback.
+- **Browser result:** the local `8892` page loaded `#/extensions` with title
+  `GenBox`; the guide rendered `先连接你的服务器`, and no
+  `extensions.guide_connect_title` warning remained. No target was selected,
+  no pairing command was generated, and no SSH action was submitted.
+- **Verification:** `python -m pytest -q tests/test_extensions.py
+  tests/test_extension_task_store.py` -> `287 passed`; full local suite ->
+  `494 passed`; both extension JavaScript syntax checks passed.
+- **Boundary:** two unrelated pre-existing i18n warnings remain; they do not
+  affect the P4 host-key pairing flow and are not claimed as fixed here.
