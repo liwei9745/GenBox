@@ -45,11 +45,12 @@ completion gates.
 
 ## Exact next step
 
-Use the verified local Docker shape as the deployment candidate. Freeze the
-sanitized receiver commit and image/config contract, then perform read-only
-discovery against the explicitly isolated VPS development clone. Reproduce the
-same container shape there before attempting the separately authorized
-browser-driven single-image E2E. Production remains read-only.
+Follow `docs/P4-LOOP-ENGINEERING.md`: L0 and L1 are complete; L2 is the active
+loop. Freeze the sanitized receiver commit and image/config contract, then
+perform read-only discovery against the explicitly isolated VPS development
+clone. Reproduce the same container shape there before attempting the
+separately authorized browser-driven single-image E2E. Production remains
+read-only.
 
 ## Resume constraints
 

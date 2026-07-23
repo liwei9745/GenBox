@@ -22,6 +22,7 @@ This is the documentation hub beyond the main README. Start with usage and upgra
 | [架构说明](ARCHITECTURE.md) | 高级用户和维护者 | 模块边界、运行方式、扩展中心与同步架构 |
 | [安全与技术决策](DECISIONS.md) | 安全审查者和维护者 | 已接受的凭证、网络、同步与删除安全决策 |
 | [当前状态](STATUS.md) | 需要了解真实完成度的人 | 已验证能力、限制、阻塞项、测试证据和下一步 |
+| [P4 Loop Engineering](P4-LOOP-ENGINEERING.md) | P4 开发与验证协作者 | 每轮目标、证据等级、停止条件和恢复点 |
 
 ## chatgpt2api 集成 / chatgpt2api Integration
 
