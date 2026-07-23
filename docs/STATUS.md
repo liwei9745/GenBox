@@ -6,13 +6,13 @@
 
 ## Current evidence
 
-- **VERIFIED 2026-07-23:** GenBox commits `5397141`, `6f8c710`, and `b037c9d`
-  locally implement the personal-user trusted SSH-session pairing path on top of
+- **VERIFIED 2026-07-23:** GenBox commits `997e78c`, `5394c42`, and `72edab0`
+  locally implement the novice-oriented trusted SSH-session pairing path on top of
   Deployment Safety Contract v3. The saved trust record remains the canonical
   SSH host-key algorithm plus `SHA256:` fingerprint pair; pairing does not
   replace SSH credentials or mandatory host-key verification.
 - **VERIFIED 2026-07-23:** focused and full local verification completed with
-  `486 passed`. Independent fixed-commit architecture, security, and regression
+  `491 passed`. Independent fixed-commit architecture, security, and regression
   reviews each returned **APPROVE**. This is local evidence only.
 - **VERIFIED 2026-07-23:** local Docker preflight succeeded from image
   `genbox-p4-local:dae8d84`
@@ -52,12 +52,12 @@ completion gates.
 
 ## Exact next step
 
-Follow `docs/P4-LOOP-ENGINEERING.md`: L0 and L1 are complete; L2 is the active
-loop. Freeze the sanitized receiver commit and image/config contract, then
-perform read-only discovery against the explicitly isolated VPS development
-clone. Reproduce the same container shape there before attempting the
-separately authorized browser-driven single-image E2E. Production remains
-read-only.
+Keep L2 paused. In the local-only loop, perform a read-only contract review of
+the separate `chatgpt2api-dev` sender worktree: verify the existing Push service,
+destination test, receipt handling, and whether a per-generation action is
+present. Do not edit that dirty worktree or run sender network calls. The next
+remote step remains separately authorized isolated-VPS discovery only after the
+user supplies the target owner/scope and canonical SSH host-key pair.
 
 ## Resume constraints
 
@@ -193,3 +193,23 @@ read-only.
   the local runtime and must not submit credentials, generate a real pairing
   command, or initiate SSH. Reopen L2 only after separately verified isolated
   target identity and canonical host-key trust are supplied.
+
+## Local sender contract review (2026-07-23)
+
+- **Evidence class:** `LOCAL` / read-only review. The separate
+  `chatgpt2api-dev` worktree contains uncommitted sender changes; no files were
+  edited, reverted, staged, or committed there.
+- **Observed sender surface:** a shared GenBox Push service, destination
+  settings and connection probe, receipt SHA-256 validation, source-retention
+  gating, gallery batch Push, and date-range Push are present in the dirty
+  worktree. The focused sender service suite passed `8` tests using only a
+  test-only process environment value.
+- **Gap:** no generation-completion or per-generation single-image Push action
+  was found in the reviewed sender UI/runtime. This remains a sender-side
+  Phase 4B item and is not implemented or claimed by the GenBox receiver.
+- **Boundary:** no sender network request, SSH/VPS action, remote container
+  operation, or production mutation was performed. Cross-project E2E remains
+  `UNVERIFIED` and L2 remains paused.
+- **Next local entry:** obtain explicit authorization before editing the dirty
+  sender worktree; then add the per-generation action and focused tests there,
+  preserving all existing changes and using only a local/mock receiver.

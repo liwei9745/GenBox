@@ -140,6 +140,20 @@ def test_push_route_rejects_wrong_or_missing_identity(push_environment):
     assert _push(client, payload, headers={}).status_code == 401
 
 
+def test_push_route_rejects_malformed_source_without_echoing_key(push_environment):
+    client = TestClient(main.app)
+    secret = "secret-that-must-not-appear-in-errors"
+
+    response = _push(
+        client,
+        _png_bytes(),
+        headers={"X-GenBox-Source": "../invalid source", "X-GenBox-Key": secret},
+    )
+
+    assert response.status_code == 401
+    assert secret not in response.text
+
+
 def test_push_route_imports_then_is_idempotent_and_deduplicates_by_content(push_environment):
     client = TestClient(main.app)
     payload = _png_bytes()
