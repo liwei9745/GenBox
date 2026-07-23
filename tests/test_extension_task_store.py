@@ -2497,6 +2497,37 @@ for(let i=0;i<3;i++){await window.extensionStartHostKeySetup();if(!element('extH
     assert result.returncode == 0, result.stderr
 
 
+def test_host_key_pairing_ui_mock_round_trip_locks_and_clears_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+(async()=>{
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(['extNetworkHostKey','extHostKeyConfirm'].includes(id)?['hidden']:[]);elements.set(id,{id,style:{},value:'',textContent:'',innerHTML:'',disabled:false,checked:false,dataset:{},options:[],selectedIndex:0,classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){this.focused=true},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
+const listeners={};const networkRadio={value:'tailscale',checked:true,classList:{toggle(){}}};global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('input[name="extNetwork"]'))return networkRadio;return element('query')},querySelectorAll(){return []},addEventListener(type,fn){(listeners[type]||(listeners[type]=[])).push(fn)},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'en';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});
+const key='SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';let target={id:'saved',name:'Saved',host:'safe.example',port:22,username:'ubuntu',host_key_algorithm:'',host_key:'',chatgpt2api_port:3000};let startCalls=0,completeCalls=0,releaseComplete;
+global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/host-key/pair/start'){startCalls+=1;body={pairing_id:'pair-one',expires_at:Date.now()/1000+30,helper_command:'printf pairing'};}else if(url==='/api/extensions/ssh/host-key/pair/complete'){completeCalls+=1;const sent=JSON.parse(options.body);if(sent.response!=='GENBOX-PAIR/1 response')throw new Error('pairing response was not forwarded exactly once');return await new Promise(resolve=>{releaseComplete=()=>resolve({ok:true,text:async()=>JSON.stringify({target:{...target,host_key_algorithm:'ssh-ed25519',host_key:key}})})})}return {ok:true,text:async()=>JSON.stringify(body)}};
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');await window.extensionStartHostKeyPairing();if(startCalls!==1||element('extHostKeyPairingCommand').value!=='printf pairing')throw new Error('mock pairing command did not render');if(element('extHostKeyPairingCompleteBtn').disabled!==true||element('extHostKeyPairingResponse').disabled!==false)throw new Error('empty pairing response state was not enforced');element('extHostKeyPairingResponse').value='GENBOX-PAIR/1 response';(listeners.input||[]).forEach(fn=>fn({target:element('extHostKeyPairingResponse')}));if(element('extHostKeyPairingCompleteBtn').disabled)throw new Error('valid response did not enable submit');const pending=window.extensionCompleteHostKeyPairing();await Promise.resolve();if(completeCalls!==1||!element('extHostKeyPairingResponse').disabled||!element('extHostKeyPairingCopyBtn').disabled||!element('extHostKeyPairingCancelBtn').disabled)throw new Error('submit did not lock pairing controls');releaseComplete();await pending;if(element('extHostKeyPairingCommand').value!==''||element('extHostKeyPairingResponse').value!==''||!element('extHostKeyPairing').classList.contains('hidden'))throw new Error('successful pairing did not clear transient UI state');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_host_key_pairing_ui_mock_expiry_clears_and_restarts_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+(async()=>{
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(['extNetworkHostKey','extHostKeyConfirm'].includes(id)?['hidden']:[]);elements.set(id,{id,style:{},value:'',textContent:'',innerHTML:'',disabled:false,checked:false,dataset:{},options:[],selectedIndex:0,classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
+const networkRadio={value:'tailscale',checked:true,classList:{toggle(){}}};const timers=[];global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('input[name="extNetwork"]'))return networkRadio;return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'en';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=fn=>{timers.push(fn);return fn};
+const target={id:'saved',name:'Saved',host:'safe.example',port:22,username:'ubuntu',host_key_algorithm:'',host_key:'',chatgpt2api_port:3000};let starts=0;global._authFetch=async(url)=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/host-key/pair/start'){starts+=1;body={pairing_id:'pair-'+starts,expires_at:starts===1?Date.now()/1000-1:Date.now()/1000+30,helper_command:'printf pairing-'+starts};}return {ok:true,text:async()=>JSON.stringify(body)}};
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');await window.extensionStartHostKeyPairing();if(element('extHostKeyPairingCommand').value!==''||!element('extHostKeyPairingCommandWrap').classList.contains('hidden')||!element('extHostKeyPairingState').classList.contains('error'))throw new Error('expired pairing did not clear command and show recovery');await window.extensionStartHostKeyPairing();if(starts!==2||element('extHostKeyPairingCommand').value!=='printf pairing-2'||element('extHostKeyPairingStartBtn').disabled!==true)throw new Error('expired pairing could not be restarted');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_restored_public_task_does_not_recreate_target_binding_in_node():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''

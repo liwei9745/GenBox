@@ -174,10 +174,14 @@ read-only.
 - **Verification:** `node --check static/js/extensions.js` and
   `node --check static/js/i18n.js` passed; `git diff --check` passed;
   `python -m pytest -q tests/test_extensions.py tests/test_extension_task_store.py`
-  -> `285 passed`; `python -m pytest -q` -> `487 passed`. Focused static tests
-  cover expiry cleanup, submitting/recovery state, copy/paste controls, and
-  narrow-screen CSS. The earlier local geometry regression measured separate
-  command/response rows with `overlap=false`.
+  -> `287 passed`; `python -m pytest -q` -> `489 passed`. Node DOM mocks cover
+  pairing start, paste, submit-time control locking, successful transient-state
+  cleanup, expiry cleanup, and restart. The earlier local geometry regression
+  measured separate command/response rows with `overlap=false`.
+- **Follow-up fix:** mock-flow testing found that submit state was set before
+  the request but controls were not re-rendered until the response. The submit
+  path now immediately disables response, copy, restart, and submit controls;
+  this is covered by the local mock test.
 - **Next local entry:** keep L2 paused. Any further browser smoke must use only
   the local runtime and must not submit credentials, generate a real pairing
   command, or initiate SSH. Reopen L2 only after separately verified isolated
