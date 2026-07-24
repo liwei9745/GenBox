@@ -85,12 +85,28 @@ receiver proof from sender, isolated-VPS, and production claims.
   deployment, or live sender-to-GenBox request was performed. Sender changes
   are committed separately at `78135e1` and `0320b62`; this local evidence does
   not upgrade isolated VPS or cross-project E2E status.
+- **Secret/data boundary review (2026-07-24):** `LOCAL` only. The sender's
+  GenBox Push settings API continues to mask the Push key before returning
+  settings, and the Studio stores only per-image UI status in page memory.
+  The receiver accepts only source-scoped Push authentication and verifies the
+  sender-provided SHA-256 against uploaded bytes. The review found that a
+  transport exception could otherwise be copied into a retry receipt or batch
+  result; sender commit `041a2ce` replaces those raw exception strings with
+  fixed recovery messages while retaining safe HTTP status categories,
+  idempotency, SHA-256 receipt validation, retry state, and source retention.
+  Focused and full sender pytest each passed `14` with a test-only process
+  value; `web-vue` production build and `git diff --check` passed. New tests
+  assert synthetic sensitive exception fragments do not reach a receipt,
+  batch response, or connection error. No image bytes, Push key, raw receipt,
+  or live network request was used.
 
 ## Exact next step
 
-Keep L2 paused. The next local entry is a final secret/data review of the
-committed sender Studio and protocol boundary. Then, if separately authorized,
-perform isolated-VPS discovery with a confirmed canonical SSH host-key pair.
+Keep L2 paused. The local sender/receiver secret and data-boundary review is
+complete; no further P4 runtime proof is permitted without separate
+authorization. The next external gate, only after the user confirms an
+isolated development target and its canonical SSH host-key pair, is the
+approved read-only isolated-VPS discovery set.
 Do not treat this LOCAL evidence as VPS or production verification.
 
 ## Resume constraints
