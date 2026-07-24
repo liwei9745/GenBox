@@ -249,6 +249,24 @@ Do not treat this LOCAL evidence as VPS or production verification.
   local Lab browser check loaded `#/extensions` at `390px` with title `GenBox`,
   `aria-live="polite"` on the pairing panel, and no horizontal overflow. No
   target was saved, pairing started, credential entered, or remote action used.
+- **Pairing-cancel follow-up (2026-07-24):** `LOCAL` only. The visible
+  cancel action now immediately clears page-only pairing material and restores
+  the restart control, then sends only the one-time pairing identifier to a
+  local cancellation endpoint. The same best-effort local cleanup runs when a
+  target is edited or switched, and at browser-side expiry. The endpoint
+  discards that transient in-memory record without host probing, target lookup,
+  credential input, command input, response input, or disclosure of whether
+  the record existed. A direct backend test proves a cancelled record cannot be
+  completed or persist trust; the Node DOM mock proves cancellation and target
+  editing submit only `pairing_id` and do not call the host-key probe endpoint.
+  JavaScript syntax checks passed,
+  focused extension suites passed `291`, full `python -m pytest -q` passed
+  `505`, and `git diff --check` passed. The local Lab browser check at
+  `http://127.0.0.1:8892/#/extensions` had title `GenBox`,
+  `aria-live="polite"`, empty pairing fields, no browser errors, and
+  `scrollWidth=390` at a `390px` viewport. No pairing was started, no
+  credential was entered, and no SSH, VPS, remote container, production, or
+  network deployment action was performed.
 - **Next local entry:** keep L2 paused. Future local UI work may use mocks and
   the local browser only; do not submit credentials or generate a real pairing
   command. Reopen L2 only after separately verified isolated-target identity,

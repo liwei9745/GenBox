@@ -100,6 +100,10 @@ class ExtensionHostKeyPairingCompleteRequest(BaseModel):
     response: str = Field(min_length=20, max_length=512)
 
 
+class ExtensionHostKeyPairingCancelRequest(BaseModel):
+    pairing_id: str = Field(pattern=r"^[A-Za-z0-9_-]{20,128}$", min_length=20, max_length=128)
+
+
 class SSHCredential(BaseModel):
     password: str = ""
     private_key: str = ""

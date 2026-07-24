@@ -80,8 +80,8 @@ from sync.ingest import (
 import sync.store as sync_store
 from extensions.models import (
     ExtensionBatchTargetsRequest, ExtensionDeployRequest, ExtensionDiscoveryRequest,
-    ExtensionDeliveryClaimRequest, ExtensionHostKeyConfirmRequest, ExtensionHostKeyPairingCompleteRequest,
-    ExtensionHostKeyPairingStartRequest, ExtensionHostKeyProbeRequest, ExtensionKeyResetRequest,
+    ExtensionDeliveryClaimRequest, ExtensionHostKeyConfirmRequest, ExtensionHostKeyPairingCancelRequest,
+    ExtensionHostKeyPairingCompleteRequest, ExtensionHostKeyPairingStartRequest, ExtensionHostKeyProbeRequest, ExtensionKeyResetRequest,
     ExtensionTaskResumeRequest,
     ExtensionPlanRequest, ExtensionTestRequest,
     ManagedCredentialUpsertRequest, VaultPasswordRequest,
@@ -3882,6 +3882,13 @@ async def extension_complete_ssh_host_key_pairing(body: ExtensionHostKeyPairingC
     except ValueError as exc:
         raise HTTPException(status_code=409, detail="VPS 连接信息在配对期间发生变化，未保存") from exc
     return {"target": saved.model_dump(), "verified": True}
+
+
+@app.post("/api/extensions/ssh/host-key/pair/cancel")
+async def extension_cancel_ssh_host_key_pairing(body: ExtensionHostKeyPairingCancelRequest):
+    """Discard a one-time pairing without revealing whether it existed."""
+    host_key_pairings.discard(body.pairing_id)
+    return {"cancelled": True}
 
 
 @app.post("/api/extensions/ssh/host-key/confirm")

@@ -675,6 +675,7 @@
     "extensions.host_key_pairing_expired":{"zh-CN":"确认已过期，临时信息已清除。请重新开始确认。","en":"The confirmation expired and temporary data was cleared. Start again."},
     "extensions.host_key_pairing_complete_success":{"zh-CN":"这台服务器已确认。现在可以输入 SSH 密码或私钥继续。","en":"This server is confirmed. You can now enter an SSH password or private key to continue."},
     "extensions.host_key_pairing_cancelled":{"zh-CN":"配对已取消，未保存任何身份信息。","en":"Pairing cancelled; no identity information was saved."},
+    "extensions.host_key_pairing_cancel_cleanup_pending":{"zh-CN":"页面已清除配对信息；本机清理尚未确认，请稍后重新开始。","en":"Pairing data was cleared from this page, but local cleanup was not confirmed. Start again shortly."},
     "extensions.host_key_pairing_invalid":{"zh-CN":"配对回执无效，请重新开始。","en":"The pairing response was invalid. Start again."},
     "extensions.host_key_title":{"zh-CN":"确认 VPS 的 SSH 主机指纹","en":"Confirm the VPS SSH host key"},
     "extensions.host_key_probe_help":{"zh-CN":"这里只读取服务器公开身份，不验证密码、不执行命令。","en":"This reads only the server public identity. It does not verify a password or run commands."},

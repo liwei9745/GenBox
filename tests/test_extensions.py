@@ -17,6 +17,7 @@ from extensions.models import (
     ExtensionDeployRequest,
     ExtensionDiscoveryRequest,
     ExtensionHostKeyConfirmRequest,
+    ExtensionHostKeyPairingCancelRequest,
     ExtensionHostKeyPairingCompleteRequest,
     ExtensionHostKeyPairingStartRequest,
     ExtensionHostKeyProbeRequest,
@@ -1003,6 +1004,39 @@ def test_host_key_pairing_rejects_malformed_or_mismatched_response_and_consumes(
         ))
     assert mismatch.value.status_code == 400
     assert started["pairing_id"] not in main.host_key_pairings._records
+
+
+def test_host_key_pairing_cancel_discards_record_without_persisting(monkeypatch):
+    import main
+    from fastapi import HTTPException
+
+    target = ExtensionTarget(id="pair", name="Pair", host="safe.example", username="ubuntu")
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    monkeypatch.setattr(
+        main,
+        "probe_host_key",
+        lambda _target: asyncio.sleep(0, result=(TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY)),
+    )
+    persisted = []
+    monkeypatch.setattr(main.extensions_store, "confirm_target_host_key", lambda *args: persisted.append(args))
+    main.host_key_pairings.clear()
+    started = asyncio.run(main.extension_start_ssh_host_key_pairing(
+        ExtensionHostKeyPairingStartRequest(target_id="pair")
+    ))
+    pairing_id = started["pairing_id"]
+
+    cancelled = asyncio.run(main.extension_cancel_ssh_host_key_pairing(
+        ExtensionHostKeyPairingCancelRequest(pairing_id=pairing_id)
+    ))
+
+    assert cancelled == {"cancelled": True}
+    assert pairing_id not in main.host_key_pairings._records
+    with pytest.raises(HTTPException) as completion:
+        asyncio.run(main.extension_complete_ssh_host_key_pairing(
+            ExtensionHostKeyPairingCompleteRequest(pairing_id=pairing_id, response="x" * 20)
+        ))
+    assert completion.value.status_code == 409
+    assert persisted == []
 
 
 def test_host_key_pairing_rejects_target_mutation_without_persisting(monkeypatch):
