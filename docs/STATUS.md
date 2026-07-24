@@ -131,6 +131,24 @@ Do not treat this LOCAL evidence as VPS or production verification.
   development target and press `保存`; then re-open the target and confirm the
   saved role before preparing the redacted read-only discovery plan.
 
+## Host identity mismatch recovery (2026-07-24)
+
+- **Evidence class:** `LOCAL` only. When local UI SSH testing receives the
+  backend diagnostic `ssh_host_key_mismatch`, the page now stops the flow,
+  clears the current session credential fields, discards discovery and plan
+  state, and returns to Step 1. It does not display or persist the fingerprint,
+  host-key algorithm, raw SSH response, password, or private key.
+- **Recovery:** the novice guide explains that the saved server identity no
+  longer matches and exposes a single `重新开始` action for the existing
+  trusted-terminal confirmation flow. A new pairing must complete before any
+  SSH credential test; the backend remains responsible for re-probing,
+  algorithm allowlisting, SHA-256 validation, and compare-and-swap persistence.
+- **Verification:** `node --check static/js/extensions.js`; `node --check
+  static/js/i18n.js`; `git diff --check`; full local pytest -> `506 passed`.
+  Browser inspection of `http://127.0.0.1:8892/#/extensions` was read-only after
+  reload; no pairing, SSH, VPS, remote container, production, or deployment
+  action was performed.
+
 ## Resume constraints
 
 - Require SSH host-key verification; production is read-only and all development
