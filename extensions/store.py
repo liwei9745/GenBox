@@ -197,6 +197,9 @@ def load_config() -> ExtensionConfig:
         invalid_targets += 1
     for item in raw_targets:
         try:
+            # A pre-role record must not silently become deployable.
+            item = {**item}
+            item.setdefault("target_role", "production-read-only")
             targets.append(ExtensionTarget(**item))
         except Exception:
             invalid_targets += 1
@@ -285,8 +288,10 @@ def save_target_metadata(data: dict) -> ExtensionTarget:
         target_id = str(data.get("id") or uuid.uuid4().hex[:8])
         now = time.strftime("%Y-%m-%d %H:%M:%S")
         existing = next((item for item in config.targets if item.id == target_id), None)
-        browser_fields = {"name", "host", "port", "username", "chatgpt2api_port"}
+        browser_fields = {"name", "host", "port", "username", "target_role", "chatgpt2api_port"}
         submitted = {key: value for key, value in data.items() if key in browser_fields}
+        if "target_role" not in submitted and not existing:
+            submitted["target_role"] = "production-read-only"
         same_identity = bool(existing) and (
             str(submitted.get("host", existing.host)) == existing.host
             and int(submitted.get("port", existing.port)) == existing.port

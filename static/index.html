@@ -839,6 +839,7 @@
               <label><span data-i18n="extensions.host">IP 地址或域名</span><input id="extHost" placeholder="192.0.2.10" autocomplete="off" oninput="extensionConnectionChanged()"></label>
               <label><span data-i18n="extensions.ssh_port">SSH 端口</span><input id="extPort" type="number" value="22" min="1" max="65535" oninput="extensionConnectionChanged()"></label>
               <label><span data-i18n="extensions.ssh_username">SSH 用户名</span><input id="extUsername" value="" autocomplete="username" oninput="extensionConnectionChanged()"></label>
+              <label class="extension-target-role"><span data-i18n="extensions.target_role">这台服务器的用途</span><select id="extTargetRole" onchange="extensionTargetRoleChanged()"><option value="isolated-development" data-i18n="extensions.target_role_isolated">隔离开发机（推荐）</option><option value="production-read-only" data-i18n="extensions.target_role_production">生产机，只读检查</option></select><small data-i18n="extensions.target_role_help">请按服务器实际用途选择。生产机只允许读取检查，不会用于部署。</small></label>
             </div>
             <fieldset class="extension-auth"><legend><span data-i18n="extensions.auth_method">鉴权方式</span></legend>
               <div class="extension-segments">
@@ -1241,6 +1242,6 @@
   <script src="/static/js/i18n.js?v=10"></script>
 <script src="/static/js/app-all.js?v=36"></script>
 <script src="/static/js/sync.js?v=7"></script>
-<script src="/static/js/extensions.js?v=15"></script>
+<script src="/static/js/extensions.js?v=16"></script>
 </body>
 </html>

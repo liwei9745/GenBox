@@ -3246,6 +3246,24 @@ def test_target_username_is_required_normalized_and_roundtrips(tmp_path, monkeyp
     assert store.get_target(saved.id).username == "deploy-operator"
 
 
+def test_target_role_is_saved_and_legacy_targets_are_read_only(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    legacy = store.save_target_metadata({
+        "name": "Legacy", "host": "legacy.example", "username": "operator",
+    })
+    assert legacy.target_role == "production-read-only"
+    isolated = store.save_target_metadata({
+        "name": "Dev", "host": "dev.example", "username": "operator",
+        "target_role": "isolated-development",
+    })
+    assert isolated.target_role == "isolated-development"
+    with pytest.raises(ValueError):
+        store.save_target_metadata({
+            "id": isolated.id, "name": "Dev", "host": "dev.example", "username": "operator",
+            "target_role": "not-a-role",
+        })
+
+
 def test_legacy_blank_username_quarantines_only_that_target_and_preserves_instances(tmp_path, monkeypatch):
     path = tmp_path / "extensions.json"
     monkeypatch.setattr(store, "EXTENSIONS_FILE", path)
@@ -3554,6 +3572,10 @@ def test_vps_password_fields_support_explicit_visibility_toggle_without_autofill
     assert "button.setAttribute('aria-pressed',String(visible))" in extensions_js
     assert "sshTestInFlight||!requireCredential()" in extensions_js
     assert "delivery=restoring?{available:false,error:false}:await claimTaskDelivery(taskId,attemptId)" in extensions_js
+    assert 'id="extTargetRole"' in html
+    assert 'value="isolated-development"' in html
+    assert 'value="production-read-only"' in html
+    assert "target_role:el('extTargetRole').value" in extensions_js
 
 
 def test_beginner_mode_hides_duplicate_workflow_buttons_until_advanced_is_opened():

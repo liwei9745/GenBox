@@ -109,6 +109,28 @@ isolated development target and its canonical SSH host-key pair, is the
 approved read-only isolated-VPS discovery set.
 Do not treat this LOCAL evidence as VPS or production verification.
 
+## Read-only discovery target-role gate (2026-07-24)
+
+- **Evidence class:** `LOCAL` only. The extension target form now requires an
+  explicit server-purpose field: `isolated-development` or
+  `production-read-only`. Existing target records without this field are
+  loaded conservatively as `production-read-only`; new targets default to the
+  read-only choice until the user explicitly selects otherwise.
+- **Behavior:** the selected role is saved with the target. Read-only discovery
+  remains available for either role, while deployment-plan generation is
+  rejected unless the saved target role is `isolated-development`. The role is
+  a local authorization label, not proof of ownership or VPS isolation.
+- **Verification:** `python -m pytest -q` -> `506 passed`; focused extension and
+  discovery tests -> `195 passed`; `node --check static/js/extensions.js`;
+  `node --check static/js/i18n.js`; `git diff --check` all passed. Local browser
+  page `http://127.0.0.1:8892/#/extensions` rendered both purpose options and
+  no horizontal overflow at the observed viewport. No target role was changed
+  or saved in the browser, and no SSH, VPS, remote container, production, or
+  deployment action was performed.
+- **Next local action:** choose `隔离开发机（推荐）` for the intended isolated
+  development target and press `保存`; then re-open the target and confirm the
+  saved role before preparing the redacted read-only discovery plan.
+
 ## Resume constraints
 
 - Require SSH host-key verification; production is read-only and all development

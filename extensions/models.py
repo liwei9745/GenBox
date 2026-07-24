@@ -26,6 +26,7 @@ class ExtensionTarget(BaseModel):
     host: str
     port: int = Field(default=22, ge=1, le=65535)
     username: str
+    target_role: Literal["isolated-development", "production-read-only"] = "isolated-development"
     identity_version: int = Field(default=0, ge=0)
     host_key_algorithm: str = ""
     host_key: str = ""

@@ -3689,6 +3689,11 @@ def _bind_confirmed_extension_target(body, *, plan_confirmation: bool = False):
                 },
             )
         raise HTTPException(status_code=409, detail="VPS 连接信息已变化，请重新保存并确认主机指纹")
+    if plan_confirmation and saved_target.target_role != "isolated-development":
+        raise HTTPException(
+            status_code=403,
+            detail="当前目标已标记为生产机（只读），不能生成或执行部署计划；请选择隔离开发机。",
+        )
     return body.model_copy(update={
         "target": saved_target,
         "expected_host_key_algorithm": saved_target.host_key_algorithm,
@@ -3983,6 +3988,12 @@ async def extension_deploy_plan(body: ExtensionPlanRequest):
         validate_deployment_capability(body.project_id, body.strategy, body.deployment_mode)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+    saved_target = extensions_store.get_target(body.target.id)
+    if not saved_target or saved_target.target_role != "isolated-development":
+        raise HTTPException(
+            status_code=403,
+            detail="当前目标仅允许只读检查；请把服务器用途改为隔离开发机后再生成部署计划。",
+        )
     body = _bind_confirmed_extension_target(body)
     try:
         initial_discovery = await discover_environment(body)
