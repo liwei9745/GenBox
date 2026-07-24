@@ -221,6 +221,26 @@ Do not treat this LOCAL evidence as VPS or production verification.
   state and did not start host probing, SSH, pairing, or remote work. Focused
   tests now cover its ARIA relationship, Escape behavior, and absence of an SSH
   endpoint call in the handler.
+- **Novice-guide alignment (2026-07-24):** `LOCAL` only. After target save, the
+  guide now presents "Start server confirmation" and starts only the
+  confirmation-code path; it no longer labels that primary action as reading a
+  host fingerprint. While a confirmation is active, the guide directs the user
+  to copy, run, and paste the code rather than allowing a second start. Cancel,
+  expiry, and a rejected submission restore the restart action. The manual
+  host-key flow remains an advanced recovery path and the backend canonical
+  algorithm plus `SHA256:` comparison is unchanged.
+- **Verification:** Node syntax checks passed for `static/js/extensions.js` and
+  `static/js/i18n.js`; focused pairing/guide tests passed `4`; full
+  `python -m pytest -q` passed `503`; `git diff --check` passed. The new Node
+  DOM assertion verifies that the novice button starts pairing without a host
+  probe and that cancel restores the start action.
+- **Browser result:** the local Lab at `http://127.0.0.1:8892/#/extensions`
+  rendered the saved-target guide with the server-confirmation action and the
+  no-password/no-private-key explanation. At `390px`, `scrollWidth` equaled
+  `innerWidth`. A temporary non-routable local UI target was deleted after the
+  check. No confirmation was started, no SSH or VPS action occurred, and no
+  credentials, pairing material, remote container, production, or network
+  deployment action was used.
 - **Next local entry:** keep L2 paused. Future local UI work may use mocks and
   the local browser only; do not submit credentials or generate a real pairing
   command. Reopen L2 only after separately verified isolated-target identity,

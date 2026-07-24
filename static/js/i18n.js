@@ -643,7 +643,7 @@
     "extensions.host_key_pairing_kicker":{"zh-CN":"当前只做一件事","en":"ONE THING NOW"},
     "extensions.host_key_pairing_title":{"zh-CN":"确认这台服务器","en":"Confirm this server"},
     "extensions.host_key_pairing_help":{"zh-CN":"在你平时用来登录这台服务器的终端中完成确认。GenBox 不会要求你输入密码或私钥。","en":"Complete this in the terminal you normally use for this server. GenBox will not ask for your password or private key."},
-    "extensions.host_key_pairing_start":{"zh-CN":"开始确认","en":"Start confirmation"},
+    "extensions.host_key_pairing_start":{"zh-CN":"开始确认服务器","en":"Start server confirmation"},
     "extensions.host_key_pairing_help_button":{"zh-CN":"没有已登录终端？","en":"No signed-in terminal?"},
     "extensions.host_key_pairing_help_hide":{"zh-CN":"收起帮助","en":"Hide help"},
     "extensions.host_key_pairing_help_title":{"zh-CN":"没有已登录终端时怎么办","en":"No signed-in terminal?"},
@@ -1389,7 +1389,9 @@
   MESSAGES['extensions.guide_step1_unsaved'] = {"zh-CN":"这台 VPS 还没有保存。","en":"This VPS has not been saved yet."};
   MESSAGES['extensions.guide_step1_save'] = {"zh-CN":"确认名称、地址和 SSH 用户，然后点“保存”。","en":"Confirm the name, address, and SSH user, then save."};
   MESSAGES['extensions.guide_step1_saved'] = {"zh-CN":"VPS 信息已保存，还差一次服务器身份确认。","en":"The VPS is saved; its public identity still needs confirmation."};
-  MESSAGES['extensions.guide_step1_host_key'] = {"zh-CN":"读取并确认主机指纹；这一步不验证密码。","en":"Read and confirm the host key; this does not test the password."};
+  MESSAGES['extensions.guide_step1_host_key'] = {"zh-CN":"在你已登录的终端中确认这台服务器；这一步不输入密码或私钥。","en":"Confirm this server in a terminal where you are already signed in; this does not enter a password or private key."};
+  MESSAGES['extensions.guide_step1_pairing_active'] = {"zh-CN":"把下方确认工具复制到已信任终端运行，再粘贴确认码。","en":"Copy the confirmation tool below into your trusted terminal, run it, then paste the confirmation code."};
+  MESSAGES['extensions.guide_step1_pairing_after'] = {"zh-CN":"粘贴后，点击“确认这台服务器”。","en":"After pasting, select Confirm this server."};
   MESSAGES['extensions.guide_step1_identity_ready'] = {"zh-CN":"服务器身份已经确认。","en":"The server identity is confirmed."};
   MESSAGES['extensions.guide_step1_credential'] = {"zh-CN":"输入本次使用的 SSH 密码或私钥。它只留在当前页面。","en":"Enter the SSH password or key for this session only."};
   MESSAGES['extensions.guide_step1_test'] = {"zh-CN":"让 GenBox 自动测试 SSH 和部署权限。","en":"Let GenBox test SSH and deployment access."};
