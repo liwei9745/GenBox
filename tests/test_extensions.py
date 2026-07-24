@@ -1090,6 +1090,26 @@ def test_pairing_ui_has_expiry_cleanup_and_recovery_state():
     assert "@media(max-width:700px)" in styles
 
 
+def test_pairing_help_exposes_a_local_only_advanced_recovery_path():
+    root = Path(__file__).parents[1]
+    source = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    markup = (root / "static" / "index.html").read_text(encoding="utf-8")
+    styles = (root / "static" / "css" / "extensions.css").read_text(encoding="utf-8")
+
+    assert 'id="extHostKeyPairingHelpBtn"' in markup
+    assert 'aria-controls="extHostKeyPairingHelp"' in markup
+    assert 'id="extHostKeyPairingHelp"' in markup
+    assert 'id="extHostKeyPairingAdvancedBtn"' in markup
+    assert "extensionToggleHostKeyPairingHelp" in source
+    assert "extensionOpenHostKeyManualHelp" in source
+    assert "event.key==='Escape'" in source
+    assert "extensionToggleAdvanced()" in source
+    assert "/api/extensions/ssh/" not in source.split(
+        "window.extensionOpenHostKeyManualHelp=function(){", 1
+    )[1].split("\n", 1)[0]
+    assert ".extension-pairing-help" in styles
+
+
 def test_confirm_target_host_key_is_cross_thread_compare_and_swap(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
     store.host_key_pairings.clear()

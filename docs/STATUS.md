@@ -204,7 +204,7 @@ Do not treat this LOCAL evidence as VPS or production verification.
   persistence remain unchanged.
 - **Verification:** Node syntax checks passed for `static/js/extensions.js` and
   `static/js/i18n.js`; Python compilation passed; focused pairing tests passed
-  `287`; full `python -m pytest -q` passed `501`; `git diff --check` passed.
+  `288`; full `python -m pytest -q` passed `502`; `git diff --check` passed.
   Node DOM mocks cover copy, confirmation-code hiding, one-time submit,
   control locking, success cleanup, expiry, restart, and response redaction.
 - **Browser result:** the local lab at `http://127.0.0.1:8892/#/extensions`
@@ -213,6 +213,14 @@ Do not treat this LOCAL evidence as VPS or production verification.
   `scrollWidth` equaled the viewport width. No target was saved or selected for
   pairing, no confirmation was generated, and no SSH, VPS, remote container,
   production, or network deployment action was attempted.
+- **Recovery follow-up:** the default panel now exposes “没有已登录终端？”
+  before a pairing attempt. Local browser evidence used a temporary TEST-NET
+  target, expanded the help, opened the advanced manual path, and confirmed
+  keyboard focus moved to that path; Escape returned focus to the help button.
+  The temporary target was deleted afterward. This path only changes local UI
+  state and did not start host probing, SSH, pairing, or remote work. Focused
+  tests now cover its ARIA relationship, Escape behavior, and absence of an SSH
+  endpoint call in the handler.
 - **Next local entry:** keep L2 paused. Future local UI work may use mocks and
   the local browser only; do not submit credentials or generate a real pairing
   command. Reopen L2 only after separately verified isolated-target identity,
