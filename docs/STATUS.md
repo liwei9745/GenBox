@@ -241,6 +241,14 @@ Do not treat this LOCAL evidence as VPS or production verification.
   check. No confirmation was started, no SSH or VPS action occurred, and no
   credentials, pairing material, remote container, production, or network
   deployment action was used.
+- **Keyboard recovery follow-up (2026-07-24):** `LOCAL` only. Cancel, expiry,
+  and rejected confirmation submission now return keyboard focus to the visible
+  restart control after clearing temporary pairing material. A focused Node DOM
+  assertion covers the cancellation path; the complete local suite passed
+  `503`, JavaScript syntax checks passed, and `git diff --check` passed. The
+  local Lab browser check loaded `#/extensions` at `390px` with title `GenBox`,
+  `aria-live="polite"` on the pairing panel, and no horizontal overflow. No
+  target was saved, pairing started, credential entered, or remote action used.
 - **Next local entry:** keep L2 paused. Future local UI work may use mocks and
   the local browser only; do not submit credentials or generate a real pairing
   command. Reopen L2 only after separately verified isolated-target identity,
