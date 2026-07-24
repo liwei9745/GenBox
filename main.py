@@ -7,6 +7,7 @@ import sys
 import platform
 import re
 import hmac
+import hashlib
 import threading
 import asyncio
 import json as _json
@@ -3845,12 +3846,10 @@ async def extension_start_ssh_host_key_pairing(body: ExtensionHostKeyPairingStar
             },
         ) from exc
     return {
-        "protocol": "GENBOX-PAIR/1",
         "pairing_id": record.pairing_id,
         "expires_at": int(record.expires_at),
         "expires_in_seconds": max(0, int(record.expires_at - time.time())),
         "helper_command": helper,
-        "candidate": {"algorithm": algorithm, "fingerprint": fingerprint},
     }
 
 
@@ -3862,12 +3861,13 @@ async def extension_complete_ssh_host_key_pairing(body: ExtensionHostKeyPairingC
         raise HTTPException(status_code=409, detail="配对已过期、取消或已经使用")
     parsed = parse_host_key_pairing_response(body.response)
     target = extensions_store.get_target(record.target_id)
-    if not parsed or parsed["pairing_id"] != record.pairing_id or parsed["challenge"] != record.challenge:
+    expected_proof = hashlib.sha256(
+        f"{record.algorithm}:{record.fingerprint}:{record.challenge}".encode("utf-8")
+    ).hexdigest()
+    if not parsed or not hmac.compare_digest(parsed["code"], record.challenge) or not hmac.compare_digest(parsed["proof"], expected_proof):
         raise HTTPException(status_code=400, detail="配对回执格式或挑战值无效")
     if not target or target_identity_digest(target) != record.target_identity:
         raise HTTPException(status_code=409, detail="VPS 连接信息已修改，请重新开始配对")
-    if parsed["algorithm"] != record.algorithm or parsed["fingerprint"] != record.fingerprint:
-        raise HTTPException(status_code=409, detail="SSH 主机身份与本次配对候选值不一致")
     try:
         current_algorithm, current_fingerprint = await probe_host_key(target)
     except SSHConnectionError as exc:

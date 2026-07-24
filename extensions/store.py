@@ -142,10 +142,7 @@ _PAIRING_KEY_PATHS = {
     "ssh-rsa": "/etc/ssh/ssh_host_rsa_key.pub",
 }
 _PAIRING_RESPONSE_RE = re.compile(
-    r"^GENBOX-PAIR/1 pairing_id=([A-Za-z0-9_-]{20,128}) "
-    r"challenge=([A-Za-z0-9_-]{20,128}) "
-    r"algorithm=(ssh-ed25519|ecdsa-sha2-nistp256|ssh-rsa) "
-    r"fingerprint=(SHA256:[A-Za-z0-9+/]{43})$"
+    r"^GENBOX-PAIR/1 code=([A-Za-z0-9_-]{20,128}) proof=([a-f0-9]{64})$"
 )
 
 
@@ -160,9 +157,10 @@ def build_host_key_pairing_helper(record: HostKeyPairing) -> str:
         "k=$(ssh-keygen -lf \"$f\" -E sha256 2>/dev/null | awk 'NR==1 {print $2}'); "
         "a=$(awk 'NR==1 {print $1}' \"$f\"); "
         "case \"$a\" in ssh-ed25519|ecdsa-sha2-nistp256|ssh-rsa) ;; *) exit 1 ;; esac; "
-        "[ -n \"$k\" ] || exit 1; "
-        "printf 'GENBOX-PAIR/1 pairing_id=%s challenge=%s algorithm=%s fingerprint=%s\\n' '"
-        + record.pairing_id + "' '" + record.challenge + "' \"$a\" \"$k\""
+        "p=$(printf '%s' \"$a:$k:" + record.challenge + "\" | sha256sum 2>/dev/null | awk 'NR==1 {print $1}'); "
+        "case \"$p\" in *[!a-f0-9]*|'') exit 1 ;; esac; "
+        "[ ${#p} -eq 64 ] || exit 1; "
+        "printf 'GENBOX-PAIR/1 code=%s proof=%s\\n' '" + record.challenge + "' \"$p\""
     )
 
 
@@ -174,12 +172,10 @@ def parse_host_key_pairing_response(value: str) -> dict[str, str] | None:
     match = _PAIRING_RESPONSE_RE.fullmatch(value.rstrip("\r\n"))
     if not match:
         return None
-    pairing_id, challenge, algorithm, fingerprint = match.groups()
+    code, proof = match.groups()
     return {
-        "pairing_id": pairing_id,
-        "challenge": challenge,
-        "algorithm": algorithm,
-        "fingerprint": fingerprint,
+        "code": code,
+        "proof": proof,
     }
 
 

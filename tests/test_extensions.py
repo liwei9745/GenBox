@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import hashlib
 import json
 import re
 import subprocess
@@ -941,15 +942,16 @@ def test_host_key_pairing_round_trip_is_transient_and_reprobes(monkeypatch):
     started = asyncio.run(main.extension_start_ssh_host_key_pairing(
         ExtensionHostKeyPairingStartRequest(target_id="pair")
     ))
-    assert started["protocol"] == "GENBOX-PAIR/1"
-    assert started["candidate"] == {"algorithm": TEST_HOST_KEY_ALGORITHM, "fingerprint": TEST_HOST_KEY}
+    assert "protocol" not in started
+    assert "candidate" not in started
+    assert TEST_HOST_KEY not in str(started)
     assert "ssh-secret" not in started["helper_command"]
     assert "/etc/ssh/ssh_host_ed25519_key.pub" in started["helper_command"]
-    response = (
-        "GENBOX-PAIR/1 pairing_id=" + started["pairing_id"] + " "
-        "challenge=" + main.host_key_pairings._records[started["pairing_id"]].challenge + " "
-        "algorithm=ssh-ed25519 fingerprint=" + TEST_HOST_KEY
-    )
+    record = main.host_key_pairings._records[started["pairing_id"]]
+    proof = hashlib.sha256(
+        f"{record.algorithm}:{record.fingerprint}:{record.challenge}".encode("utf-8")
+    ).hexdigest()
+    response = "GENBOX-PAIR/1 code=" + record.challenge + " proof=" + proof
     completed = asyncio.run(main.extension_complete_ssh_host_key_pairing(
         ExtensionHostKeyPairingCompleteRequest(pairing_id=started["pairing_id"], response=response)
     ))
@@ -958,7 +960,7 @@ def test_host_key_pairing_round_trip_is_transient_and_reprobes(monkeypatch):
     assert started["pairing_id"] not in main.host_key_pairings._records
 
 
-def test_host_key_pairing_rejects_malformed_response_and_consumes(monkeypatch):
+def test_host_key_pairing_rejects_malformed_or_mismatched_response_and_consumes(monkeypatch):
     import main
     from fastapi import HTTPException
 
@@ -988,6 +990,20 @@ def test_host_key_pairing_rejects_malformed_response_and_consumes(monkeypatch):
         ))
     assert replay.value.status_code == 409
 
+    started = asyncio.run(main.extension_start_ssh_host_key_pairing(
+        ExtensionHostKeyPairingStartRequest(target_id="pair")
+    ))
+    record = main.host_key_pairings._records[started["pairing_id"]]
+    with pytest.raises(HTTPException) as mismatch:
+        asyncio.run(main.extension_complete_ssh_host_key_pairing(
+            ExtensionHostKeyPairingCompleteRequest(
+                pairing_id=started["pairing_id"],
+                response="GENBOX-PAIR/1 code=" + record.challenge + " proof=" + "0" * 64,
+            )
+        ))
+    assert mismatch.value.status_code == 400
+    assert started["pairing_id"] not in main.host_key_pairings._records
+
 
 def test_host_key_pairing_rejects_target_mutation_without_persisting(monkeypatch):
     import main
@@ -1007,10 +1023,10 @@ def test_host_key_pairing_rejects_target_mutation_without_persisting(monkeypatch
     ))
     record = main.host_key_pairings._records[started["pairing_id"]]
     current["target"] = target.model_copy(update={"host": "changed.example"})
-    response = (
-        "GENBOX-PAIR/1 pairing_id=" + started["pairing_id"] + " "
-        "challenge=" + record.challenge + " algorithm=ssh-ed25519 fingerprint=" + TEST_HOST_KEY
-    )
+    proof = hashlib.sha256(
+        f"{record.algorithm}:{record.fingerprint}:{record.challenge}".encode("utf-8")
+    ).hexdigest()
+    response = "GENBOX-PAIR/1 code=" + record.challenge + " proof=" + proof
     with pytest.raises(HTTPException) as caught:
         asyncio.run(main.extension_complete_ssh_host_key_pairing(
             ExtensionHostKeyPairingCompleteRequest(pairing_id=started["pairing_id"], response=response)
@@ -1059,8 +1075,15 @@ def test_pairing_ui_has_expiry_cleanup_and_recovery_state():
     assert "hostKeyPairingTimer" in source
     assert "expireHostKeyPairing" in source
     assert "hostKeyPairingSubmitting" in source
-    assert "response.disabled=!backendOnline||!hostKeyPairing||hostKeyPairingSubmitting" in source
+    assert "captureHostKeyPairingResponse" in source
+    assert "isHostKeyPairingResponse" in source
+    assert "response.disabled=!backendOnline||!hostKeyPairing||hostKeyPairingSubmitting||hasResponse" in source
+    assert "hostKeyPairing.response=value" in source
+    assert "response.value=''" in source
     assert "extHostKeyPairingCancelBtn" in markup
+    assert "extHostKeyPairingReceived" in markup
+    assert "GENBOX-PAIR/1" not in markup
+    assert "GENBOX-PAIR/1" not in (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
     assert "extensions.host_key_pairing_expired" in source
     assert 'id="extHostKeyPairingState"' in markup
     assert "extension-pairing-command-row" in styles

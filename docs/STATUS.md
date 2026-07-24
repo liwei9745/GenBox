@@ -187,46 +187,36 @@ Do not treat this LOCAL evidence as VPS or production verification.
   local UI checks. The deployment wizard and Push receiver remain gated by
   their existing contracts; L2 stays paused until separately resumed.
 
-## Host-key pairing UX strategy and local verification (2026-07-23)
+## Server confirmation-code UX and local verification (2026-07-24)
 
-- **Evidence class:** `LOCAL` only. `docs/P4-HOST-KEY-PAIRING-UX-STRATEGY.md`
-  records the mature-product research, novice-user flow, state model, recovery
-  paths, accessibility, and security boundaries. The backend canonical host-key
-  algorithm allowlist and full `SHA256:` fingerprint comparison remain intact.
-- **Finding/fix:** the pairing panel now presents one two-step task, a distinct
-  copy-command button, a paste-result field, an explicit `提交验证结果` action,
-  submission locking, a short-lived countdown, expiry cleanup, restart/error
-  recovery, keyboard-safe native controls, and narrow-screen stacking. Pairing
-  command/response material is cleared on completion, expiry, cancellation, and
-  target changes.
-- **Browser result:** local authenticated browser loaded `#/extensions` and
-  exposed the pairing panel, two numbered steps, copy entry, submit entry, and
-  manual fallback. A local-only dummy target was removed after the check. The
-  generation attempt stopped at the local SSH host-probe prerequisite before
-  authentication; no VPS, remote container, production instance, or remote
-  command was touched, and no pairing response or fingerprint was persisted.
-- **Verification:** `node --check static/js/extensions.js` and
-  `node --check static/js/i18n.js` passed; `git diff --check` passed;
-  `python -m pytest -q tests/test_extensions.py tests/test_extension_task_store.py`
-  -> `287 passed`; `python -m pytest -q` -> `489 passed`. Node DOM mocks cover
-  pairing start, paste, submit-time control locking, successful transient-state
-  cleanup, expiry cleanup, and restart. The earlier local geometry regression
-  measured separate command/response rows with `overlap=false`.
-- **Follow-up fix:** mock-flow testing found that submit state was set before
-  the request but controls were not re-rendered until the response. The submit
-  path now immediately disables response, copy, restart, and submit controls;
-  this is covered by the local mock test.
-- **Receiver contract follow-up:** a local Push test now covers changed content
-  at the same source path: a new SHA-256 receives a new local file and receipt,
-  while retrying that new content remains `already-imported`. The sender-side
-  per-generation action remains outside this repository; no cross-project E2E
-  claim is made.
-- **Verification update:** `python -m pytest -q tests/test_sync_push_routes.py
-  tests/test_sync.py` -> `32 passed`; `python -m pytest -q` -> `490 passed`.
-- **Next local entry:** keep L2 paused. Any further browser smoke must use only
-  the local runtime and must not submit credentials, generate a real pairing
-  command, or initiate SSH. Reopen L2 only after separately verified isolated
-  target identity and canonical host-key trust are supplied.
+- **Evidence class:** `LOCAL` only. The revised
+  `docs/P4-HOST-KEY-PAIRING-UX-STRATEGY.md` makes the novice-facing task
+  “确认这台服务器”: generate a short-lived confirmation, copy the fixed helper
+  to an already trusted terminal, paste the confirmation code, then confirm.
+  Users do not need to read or compare algorithms, fingerprints, or protocol
+  prefixes; manual verification remains an advanced recovery path.
+- **Security boundary:** the start response no longer returns the candidate
+  host-key algorithm or fingerprint to the browser. The fixed helper produces
+  a one-time confirmation code plus an identity-bound digest proof, not a raw
+  fingerprint; the pasted value is immediately removed from the input and held
+  only in page memory until submission. Backend algorithm allowlisting, full
+  `SHA256:` comparison, single-use expiry, target binding, re-probe, and CAS
+  persistence remain unchanged.
+- **Verification:** Node syntax checks passed for `static/js/extensions.js` and
+  `static/js/i18n.js`; Python compilation passed; focused pairing tests passed
+  `287`; full `python -m pytest -q` passed `501`; `git diff --check` passed.
+  Node DOM mocks cover copy, confirmation-code hiding, one-time submit,
+  control locking, success cleanup, expiry, restart, and response redaction.
+- **Browser result:** the local lab at `http://127.0.0.1:8892/#/extensions`
+  loaded with title `GenBox`, rendered the confirmation-code copy without the
+  raw protocol prefix, and reported no browser errors. At `390px` width,
+  `scrollWidth` equaled the viewport width. No target was saved or selected for
+  pairing, no confirmation was generated, and no SSH, VPS, remote container,
+  production, or network deployment action was attempted.
+- **Next local entry:** keep L2 paused. Future local UI work may use mocks and
+  the local browser only; do not submit credentials or generate a real pairing
+  command. Reopen L2 only after separately verified isolated-target identity,
+  canonical host-key trust, and explicit authorization are supplied.
 
 ## Local sender contract review (2026-07-23)
 
