@@ -2514,6 +2514,23 @@ eval(source);window.extensionLoadServices=async()=>{};await window.loadExtension
     assert result.returncode == 0, result.stderr
 
 
+def test_host_key_pairing_rejection_clears_and_restores_keyboard_restart_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+(async()=>{
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(['extNetworkHostKey','extHostKeyConfirm'].includes(id)?['hidden']:[]);elements.set(id,{id,style:{},value:'',textContent:'',innerHTML:'',disabled:false,checked:false,dataset:{},options:[],selectedIndex:0,classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){this.focused=true},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
+const listeners={};const networkRadio={value:'tailscale',checked:true,classList:{toggle(){}}};global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('input[name="extNetwork"]'))return networkRadio;return element('query')},querySelectorAll(){return []},addEventListener(type,fn){(listeners[type]||(listeners[type]=[])).push(fn)},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'en';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});
+const target={id:'saved',name:'Saved',host:'safe.example',port:22,username:'user',host_key_algorithm:'',host_key:'',chatgpt2api_port:3000};const response='GENBOX-PAIR/1 code=rejected_identifier_12345 proof='+'b'.repeat(64);let starts=0,completes=0;
+global._authFetch=async(url)=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/host-key/pair/start'){starts+=1;body={pairing_id:'local-rejected-pairing',expires_at:Date.now()/1000+30,helper_command:'printf local-confirmation'}}else if(url==='/api/extensions/ssh/host-key/pair/complete'){completes+=1;return {ok:false,text:async()=>JSON.stringify({detail:'confirmation rejected'})}}return {ok:true,text:async()=>JSON.stringify(body)}};
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');await window.extensionStartHostKeyPairing();element('extHostKeyPairingResponse').value=response;(listeners.input||[]).forEach(fn=>fn({target:element('extHostKeyPairingResponse')}));await window.extensionCompleteHostKeyPairing();
+if(starts!==1||completes!==1)throw new Error('rejected confirmation did not complete exactly once');if(element('extHostKeyPairingCommand').value!==''||element('extHostKeyPairingResponse').value!=='')throw new Error('rejected confirmation retained transient material');if(!element('extHostKeyPairingState').classList.contains('error'))throw new Error('rejected confirmation did not render an error state');if(element('extGuidePrimaryBtn').textContent!=='extensions.host_key_pairing_start'||element('extGuidePrimaryBtn').disabled)throw new Error('rejected confirmation did not restore restart guidance');if(!element('extHostKeyPairingStartBtn').focused)throw new Error('rejected confirmation did not restore keyboard focus');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_host_key_pairing_ui_mock_expiry_clears_and_restarts_in_node():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''

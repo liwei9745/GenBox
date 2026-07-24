@@ -243,9 +243,9 @@ Do not treat this LOCAL evidence as VPS or production verification.
   deployment action was used.
 - **Keyboard recovery follow-up (2026-07-24):** `LOCAL` only. Cancel, expiry,
   and rejected confirmation submission now return keyboard focus to the visible
-  restart control after clearing temporary pairing material. A focused Node DOM
-  assertion covers the cancellation path; the complete local suite passed
-  `503`, JavaScript syntax checks passed, and `git diff --check` passed. The
+  restart control after clearing temporary pairing material. Focused Node DOM
+  assertions cover all three recovery paths; the complete local suite passed
+  `504`, JavaScript syntax checks passed, and `git diff --check` passed. The
   local Lab browser check loaded `#/extensions` at `390px` with title `GenBox`,
   `aria-live="polite"` on the pairing panel, and no horizontal overflow. No
   target was saved, pairing started, credential entered, or remote action used.
