@@ -1402,6 +1402,7 @@
   MESSAGES['extensions.guide_step1_pairing_after'] = {"zh-CN":"粘贴后，点击“确认这台服务器”。","en":"After pasting, select Confirm this server."};
   MESSAGES['extensions.guide_step1_identity_ready'] = {"zh-CN":"服务器身份已经确认。","en":"The server identity is confirmed."};
   MESSAGES['extensions.guide_step1_credential'] = {"zh-CN":"输入本次使用的 SSH 密码或私钥。它只留在当前页面。","en":"Enter the SSH password or key for this session only."};
+  MESSAGES['extensions.guide_step1_credential_after'] = {"zh-CN":"服务器确认已经完成；填写后仍在步骤 1 测试 SSH，测试通过才进入步骤 2。","en":"Server confirmation is complete. Stay in Step 1 to test SSH; Step 2 opens only after it passes."};
   MESSAGES['extensions.guide_step1_test'] = {"zh-CN":"让 GenBox 自动测试 SSH 和部署权限。","en":"Let GenBox test SSH and deployment access."};
   MESSAGES['extensions.guide_step1_connected'] = {"zh-CN":"SSH 与部署权限已通过。","en":"SSH and deployment access passed."};
   MESSAGES['extensions.guide_step1_next'] = {"zh-CN":"继续准备应用服务。","en":"Continue to prepare the service."};

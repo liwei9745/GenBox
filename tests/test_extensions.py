@@ -1125,6 +1125,8 @@ def test_pairing_ui_has_expiry_cleanup_and_recovery_state():
     assert "extensions.guide_step1_identity_changed" in (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
     assert "clearSessionCredentials()" in source.split("function requireHostKeyReconfirmation", 1)[1].split("function invalidatePlanRequest", 1)[0]
     assert "hostKeyReconfirmationRequired&&!hostKeyPairing" in source
+    assert "'extensions.guide_step1_credential_after'" in source
+    assert "服务器确认已经完成；填写后仍在步骤 1 测试 SSH" in (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
     assert 'id="extHostKeyPairingState"' in markup
     assert "extension-pairing-command-row" in styles
     assert "@media(max-width:700px)" in styles
@@ -1448,7 +1450,7 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "Do not deploy again; reload and check task status manually." in translations
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
-    assert '<script src="/static/js/i18n.js?v=10"></script>' in html
+    assert '<script src="/static/js/i18n.js?v=11"></script>' in html
     assert '<script src="/static/js/extensions.js?v=16"></script>' in html
 
 

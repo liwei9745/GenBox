@@ -149,6 +149,21 @@ Do not treat this LOCAL evidence as VPS or production verification.
   reload; no pairing, SSH, VPS, remote container, production, or deployment
   action was performed.
 
+## Pairing Progress Clarity (2026-07-26)
+
+- **Evidence class:** `LOCAL` only. Review of the pairing completion state
+  found no repeat-pairing transition: a completed server identity confirmation
+  intentionally remains in Step 1 until an SSH credential test succeeds. The
+  prior generic guide sentence said it would move to the next step, which made
+  this required credential stage appear to be a loop.
+- **Fix:** when the identity is confirmed but no session credential is present,
+  the guide now explicitly says that the user remains in Step 1 to test SSH and
+  that Step 2 opens only after a successful test. The change does not alter
+  host-key verification, credential lifetime, pairing, or any remote action.
+- **Verification:** focused extension tests passed locally. No pairing, SSH,
+  VPS, remote container, production, or deployment action was performed for
+  this review.
+
 ## Resume constraints
 
 - Require SSH host-key verification; production is read-only and all development
