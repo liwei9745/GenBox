@@ -258,6 +258,30 @@ Do not treat this LOCAL evidence as VPS or production verification.
   outbound transport, revocation, capability allowlists, and local tests; it
   must not block the current SSH deployment mainline.
 
+## SSH Host-Key Algorithm Pinning (2026-07-27)
+
+- **Evidence class:** `LOCAL` only. A likely false mismatch loop was found in
+  the SSH compatibility path: host identity pairing probes one algorithm, while
+  the later authenticated AsyncSSH connection could negotiate a different
+  algorithm offered by the same server. That made a multi-key server look like
+  a changed server after a successful pairing.
+- **Fix:** the authenticated SSH connection now offers only the saved canonical
+  host-key algorithm. The callback still verifies both that algorithm and its
+  SHA-256 fingerprint. If the server no longer offers that algorithm, the
+  result remains fail-closed and is classified as a host-identity mismatch;
+  unrelated secure-negotiation failures remain distinct.
+- **Verification:** focused extension tests -> `177 passed`; extension task
+  store tests -> `118 passed`; full `python -m pytest -q` -> `509 passed`;
+  `python -m py_compile extensions/orchestrator.py`; `git diff --check`.
+  Local browser reload at `http://127.0.0.1:8892/#/extensions` rendered the
+  revised entry without page errors or horizontal overflow. No credential,
+  pairing response, real SSH, VPS, remote container, production, or deployment
+  action was submitted.
+- **Limit:** this removes the local algorithm-negotiation false positive. If a
+  future check still reports a mismatch, GenBox must remain stopped because the
+  server identity may genuinely have changed; do not repeat password or pairing
+  entry until its trusted source is checked.
+
 ## Resume constraints
 
 - Require SSH host-key verification; production is read-only and all development

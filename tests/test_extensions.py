@@ -227,6 +227,7 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
         assert trusted_fingerprint == fingerprint
         assert "password" not in calls[0]
         assert calls[0]["provided_password"] == "ssh-secret"
+        assert calls[0]["server_host_key_algs"] == [algorithm]
         assert calls[0]["preferred_auth"] == ["password"]
         assert calls[0]["kbdint_auth"] is False
         assert calls[0]["password_auth"] is True
@@ -242,6 +243,7 @@ def test_ssh_host_key_is_checked_before_credentials_are_used(monkeypatch):
         assert key_fingerprint == fingerprint
         assert imported_keys == [("private-key", "key-passphrase")]
         assert calls[1]["client_keys"] == ["imported-private-key"]
+        assert calls[1]["server_host_key_algs"] == [algorithm]
         assert calls[1]["preferred_auth"] == ["publickey"]
         assert calls[1]["kbdint_auth"] is False
         assert calls[1]["password_auth"] is False

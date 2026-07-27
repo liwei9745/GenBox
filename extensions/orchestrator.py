@@ -512,6 +512,11 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
         # An empty known-hosts list deliberately invokes our fingerprint callback.
         # `known_hosts=None` disables host-key validation entirely.
         "known_hosts": b"",
+        # A server may publish more than one host-key algorithm. Pairing records
+        # one canonical identity, so the authenticated connection must negotiate
+        # that same algorithm instead of treating another valid server key as a
+        # changed host.
+        "server_host_key_algs": [expected_algorithm],
         "connect_timeout": 15,
         "config": [],
         "agent_path": None,
@@ -595,6 +600,18 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
             "VPS 当前 SSH 主机指纹与已确认记录不一致，已拒绝继续连接。",
             code="ssh_host_key_mismatch",
             stage="host_key_verification",
+        ) from exc
+    except asyncssh.KeyExchangeFailed as exc:
+        if "host key" in str(exc).lower():
+            raise SSHConnectionError(
+                "VPS 当前 SSH 主机身份与已确认记录不一致，已拒绝继续连接。",
+                code="ssh_host_key_mismatch",
+                stage="host_key_verification",
+            ) from exc
+        raise SSHConnectionError(
+            "SSH 安全协商未完成，请检查服务器 SSH 配置。",
+            code="ssh_protocol_failed",
+            stage="ssh_protocol",
         ) from exc
     except (TimeoutError, asyncio.TimeoutError) as exc:
         raise SSHConnectionError(
