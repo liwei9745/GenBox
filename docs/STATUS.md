@@ -60,11 +60,14 @@
   normalized SSH endpoint on browser metadata save and shows one canonical
   record per endpoint in the beginner UI without deleting or replacing stored
   host trust. The deployment form now withholds instance name, service port,
-  and image until the read-only environment check returns. Focused extension
-  tests passed `182`; the full local suite passed `515`; local browser
-  verification at `http://127.0.0.1:8892/#/extensions` confirmed those three
-  fields were hidden before discovery. No pairing, credential submission, SSH,
-  VPS, remote container, production, or deployment operation was performed.
+  and image until the read-only environment check returns. The Step 2 transition
+  now restores the one-action guide, so a successful SSH check exposes the
+  read-only environment check instead of a blank waiting state. Focused
+  extension tests passed `183`; the full local suite passed `516`; local
+  browser verification at `http://127.0.0.1:8892/#/extensions` confirmed those
+  three fields were hidden before discovery. No pairing, credential submission,
+  SSH, VPS, remote container, production, or deployment operation was
+  performed.
 
 ## Phase 4 boundary
 

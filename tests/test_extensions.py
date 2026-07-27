@@ -1353,6 +1353,8 @@ def test_personal_onboarding_uses_exclusive_views_and_preserves_the_deploy_path(
     assert "if(!hasCredential()||!sshVerified)return 'credentials'" in source
     assert "return 'ready'" in source
     assert "function renderPersonalOnboarding()" in source
+    assert "var renderPersonalOnboardingBase=renderPersonalOnboarding;" in source
+    assert "if(currentExtensionStep!==1){var guide=el('extNoviceGuide');if(guide)guide.classList.remove('hidden');return}" in source
     assert "landing.classList.toggle('hidden',view!=='landing')" in source
     assert "credentials.classList.toggle('hidden',view!=='credentials')" in source
     assert "ready.classList.toggle('hidden',view!=='ready')" in source
@@ -1373,6 +1375,32 @@ def test_deployment_parameters_are_hidden_until_environment_discovery():
     assert "var renderDiscoveryWithDeploymentOptions=renderDiscovery;" in source
     assert "options.classList.remove('hidden')" in source
     assert "window.extensionGoToStep=function(step){if(Number(step)===2&&!requireVerifiedSsh())return;extensionNext(step)}" in source
+
+
+def test_step_two_restores_the_visible_novice_action_guide_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs = require('fs');
+let source = fs.readFileSync(process.argv[1], 'utf8');
+source = source.replace(/\}\)\(\);\s*$/, 'window.__guideTest={showStepTwo(){currentExtensionStep=2;renderPersonalOnboarding()}};})();');
+const elements = new Map();
+function element(id){
+  if(!elements.has(id)){
+    const classes = new Set(id === 'extNoviceGuide' ? ['hidden'] : []);
+    elements.set(id,{value:'',textContent:'',innerHTML:'',disabled:false,dataset:{},classList:{add:n=>classes.add(n),remove:n=>classes.delete(n),toggle:(n,on)=>on?classes.add(n):classes.delete(n),contains:n=>classes.has(n)},querySelector(){return null},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){}});
+  }
+  return elements.get(id);
+}
+global.window = global;
+global.document = {getElementById:element,querySelector(){return null},querySelectorAll(){return []},addEventListener(){}};
+global.i18nText = key => key;
+global.escHtml = value => String(value || '');
+eval(source);
+window.__guideTest.showStepTwo();
+if(element('extNoviceGuide').classList.contains('hidden')) throw new Error('step two left its primary action guide hidden');
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
 
 
 def test_browser_hides_duplicate_endpoint_records_without_weakening_host_key_checks():
