@@ -322,6 +322,16 @@ def _fingerprint(key: Any) -> str:
     return _host_key_identity(key)[1]
 
 
+def _host_key_negotiation_algorithms(canonical_algorithm: str) -> list[str]:
+    """Return safe SSH negotiation names for one canonical saved host identity."""
+    if canonical_algorithm == "ssh-rsa":
+        # OpenSSH advertises an RSA key with RSA/SHA-2 signature algorithms.
+        # The callback below still requires the saved ssh-rsa public-key type
+        # and exact SHA-256 fingerprint, so this does not accept another key.
+        return ["rsa-sha2-512", "rsa-sha2-256"]
+    return [canonical_algorithm]
+
+
 def _clone_config_scrub_script() -> str:
     """Return a self-contained script for stripping inherited clone secrets."""
     keys = json.dumps(sorted(CLONE_SCRUB_KEYS))
@@ -529,9 +539,9 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
         "known_hosts": b"",
         # A server may publish more than one host-key algorithm. Pairing records
         # one canonical identity, so the authenticated connection must negotiate
-        # that same algorithm instead of treating another valid server key as a
-        # changed host.
-        "server_host_key_algs": [expected_algorithm],
+        # that same identity instead of treating another valid server key as a
+        # changed host. RSA uses its modern signature-algorithm aliases here.
+        "server_host_key_algs": _host_key_negotiation_algorithms(expected_algorithm),
         "connect_timeout": 15,
         "config": [],
         "agent_path": None,

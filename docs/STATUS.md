@@ -34,7 +34,7 @@
   scope. Host, port, container, and credential facts are intentionally absent
   without fresh dated discovery evidence.
 - **USER-CONFIRMED / BLOCKED 2026-07-27 (L2):** the user identified the selected
-  target as an isolated development machine and authorized exactly one
+  target as an isolated development machine and authorized a bounded
   `read-only-discovery` SSH check. The local client established SSH transport,
   but the server closed the session before current host-key validation or user
   authentication. No discovery command, container action, deployment, or
@@ -49,6 +49,13 @@
   code. Focused extension suites passed `178` and `119` tests; the full local
   suite passed `511`. No target identifiers, fingerprints, credentials, or raw
   SSH errors are stored in this record.
+- **LOCAL 2026-07-27:** the prior transport-close result was traced to an RSA
+  host-key negotiation mismatch in GenBox. The saved canonical `ssh-rsa` key
+  type and SHA-256 fingerprint remain mandatory, while the SSH client now
+  negotiates that same RSA key through `rsa-sha2-512` or `rsa-sha2-256`.
+  A real local AsyncSSH RSA server passed password authentication and exact
+  fingerprint verification. This is not isolated-VPS proof; the next user-run
+  connection check is still required before L2 discovery can begin.
 
 ## Phase 4 boundary
 

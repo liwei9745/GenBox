@@ -402,6 +402,57 @@ def test_password_callback_authenticates_against_real_asyncssh_server():
     assert accepted_passwords == ["test-password"]
 
 
+def test_rsa_host_key_uses_sha2_negotiation_and_keeps_the_canonical_fingerprint():
+    import asyncssh
+    from extensions.orchestrator import _fingerprint, _host_key_negotiation_algorithms
+
+    accepted_passwords = []
+    server_key = asyncssh.generate_private_key("ssh-rsa", key_size=2048)
+
+    class LoopbackServer(asyncssh.SSHServer):
+        def begin_auth(self, username):
+            return True
+
+        def password_auth_supported(self):
+            return True
+
+        def validate_password(self, username, password):
+            accepted_passwords.append(password)
+            return username == "test-user" and password == "test-password"
+
+    async def run():
+        server = await asyncssh.listen(
+            "127.0.0.1",
+            0,
+            server_factory=LoopbackServer,
+            server_host_keys=[server_key],
+        )
+        try:
+            request = ExtensionTestRequest(
+                target=ExtensionTarget(
+                    id="rsa-loopback",
+                    name="RSA loopback",
+                    host="127.0.0.1",
+                    port=server.get_port(),
+                    username="test-user",
+                ),
+                credential=SSHCredential(password="test-password"),
+                expected_host_key_algorithm="ssh-rsa",
+                expected_host_key=_fingerprint(server_key),
+            )
+            connection, fingerprint = await _connect(request)
+            assert fingerprint == _fingerprint(server_key)
+            connection.close()
+            await connection.wait_closed()
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    assert _host_key_negotiation_algorithms("ssh-rsa") == ["rsa-sha2-512", "rsa-sha2-256"]
+    asyncio.run(run())
+    assert accepted_passwords == ["test-password"]
+
+
 def test_ssh_connection_rejects_missing_or_ambiguous_credentials_before_connect():
     async def run():
         for values in (
