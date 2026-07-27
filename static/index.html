@@ -913,6 +913,7 @@
           </div>
           <div class="extension-pane hidden" data-pane="2">
             <h2 tabindex="-1"><span data-i18n="extensions.deploy_chatgpt2api">部署 chatgpt2api</span></h2>
+            <div id="extDeploymentOptions" class="hidden">
             <section class="extension-batch-selector" aria-labelledby="extBatchTitle"><div class="extension-batch-heading"><div><span>DEPLOYMENT TARGETS</span><h3 id="extBatchTitle"><span data-i18n="extensions.choose_deploy_targets">选择本次部署的 VPS</span></h3><p><span data-i18n="extensions.batch_hint">可规划多台服务器；真正部署时仍会逐台确认 SSH 凭据和安全计划。</span></p></div><div class="extension-batch-actions"><button class="btn-ghost" type="button" onclick="extensionSelectAllBatchTargets()"><span data-i18n="library.select_all">全选</span></button><button class="btn-primary" type="button" onclick="extensionSaveBatchTargets()"><span data-i18n="extensions.save_selection">保存选择</span></button></div></div><div id="extBatchTargets" class="extension-batch-targets"></div><div id="extBatchSummary" class="extension-batch-summary"><span data-i18n="extensions.no_server_selected">尚未选择服务器</span></div></section>
             <div class="extension-catalog-preview">
               <div class="extension-catalog-heading"><b><span data-i18n="extensions.catalog">应用目录</span></b><span><span data-i18n="extensions.catalog_hint">当前仅 chatgpt2api 可部署，其余模板为规划占位</span></span></div>
@@ -943,6 +944,7 @@
             <fieldset class="extension-choice-group"><legend><span data-i18n="extensions.deploy_method">部署方式</span></legend><div id="extDeploymentModes" class="extension-mode-list"><span class="extension-placeholder"><span data-i18n="extensions.method_after_discovery">检测环境后显示推荐方式</span></span></div></fieldset>
             <div class="extension-form-grid"><label><span data-i18n="extensions.instance_name">实例名称</span><input id="extInstanceId" value="chatgpt2api-dev" pattern="[a-z0-9-]+"></label><label><span data-i18n="extensions.service_port">服务端口</span><input id="extServicePort" type="number" value="33010" min="1" max="65535"></label><label><span data-i18n="extensions.container_image">容器镜像</span><input id="extImage" value="ghcr.io/yukkcat/chatgpt2api:latest"></label></div>
             <div id="extPlanPreview" class="extension-plan-preview hidden"></div>
+            </div>
             <div class="extension-progress"><div><span id="extProgressLabel"><span data-i18n="common.waiting">等待开始</span></span><span id="extProgressPercent">0%</span></div><div class="extension-progress-track"><div id="extProgressFill"></div></div></div>
             <ol id="extTimeline" class="extension-timeline"></ol>
             <pre id="extLogs" class="extension-logs" aria-live="polite"></pre>

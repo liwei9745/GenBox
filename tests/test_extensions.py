@@ -1363,6 +1363,39 @@ def test_personal_onboarding_uses_exclusive_views_and_preserves_the_deploy_path(
     assert "SSH still binds a target to its canonical host-key algorithm and SHA-256" in strategy
 
 
+def test_deployment_parameters_are_hidden_until_environment_discovery():
+    root = Path(__file__).parents[1]
+    markup = (root / "static" / "index.html").read_text(encoding="utf-8")
+    source = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+
+    assert '<div id="extDeploymentOptions" class="hidden">' in markup
+    assert "options=el('extDeploymentOptions')" in source
+    assert "var renderDiscoveryWithDeploymentOptions=renderDiscovery;" in source
+    assert "options.classList.remove('hidden')" in source
+    assert "window.extensionGoToStep=function(step){if(Number(step)===2&&!requireVerifiedSsh())return;extensionNext(step)}" in source
+
+
+def test_browser_hides_duplicate_endpoint_records_without_weakening_host_key_checks():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs = require('fs');
+let source = fs.readFileSync(process.argv[1], 'utf8');
+source = source.replace(/\}\)\(\);\s*$/, 'window.__targetTest={visibleSavedTargets:visibleSavedTargets};})();');
+global.window = global;
+global.document = {getElementById(){return null},querySelector(){return null},querySelectorAll(){return []},addEventListener(){}};
+global.i18nText = key => key;
+global.escHtml = value => String(value || '');
+eval(source);
+const first = {id:'old',host:'safe.example',port:22,username:'ubuntu',host_key_algorithm:'ssh-rsa',host_key:'SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',updated_at:'2026-07-26'};
+const second = {id:'new',host:'SAFE.EXAMPLE.',port:22,username:'ubuntu',host_key_algorithm:'ssh-rsa',host_key:'SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',updated_at:'2026-07-27'};
+const visible = window.__targetTest.visibleSavedTargets([first, second]);
+if(visible.length !== 1 || visible[0].id !== 'new') throw new Error('duplicate endpoint records remained selectable');
+if(!/^SHA256:/.test(visible[0].host_key)) throw new Error('selected record lost its host-key trust pair');
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_confirm_target_host_key_is_cross_thread_compare_and_swap(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
     store.host_key_pairings.clear()
@@ -1685,6 +1718,28 @@ def test_target_store_roundtrip_and_delete(tmp_path, monkeypatch):
     assert store.list_targets()[0].id == target.id
     assert store.delete_target(target.id) is True
     assert store.list_targets() == []
+
+
+def test_browser_target_save_reuses_existing_ssh_endpoint_without_replacing_trust(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    original = store.save_target_metadata({
+        "id": "trusted-target", "name": "Original", "host": "safe.example", "port": 22,
+        "username": "ubuntu", "target_role": "isolated-development",
+    })
+    trusted = store.upsert_target({
+        **original.model_dump(), "host_key_algorithm": TEST_HOST_KEY_ALGORITHM,
+        "host_key": TEST_HOST_KEY,
+    })
+
+    saved_again = store.save_target_metadata({
+        "name": "Renamed", "host": "SAFE.EXAMPLE.", "port": 22,
+        "username": "ubuntu", "target_role": "isolated-development",
+    })
+
+    assert saved_again.id == trusted.id
+    assert saved_again.host_key_algorithm == TEST_HOST_KEY_ALGORITHM
+    assert saved_again.host_key == TEST_HOST_KEY
+    assert len(store.list_targets()) == 1
 
 
 def test_browser_target_save_cannot_set_or_replace_host_key(tmp_path, monkeypatch):

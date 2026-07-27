@@ -56,6 +56,15 @@
   A real local AsyncSSH RSA server passed password authentication and exact
   fingerprint verification. This is not isolated-VPS proof; the next user-run
   connection check is still required before L2 discovery can begin.
+- **LOCAL 2026-07-27:** duplicate saved-target recovery now reuses an existing
+  normalized SSH endpoint on browser metadata save and shows one canonical
+  record per endpoint in the beginner UI without deleting or replacing stored
+  host trust. The deployment form now withholds instance name, service port,
+  and image until the read-only environment check returns. Focused extension
+  tests passed `182`; the full local suite passed `515`; local browser
+  verification at `http://127.0.0.1:8892/#/extensions` confirmed those three
+  fields were hidden before discovery. No pairing, credential submission, SSH,
+  VPS, remote container, production, or deployment operation was performed.
 
 ## Phase 4 boundary
 

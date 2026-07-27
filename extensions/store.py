@@ -281,6 +281,15 @@ def upsert_target(data: dict) -> ExtensionTarget:
         return target
 
 
+def _target_endpoint_identity(host: object, port: object, username: object) -> tuple[str, int, str]:
+    """Normalize only fields that identify a saved SSH endpoint."""
+    return (
+        str(host or "").strip().lower().rstrip("."),
+        int(port or 22),
+        str(username or "").strip(),
+    )
+
+
 def save_target_metadata(data: dict) -> ExtensionTarget:
     """Save browser-editable target metadata without accepting trust material."""
     with _config_lock():
@@ -292,11 +301,23 @@ def save_target_metadata(data: dict) -> ExtensionTarget:
         submitted = {key: value for key, value in data.items() if key in browser_fields}
         if "target_role" not in submitted and not existing:
             submitted["target_role"] = "production-read-only"
-        same_identity = bool(existing) and (
-            str(submitted.get("host", existing.host)) == existing.host
-            and int(submitted.get("port", existing.port)) == existing.port
-            and str(submitted.get("username", existing.username)) == existing.username
-        )
+        if not existing and not data.get("id"):
+            submitted_identity = _target_endpoint_identity(
+                submitted.get("host"), submitted.get("port", 22), submitted.get("username")
+            )
+            matching_targets = [
+                item for item in config.targets
+                if _target_endpoint_identity(item.host, item.port, item.username) == submitted_identity
+            ]
+            if matching_targets:
+                # Metadata saves never receive trust material, so reuse rather than duplicate.
+                existing = max(matching_targets, key=lambda item: (item.updated_at, item.id))
+                target_id = existing.id
+        same_identity = bool(existing) and _target_endpoint_identity(
+            submitted.get("host", existing.host),
+            submitted.get("port", existing.port),
+            submitted.get("username", existing.username),
+        ) == _target_endpoint_identity(existing.host, existing.port, existing.username)
         generation = max(
             int(config.target_generations.get(target_id, 0)),
             int(existing.identity_version) if existing else 0,
