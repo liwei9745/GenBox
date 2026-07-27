@@ -1132,6 +1132,27 @@ def test_pairing_ui_has_expiry_cleanup_and_recovery_state():
     assert "@media(max-width:700px)" in styles
 
 
+def test_identity_reconfirmation_hides_and_clears_session_credentials():
+    root = Path(__file__).parents[1]
+    source = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    markup = (root / "static" / "index.html").read_text(encoding="utf-8")
+    messages = (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+    styles = (root / "static" / "css" / "extensions.css").read_text(encoding="utf-8")
+
+    assert 'id="extHostKeyReconfirmation"' in markup
+    assert 'id="extAuth"' in markup
+    assert "function updateHostKeyIdentityView()" in source
+    assert "needsHostIdentityConfirmation=!!currentTargetId&&!targetDirty&&!trustedHostKey" in source
+    assert "auth.classList.toggle('hidden',needsHostIdentityConfirmation)" in source
+    assert "notice.classList.toggle('hidden',needsHostIdentityConfirmation)" in source
+    assert "recovery.classList.toggle('hidden',!needsHostIdentityConfirmation)" in source
+    save_target = source.split("window.extensionSaveTarget=async function()", 1)[1].split("window.extensionDeleteTarget", 1)[0]
+    assert "if(!trustedHostKey)clearSessionCredentials()" in save_target
+    assert "extensions.identity_reconfirm_credential_title" in messages
+    assert "extensions.identity_reconfirm_credential_body" in messages
+    assert ".extension-identity-recovery.hidden{display:none}" in styles
+
+
 def test_pairing_help_exposes_a_local_only_advanced_recovery_path():
     root = Path(__file__).parents[1]
     source = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
@@ -1474,8 +1495,8 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "Do not deploy again; reload and check task status manually." in translations
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
-    assert '<script src="/static/js/i18n.js?v=12"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=17"></script>' in html
+    assert '<script src="/static/js/i18n.js?v=13"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=18"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):

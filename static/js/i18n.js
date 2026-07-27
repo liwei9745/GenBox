@@ -674,6 +674,8 @@
     "extensions.host_key_pairing_complete":{"zh-CN":"确认这台服务器","en":"Confirm this server"},
     "extensions.host_key_pairing_restart":{"zh-CN":"重新开始","en":"Start over"},
     "extensions.ssh_host_key_mismatch":{"zh-CN":"服务器身份发生变化，已停止 SSH 连接。请重新确认这台服务器；不会自动覆盖原记录。","en":"The server identity changed, so SSH stopped. Confirm this server again; the saved record will not be overwritten automatically."},
+    "extensions.identity_reconfirm_credential_title":{"zh-CN":"先确认服务器身份","en":"Confirm the server identity first"},
+    "extensions.identity_reconfirm_credential_body":{"zh-CN":"本次 SSH 凭据已清除。完成服务器身份确认后，才需要重新输入密码或私钥。","en":"The SSH credentials for this session were cleared. Enter a password or private key only after confirming the server identity."},
     "extensions.guide_step1_identity_changed":{"zh-CN":"服务器身份与之前记录不一致。","en":"The server identity does not match the previous record."},
     "extensions.guide_step1_reconfirm_action":{"zh-CN":"请重新确认这台服务器。不要继续输入密码。","en":"Confirm this server again before entering a password."},
     "extensions.host_key_pairing_expiry":{"zh-CN":"请尽快完成；配对信息不会保存到浏览器或 VPS 配置。","en":"Complete soon; pairing data is not saved in browser storage or VPS configuration."},

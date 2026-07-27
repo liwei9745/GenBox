@@ -856,7 +856,11 @@
               <label><span data-i18n="extensions.ssh_username">SSH 用户名</span><input id="extUsername" value="" autocomplete="username" oninput="extensionConnectionChanged()"></label>
               <label class="extension-target-role"><span data-i18n="extensions.target_role">这台服务器的用途</span><select id="extTargetRole" onchange="extensionTargetRoleChanged()"><option value="isolated-development" data-i18n="extensions.target_role_isolated">隔离开发机（推荐）</option><option value="production-read-only" data-i18n="extensions.target_role_production">生产机，只读检查</option></select><small data-i18n="extensions.target_role_help">请按服务器实际用途选择。生产机只允许读取检查，不会用于部署。</small></label>
             </div>
-            <fieldset class="extension-auth"><legend><span data-i18n="extensions.auth_method">鉴权方式</span></legend>
+            <section id="extHostKeyReconfirmation" class="extension-identity-recovery hidden" role="status">
+              <b data-i18n="extensions.identity_reconfirm_credential_title">先确认服务器身份</b>
+              <p data-i18n="extensions.identity_reconfirm_credential_body">本次 SSH 凭据已清除。完成服务器身份确认后，才需要重新输入密码或私钥。</p>
+            </section>
+            <fieldset id="extAuth" class="extension-auth"><legend><span data-i18n="extensions.auth_method">鉴权方式</span></legend>
               <div class="extension-segments">
                 <button type="button" class="active" data-auth="password" onclick="extensionSetAuth('password')"><span data-i18n="extensions.password">密码</span></button>
                 <button type="button" data-auth="key" onclick="extensionSetAuth('key')"><span data-i18n="extensions.private_key">SSH 私钥</span></button>
@@ -1254,9 +1258,9 @@
       } catch (error3) {}
     })();
   </script>
-  <script src="/static/js/i18n.js?v=12"></script>
+  <script src="/static/js/i18n.js?v=13"></script>
 <script src="/static/js/app-all.js?v=36"></script>
 <script src="/static/js/sync.js?v=7"></script>
-<script src="/static/js/extensions.js?v=17"></script>
+<script src="/static/js/extensions.js?v=18"></script>
 </body>
 </html>

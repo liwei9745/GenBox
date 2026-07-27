@@ -196,6 +196,29 @@ Do not treat this LOCAL evidence as VPS or production verification.
   pairing, SSH, VPS, remote container, production, OAuth, or deployment action
   was performed.
 
+## Host Identity Before SSH Credential UX (2026-07-27)
+
+- **Evidence class:** `LOCAL` only. The Step 1 credential area no longer stays
+  visible while a saved server has no confirmed host identity, including the
+  `ssh_host_key_mismatch` recovery state. The page now shows one clear recovery
+  card: the session credential was cleared, confirm the server identity first,
+  then enter a password or private key. The hidden area includes the password,
+  private-key, sudo, and credential-notice controls.
+- **Security and flow:** a host-key mismatch continues to clear all session
+  credentials, discovery, plan, and SSH verification state before returning to
+  Step 1. Saving a target whose identity is not yet confirmed also clears any
+  credential entered prematurely. The credential controls return only after
+  canonical host identity confirmation. No password is restored, represented as
+  masked text, persisted, logged, or reused across the identity-confirmation
+  boundary.
+- **Verification:** `node --check static/js/extensions.js`; `node --check
+  static/js/i18n.js`; focused `python -m pytest tests/test_extensions.py -q`
+  -> `176 passed`; and `git diff --check` passed locally. The local Extensions
+  page reloaded at `http://127.0.0.1:8892/#/extensions` without horizontal
+  overflow. Browser verification did not save a target, submit a pairing,
+  submit a credential, or attempt SSH, VPS, remote-container, production, or
+  deployment access.
+
 ## Resume constraints
 
 - Require SSH host-key verification; production is read-only and all development
