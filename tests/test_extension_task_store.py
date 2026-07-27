@@ -2629,6 +2629,18 @@ eval(source);window.extensionLoadServices=async()=>{};await window.loadExtension
     assert result.returncode == 0, result.stderr
 
 
+def test_ssh_session_close_tells_the_user_not_to_restart_pairing_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set();elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',disabled:false,dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){}})}return elements.get(id)}
+global.window=global;global.document={getElementById:element,querySelector(){return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});
+eval(source.replace(/\}\)\(\);\s*$/, ';global._extensionErrorForTest=extensionError;})();'));const output=global._extensionErrorForTest({message:'server closed the session',diagnostic:{code:'ssh_session_closed',stage:'password_requested'}});if(!output.includes('server closed the session')||!output.includes('extensions.ssh_diag_password_requested')||!output.includes('extensions.ssh_no_repair_loop'))throw new Error('SSH close recovery message was not rendered');
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_novice_step_two_executes_discovery_plan_deploy_and_routes_to_network_in_node():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''

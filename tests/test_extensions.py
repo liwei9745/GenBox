@@ -722,6 +722,85 @@ def test_password_auth_rejection_reports_when_password_was_not_selected(monkeypa
     asyncio.run(run())
 
 
+def test_connection_close_after_host_verification_is_sanitized_without_repair_loop(monkeypatch):
+    class ConnectionLost(Exception):
+        pass
+
+    class PermissionDenied(Exception):
+        pass
+
+    class ProtocolError(Exception):
+        pass
+
+    class KeyExchangeFailed(Exception):
+        pass
+
+    class HostKeyNotVerifiable(Exception):
+        pass
+
+    class Client:
+        def __init__(self, expected_algorithm, expected_fingerprint, password=""):
+            self.expected_algorithm = expected_algorithm
+            self.expected_fingerprint = expected_fingerprint
+            self._password = password
+            self.algorithm = ""
+            self.fingerprint = ""
+            self.transport_connected = False
+            self.host_key_verified = False
+            self.authentication_started = False
+            self.authentication_completed = False
+            self.connection_lost_during_auth = False
+            self.password_requested = False
+
+        def password_auth_requested(self):
+            self.password_requested = True
+            return self._password
+
+    async def connect(**kwargs):
+        client = kwargs["client_factory"]()
+        client.transport_connected = True
+        client.host_key_verified = True
+        assert client.password_auth_requested() == "ssh-secret"
+        raise ConnectionLost("hidden target details and ssh-secret")
+
+    fake_asyncssh = SimpleNamespace(
+        SSHClient=Client,
+        ConnectionLost=ConnectionLost,
+        ProtocolError=ProtocolError,
+        KeyExchangeFailed=KeyExchangeFailed,
+        HostKeyNotVerifiable=HostKeyNotVerifiable,
+        PermissionDenied=PermissionDenied,
+        connect=connect,
+    )
+    monkeypatch.setitem(sys.modules, "asyncssh", fake_asyncssh)
+    request = ExtensionTestRequest(
+        target=ExtensionTarget(
+            id="vps", name="VPS", host="vps.example", username="root",
+            host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY,
+        ),
+        credential=SSHCredential(password="ssh-secret"),
+        expected_host_key_algorithm=TEST_HOST_KEY_ALGORITHM,
+        expected_host_key=TEST_HOST_KEY,
+    )
+
+    async def run():
+        with pytest.raises(SSHConnectionError) as caught:
+            await _connect(request)
+        assert caught.value.diagnostic == {
+            "code": "ssh_session_closed",
+            "stage": "password_requested",
+            "retry_safe": False,
+            "host_key_verified": True,
+            "password_requested": True,
+        }
+        message = str(caught.value)
+        assert "无需重新确认服务器身份" in message
+        assert "hidden target details" not in message
+        assert "ssh-secret" not in message
+
+    asyncio.run(run())
+
+
 def test_extension_ssh_route_returns_structured_sanitized_auth_diagnostic(monkeypatch):
     import main
     from fastapi import HTTPException

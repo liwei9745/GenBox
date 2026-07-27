@@ -116,9 +116,21 @@ class SSHAuthenticationError(PermissionError):
 class SSHConnectionError(ConnectionError):
     """A fixed, non-sensitive SSH failure safe for API and task responses."""
 
-    def __init__(self, message: str, *, code: str, stage: str):
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str,
+        stage: str,
+        facts: dict[str, bool] | None = None,
+    ):
         super().__init__(message)
-        self.diagnostic = {"code": code, "stage": stage, "retry_safe": False}
+        self.diagnostic = {
+            "code": code,
+            "stage": stage,
+            "retry_safe": False,
+            **(facts or {}),
+        }
 
 
 class DeploymentNoTaskError(ValueError):
@@ -465,6 +477,9 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
         import asyncssh
     except ImportError as exc:
         raise RuntimeError("缺少 asyncssh 依赖，请重新安装 requirements.txt") from exc
+    key_exchange_error = getattr(asyncssh, "KeyExchangeFailed", ())
+    connection_lost_error = getattr(asyncssh, "ConnectionLost", ())
+    protocol_error = getattr(asyncssh, "ProtocolError", ())
 
     class _FingerprintClient(asyncssh.SSHClient):
         def __init__(self, expected_algorithm: str, expected_fingerprint: str, password: str = ""):
@@ -550,6 +565,18 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
         kwargs["preferred_auth"] = ["password"]
         kwargs["kbdint_auth"] = False
         kwargs["password_auth"] = True
+
+    def _connection_stage() -> str:
+        if trusted_client.password_requested:
+            return "password_requested"
+        if trusted_client.authentication_started:
+            return "authentication_started"
+        if trusted_client.host_key_verified:
+            return "host_key_verified"
+        if trusted_client.transport_connected:
+            return "transport_connected"
+        return "connection_started"
+
     try:
         connection = await asyncssh.connect(**kwargs)
     except asyncssh.PermissionDenied as exc:
@@ -601,7 +628,7 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
             code="ssh_host_key_mismatch",
             stage="host_key_verification",
         ) from exc
-    except asyncssh.KeyExchangeFailed as exc:
+    except key_exchange_error as exc:
         if "host key" in str(exc).lower():
             raise SSHConnectionError(
                 "VPS 当前 SSH 主机身份与已确认记录不一致，已拒绝继续连接。",
@@ -612,6 +639,25 @@ async def _connect(request: ExtensionTestRequest | ExtensionDeployRequest):
             "SSH 安全协商未完成，请检查服务器 SSH 配置。",
             code="ssh_protocol_failed",
             stage="ssh_protocol",
+        ) from exc
+    except connection_lost_error as exc:
+        raise SSHConnectionError(
+            "服务器在 SSH 认证完成前关闭了本次会话。无需重新确认服务器身份或重复粘贴确认码；"
+            "请检查隔离开发机的 SSH 登录策略、账户允许方式或并发连接限制后，再进行一次检查。",
+            code="ssh_session_closed",
+            stage=_connection_stage(),
+            facts={
+                "host_key_verified": trusted_client.host_key_verified,
+                "password_requested": trusted_client.password_requested,
+            },
+        ) from exc
+    except protocol_error as exc:
+        raise SSHConnectionError(
+            "SSH 安全协商未完成。无需重新确认服务器身份或重复粘贴确认码；"
+            "请检查隔离开发机的 SSH 协议兼容性和服务策略后，再进行一次检查。",
+            code="ssh_protocol_failed",
+            stage=_connection_stage(),
+            facts={"host_key_verified": trusted_client.host_key_verified},
         ) from exc
     except (TimeoutError, asyncio.TimeoutError) as exc:
         raise SSHConnectionError(

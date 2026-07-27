@@ -33,13 +33,22 @@
 - **VERIFIED 2026-07-23:** production chatgpt2api remains outside the mutation
   scope. Host, port, container, and credential facts are intentionally absent
   without fresh dated discovery evidence.
-- **UNVERIFIED / BLOCKED 2026-07-23 19:29 +08:00 (L2):** the only local runtime
-  target record is ignored `storage/extensions.json`; it has no saved canonical
-  SSH host-key algorithm or `SHA256:` fingerprint. No SSH connection or remote
-  command was attempted. Therefore VPS isolation, ownership, Docker/Compose
-  state, ports, mounts, capacity, and health remain unverified. The configured
-  target must not be treated as production or development evidence until the
-  user confirms the isolated clone and supplies/approves its host-key trust pair.
+- **USER-CONFIRMED / BLOCKED 2026-07-27 (L2):** the user identified the selected
+  target as an isolated development machine and authorized exactly one
+  `read-only-discovery` SSH check. The local client established SSH transport,
+  but the server closed the session before current host-key validation or user
+  authentication. No discovery command, container action, deployment, or
+  mutation ran. This does not prove the current host identity, isolation,
+  ownership, Docker/Compose state, ports, mounts, capacity, or health. L2
+  remains blocked pending an SSH service/policy correction on the isolated
+  development machine and a fresh host-key validation.
+- **LOCAL 2026-07-27:** GenBox now classifies an SSH session closed by the server
+  separately from authentication rejection and protocol negotiation failure.
+  The UI instructs the user to keep the current identity and credential views;
+  it does not send the user back to pairing or request another confirmation
+  code. Focused extension suites passed `178` and `119` tests; the full local
+  suite passed `511`. No target identifiers, fingerprints, credentials, or raw
+  SSH errors are stored in this record.
 
 ## Phase 4 boundary
 
@@ -102,12 +111,11 @@ receiver proof from sender, isolated-VPS, and production claims.
 
 ## Exact next step
 
-Keep L2 paused. The local sender/receiver secret and data-boundary review is
-complete; no further P4 runtime proof is permitted without separate
-authorization. The next external gate, only after the user confirms an
-isolated development target and its canonical SSH host-key pair, is the
-approved read-only isolated-VPS discovery set.
-Do not treat this LOCAL evidence as VPS or production verification.
+L2 is blocked before its discovery command set. Correct the isolated
+development machine's SSH service or login policy through an independently
+trusted administration path, then obtain a fresh canonical host-key validation
+and authorize one bounded `read-only-discovery` retry. Do not treat the local
+UI/tests or the failed transport attempt as VPS or production verification.
 
 ## Read-only discovery target-role gate (2026-07-24)
 

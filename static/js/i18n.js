@@ -638,6 +638,7 @@
     "extensions.ssh_diag_host_verified":{"zh-CN":"诊断阶段：主机指纹已确认，连接在认证开始前结束。","en":"Diagnostic stage: the host key was verified, but the connection ended before authentication started."},
     "extensions.ssh_diag_transport":{"zh-CN":"诊断阶段：SSH 传输已建立，连接在主机确认或认证前结束。","en":"Diagnostic stage: SSH transport was established, but the connection ended before host verification or authentication."},
     "extensions.ssh_safe_failure":{"zh-CN":"SSH 客户端认证未完成，原始错误已隐藏。不能据此判断密码错误，请勿连续重试。","en":"SSH client authentication did not complete. Raw details were hidden; do not retry repeatedly."},
+    "extensions.ssh_no_repair_loop":{"zh-CN":"请保留当前服务器身份记录和凭据页面；这不是重新配对步骤。","en":"Keep the current server identity and credential view; this is not a pairing step."},
     "extensions.ssh_diagnostic_optional":{"zh-CN":"诊断 SSH（可选）","en":"Diagnose SSH (optional)"},
     "extensions.ssh_deploy_diagnostic":{"zh-CN":"测试 SSH 与部署权限","en":"Test SSH and deployment access"},
     "extensions.ssh_optional_notice":{"zh-CN":"凭据已填写。SSH 诊断是可选项，不是私网检测的前置条件。","en":"Credentials are ready. SSH diagnosis is optional and not a private-link prerequisite."},
