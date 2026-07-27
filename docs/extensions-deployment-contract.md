@@ -129,7 +129,7 @@ VPS 注册后，任务必须同时通过以下检查才标记成功：
 
 ### Phase A：扩展页与 SSH 编排基础
 
-- GenBox `扩展功能` 页面和 5 步状态机
+- GenBox `扩展功能` 页面、个人服务器部署入口和后续部署状态机
 - 目标存储、任务进度、取消/重试
 - SSH 主机指纹、固定部署清单、Docker 健康检查
 - 不接入生产 VPS 自动切换
@@ -172,33 +172,30 @@ remembered as available networks so a later phase can add one-click switching an
 recovery. Switching must re-run endpoint and HTTP checks before replacing the
 stored Push URL.
 
-### Trusted SSH-Session Pairing (Planned)
+### Trusted SSH-Session Pairing (Current SSH Compatibility Path)
 
-The current host-identity flow asks the user to manually confirm the canonical
-SSH host-key algorithm and `SHA256:` fingerprint pair. The next local Phase 4
-increment will make trusted SSH-session pairing the personal-user default. Once
-the host, port, and username are saved, a user who already trusts an SSH
-terminal session may run a GenBox-generated fixed one-line helper there and
+The personal-server onboarding keeps server details, host identity, and session
+credentials in separate views. When the user selects the currently available
+SSH path, a saved target without a trusted identity enters a dedicated
+confirmation view with no credential fields. A user who already trusts an SSH
+terminal session may run the GenBox-generated fixed one-line helper there and
 paste its one-line response into GenBox. The normal UI reports success plainly;
 the technical identity belongs in advanced details.
 
-This is a planned protocol, not a current endpoint or command. It uses a
-short-lived, single-use, in-memory challenge bound to the saved target identity
-version and candidate host-key pair. Completion re-probes and rejects mismatch,
-expiry, replay, target edits, unsupported algorithms, malformed responses, and
-conflicts with saved trust records. The start and completion requests accept no
-SSH credential and cause no GenBox remote command. The helper is backend-owned
-and fixed/versioned; the browser never supplies shell.
+The protocol uses a short-lived, single-use, in-memory challenge bound to the
+saved target identity version and candidate host-key pair. Completion re-probes
+and rejects mismatch, expiry, replay, target edits, unsupported algorithms,
+malformed responses, and conflicts with saved trust records. Start and
+completion accept no SSH credential and cause no GenBox remote command. The
+helper is backend-owned and fixed/versioned; the browser never supplies shell.
 
 An existing terminal session or known-host record is a user-supplied external
 trust anchor, not VPS ownership evidence and not a password or key substitute.
 The canonical trust pair is the only permitted saved outcome. Transient
-challenge, helper, and response transport is allowed only through future
-dedicated authenticated, CSRF-protected pairing endpoints; no endpoint name or
-path is specified or implemented here. Pairing material must not appear in
-public task, status, instance, or diagnostic projections; durable target,
-TaskStore, or runtime records; ordinary logs; browser storage; screenshots,
-URLs; or Git. Cancellation saves nothing. Users without an OpenSSH-compatible
-readable trusted session, including custom host-key paths, fall back to
-provider-console, known-host, or manual advanced verification.
+challenge, helper, and response material must not appear in public task,
+status, instance, or diagnostic projections; durable target, TaskStore, or
+runtime records; ordinary logs; browser storage; screenshots, URLs, or Git.
+Cancellation saves nothing. Users without an OpenSSH-compatible readable trusted
+session, including custom host-key paths, fall back to provider-console,
+known-host, or manual advanced verification.
 Provider-account verification is out of scope.

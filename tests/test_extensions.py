@@ -1145,7 +1145,10 @@ def test_identity_reconfirmation_hides_and_clears_session_credentials():
     assert "needsHostIdentityConfirmation=!!currentTargetId&&!targetDirty&&!trustedHostKey" in source
     assert "auth.classList.toggle('hidden',needsHostIdentityConfirmation)" in source
     assert "notice.classList.toggle('hidden',needsHostIdentityConfirmation)" in source
-    assert "recovery.classList.toggle('hidden',!needsHostIdentityConfirmation)" in source
+    assert "recovery.classList.toggle('hidden',!hostKeyReconfirmationRequired)" in source
+    assert 'id="extOnboardingIdentity"' in markup
+    assert 'id="extOnboardingCredentials"' in markup
+    assert "['extHostKeyReconfirmation','extHostKeyPairing','extHostKeyConfirm']" in source
     save_target = source.split("window.extensionSaveTarget=async function()", 1)[1].split("window.extensionDeleteTarget", 1)[0]
     assert "if(!trustedHostKey)clearSessionCredentials()" in save_target
     assert "extensions.identity_reconfirm_credential_title" in messages
@@ -1183,18 +1186,49 @@ def test_server_connector_entry_is_honest_and_preserves_ssh_fallback():
 
     assert 'id="extConnectorPathTitle"' in markup
     assert 'id="extUseSshFallbackBtn"' in markup
-    assert 'onclick="extensionUseSshFallback()"' in markup
+    assert 'onclick="extensionBeginSshSetup()"' in markup
     assert "extensions.connection_connector_unavailable" in markup
     assert "extensions.connection_ssh_status" in messages
     assert "extensions.connection_connector_unavailable" in messages
     assert "window.extensionUseSshFallback=function()" in source
     fallback = source.split("window.extensionUseSshFallback=function()", 1)[1].split("function message", 1)[0]
     assert "_authFetch" not in fallback
-    assert "extensionNext(1)" in fallback
+    assert "window.extensionBeginSshSetup()" in fallback
     assert ".extension-connection-path-grid" in styles
     assert ".extension-connection-option button{width:100%}" in styles
     assert "remains **SSH (advanced)**" in strategy
     assert "does\nnot claim an installed connector" in strategy.lower()
+
+
+def test_personal_onboarding_uses_exclusive_views_and_preserves_the_deploy_path():
+    root = Path(__file__).parents[1]
+    source = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    markup = (root / "static" / "index.html").read_text(encoding="utf-8")
+    styles = (root / "static" / "css" / "extensions.css").read_text(encoding="utf-8")
+    strategy = (root / "docs" / "P4-PERSONAL-SERVER-ONBOARDING-UX-STRATEGY.md").read_text(encoding="utf-8")
+
+    for view_id in (
+        "extOnboardingLanding",
+        "extOnboardingDetails",
+        "extOnboardingIdentity",
+        "extOnboardingCredentials",
+        "extOnboardingReady",
+    ):
+        assert f'id="{view_id}"' in markup
+    assert "function personalOnboardingView()" in source
+    assert "if(!currentTargetId||targetDirty)return 'details'" in source
+    assert "if(!trustedHostKey)return 'identity'" in source
+    assert "if(!hasCredential()||!sshVerified)return 'credentials'" in source
+    assert "return 'ready'" in source
+    assert "function renderPersonalOnboarding()" in source
+    assert "landing.classList.toggle('hidden',view!=='landing')" in source
+    assert "credentials.classList.toggle('hidden',view!=='credentials')" in source
+    assert "ready.classList.toggle('hidden',view!=='ready')" in source
+    assert "if(!trustedHostKey)clearSessionCredentials()" in source
+    assert "window.extensionBeginDeploymentPlanning=function(){if(requireVerifiedSsh())extensionNext(2)}" in source
+    assert ".extension-onboarding-view" in styles
+    assert "Remove the user-visible `连接服务器` mega-step" in strategy
+    assert "SSH still binds a target to its canonical host-key algorithm and SHA-256" in strategy
 
 
 def test_confirm_target_host_key_is_cross_thread_compare_and_swap(tmp_path, monkeypatch):
@@ -1495,8 +1529,8 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "Do not deploy again; reload and check task status manually." in translations
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
-    assert '<script src="/static/js/i18n.js?v=13"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=18"></script>' in html
+    assert '<script src="/static/js/i18n.js?v=14"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=19"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):

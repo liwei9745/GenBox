@@ -219,6 +219,45 @@ Do not treat this LOCAL evidence as VPS or production verification.
   submit a credential, or attempt SSH, VPS, remote-container, production, or
   deployment access.
 
+## Personal Server Onboarding Redesign (2026-07-27)
+
+- **Evidence class:** `LOCAL` only. The user-visible `连接服务器` mega-step has
+  been removed from the initial deployment experience. The entry is now
+  `开始部署`: it honestly presents `服务器连接器（推荐）` as unavailable and
+  `使用 SSH 设置服务器` as the current working compatibility path. This does not
+  implement a connector, OAuth flow, VPS connection, SSH pairing, or deployment.
+- **Flow:** the SSH path now renders one exclusive view at a time: server
+  details, server identity confirmation, temporary credential check, then a
+  ready-to-plan state. A changed server identity clears session credentials and
+  stays in its own recovery view; credentials are neither shown as masked text
+  nor persisted. The existing discovery, safety-plan, deployment, and network
+  sequence remains behind the verified SSH gate.
+- **Safety baseline:** canonical SSH host-key algorithm plus `SHA256:`
+  fingerprint verification, fail-closed identity changes, session-only
+  credentials, backend-owned fixed operations, production read-only treatment,
+  isolated-development deployment gate, and receipt-gated source retention are
+  unchanged. Personal-use language now hides technical identity details from
+  the normal path without weakening those controls.
+- **Research and decisions:**
+  `docs/P4-PERSONAL-SERVER-ONBOARDING-UX-STRATEGY.md` records applicable public
+  product references and the new state model. ADR-021, the SSH pairing strategy,
+  the deployment contract, and deployment invariants now distinguish a personal
+  safety baseline from enterprise-oriented presentation.
+- **Verification:** `node --check static/js/extensions.js`; `node --check
+  static/js/i18n.js`; `git diff --check`; focused
+  `python -m pytest tests/test_extensions.py -q` -> `177 passed`; full
+  `python -m pytest -q` -> `509 passed`. Local browser
+  `http://127.0.0.1:8892/#/extensions` loaded the revised entry, opened only the
+  server-details view after its SSH action, kept identity and credential views
+  hidden, reported no page errors, and had no horizontal overflow at the
+  checked desktop and 390px layouts. No target was saved and no SSH, VPS,
+  remote-container, production, OAuth, pairing, or deployment action ran.
+- **Next local entry:** keep L2 paused. Reopen the local Extensions page to
+  review the static onboarding states only. A real server connector requires its
+  own implementation milestone for installable agent, enrollment, authenticated
+  outbound transport, revocation, capability allowlists, and local tests; it
+  must not block the current SSH deployment mainline.
+
 ## Resume constraints
 
 - Require SSH host-key verification; production is read-only and all development

@@ -418,13 +418,14 @@ the intended host.
 
 ### Decision
 
-The next Phase 4 local increment will implement trusted SSH-session pairing as
-the personal-user default for first-time host trust. After the user saves a
-target host, port, and username, GenBox will create a short-lived, single-use,
-in-memory challenge bound to the saved target identity version and candidate
-host-key algorithm/fingerprint pair. The user runs a GenBox-generated fixed,
-versioned one-line helper in an SSH terminal session they already trust and
-pastes its one-line response into GenBox.
+The local SSH compatibility path uses trusted SSH-session pairing for first-time
+host trust. It is not a user-visible all-in-one connection step: the current
+onboarding isolates server details, identity confirmation, and credential
+checks. After the user saves a target host, port, and username, GenBox creates
+a short-lived, single-use, in-memory challenge bound to the saved target
+identity version and candidate host-key algorithm/fingerprint pair. The user
+runs a GenBox-generated fixed, versioned one-line helper in an SSH terminal
+session they already trust and pastes its one-line response into GenBox.
 
 Pairing completion re-probes the host and rejects mismatched identity, expired
 or replayed challenge, edited target, unsupported algorithm, malformed response,
@@ -444,16 +445,14 @@ persists nothing. Provider-account verification is out of scope.
 
 The primary UI can say that server identity has been verified and reserve the
 algorithm/fingerprint for advanced details. The pairing challenge, helper,
-response, credentials, raw pairing observations, and command text may travel
-only through future dedicated authenticated, CSRF-protected pairing endpoints;
-their names and paths are unspecified and unimplemented. They must not enter
-public task, status, instance, or diagnostic projections; durable target,
-TaskStore, or runtime records; ordinary logs; browser storage; screenshots,
-URLs; or Git. The canonical trust pair is the only permitted saved outcome.
-This is an accepted future implementation contract; it does not claim that
-pairing endpoints or a helper exist today. It requires local tests and an
-independent fixed-commit review before separately authorized isolated
-VPS/browser single-image E2E work resumes.
+response, credentials, raw pairing observations, and command text are confined
+to dedicated authenticated pairing handling and must not enter public task,
+status, instance, or diagnostic projections; durable target, TaskStore, or
+runtime records; ordinary logs; browser storage; screenshots, URLs, or Git. The
+canonical trust pair is the only permitted saved outcome. Current pairing work
+has only local test and browser evidence; it still requires separately
+authorized isolated-VPS/browser single-image E2E work before it contributes to
+Phase 4 acceptance.
 
 ## ADR-019: Message Channels Are Event-Driven Adapters With Capability-Scoped Commands
 
@@ -562,3 +561,40 @@ product direction visible without delaying Phase 4's existing deploy-capable
 route. Connector implementation becomes a separate, testable milestone; its
 availability cannot be inferred from copy, a catalog item, an enrollment code,
 or a mock state.
+
+## ADR-021: Personal Server Onboarding Separates Identity From Credentials
+
+**Status:** Accepted
+**Date:** 2026-07-27
+
+### Context
+
+The former user-visible `连接服务器` step combined target metadata, host-key
+identity, session credentials, and deployment permission checks in one panel.
+The backend intentionally kept these states separate, but the shared UI made a
+successful identity confirmation look like a loop back to an empty password
+field. Personal users should not need to interpret a fingerprint, but a changed
+host identity remains a meaningful wrong-server or interception risk.
+
+### Decision
+
+Replace the mega-step with a single deployment task containing separate,
+mutually exclusive server-detail, identity-confirmation, credential-check, and
+recovery views. The normal UI reports plain-language identity state; canonical
+SSH algorithm and SHA-256 fingerprint verification remains backend-enforced and
+available only in advanced diagnostics.
+
+An identity change clears every session credential and can only enter the
+dedicated reconfirmation view. It never restores a password as masked text and
+does not silently accept a new identity. SSH remains the current deploy-capable
+path; the future connector is not made functional by this UX change.
+
+### Consequences
+
+- Personal users see one next action at a time without weakening target trust,
+  secret handling, fixed backend operations, source retention, or environment
+  isolation.
+- Existing SSH discovery, safety-plan, deployment, and private-network stages
+  remain reusable after the credential check succeeds.
+- The pairing protocol remains an SSH confirmation capability, not a universal
+  first-screen requirement or a replacement for credentials.

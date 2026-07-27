@@ -12,7 +12,7 @@ claim that a local test or a plan is an isolated-VPS end-to-end result.
 
 | ID | Requirement and protected failure |
 |---|---|
-| DEP-INV-001 | SSH host-key verification and fixed adapter commands are mandatory. A trusted SSH host identity is the canonical `(algorithm, SHA256:fingerprint)` pair; the browser supplies structured intent, never shell. This prevents target substitution and command injection. |
+| DEP-INV-001 | Personal deployment baseline: SSH host-key verification and fixed adapter commands are mandatory. A trusted SSH host identity is the canonical `(algorithm, SHA256:fingerprint)` pair; the browser supplies structured intent, never shell. The normal UI need not expose these technical details, but this prevents wrong-server connection and command injection. |
 | DEP-INV-002 | Production sources are read-only. A development deployment uses distinct directory, data, container, Compose project, port, management key, and Push identity. This prevents production mutation and resource overlap. |
 | DEP-INV-003 | Docker bindings are a canonical, multiplicity-preserving multiset of `(host_ip, host_port, container_port, protocol)`. Set conversion is forbidden. |
 | DEP-INV-004 | Phase 4 TCP listener evidence is a separate complete canonical multiset of `(tcp, host_port)` from reliable `ss`/`netstat` evidence. It neither infers address/container-port exposure nor generalizes to UDP. |
