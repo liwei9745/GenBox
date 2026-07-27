@@ -1,6 +1,6 @@
 # Current Project Status
 
-**Last updated:** 2026-07-24
+**Last updated:** 2026-07-27
 **Current branch:** `codex/p4-deploy-plan-ux-eai`
 **Current phase:** Phase 4 Single-Image Push End To End - **In Progress**
 
@@ -163,6 +163,38 @@ Do not treat this LOCAL evidence as VPS or production verification.
 - **Verification:** focused extension tests passed locally. No pairing, SSH,
   VPS, remote container, production, or deployment action was performed for
   this review.
+
+## Server Connector Direction, SSH Mainline Preserved (2026-07-27)
+
+- **Evidence class:** `LOCAL` only. The Extensions page now makes the intended
+  beginner-facing product direction visible: `服务器连接器（推荐）` is explicitly
+  marked `准备中`, while `SSH 连接（高级方式）` is explicitly marked `当前可用`.
+  This is an honest route selector, not a connector implementation, enrollment,
+  authenticated transport, provider OAuth connection, VPS connection, or
+  deployment result.
+- **Mainline preservation:** the only active action is `使用 SSH 继续`. It focuses
+  the existing Step 1 target form and then retains the current deploy-capable
+  sequence unchanged: save target, confirm host identity, supply a transient
+  SSH credential, test access, run read-only discovery, and prepare the bounded
+  safety plan. The fallback action creates no API request, target, credential,
+  pairing, SSH, network, or deployment operation. The unavailable connector
+  cannot block or replace this path.
+- **Design boundary:** `docs/P4-SERVER-CONNECTOR-UX-STRATEGY.md` and ADR-020
+  specify that a real connector needs an installable agent, identity and
+  enrollment lifecycle, authenticated outbound transport, signed
+  capability-scoped intents, allowlisted agent operations, redacted audit
+  events, and local/isolated-VPS evidence before it can become deploy-capable.
+  No web terminal is added; browser requests still cannot submit arbitrary
+  remote shell commands. Generic OAuth is not treated as an SSH replacement.
+- **Verification:** `node --check static/js/extensions.js`; `node --check
+  static/js/i18n.js`; focused `python -m pytest tests/test_extensions.py -q`
+  -> `175 passed`; full `python -m pytest -q` -> `507 passed`; and `git diff
+  --check` passed locally. Local browser verification at
+  `http://127.0.0.1:8892/#/extensions` confirmed the SSH fallback focuses the
+  target form, shows its local guidance, produces no relevant page error, and
+  has no horizontal overflow at a 390px viewport. No form was submitted and no
+  pairing, SSH, VPS, remote container, production, OAuth, or deployment action
+  was performed.
 
 ## Resume constraints
 

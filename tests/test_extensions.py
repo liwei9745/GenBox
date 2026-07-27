@@ -1152,6 +1152,30 @@ def test_pairing_help_exposes_a_local_only_advanced_recovery_path():
     assert ".extension-pairing-help" in styles
 
 
+def test_server_connector_entry_is_honest_and_preserves_ssh_fallback():
+    root = Path(__file__).parents[1]
+    source = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    markup = (root / "static" / "index.html").read_text(encoding="utf-8")
+    messages = (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+    styles = (root / "static" / "css" / "extensions.css").read_text(encoding="utf-8")
+    strategy = (root / "docs" / "P4-SERVER-CONNECTOR-UX-STRATEGY.md").read_text(encoding="utf-8")
+
+    assert 'id="extConnectorPathTitle"' in markup
+    assert 'id="extUseSshFallbackBtn"' in markup
+    assert 'onclick="extensionUseSshFallback()"' in markup
+    assert "extensions.connection_connector_unavailable" in markup
+    assert "extensions.connection_ssh_status" in messages
+    assert "extensions.connection_connector_unavailable" in messages
+    assert "window.extensionUseSshFallback=function()" in source
+    fallback = source.split("window.extensionUseSshFallback=function()", 1)[1].split("function message", 1)[0]
+    assert "_authFetch" not in fallback
+    assert "extensionNext(1)" in fallback
+    assert ".extension-connection-path-grid" in styles
+    assert ".extension-connection-option button{width:100%}" in styles
+    assert "remains **SSH (advanced)**" in strategy
+    assert "does\nnot claim an installed connector" in strategy.lower()
+
+
 def test_confirm_target_host_key_is_cross_thread_compare_and_swap(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
     store.host_key_pairings.clear()
@@ -1450,8 +1474,8 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "Do not deploy again; reload and check task status manually." in translations
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
-    assert '<script src="/static/js/i18n.js?v=11"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=16"></script>' in html
+    assert '<script src="/static/js/i18n.js?v=12"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=17"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):

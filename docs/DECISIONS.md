@@ -507,3 +507,58 @@ channels.
   media, rate-limit, and recovery contracts are implemented.
 - High-risk actions may require an additional GenBox confirmation layer even
   after the message channel itself is authenticated.
+
+## ADR-020: Server Connector Is The Future Default, SSH Remains A Working Fallback
+
+**Status:** Accepted
+**Date:** 2026-07-27
+
+### Context
+
+The current deployment path can operate through SSH after host identity is
+confirmed and a session-only credential is supplied. This is deploy-capable but
+asks a beginner to manage a trusted terminal and a temporary credential. A
+server connector can eventually offer a simpler model: an agent installed by
+the user on the intended server initiates a restricted, authenticated connection
+back to GenBox and accepts only capability-scoped operations.
+
+There is no installable agent, authenticated relay/private-network transport,
+device enrollment, or allowlisted connector-operation adapter in this release.
+Calling a visual placeholder "connected" would block the working Phase 4 path
+and create a false security claim.
+
+### Decision
+
+Present the server connector as the preferred future path, with its actual
+availability shown explicitly. Until all connector prerequisites exist, the UI
+must expose a single obvious SSH continuation and preserve the current SSH
+deployment, discovery, safety-plan, and private-network sequence unchanged.
+
+A deploy-capable connector requires all of the following before it can replace
+SSH for a target:
+
+- an installable, versioned agent with an independently identifiable device key
+- one-time enrollment, expiry, rotation, revocation, and target binding
+- an authenticated outbound relay or an established private-network transport
+- signed, capability-scoped backend intents and agent-side allowlisted actions
+- redacted audit events and no secret-bearing command/output persistence
+- adapter-level discovery, deployment, recovery, and local/isolated-VPS tests
+
+GenBox will not embed an interactive web terminal. Browser requests remain
+unable to submit arbitrary shell commands. OAuth may be a future cloud-provider
+selection or ownership signal for a particular provider, but it is not a
+generic replacement for access to arbitrary existing SSH servers.
+
+Whenever SSH is used, canonical host-key algorithm and SHA-256 fingerprint
+verification remain mandatory. The connector may simplify credentials, but it
+must not silently change the SSH trust model or weaken the existing fail-closed
+host-key checks.
+
+### Consequences
+
+The current increment is an honest UI and protocol boundary, not a connector
+implementation and not end-to-end server evidence. It makes the primary
+product direction visible without delaying Phase 4's existing deploy-capable
+route. Connector implementation becomes a separate, testable milestone; its
+availability cannot be inferred from copy, a catalog item, an enrollment code,
+or a mock state.

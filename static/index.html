@@ -827,6 +827,21 @@
             <div class="extension-guide-actions"><button type="button" class="btn-ghost" id="extGuideAdvancedBtn" onclick="extensionToggleAdvanced()" aria-expanded="false"><span data-i18n="extensions.show_advanced">查看高级设置和日志</span></button><button type="button" class="btn-primary" id="extGuidePrimaryBtn" onclick="extensionPrimaryAction()"><span data-i18n="common.continue">继续</span></button></div>
           </section>
           <div class="extension-pane" data-pane="1">
+            <section class="extension-connection-paths" aria-labelledby="extConnectionPathsTitle">
+              <div class="extension-connection-paths-heading"><span data-i18n="extensions.connection_path_kicker">Connection method</span><h3 id="extConnectionPathsTitle"><span data-i18n="extensions.connection_path_title">Choose the connection method that fits you</span></h3><p data-i18n="extensions.connection_path_help">A server connector is the future default; until it is truly available, SSH still completes the current deployment flow.</p></div>
+              <div class="extension-connection-path-grid">
+                <article class="extension-connection-option extension-connection-option-recommended" aria-labelledby="extConnectorPathTitle">
+                  <div><span class="extension-connection-status" data-i18n="extensions.connection_connector_status">In preparation</span><h4 id="extConnectorPathTitle" data-i18n="extensions.connection_connector_title">Server connector (recommended)</h4></div>
+                  <p data-i18n="extensions.connection_connector_body">The connector runs on your server and initiates a restricted connection; it does not give SSH passwords or private keys to the browser.</p>
+                  <small data-i18n="extensions.connection_connector_unavailable">This version has no installable connector or trusted transport yet, so it cannot claim to be connected or deploy.</small>
+                </article>
+                <article class="extension-connection-option" aria-labelledby="extSshPathTitle">
+                  <div><span class="extension-connection-status extension-connection-status-ready" data-i18n="extensions.connection_ssh_status">Available now</span><h4 id="extSshPathTitle" data-i18n="extensions.connection_ssh_title">SSH connection (advanced)</h4></div>
+                  <p data-i18n="extensions.connection_ssh_body">This is the complete path available now: save the server, confirm its identity, enter a temporary credential, and test deployment access.</p>
+                  <button type="button" class="btn-primary" id="extUseSshFallbackBtn" onclick="extensionUseSshFallback()" data-i18n="extensions.connection_ssh_button">Continue with SSH</button>
+                </article>
+              </div>
+            </section>
             <h2 tabindex="-1"><span data-i18n="extensions.connect_vps">连接 VPS</span></h2>
             <div class="extension-target-bar">
               <label><span data-i18n="extensions.saved_vps">已保存 VPS</span><select id="extTargetSelect" onchange="extensionLoadTarget(this.value)"><option value=""><span data-i18n="extensions.current_unsaved">当前未保存</span></option></select></label>
@@ -1239,9 +1254,9 @@
       } catch (error3) {}
     })();
   </script>
-  <script src="/static/js/i18n.js?v=11"></script>
+  <script src="/static/js/i18n.js?v=12"></script>
 <script src="/static/js/app-all.js?v=36"></script>
 <script src="/static/js/sync.js?v=7"></script>
-<script src="/static/js/extensions.js?v=16"></script>
+<script src="/static/js/extensions.js?v=17"></script>
 </body>
 </html>
