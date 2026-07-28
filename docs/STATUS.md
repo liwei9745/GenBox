@@ -136,6 +136,34 @@ trusted administration path, then obtain a fresh canonical host-key validation
 and authorize one bounded `read-only-discovery` retry. Do not treat the local
 UI/tests or the failed transport attempt as VPS or production verification.
 
+## Phase 5 sender local batch and schedule work (2026-07-28)
+
+- **Evidence class:** `LOCAL` only. The separate sender worktree now has a
+  durable manual batch service for Gallery selections and server-indexed date
+  range previews. Items persist only a relative path, SHA-256, status, attempt
+  count, timestamps, and a fixed recovery message. Source images are retained;
+  no cleanup path was added.
+- **Scheduled local behavior:** the sender has a disabled-by-default weekly
+  schedule with optional date bounds, an overlap scan cursor, a short durable
+  worker lease, and no more than three automatic retries for a failed scheduled
+  item. All scheduled sends enter the existing batch service. This is not
+  isolated-VPS, private-network, receiver, or production evidence.
+- **Verification:** focused sender Push tests passed `17`; complete sender
+  unittest discovery passed `32`; Python compilation, Vue production build,
+  and `git diff --check` passed. The tests use synthetic relative paths and
+  in-memory image bytes only.
+- **Browser limitation:** the local sender process listened on loopback, but
+  the in-app browser blocked navigation before page load and the sender source
+  backend did not serve its Vue source build at the root URL. Therefore no
+  Phase 5 browser interaction is claimed. This must be retried through the
+  sender's local Vite UI or a packaged local static build before calling the
+  Phase 5 UI flow browser-verified.
+- **Next local entry:** review the sender diff, run the local Vite UI with mock
+  API responses to exercise multi-select, date-range preview, progress close,
+  cancellation, failure retry, and weekly schedule controls. Then commit the
+  sanitized sender change separately. Keep Phase 5 marked planned until its
+  local UI evidence and later isolated-VPS gate are recorded.
+
 ## Read-only discovery target-role gate (2026-07-24)
 
 - **Evidence class:** `LOCAL` only. The extension target form now requires an
