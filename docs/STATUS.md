@@ -145,8 +145,9 @@ UI/tests or the failed transport attempt as VPS or production verification.
   no cleanup path was added.
 - **Scheduled local behavior:** the sender has a disabled-by-default weekly
   schedule with optional date bounds, an overlap scan cursor, a short durable
-  worker lease, and no more than three automatic retries for a failed scheduled
-  item. All scheduled sends enter the existing batch service. This is not
+  worker lease protected by an atomic cross-process lock, and no more than three
+  automatic retries for a failed scheduled item. All scheduled sends enter the
+  existing batch service. This is not
   isolated-VPS, private-network, receiver, or production evidence.
 - **Verification:** focused schedule tests passed `5`; complete sender
   unittest discovery passed `33`; Python compilation, Vue production build,
