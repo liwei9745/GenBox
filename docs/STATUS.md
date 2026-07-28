@@ -154,12 +154,12 @@ UI/tests or the failed transport attempt as VPS or production verification.
   and `git diff --check` passed. The tests use synthetic relative paths and
   in-memory image bytes only. The schedule API tests also prove administrator
   protection and reject request-side Push-key projection.
-- **Browser limitation:** the local sender process listened on loopback, but
-  the in-app browser blocked navigation before page load and the sender source
-  backend did not serve its Vue source build at the root URL. Therefore no
-  Phase 5 browser interaction is claimed. This must be retried through the
-  sender's local Vite UI or a packaged local static build before calling the
-  Phase 5 UI flow browser-verified.
+- **Browser baseline:** local Vite at `127.0.0.1:5173` rendered the sender
+  login page. The source backend does not serve Vue assets at its root by
+  design; Docker and the installer copy the built `web-vue/dist` files into
+  `web_dist`. No authenticated Phase 5 browser action is claimed yet, because
+  this check deliberately did not submit a credential, inspect saved settings,
+  or use real image data.
 - **Next local entry:** review the sender diff, run the local Vite UI with mock
   API responses to exercise multi-select, date-range preview, progress close,
   cancellation, failure retry, and weekly schedule controls. Then commit the
