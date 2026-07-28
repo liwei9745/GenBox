@@ -700,3 +700,25 @@ UI/tests or the failed transport attempt as VPS or production verification.
   image ID. This is not image-build, VPS, or deployment evidence.
 - **Next local entry:** restore a running local Docker Engine, build and inspect
   the tagged image locally, then run only local receiver/sender smoke tests.
+
+## Local sender runtime-smoke image (2026-07-28)
+
+- **Evidence class:** `LOCAL` only. A temporary container created from local
+  image `genbox/chatgpt2api:2.7.0-genbox-p4.0.1-runtime-smoke` started on a
+  loopback-only port, reported version `2.7.0-genbox-p4.0.1-dev`, and exposed
+  the GenBox Push settings route. The temporary container was removed after
+  verification.
+- **Verification:** an unauthenticated request to the settings route was
+  rejected; an authorized local test request returned only the masked settings
+  shape and no Push key. No Push was configured or sent, and no source image,
+  SSH, VPS, remote container, production system, registry push, or external
+  deployment was used.
+- **Build qualification:** this image is a local runtime smoke artifact made by
+  overlaying the current complete application source and Vue build onto an
+  existing local chatgpt2api image. It proves local startup and the new route
+  boundary, but does not replace a clean build from the repository Dockerfile.
+  The canonical Dockerfile still cannot resolve its base-image metadata because
+  Docker Desktop's configured local registry mirror returns EOF.
+- **Next local entry:** repair or replace that Docker registry mirror, then
+  rebuild from the repository Dockerfile and repeat the same loopback-only
+  smoke checks before any isolated-VPS work.
