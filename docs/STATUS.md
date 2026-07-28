@@ -792,3 +792,27 @@ UI/tests or the failed transport attempt as VPS or production verification.
   source revisions as separate local steps, then use this harness after any
   Push-protocol or image-build change. Keep isolated-VPS verification behind
   its explicit lifecycle gate.
+
+## Per-generation GenBox Push sender flow (2026-07-28)
+
+- **Evidence class:** `LOCAL` only. The separate chatgpt2api sender worktree
+  now offers an opt-in "Push to GenBox after generation" setting in Studio.
+  A generated image is saved first and then added to a persistent local outbox;
+  Push runs independently, so an unavailable destination cannot turn a
+  successful image generation into a failure. Failed items keep their source
+  and expose a scoped retry action. Restart recovery requeues an interrupted
+  in-flight item. Prompt text is transient only and is not written to the
+  outbox state.
+- **Verification:** sender unittest discovery passed `22`; Python compilation
+  and Vue production build passed. A current local Dockerfile image passed the
+  disposable two-container v1 probe, first-import, idempotent-retry, and
+  source-retention smoke harness. A loopback-only browser check of the sender
+  Studio confirmed the setting, its local-save/failure boundary text, and its
+  checkbox interaction. All test credentials and image data were synthetic.
+- **Safety boundary:** no real image, prompt, SSH credential, Push key, VPS,
+  remote container, production system, registry push, or external deployment
+  was used. This does not prove an isolated-VPS route, a real upstream image
+  generation, batch Push, scheduled Push, cleanup, or production behavior.
+- **Next local entry:** treat the next work as a separate Phase 5
+  batch/scheduler design or an explicitly authorized isolated-VPS Phase 4
+  gate; neither is implied by this local evidence.
