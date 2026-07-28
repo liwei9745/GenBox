@@ -769,3 +769,26 @@ UI/tests or the failed transport attempt as VPS or production verification.
 - **Next local entry:** add this disposable two-container round trip to a
   repeatable local test harness, then keep batch, scheduling, and cleanup work
   in their separate roadmap phases.
+
+## Repeatable local GenBox Push smoke harness (2026-07-28)
+
+- **Evidence class:** `LOCAL` only. The separate chatgpt2api worktree now has
+  a disposable two-container smoke harness for a prebuilt local sender image
+  and a prebuilt local GenBox receiver image. It creates an internal Docker
+  network with per-run labels, publishes no ports, and uses generated test-only
+  credentials from temporary environment files that are removed on exit.
+- **Verification:** the harness passed the authenticated Push v1 probe, first
+  synthetic-image import, idempotent retry, source SHA-256 receipt, receiver
+  image dimensions and metadata, and sender source-retention check. Its focused
+  harness tests passed `7`; the sender Push test suite passed `9`; Python
+  syntax compilation and `git diff --check` passed. Normal completion left no
+  labeled containers, networks, or temporary credential files.
+- **Safety boundary:** it refuses implicit or `latest` image references and
+  never builds, pulls, publishes, or deploys. Cleanup removes only exact
+  resources whose fixed local-smoke label and per-run label both match; a label
+  mismatch fails closed. This is not VPS, production, registry, batch, or
+  scheduled-Push evidence.
+- **Next local entry:** build the sender and receiver images from their current
+  source revisions as separate local steps, then use this harness after any
+  Push-protocol or image-build change. Keep isolated-VPS verification behind
+  its explicit lifecycle gate.
