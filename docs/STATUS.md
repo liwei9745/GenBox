@@ -679,3 +679,24 @@ UI/tests or the failed transport attempt as VPS or production verification.
   `494 passed`; both extension JavaScript syntax checks passed.
 - **Boundary:** two unrelated pre-existing i18n warnings remain; they do not
   affect the P4 host-key pairing flow and are not claimed as fixed here.
+
+## Local GenBox sender development image slice (2026-07-28)
+
+- **Evidence class:** `LOCAL` only. The separate chatgpt2api worktree on branch
+  `codex/genbox-p4-sender-image` now contains the first GenBox Push v1 sender
+  slice, committed as `23a674e`. It stores a destination/source configuration,
+  masks the Push key in API responses, probes the receiver, validates the
+  returned contract/source/SHA-256 receipt, and always retains the source image.
+- **Verification:** sender focused Python tests passed `8`; Python compilation
+  and `git diff --check` passed; the Vue production build passed with
+  `npm run build`. Tests use local fakes only and no real credentials or image
+  data.
+- **Security boundary:** redirects are refused so credentials and image bytes
+  are not forwarded to a different origin; non-boolean deletion hints are not
+  treated as permission. No source deletion, batch push, scheduling, arbitrary
+  remote shell, SSH, VPS, or production action was performed.
+- **Build blocker:** local Docker Desktop remained `starting`; the attempted
+  build returned a local Docker Engine 500 ping error and produced no verified
+  image ID. This is not image-build, VPS, or deployment evidence.
+- **Next local entry:** restore a running local Docker Engine, build and inspect
+  the tagged image locally, then run only local receiver/sender smoke tests.
