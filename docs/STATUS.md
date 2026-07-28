@@ -747,3 +747,25 @@ UI/tests or the failed transport attempt as VPS or production verification.
   add a mocked Push round-trip container test if needed, and separately resolve
   the environment's Docker Hub proxy route before requiring clean-machine
   rebuild evidence.
+
+## Local sender-receiver Push container round trip (2026-07-28)
+
+- **Evidence class:** `LOCAL` only. The canonical chatgpt2api sender image and
+  a freshly built current GenBox receiver image ran on a temporary Docker-only
+  network with one synthetic 1x1 PNG and test-only credentials. The sender
+  completed the authenticated v1 probe, the first Push imported the image, and
+  the identical retry returned an accepted idempotent status. The sender also
+  verified that its source file remained present after both requests.
+- **Fix:** this live local check exposed that `curl_cffi` does not support the
+  `files` request argument used by the sender implementation. Sender commit
+  `6a099cd` now creates a `CurlMime` multipart body, matching the installed
+  library API. Focused and full sender unittest discovery each passed `8`, and
+  the canonical sender Dockerfile built successfully before the round trip.
+- **Cleanup and boundary:** temporary sender/receiver containers, network,
+  synthetic image, and test-only configuration were removed. No user image,
+  Push key, credential, SSH, VPS, remote container, production system, or
+  external deployment was used. This proves a local container round trip only;
+  isolated-VPS and production evidence remain unverified.
+- **Next local entry:** add this disposable two-container round trip to a
+  repeatable local test harness, then keep batch, scheduling, and cleanup work
+  in their separate roadmap phases.
