@@ -722,3 +722,28 @@ UI/tests or the failed transport attempt as VPS or production verification.
 - **Next local entry:** repair or replace that Docker registry mirror, then
   rebuild from the repository Dockerfile and repeat the same loopback-only
   smoke checks before any isolated-VPS work.
+
+## Local canonical sender image build (2026-07-28)
+
+- **Evidence class:** `LOCAL` only. The stale Docker Desktop registry mirror
+  was removed from the local daemon configuration after a backup was created.
+  Direct Docker Hub metadata requests still fail through the local network
+  path, so compatible Node and Python base images were fetched from an
+  alternate registry into the local Docker cache and tagged locally with the
+  names required by the unchanged repository Dockerfile.
+- **Verification:** `docker build --pull=false` using the original Dockerfile
+  completed and produced local image `genbox/chatgpt2api:2.7.0-genbox-p4.0.1-dev`.
+  A loopback-only temporary container started from that image, returned version
+  `2.7.0-genbox-p4.0.1-dev`, rejected an unauthenticated settings request, and
+  returned masked GenBox Push settings for a local authorized test request. The
+  temporary container and earlier overlay smoke image were removed afterward.
+- **Qualification:** this is a reproducible local Dockerfile build while the
+  two required base-image tags remain cached. It is not a registry-pushed
+  artifact, clean-machine proof, isolated-VPS proof, cross-project Push E2E,
+  or production evidence. The upstream Vue lockfile also reports `11` existing
+  dependency audit findings during `npm ci`; no audit remediation was included
+  in this sender slice.
+- **Next local entry:** retain the cache-backed image for local development,
+  add a mocked Push round-trip container test if needed, and separately resolve
+  the environment's Docker Hub proxy route before requiring clean-machine
+  rebuild evidence.
