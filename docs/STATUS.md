@@ -148,10 +148,11 @@ UI/tests or the failed transport attempt as VPS or production verification.
   worker lease, and no more than three automatic retries for a failed scheduled
   item. All scheduled sends enter the existing batch service. This is not
   isolated-VPS, private-network, receiver, or production evidence.
-- **Verification:** focused sender Push tests passed `17`; complete sender
-  unittest discovery passed `32`; Python compilation, Vue production build,
+- **Verification:** focused schedule tests passed `5`; complete sender
+  unittest discovery passed `33`; Python compilation, Vue production build,
   and `git diff --check` passed. The tests use synthetic relative paths and
-  in-memory image bytes only.
+  in-memory image bytes only. The schedule API tests also prove administrator
+  protection and reject request-side Push-key projection.
 - **Browser limitation:** the local sender process listened on loopback, but
   the in-app browser blocked navigation before page load and the sender source
   backend did not serve its Vue source build at the root URL. Therefore no
