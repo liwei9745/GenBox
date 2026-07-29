@@ -186,6 +186,32 @@ UI/tests or the failed transport attempt as VPS or production verification.
   recorded. The coordinator is intentionally an in-process guarantee and is not
   evidence of multi-process or isolated-VPS behavior.
 
+## Phase 5 local transfer configuration binding follow-up (2026-07-29)
+
+- **Evidence class:** `LOCAL` only. The sender now captures one in-memory,
+  non-persisted destination configuration context before deriving its in-flight
+  transfer key. The physical send receives that same context and rejects the
+  request before any receiver probe or upload if the configured destination
+  changes in the gap. The source remains retained and the caller retries under
+  the new configuration. The context is not returned by an API, written to
+  outbox/batch/schedule state, or logged.
+- **Verification:** local sender unittest discovery passed `45` tests,
+  including focused coverage for a configuration rotation before send and
+  coordinator-to-service context forwarding. Python compilation for the two
+  changed sender services, Vue production build, and `git diff --check` passed.
+  A newly built local sender image passed the disposable internal-network Push
+  smoke with v1 probe, initial import, idempotent retry, matching-request
+  coordination, source retention, and interrupted batch recovery. No ports
+  were published; the harness uses generated test-only credentials and removes
+  its labeled containers, network, and temporary files.
+- **Boundary:** no VPS, SSH, remote container, registry publish, real
+  credential, user image, or production action was used. This strengthens the
+  local Phase 5 sender guarantee only and does not complete isolated-VPS or
+  cross-project acceptance.
+- **Next local entry:** keep the sender/receiver image tags explicit, run the
+  same local smoke after future transfer changes, and wait for a separately
+  authorized isolated-VPS clone before advancing the Phase 5 evidence gate.
+
 ## Read-only discovery target-role gate (2026-07-24)
 
 - **Evidence class:** `LOCAL` only. The extension target form now requires an
