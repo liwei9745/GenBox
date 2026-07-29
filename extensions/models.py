@@ -1,5 +1,7 @@
 ﻿from typing import Literal
 
+import re
+
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
 
@@ -9,6 +11,23 @@ HOST_KEY_ALGORITHMS = frozenset({
     "ssh-rsa",
 })
 HOST_KEY_FINGERPRINT_PATTERN = r"^SHA256:[A-Za-z0-9+/]{43}$"
+IMMUTABLE_IMAGE_REFERENCE_PATTERN = re.compile(
+    r"^[a-z0-9][a-z0-9._/-]{1,240}@sha256:[a-f0-9]{64}$"
+)
+
+
+def is_immutable_image_reference(value: object) -> bool:
+    """Return whether a deployable image is pinned to an OCI content digest."""
+    return IMMUTABLE_IMAGE_REFERENCE_PATTERN.fullmatch(str(value or "").strip()) is not None
+
+
+def validate_deployment_image(image: object, strategy: str, clone_scope: str) -> None:
+    """Reject mutable image references before a plan can initiate SSH discovery."""
+    if strategy != "existing" and clone_scope == "empty" and not is_immutable_image_reference(image):
+        raise ValueError(
+            "隔离空白实例需要可由服务器拉取的不可变镜像地址，"
+            "格式为 registry/name@sha256:<64 位摘要>；本机 Docker 标签和 latest 不能用于部署"
+        )
 
 
 def is_canonical_host_key_trust(algorithm: str, fingerprint: str) -> bool:

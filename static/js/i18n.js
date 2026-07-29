@@ -728,6 +728,8 @@
     "extensions.copy_estimate_suffix":{"zh-CN":" MB；源实例保持在线且只读。</p>","en":" MB; the source instance stays online and read-only.</p>"},
     "extensions.plan_ready":{"zh-CN":"安全计划已生成，10 分钟内确认有效。","en":"Safety plan generated and valid for 10 minutes."},
     "extensions.plan_failed_prefix":{"zh-CN":"无法生成计划：","en":"Could not generate plan: "},
+    "extensions.image_source_help":{"zh-CN":"请填写隔离开发机能拉取的不可变镜像地址。本机 Docker 标签和 latest 不能直接部署。","en":"Enter an immutable image address the isolated development machine can pull. Local Docker tags and latest cannot be deployed."},
+    "extensions.image_source_required":{"zh-CN":"请先准备可部署镜像：填写可由隔离开发机访问的 registry/name@sha256:<64 位摘要>。本机构建的镜像需要先通过可复现的交付流程提供给服务器。","en":"Prepare a deployable image first: enter registry/name@sha256:<64 hex digest> that the isolated development machine can access. A locally built image needs a reproducible delivery path before deployment."},
     "extensions.connected_existing":{"zh-CN":"已接入","en":"Connected"},
     "extensions.delivery_failed_prefix":{"zh-CN":"实例已部署，但一次性密钥交付失败：","en":"Instance deployed, but one-time key delivery failed: "},
     "extensions.existing_key_placeholder":{"zh-CN":"请输入该实例现有管理密钥","en":"Enter the existing management key for this instance"},

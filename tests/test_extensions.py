@@ -28,6 +28,8 @@ from extensions.models import (
     NetworkConnectRequest,
     SSHCredential,
     is_canonical_host_key_trust,
+    is_immutable_image_reference,
+    validate_deployment_image,
 )
 import extensions.store as store
 from extensions.orchestrator import (
@@ -52,6 +54,7 @@ TEST_HOST_KEY_ALGORITHM = "ssh-ed25519"
 TEST_HOST_KEY = "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 DEPLOYMENT_ATTEMPT_ID = "0123456789abcdef0123456789abcdef"
 PHASE4_PATH_CONDITIONS_VERSION = "phase4-v3"
+TEST_DEPLOYMENT_IMAGE = "registry.example/chatgpt2api@sha256:" + ("a" * 64)
 
 
 def ExtensionTarget(**values):
@@ -1405,6 +1408,67 @@ def test_generated_plan_renders_a_non_secret_review_summary_before_deploy():
         assert key in translations
 
 
+def test_empty_isolated_deployment_requires_an_immutable_remote_image_before_ssh_discovery(monkeypatch):
+    import main
+
+    target = ExtensionTarget(
+        id="isolated-target", name="VPS", host="host.example", username="deploy-user",
+        host_key=TEST_HOST_KEY,
+    )
+    discovery_calls = []
+
+    async def forbidden_discovery(_request, *, path_checks=None):
+        discovery_calls.append(path_checks)
+        raise AssertionError("image validation must happen before SSH discovery")
+
+    monkeypatch.setattr(main, "discover_environment", forbidden_discovery)
+    body = ExtensionPlanRequest(
+        target=target,
+        credential=SSHCredential(password="session-only"),
+        strategy="isolated",
+        clone_scope="empty",
+        image="chatgpt2api:local",
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(main.extension_deploy_plan(body))
+
+    assert excinfo.value.status_code == 400
+    assert "不可变镜像" in str(excinfo.value.detail)
+    assert discovery_calls == []
+
+
+def test_immutable_image_gate_allows_existing_and_source_clone_but_not_floating_empty_deployments():
+    immutable = "registry.example/chatgpt2api@sha256:" + ("a" * 64)
+
+    assert is_immutable_image_reference(immutable) is True
+    assert is_immutable_image_reference("chatgpt2api:local") is False
+    assert is_immutable_image_reference("ghcr.io/yukkcat/chatgpt2api:latest") is False
+
+    validate_deployment_image(immutable, "isolated", "empty")
+    validate_deployment_image("chatgpt2api:local", "existing", "empty")
+    validate_deployment_image("genbox-chatgpt2api-source:local", "isolated", "working-copy")
+    with pytest.raises(ValueError, match="不可变镜像"):
+        validate_deployment_image("chatgpt2api:local", "isolated", "empty")
+
+
+def test_image_input_explains_remote_digest_requirement_and_blocks_plan_request_locally():
+    root = Path(__file__).parents[1]
+    html = (root / "static" / "index.html").read_text(encoding="utf-8")
+    source = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    translations = (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+
+    assert 'id="extImage" value=""' in html
+    assert 'aria-describedby="extImageHelp"' in html
+    assert 'data-i18n="extensions.image_source_help"' in html
+    assert "function needsImmutableImage(body)" in source
+    assert "function isImmutableImageReference(value)" in source
+    assert "function requireDeployableImage(body)" in source
+    assert "if(!requireDeployableImage(body))return" in source
+    assert "extensions.image_source_help" in translations
+    assert "extensions.image_source_required" in translations
+
+
 def test_step_two_restores_the_visible_novice_action_guide_in_node():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''
@@ -1543,7 +1607,9 @@ def test_post_connect_routes_hide_unclassified_remote_exceptions(monkeypatch):
     monkeypatch.setattr(main, "reset_managed_admin_key", reject)
     cases = (
         (main.extension_discover, ExtensionDiscoveryRequest(target=target, credential=credential)),
-        (main.extension_deploy_plan, ExtensionPlanRequest(target=target, credential=credential)),
+        (main.extension_deploy_plan, ExtensionPlanRequest(
+            target=target, credential=credential, image=TEST_DEPLOYMENT_IMAGE,
+        )),
         (main.extension_reset_admin_key, ExtensionKeyResetRequest(
             target=target, credential=credential, instance_id="managed-one",
         )),
@@ -1956,7 +2022,9 @@ def test_all_ssh_routes_bind_to_the_server_confirmed_target(monkeypatch):
     requests_and_routes = [
         (ExtensionTestRequest(target=submitted, credential=credential), main.extension_test_ssh),
         (ExtensionDiscoveryRequest(target=submitted, credential=credential), main.extension_discover),
-        (ExtensionPlanRequest(target=submitted, credential=credential), main.extension_deploy_plan),
+        (ExtensionPlanRequest(
+            target=submitted, credential=credential, image=TEST_DEPLOYMENT_IMAGE,
+        ), main.extension_deploy_plan),
         (ExtensionDeployRequest(deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID, target=submitted, credential=credential), main.extension_start_deploy),
         (ExtensionKeyResetRequest(target=submitted, credential=credential, instance_id="managed-one"), main.extension_reset_admin_key),
         (NetworkConnectRequest(
@@ -2882,6 +2950,7 @@ def test_plan_route_rejects_non_closed_path_evidence_before_plan_creation(monkey
     body = ExtensionPlanRequest(
         target=target, credential=SSHCredential(password="session-only"),
         strategy="isolated", clone_scope="empty", service_port=33011,
+        image=TEST_DEPLOYMENT_IMAGE,
     )
 
     with pytest.raises(HTTPException) as excinfo:

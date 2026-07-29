@@ -85,7 +85,7 @@ from extensions.models import (
     ExtensionTaskResumeRequest,
     ExtensionPlanRequest, ExtensionTestRequest,
     ManagedCredentialUpsertRequest, VaultPasswordRequest,
-    is_canonical_host_key_trust,
+    is_canonical_host_key_trust, validate_deployment_image,
 )
 from extensions.orchestrator import (
     DeploymentAttemptConflictError, DeploymentNoTaskError, SSHAuthenticationError, SSHConnectionError,
@@ -3986,6 +3986,7 @@ async def extension_discover(body: ExtensionDiscoveryRequest):
 async def extension_deploy_plan(body: ExtensionPlanRequest):
     try:
         validate_deployment_capability(body.project_id, body.strategy, body.deployment_mode)
+        validate_deployment_image(body.image, body.strategy, body.clone_scope)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
     saved_target = extensions_store.get_target(body.target.id)

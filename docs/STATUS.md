@@ -1,6 +1,6 @@
 # Current Project Status
 
-**Last updated:** 2026-07-27
+**Last updated:** 2026-07-29
 **Current branch:** `codex/p4-deploy-plan-ux-eai`
 **Current phase:** Phase 4 Single-Image Push End To End - **In Progress**
 
@@ -68,6 +68,27 @@
   three fields were hidden before discovery. No pairing, credential submission,
   SSH, VPS, remote container, production, or deployment operation was
   performed.
+- **LOCAL 2026-07-29:** an isolated empty deployment now requires an immutable
+  OCI image reference in the form `registry/name@sha256:<64 hex digest>` before
+  GenBox starts environment discovery. The browser leaves the image value empty
+  and explains that a local Docker tag or `latest` cannot be pulled by another
+  machine. The API repeats the same check before SSH discovery, while existing
+  instance registration and source-clone workflows retain their supported paths.
+  This prevents a plan that is guaranteed to fail because the specialized sender
+  image exists only on the developer machine.
+- **Verification:** extension-focused tests passed `342`; the full local suite
+  passed `520`; `node --check static/js/extensions.js`, `node --check
+  static/js/i18n.js`, and `git diff --check` passed. The current-worktree local
+  service at port `8894` returned HTTP 200 and served the empty image field plus
+  its digest help. Prior local browser inspection of that same current-worktree
+  page confirmed the field, accessible help linkage, Chinese copy, and zero
+  browser console errors. This is `LOCAL` UI/API evidence only: no registry
+  artifact was published, and no SSH, VPS, remote container, deployment, or
+  production action was performed.
+- **Next local entry:** define a reproducible, sanitized delivery path for the
+  specialized sender image. Before building or publishing that artifact, resolve
+  the sender-side transfer-coordination findings: configuration-version cache
+  invalidation, metadata-conflict handling, and canonical path identity.
 
 ## Phase 4 boundary
 
