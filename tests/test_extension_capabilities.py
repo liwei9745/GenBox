@@ -111,6 +111,7 @@ def request_payload(project_id="chatgpt2api", **overrides):
         "credential": {"password": SECRET_SENTINEL},
         "service_port": 33010,
         "image": PINNED_IMAGE,
+        "approve_plan_discovery": True,
     }
     payload.update(overrides)
     return payload

@@ -4100,6 +4100,18 @@ async def extension_deploy_plan(body: ExtensionPlanRequest):
             detail="当前目标仅允许只读检查；请把服务器用途改为隔离开发机后再生成部署计划。",
         )
     body = _bind_confirmed_extension_target(body)
+    if not body.approve_plan_discovery:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "生成安全计划前需要明确确认两次部署前只读复核；本次未连接服务器。",
+                "diagnostic": {
+                    "code": "plan_discovery_approval_required",
+                    "stage": "plan_discovery",
+                    "retry_safe": True,
+                },
+            },
+        )
     try:
         initial_discovery = await discover_environment(body)
         body = _resolve_plan_discovery_references(body, initial_discovery)

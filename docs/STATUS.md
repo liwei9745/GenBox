@@ -6,6 +6,24 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-29:** safety-plan generation now requires a separate,
+  explicit browser confirmation before it performs its two fixed plan-preflight
+  read-only checks. Without `approve_plan_discovery=true`, the backend returns
+  a recoverable rejection before invoking any environment discovery. The UI
+  first validates the local deployment-image input, then explains that the
+  approved checks only examine port, directory, and isolation conditions and
+  cannot deploy, pull an image, or alter services. A cancelled or unavailable
+  confirmation sends no plan request. The approval marker is intentionally
+  excluded from the plan-change snapshot, preventing a valid response from
+  being discarded as stale. Focused extension suites passed `355`; full local
+  `python -m pytest -q` passed `547`; Python compilation, JavaScript syntax,
+  and whitespace checks passed. A fresh loopback-only runtime on port `8900`
+  loaded `#/extensions` with no console errors and no horizontal overflow at
+  `390x844`; no target was selected, no credential was entered, and no SSH,
+  VPS, container, discovery, plan, deployment, or network action was
+  submitted. This is `LOCAL` UI/API/test evidence only. A previously generated
+  user-visible plan predates this guard and is not evidence that the new
+  explicit-preflight interaction ran.
 - **VERIFIED 2026-07-29:** the user-authorized experimental GHCR sender-image
   publication was queried by immutable digest. Its OCI index exposes both
   `linux/amd64` and `linux/arm64`; its public package metadata identifies the

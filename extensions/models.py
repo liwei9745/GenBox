@@ -196,6 +196,7 @@ class ExtensionPlanRequest(ExtensionDiscoveryRequest):
     image: str = "ghcr.io/yukkcat/chatgpt2api:latest"
     clone_source_id: str = ""
     clone_scope: Literal["empty", "media", "working-copy"] = "empty"
+    approve_plan_discovery: bool = False
 
 
 class ExtensionKeyResetRequest(ExtensionDiscoveryRequest):

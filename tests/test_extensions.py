@@ -1492,6 +1492,40 @@ def test_empty_isolated_deployment_requires_an_immutable_remote_image_before_ssh
     assert discovery_calls == []
 
 
+def test_plan_route_requires_explicit_read_only_recheck_approval(monkeypatch):
+    import main
+
+    target = ExtensionTarget(
+        id="target-plan-approval", name="VPS", host="safe.example", username="deploy-user",
+        host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY,
+    )
+    discovery_called = False
+
+    async def forbidden_discovery(_request, **_kwargs):
+        nonlocal discovery_called
+        discovery_called = True
+        raise AssertionError("plan discovery must not run without explicit approval")
+
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    monkeypatch.setattr(main, "discover_environment", forbidden_discovery)
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(main.extension_deploy_plan(ExtensionPlanRequest(
+            target=target,
+            credential=SSHCredential(password="session-only-secret"),
+            image=TEST_DEPLOYMENT_IMAGE,
+        )))
+
+    detail = excinfo.value.detail
+    assert excinfo.value.status_code == 400
+    assert detail["diagnostic"]["code"] == "plan_discovery_approval_required"
+    assert detail["diagnostic"]["retry_safe"] is True
+    assert discovery_called is False
+    assert "safe.example" not in str(detail)
+    assert "deploy-user" not in str(detail)
+    assert "session-only-secret" not in str(detail)
+
+
 def test_immutable_image_gate_allows_existing_and_source_clone_but_not_floating_empty_deployments():
     immutable = "registry.example/chatgpt2api@sha256:" + ("a" * 64)
 
@@ -1724,6 +1758,7 @@ def test_post_connect_routes_hide_unclassified_remote_exceptions(monkeypatch):
         (main.extension_discover, ExtensionDiscoveryRequest(target=target, credential=credential)),
         (main.extension_deploy_plan, ExtensionPlanRequest(
             target=target, credential=credential, image=TEST_DEPLOYMENT_IMAGE,
+            approve_plan_discovery=True,
         )),
         (main.extension_reset_admin_key, ExtensionKeyResetRequest(
             target=target, credential=credential, instance_id="managed-one",
@@ -3272,7 +3307,7 @@ def test_plan_route_rejects_non_closed_path_evidence_before_plan_creation(monkey
     body = ExtensionPlanRequest(
         target=target, credential=SSHCredential(password="session-only"),
         strategy="isolated", clone_scope="empty", service_port=33011,
-        image=TEST_DEPLOYMENT_IMAGE,
+        image=TEST_DEPLOYMENT_IMAGE, approve_plan_discovery=True,
     )
 
     with pytest.raises(HTTPException) as excinfo:
@@ -3378,6 +3413,7 @@ def test_extension_plan_discovery_and_instance_routes_expose_only_public_product
     plan_response = asyncio.run(main.extension_deploy_plan(ExtensionPlanRequest(
         target=target, credential=credential, instance_id="public-new-app",
         strategy="isolated", clone_scope="empty", service_port=33011, image=image,
+        approve_plan_discovery=True,
     )))
 
     store.upsert_instance({
