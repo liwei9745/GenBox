@@ -89,6 +89,13 @@
   specialized sender image. Before building or publishing that artifact, resolve
   the sender-side transfer-coordination findings: configuration-version cache
   invalidation, metadata-conflict handling, and canonical path identity.
+- **LOCAL 2026-07-29 sender image preflight:** the current sender revision was
+  rebuilt from its repository Dockerfile with locally cached base images, then
+  exercised with the disposable Docker-only sender/receiver smoke harness. The
+  synthetic first Push imported once, the identical retry was idempotent, and
+  the sender retained its source file. The harness published no ports and
+  removed its labeled temporary resources. This is not a registry artifact,
+  clean-machine build, isolated-VPS, private-network, or production result.
 
 ## Phase 4 boundary
 
