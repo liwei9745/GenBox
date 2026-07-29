@@ -1476,6 +1476,7 @@
   MESSAGES['extensions.prepare_deploy_image'] = {"zh-CN":"填写部署镜像","en":"Enter deployment image"};
   MESSAGES['extensions.plan_discovery_confirm'] = {"zh-CN":"生成安全计划前，GenBox 会对这台隔离开发机进行两次固定的只读复核，用来核对端口、目录和隔离范围。不会部署、拉取镜像或改动服务。现在继续吗？","en":"Before generating the safety plan, GenBox will run two fixed read-only checks on this isolated development server to verify ports, directories, and isolation. It will not deploy, pull an image, or change services. Continue?"};
   MESSAGES['extensions.plan_discovery_cancelled'] = {"zh-CN":"已取消部署前只读复核；未连接服务器，也未生成计划。","en":"Deployment preflight was cancelled. The server was not contacted and no plan was created."};
+  MESSAGES['extensions.plan_discovery_timeout'] = {"zh-CN":"生成安全计划前的只读复核在限定时间内未完成，已停止本次复核。无需重新确认服务器身份；请检查 SSH 或 Docker 响应后再试。","en":"The read-only checks before generating the safety plan did not finish in time and have stopped. You do not need to reconfirm the server identity; check SSH or Docker responsiveness before trying again."};
   MESSAGES['extensions.guide_step2_planning'] = {"zh-CN":"正在计算安装方式、端口和隔离范围。","en":"Calculating the installation method, ports, and isolation boundaries."};
   MESSAGES['extensions.guide_step2_wait_plan'] = {"zh-CN":"请稍等，计划生成后不会自动部署。","en":"Wait briefly; generating a plan does not deploy automatically."};
   MESSAGES['extensions.guide_step2_plan_after'] = {"zh-CN":"计划生成后，你还要亲自确认才会开始安装。","en":"You must still confirm before installation starts."};

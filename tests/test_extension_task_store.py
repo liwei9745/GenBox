@@ -2808,7 +2808,7 @@ def test_ambiguous_deployment_probe_timeout_is_single_flight_and_bounded_in_node
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''
 const fs=require('fs');const vm=require('vm');let source=fs.readFileSync(process.argv[1],'utf8');
-source=source.replace('var deploymentReconcileProbeTimeoutMs=5000,deploymentReconcileIntervalMs=800,readOnlyDiscoveryTimeoutMs=65000;','var deploymentReconcileProbeTimeoutMs=5,deploymentReconcileIntervalMs=1,readOnlyDiscoveryTimeoutMs=65000;');
+source=source.replace('var deploymentReconcileProbeTimeoutMs=5000,deploymentReconcileIntervalMs=800,readOnlyDiscoveryTimeoutMs=65000,planDiscoveryTimeoutMs=100000;','var deploymentReconcileProbeTimeoutMs=5,deploymentReconcileIntervalMs=1,readOnlyDiscoveryTimeoutMs=65000,planDiscoveryTimeoutMs=100000;');
 const marker=source.lastIndexOf('})();');
 const instrumented=source.slice(0,marker)+`
 window.__test={
@@ -3095,6 +3095,24 @@ const key='SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';const target={id:
 global.confirm=()=>allowPlan;global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/test')body={ok:true,host_key_algorithm:'ssh-ed25519',host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/deploy/plan'){planCalls.push(JSON.parse(options.body));body={discovery:{environment:{},instances:[],deployment_modes:[]},plan:{id:'plan-one',ready:true,evidence_manifest:{complete:true,snapshot_digest:'a'.repeat(64)},operations:[],safety:[]}}}return {ok:true,status:200,text:async()=>JSON.stringify(body)}};
 eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';element('extImage').value='registry.example/chatgpt2api@sha256:'+('a'.repeat(64));window.extensionCredentialChanged();await window.extensionTestSSH();window.extensionNext(2);await window.extensionCreatePlan();
 if(planCalls.length!==0)throw new Error('cancelled plan confirmation called the plan endpoint');if(element('extensionMessage').textContent!=='extensions.plan_discovery_cancelled')throw new Error('cancelled plan confirmation did not explain the no-connection result');allowPlan=true;await window.extensionCreatePlan();if(planCalls.length!==1||planCalls[0].approve_plan_discovery!==true)throw new Error('confirmed plan request omitted explicit read-only recheck approval');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_plan_generation_timeout_cancels_and_restores_a_safe_retry_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');let source=fs.readFileSync(process.argv[1],'utf8');
+source=source.replace('planDiscoveryTimeoutMs=100000','planDiscoveryTimeoutMs=1');
+(async()=>{
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(['extDiscoveryResult','extPlanPreview'].includes(id)?['hidden']:[]);elements.set(id,{id,style:{},value:'',textContent:'',innerHTML:'',disabled:false,checked:false,dataset:{},options:[],selectedIndex:0,classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
+const network={value:'tailscale',checked:true,classList:{toggle(){}}};global.window=global;global.confirm=()=>true;global.document={getElementById:element,querySelector(s){if(s.includes('extNetwork'))return network;return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});
+const key='SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';const target={id:'saved',name:'Saved',host:'safe.example',port:22,username:'deploy-user',host_key_algorithm:'ssh-ed25519',host_key:key,chatgpt2api_port:33010};let planCalls=0,aborts=0;
+global._authFetch=(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/test')body={ok:true,host_key_algorithm:'ssh-ed25519',host_key:key,privileges:{is_root:true,can_deploy:true}};else if(url==='/api/extensions/deploy/plan'){planCalls+=1;return new Promise((resolve,reject)=>{if(options.signal)options.signal.addEventListener('abort',()=>{aborts+=1;const error=new Error('aborted');error.name='AbortError';reject(error)},{once:true})})}return Promise.resolve({ok:true,status:200,text:async()=>JSON.stringify(body)})};
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';element('extImage').value='registry.example/chatgpt2api@sha256:'+('a'.repeat(64));window.extensionCredentialChanged();await window.extensionTestSSH();window.extensionNext(2);await window.extensionCreatePlan();
+if(planCalls!==1||aborts!==1)throw new Error('plan timeout did not make one abortable request');if(element('extensionMessage').textContent!=='extensions.plan_discovery_timeout')throw new Error('plan timeout did not show the bounded recovery message');if(!element('extPlanPreview').classList.contains('hidden')||!element('extDeployBtn').disabled)throw new Error('plan timeout left a deployable plan visible');
 })();
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)

@@ -6,6 +6,17 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-29:** bounded the two fixed read-only checks that run only
+  after the user explicitly approves safety-plan generation. The backend now
+  cancels either stalled preflight and returns a sanitized, retry-safe
+  `plan_discovery_timeout`; the browser independently aborts an unresponsive
+  plan request, hides any plan preview, keeps deployment disabled, and tells
+  the user that host-key confirmation is not required again. Focused route and
+  UI regressions cover both backend preflight positions, browser abortion, and
+  safe retry state. `python -m pytest -q` passed `548`; JavaScript syntax,
+  Python compilation, and whitespace checks passed. No browser target was
+  selected, no credential was entered, and no SSH, VPS, container, plan,
+  deployment, or network request was submitted. This is `LOCAL` evidence only.
 - **LOCAL 2026-07-29:** safety-plan generation now requires a separate,
   explicit browser confirmation before it performs its two fixed plan-preflight
   read-only checks. Without `approve_plan_discovery=true`, the backend returns

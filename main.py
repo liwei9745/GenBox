@@ -4113,10 +4113,28 @@ async def extension_deploy_plan(body: ExtensionPlanRequest):
             },
         )
     try:
-        initial_discovery = await discover_environment(body)
+        initial_discovery = await asyncio.wait_for(
+            discover_environment(body),
+            timeout=READ_ONLY_DISCOVERY_TIMEOUT_SECONDS,
+        )
         body = _resolve_plan_discovery_references(body, initial_discovery)
         path_requirements = deployment_plans.path_requirements(body, initial_discovery)
-        discovery = await discover_environment(body, path_checks=path_requirements)
+        discovery = await asyncio.wait_for(
+            discover_environment(body, path_checks=path_requirements),
+            timeout=READ_ONLY_DISCOVERY_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "生成安全计划前的只读复核在限定时间内未完成，已停止本次复核。无需重新确认服务器身份。",
+                "diagnostic": {
+                    "code": "plan_discovery_timeout",
+                    "stage": "plan_discovery",
+                    "retry_safe": True,
+                },
+            },
+        ) from exc
     except Exception as exc:
         raise _safe_extension_ssh_error(
             exc,

@@ -1526,6 +1526,55 @@ def test_plan_route_requires_explicit_read_only_recheck_approval(monkeypatch):
     assert "session-only-secret" not in str(detail)
 
 
+@pytest.mark.parametrize("stall_call", (1, 2))
+def test_plan_discovery_timeout_cancels_each_preflight_check(monkeypatch, stall_call):
+    import main
+
+    target = ExtensionTarget(
+        id="target-plan-timeout", name="VPS", host="safe.example", username="deploy-user",
+        target_role="isolated-development",
+        host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY,
+    )
+    calls = []
+    cancelled = []
+
+    async def discovery(_request, **kwargs):
+        calls.append(kwargs)
+        if len(calls) == stall_call:
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.append(stall_call)
+                raise
+        return {"instances": []}
+
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    monkeypatch.setattr(main, "discover_environment", discovery)
+    monkeypatch.setattr(main.deployment_plans, "path_requirements", lambda *_args: {"checks": []})
+    monkeypatch.setattr(main, "READ_ONLY_DISCOVERY_TIMEOUT_SECONDS", 0.001)
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(main.extension_deploy_plan(ExtensionPlanRequest(
+            target=target,
+            credential=SSHCredential(password="session-only-secret"),
+            image=TEST_DEPLOYMENT_IMAGE,
+            approve_plan_discovery=True,
+        )))
+
+    detail = excinfo.value.detail
+    assert excinfo.value.status_code == 400
+    assert detail["diagnostic"] == {
+        "code": "plan_discovery_timeout",
+        "stage": "plan_discovery",
+        "retry_safe": True,
+    }
+    assert len(calls) == stall_call
+    assert cancelled == [stall_call]
+    assert "safe.example" not in str(detail)
+    assert "deploy-user" not in str(detail)
+    assert "session-only-secret" not in str(detail)
+
+
 def test_immutable_image_gate_allows_existing_and_source_clone_but_not_floating_empty_deployments():
     immutable = "registry.example/chatgpt2api@sha256:" + ("a" * 64)
 
