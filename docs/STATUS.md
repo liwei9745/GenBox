@@ -6,6 +6,17 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-29:** closing the reviewed safety-plan step now requires one
+  final browser confirmation immediately before the deployment request can be
+  sent. Cancelling, or a browser that cannot present that confirmation, keeps
+  the reviewed plan visible, leaves its deploy action available, and sends no
+  deployment request; it does not repeat SSH pairing, credential entry, or
+  read-only discovery. Existing plan-expiry, exact-attempt, and reconciliation
+  tests explicitly model confirmed browser intent. Focused extension suites
+  passed `323`; full local `python -m pytest -q` passed `549`; JavaScript
+  syntax and whitespace checks passed. No browser target was selected, no
+  credential was entered, and no SSH, VPS, container, plan, deployment, or
+  network request was submitted. This is `LOCAL` evidence only.
 - **LOCAL 2026-07-29:** bounded the two fixed read-only checks that run only
   after the user explicitly approves safety-plan generation. The backend now
   cancels either stalled preflight and returns a sanitized, retry-safe

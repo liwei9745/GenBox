@@ -1446,6 +1446,9 @@ def test_generated_plan_renders_a_non_secret_review_summary_before_deploy():
     assert "plan.registers_locally" in source
     assert "el('extPlanPreview').innerHTML=renderPlanPreview(plan,body)" in source
     assert "extensions.plan_review_confirm" in source
+    assert "function confirmDeploymentStart()" in source
+    assert "extensions.deploy_confirm_prompt" in source
+    assert "extensions.deploy_confirm_cancelled" in source
     preview_function = source.split("function renderPlanPreview(plan,body)", 1)[1].split(
         "window.extensionSelectExisting", 1
     )[0]
@@ -1458,6 +1461,8 @@ def test_generated_plan_renders_a_non_secret_review_summary_before_deploy():
         "extensions.plan_review_method",
         "extensions.plan_review_scope",
         "extensions.plan_review_confirm",
+        "extensions.deploy_confirm_prompt",
+        "extensions.deploy_confirm_cancelled",
     ):
         assert key in translations
 

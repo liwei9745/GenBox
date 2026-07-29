@@ -1483,6 +1483,8 @@
   MESSAGES['extensions.guide_step2_plan_ready'] = {"zh-CN":"安全计划已经生成，尚未改动 VPS。","en":"The safety plan is ready and the VPS has not been changed."};
   MESSAGES['extensions.guide_step2_confirm'] = {"zh-CN":"核对计划后，明确确认开始部署。","en":"Review the plan, then explicitly confirm deployment."};
   MESSAGES['extensions.guide_step2_confirm_after'] = {"zh-CN":"部署期间会显示进度；失败时只给出一个恢复动作。","en":"Progress will be shown, with one recovery action if it fails."};
+  MESSAGES['extensions.deploy_confirm_prompt'] = {"zh-CN":"即将按当前安全计划修改这台隔离开发机并开始部署。请确认镜像、实例名称和端口均无误。现在开始部署吗？","en":"This will modify the isolated development server according to the current safety plan and begin deployment. Confirm that the image, instance name, and port are correct. Start deployment now?"};
+  MESSAGES['extensions.deploy_confirm_cancelled'] = {"zh-CN":"已取消部署确认；安全计划仍保留，VPS 未被修改。","en":"Deployment confirmation was cancelled. The safety plan is still available and the VPS was not changed."};
   MESSAGES['extensions.guide_step2_deploying'] = {"zh-CN":"应用正在部署，重复点击已被锁定。","en":"The service is deploying and duplicate clicks are locked."};
   MESSAGES['extensions.guide_step2_wait_deploy'] = {"zh-CN":"请保持页面打开，等待任务完成。","en":"Keep this page open and wait for the task to finish."};
   MESSAGES['extensions.guide_step2_deploy_after'] = {"zh-CN":"部署完成后先交付登录信息，再继续配置私网。","en":"After deployment, save the login details and continue to private networking."};
