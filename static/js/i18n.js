@@ -1624,6 +1624,15 @@
     if (global.location && global.location.reload) global.location.reload();
   }
 
+  MESSAGES['extensions.plan_review_title'] = {"zh-CN":"请先核对以下部署计划","en":"Review this deployment plan first"};
+  MESSAGES['extensions.plan_review_instance'] = {"zh-CN":"实例名称：","en":"Instance:"};
+  MESSAGES['extensions.plan_review_port'] = {"zh-CN":"服务端口：","en":"Service port:"};
+  MESSAGES['extensions.plan_review_image'] = {"zh-CN":"容器镜像：","en":"Container image:"};
+  MESSAGES['extensions.plan_review_method'] = {"zh-CN":"部署方式：","en":"Deployment method:"};
+  MESSAGES['extensions.plan_review_scope'] = {"zh-CN":"部署范围：","en":"Deployment scope:"};
+  MESSAGES['extensions.plan_review_isolated'] = {"zh-CN":"创建新的隔离实例","en":"Create a new isolated instance"};
+  MESSAGES['extensions.plan_review_existing'] = {"zh-CN":"仅登记现有实例","en":"Register the existing instance only"};
+  MESSAGES['extensions.plan_review_confirm'] = {"zh-CN":"核对无误后，仍需点击“确认并部署”才会执行。","en":"Nothing runs until you select Confirm and deploy."};
   global.GenBoxI18n = { messages: MESSAGES, language: language, t: t, apply: apply, setLanguage: setLanguage };
   global.t = t;
   global.i18nText = t;

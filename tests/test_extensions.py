@@ -1377,6 +1377,34 @@ def test_deployment_parameters_are_hidden_until_environment_discovery():
     assert "window.extensionGoToStep=function(step){if(Number(step)===2&&!requireVerifiedSsh())return;extensionNext(step)}" in source
 
 
+def test_generated_plan_renders_a_non_secret_review_summary_before_deploy():
+    root = Path(__file__).parents[1]
+    source = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    translations = (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+
+    assert "function renderPlanPreview(plan,body)" in source
+    assert "body.instance_id" in source
+    assert "body.service_port" in source
+    assert "body.image" in source
+    assert "plan.registers_locally" in source
+    assert "el('extPlanPreview').innerHTML=renderPlanPreview(plan,body)" in source
+    assert "extensions.plan_review_confirm" in source
+    preview_function = source.split("function renderPlanPreview(plan,body)", 1)[1].split(
+        "window.extensionSelectExisting", 1
+    )[0]
+    assert "host_fingerprint" not in preview_function
+    for key in (
+        "extensions.plan_review_title",
+        "extensions.plan_review_instance",
+        "extensions.plan_review_port",
+        "extensions.plan_review_image",
+        "extensions.plan_review_method",
+        "extensions.plan_review_scope",
+        "extensions.plan_review_confirm",
+    ):
+        assert key in translations
+
+
 def test_step_two_restores_the_visible_novice_action_guide_in_node():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''

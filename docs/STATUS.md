@@ -212,6 +212,29 @@ UI/tests or the failed transport attempt as VPS or production verification.
   same local smoke after future transfer changes, and wait for a separately
   authorized isolated-VPS clone before advancing the Phase 5 evidence gate.
 
+## Local deployment-plan review summary (2026-07-29)
+
+- **Evidence class:** `LOCAL` only. After a plan is generated, the extension
+  UI now renders a review summary from the same non-secret request snapshot:
+  instance name, service port, image, deployment mode, and whether the plan is
+  for a new isolated instance or local registration of an existing one. The
+  summary explicitly states that the separate `Confirm and deploy` action is
+  still required. Host identity, paths, credentials, fingerprints, raw
+  discovery data, and plan evidence internals remain outside the preview.
+- **Verification:** focused extension UI contract tests passed `2`; extension
+  task-store regression tests passed `119`; full local pytest passed `517`.
+  Both modified browser scripts passed Node syntax checks. A fresh local browser
+  page at `#/extensions` loaded with zero page errors; it did not submit
+  credentials, SSH tests, discovery, plan creation, or deployment.
+- **Boundary:** this makes a locally rendered plan reviewable, but it is not
+  isolated-VPS deployment evidence and it does not authorize or start a
+  deployment. Any pre-existing page must be reloaded and a fresh plan generated
+  to render the new summary.
+- **Next local entry:** after reviewing the summary, keep a custom image
+  reference limited to a registry the isolated development machine can reach;
+  changing image, port, or instance invalidates the old plan and requires a
+  fresh review before deployment.
+
 ## Read-only discovery target-role gate (2026-07-24)
 
 - **Evidence class:** `LOCAL` only. The extension target form now requires an
