@@ -6,6 +6,14 @@
 
 ## Current evidence
 
+- **VERIFIED 2026-07-29:** the user-authorized experimental GHCR sender-image
+  publication was queried by immutable digest. Its OCI index exposes both
+  `linux/amd64` and `linux/arm64`; its public package metadata identifies the
+  corresponding immutable release tag. The locally reviewed sender application
+  and Docker build inputs match the published source tree; only publishing
+  workflow text differs. The sender workflow's focused image-delivery tests
+  passed locally. This verifies a registry artifact for plan input, not a VPS
+  pull, deployment, private-route, transfer, or production result.
 - **USER-CONFIRMED 2026-07-29:** the user completed the authorized single
   host-key-verified L2 read-only environment check in the local Extensions
   page. The visible result advanced to deployment-option review and stated that
