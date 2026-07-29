@@ -96,6 +96,12 @@
   the sender retained its source file. The harness published no ports and
   removed its labeled temporary resources. This is not a registry artifact,
   clean-machine build, isolated-VPS, private-network, or production result.
+- **LOCAL 2026-07-29 image prerequisite guidance:** after a read-only
+  environment check, an isolated empty deployment without an immutable image
+  reference now directs the beginner to the image field instead of offering a
+  plan action that will fail. The focus action performs no request. Focused
+  extension tests passed `187`, and the full GenBox suite passed `520`. This is
+  local UI evidence only and involved no registry, SSH, VPS, or deployment.
 
 ## Phase 4 boundary
 
