@@ -6,6 +6,14 @@
 
 ## Current evidence
 
+- **VERIFIED 2026-07-30:** after a local sanitization review, the current
+  GenBox Phase 4 branch was pushed to
+  `liwei9745/GenBox:codex/p4-deploy-plan-ux-eai`; the current sender branch
+  was pushed to both authorized experimental repositories as
+  `codex/genbox-p4-sender-image`. Neither action updated a default branch.
+  The sender's immutable GHCR image is the separately verified artifact below.
+  A clean GenBox deployment from its pushed branch and an isolated VPS
+  single-image Push acceptance run are still pending.
 - **VERIFIED 2026-07-30:** the authorized experimental GHCR workflow completed
   successfully for sender commit `a4217e3` and published the immutable image
   index `ghcr.io/liwei9745/chatgpt2api@sha256:6892af60bbb85db1963d43474e66d5551f1a0fd212cb88d658d8a3410c1dc9d0`.
