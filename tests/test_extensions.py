@@ -21,6 +21,7 @@ from extensions.models import (
     ExtensionHostKeyPairingCompleteRequest,
     ExtensionHostKeyPairingStartRequest,
     ExtensionHostKeyProbeRequest,
+    ExtensionHostKeyResetRequest,
     ExtensionKeyResetRequest,
     ExtensionPlanRequest,
     ExtensionTarget as ExtensionTargetModel,
@@ -907,6 +908,7 @@ def test_extension_ssh_route_returns_structured_sanitized_auth_diagnostic(monkey
 
 def test_host_key_probe_request_has_no_credential_fields():
     assert set(ExtensionHostKeyProbeRequest.model_fields) == {"target_id"}
+    assert set(ExtensionHostKeyResetRequest.model_fields) == {"target_id"}
     assert set(ExtensionHostKeyConfirmRequest.model_fields) == {"target_id", "algorithm", "fingerprint"}
     for fingerprint in ("", "MD5:bad", "SHA256:short", "SHA256:bad value"):
         try:
@@ -983,6 +985,53 @@ def test_host_key_confirm_reprobes_and_persists_only_matching_fingerprint(monkey
     assert result["target"]["host_key"] == fingerprint
     assert result["target"]["host_key_algorithm"] == algorithm
     assert saved == [(target, algorithm, fingerprint)]
+
+
+def test_host_key_reset_route_only_discards_local_trust(monkeypatch):
+    import main
+
+    reset = ExtensionTarget(
+        id="saved", name="Saved", host="safe.example", username="ubuntu",
+        identity_version=2,
+    )
+    calls = []
+    monkeypatch.setattr(
+        main.extensions_store,
+        "reset_target_host_key",
+        lambda target_id: calls.append(target_id) or reset,
+    )
+    monkeypatch.setattr(
+        main,
+        "probe_host_key",
+        lambda _target: (_ for _ in ()).throw(AssertionError("reset must not probe SSH")),
+    )
+
+    result = asyncio.run(main.extension_reset_ssh_host_key(
+        ExtensionHostKeyResetRequest(target_id="saved")
+    ))
+
+    assert calls == ["saved"]
+    assert result["reset"] is True
+    assert result["target"]["host_key_algorithm"] == ""
+    assert result["target"]["host_key"] == ""
+
+
+def test_host_key_reset_route_returns_not_found_without_remote_probe(monkeypatch):
+    import main
+
+    monkeypatch.setattr(main.extensions_store, "reset_target_host_key", lambda _target_id: None)
+    monkeypatch.setattr(
+        main,
+        "probe_host_key",
+        lambda _target: (_ for _ in ()).throw(AssertionError("reset must not probe SSH")),
+    )
+
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(main.extension_reset_ssh_host_key(
+            ExtensionHostKeyResetRequest(target_id="missing")
+        ))
+
+    assert caught.value.status_code == 404
 
 
 def test_host_key_confirm_rejects_changed_or_previously_conflicting_key(monkeypatch):
@@ -1227,7 +1276,9 @@ const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
 if(!source.includes("el('extHostKeyPairingManualBtn')"))throw new Error('manual fallback control missing');
 if(!source.includes('hostKeyPairingFallback=true'))throw new Error('pairing failure does not enter fallback state');
 if(!source.includes("manual.classList.toggle('hidden',!hostKeyPairingFallback)"))throw new Error('manual fallback is not surfaced');
-if(!source.includes("visible=!!currentTargetId&&!targetDirty&&!trustedHostKey"))throw new Error('pairing visibility is not trust guarded');
+if(!source.includes("visible=!!currentTargetId&&!targetDirty&&!trustedHostKey&&!hostKeyReconfirmationRequired"))throw new Error('pairing visibility does not block recovery bypass');
+if(!source.includes("if(hostKeyReconfirmationRequired||!requireBackendOnline()"))throw new Error('recovery guard is missing from host-key actions');
+if(!source.includes("extensions.identity_reset_action',window.extensionResetHostKey"))throw new Error('recovery guide can still bypass the explicit reset');
 if(!source.includes('sequence!==hostKeyProbeSequence||targetId!==currentTargetId||targetDirty'))throw new Error('pairing start response is not target-bound');
 if(!source.includes('pairing!==hostKeyPairing||sequence!==hostKeyProbeSequence'))throw new Error('pairing completion response is not target-bound');
 '''
@@ -2042,6 +2093,64 @@ def test_host_key_confirmation_store_fails_closed_on_concurrent_trust_pair_chang
     current = store.get_target("saved")
     assert current.host_key_algorithm == changed.host_key_algorithm
     assert current.host_key == changed.host_key
+
+
+def test_host_key_reset_store_is_atomic_idempotent_and_clears_old_network_state(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    trusted = store.upsert_target({
+        "id": "saved", "name": "Saved", "host": "safe.example", "port": 22,
+        "username": "ubuntu", "host_key_algorithm": TEST_HOST_KEY_ALGORITHM,
+        "host_key": TEST_HOST_KEY, "available_networks": ["tailscale"],
+        "network_url": "http://100.64.0.20:8893",
+        "network_verified_at": "2026-07-29 00:00:00",
+    })
+
+    reset = store.reset_target_host_key(trusted.id)
+
+    assert reset is not None
+    assert reset.host_key_algorithm == ""
+    assert reset.host_key == ""
+    assert reset.identity_version == trusted.identity_version + 1
+    assert reset.available_networks == []
+    assert reset.network_url == ""
+    assert reset.network_verified_at == ""
+    assert store.load_config().target_generations[trusted.id] == reset.identity_version
+    with pytest.raises(ValueError, match="^target_changed$"):
+        store.confirm_target_host_key(trusted, TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY)
+
+    repeated = store.reset_target_host_key(trusted.id)
+    assert repeated is not None
+    assert repeated.identity_version == reset.identity_version
+    assert store.reset_target_host_key("missing") is None
+
+
+def test_host_key_reset_invalidates_existing_pairing_before_completion(tmp_path, monkeypatch):
+    import main
+
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    target = store.upsert_target({
+        "id": "pair", "name": "Pair", "host": "safe.example", "port": 22,
+        "username": "ubuntu", "host_key_algorithm": TEST_HOST_KEY_ALGORITHM,
+        "host_key": TEST_HOST_KEY,
+    })
+    main.host_key_pairings.clear()
+    record = main.host_key_pairings.create(target, TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY)
+    reset = store.reset_target_host_key(target.id)
+    proof = hashlib.sha256(
+        f"{record.algorithm}:{record.fingerprint}:{record.challenge}".encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(main.extension_complete_ssh_host_key_pairing(
+            ExtensionHostKeyPairingCompleteRequest(
+                pairing_id=record.pairing_id,
+                response="GENBOX-PAIR/1 code=" + record.challenge + " proof=" + proof,
+            )
+        ))
+
+    assert caught.value.status_code == 409
+    assert reset is not None
+    assert store.get_target(target.id).host_key == ""
 
 
 def test_legacy_fingerprint_only_target_is_untrusted_and_rejected_before_remote_work(monkeypatch):

@@ -106,6 +106,10 @@ class ExtensionHostKeyProbeRequest(BaseModel):
     target_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
+class ExtensionHostKeyResetRequest(ExtensionHostKeyProbeRequest):
+    """Explicitly discard the saved host identity before a new pairing."""
+
+
 class ExtensionHostKeyConfirmRequest(ExtensionHostKeyProbeRequest):
     algorithm: Literal["ssh-ed25519", "ecdsa-sha2-nistp256", "ssh-rsa"]
     fingerprint: str = Field(pattern=HOST_KEY_FINGERPRINT_PATTERN, min_length=50, max_length=50)

@@ -865,6 +865,7 @@
             <section id="extHostKeyReconfirmation" class="extension-identity-recovery hidden" role="status">
               <b data-i18n="extensions.identity_reconfirm_credential_title">先确认服务器身份</b>
               <p data-i18n="extensions.identity_reconfirm_credential_body">本次 SSH 凭据已清除。完成服务器身份确认后，才需要重新输入密码或私钥。</p>
+              <div class="extension-actions"><button type="button" id="extHostKeyResetBtn" class="btn-danger" onclick="extensionResetHostKey()" data-i18n="extensions.identity_reset_action">清除旧记录并重新确认</button></div>
             </section>
             <section id="extOnboardingCredentials" class="extension-onboarding-view hidden">
               <div class="extension-onboarding-heading"><span data-i18n="extensions.personal_access_kicker">访问检查</span><h2 tabindex="-1" data-i18n="extensions.personal_access_title">输入本次连接凭据</h2><p data-i18n="extensions.personal_access_help">凭据只用于这次检查，关闭页面后不会保留。</p></div>

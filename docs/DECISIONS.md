@@ -598,3 +598,8 @@ path; the future connector is not made functional by this UX change.
   remain reusable after the credential check succeeds.
 - The pairing protocol remains an SSH confirmation capability, not a universal
   first-screen requirement or a replacement for credentials.
+- When a saved host identity changes, the user must explicitly clear the local
+  trust record before a new confirmation can be saved. That reset clears only
+  the stored algorithm/fingerprint and invalidates unfinished pairing records;
+  it never contacts the host, restores credentials, or accepts a replacement
+  identity automatically.

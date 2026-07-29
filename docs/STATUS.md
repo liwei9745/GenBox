@@ -6,6 +6,26 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-29:** fixed the host-identity-change recovery loop in the
+  Extensions onboarding. A mismatch now clears only the browser's session
+  credentials and enters a dedicated recovery view; it cannot start another
+  pairing, manual probe, or discovery until the user explicitly confirms a
+  local reset. The reset API accepts only a saved target ID, atomically clears
+  its canonical host-key trust and stale network-verification state, increments
+  its identity generation to invalidate unfinished pairing challenges, and
+  never contacts the host, receives a credential, or accepts a replacement
+  identity. The user must then manually begin a fresh confirmation.
+  Store/route/DOM regression coverage passed, including cancelled reset,
+  minimal request payload, stale-challenge rejection, and no browser-storage or
+  credential disclosure. `node --check` passed for both extension bundles,
+  Python compilation passed, `git diff --check` passed, and full local pytest
+  passed `541`. A launcher-owned Lab at `http://127.0.0.1:8895/#/extensions`
+  served the current source with the reset route present and zero browser
+  console errors; no target metadata, credential, host-key probe, SSH test,
+  discovery, deployment, or remote command was submitted. This is local
+  UI/API/test evidence only, not isolated-VPS, SSH, container, deployment, or
+  production evidence. The pre-existing `8892` runtime did not expose this
+  route and was left running unchanged.
 - **LOCAL 2026-07-29:** added a fail-closed L2 read-only discovery-plan gate.
   `scripts/validate_discovery_plan.py` accepts only a secret-free,
   target-bound `read-only-discovery` authorization, matching expected/observed

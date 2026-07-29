@@ -83,6 +83,7 @@ from extensions.models import (
     ExtensionBatchTargetsRequest, ExtensionDeployRequest, ExtensionDiscoveryRequest,
     ExtensionDeliveryClaimRequest, ExtensionHostKeyConfirmRequest, ExtensionHostKeyPairingCancelRequest,
     ExtensionHostKeyPairingCompleteRequest, ExtensionHostKeyPairingStartRequest, ExtensionHostKeyProbeRequest, ExtensionKeyResetRequest,
+    ExtensionHostKeyResetRequest,
     ExtensionTaskResumeRequest,
     ExtensionPlanRequest, ExtensionTestRequest,
     ManagedCredentialUpsertRequest, VaultPasswordRequest,
@@ -3959,6 +3960,15 @@ async def extension_cancel_ssh_host_key_pairing(body: ExtensionHostKeyPairingCan
     """Discard a one-time pairing without revealing whether it existed."""
     host_key_pairings.discard(body.pairing_id)
     return {"cancelled": True}
+
+
+@app.post("/api/extensions/ssh/host-key/reset")
+async def extension_reset_ssh_host_key(body: ExtensionHostKeyResetRequest):
+    """Discard one saved trust record only after an explicit local user action."""
+    target = extensions_store.reset_target_host_key(body.target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="请先保存 VPS，再重置服务器身份记录")
+    return {"target": target.model_dump(), "reset": True}
 
 
 @app.post("/api/extensions/ssh/host-key/confirm")

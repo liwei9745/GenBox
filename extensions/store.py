@@ -381,6 +381,35 @@ def confirm_target_host_key(
         return confirmed
 
 
+def reset_target_host_key(target_id: str) -> ExtensionTarget | None:
+    """Atomically discard saved host trust and invalidate outstanding pairings."""
+    with _config_lock():
+        config = load_config()
+        current = next((item for item in config.targets if item.id == target_id), None)
+        if not current:
+            return None
+        if not current.host_key_algorithm and not current.host_key:
+            return current
+        generation = max(
+            int(config.target_generations.get(target_id, 0)),
+            int(current.identity_version),
+        ) + 1
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        reset = current.model_copy(update={
+            "host_key_algorithm": "",
+            "host_key": "",
+            "identity_version": generation,
+            "available_networks": [],
+            "network_url": "",
+            "network_verified_at": "",
+            "updated_at": now,
+        })
+        config.targets = [item for item in config.targets if item.id != target_id] + [reset]
+        config.target_generations[target_id] = generation
+        save_config(config)
+        return reset
+
+
 def list_targets() -> list[ExtensionTarget]:
     return load_config().targets
 
