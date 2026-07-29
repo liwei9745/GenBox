@@ -179,6 +179,12 @@ class ExtensionTaskResumeRequest(BaseModel):
     target_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
+class PushSourceProvisionRequest(BaseModel):
+    """Request a Push source for one opaque managed-instance handle."""
+
+    instance_handle: str = Field(pattern=r"^i-[a-f0-9]{32}$")
+
+
 class ExtensionDiscoveryRequest(BaseModel):
     target: ExtensionTarget
     credential: SSHCredential

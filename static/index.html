@@ -1042,6 +1042,14 @@
               <label><span data-i18n="extensions.admin_key">管理密钥</span><div class="extension-copy-row"><input id="extConsoleLoginKey" type="password" autocomplete="off" spellcheck="false" data-i18n-placeholder="extensions.console_login_key_placeholder" placeholder="粘贴管理密钥"><button type="button" class="btn-secondary" aria-label="显示管理密钥" aria-pressed="false" title="显示管理密钥" onclick="extensionTogglePassword('extConsoleLoginKey',this)">👁</button></div></label>
               <div class="extension-console-login-actions"><button type="button" class="btn-secondary" onclick="extensionOpenConsoleOnly()"><span data-i18n="extensions.open_console_only">仅打开控制台</span></button><button type="button" class="btn-primary" onclick="extensionOpenConsoleLogin()"><span data-i18n="extensions.copy_key_open_console">复制密钥并打开控制台</span></button></div>
             </section>
+            <section id="extPushSource" class="extension-console-login hidden" aria-labelledby="extPushSourceTitle">
+              <div><span data-i18n="extensions.push_source_kicker">图片 Push 配置</span><h3 id="extPushSourceTitle"><span data-i18n="extensions.push_source_title">连接 chatgpt2api 与 GenBox</span></h3><p data-i18n="extensions.push_source_help">为这个隔离实例创建独立的 GenBox Push 凭据。密钥只会在创建或轮换后显示一次。</p></div>
+              <div id="extPushSourceStatus" class="extension-push-source-status" role="status"></div>
+              <label><span data-i18n="extensions.push_destination_url">GenBox Push 地址</span><div class="extension-copy-row"><input id="extPushDestinationUrl" readonly><button type="button" class="btn-secondary" onclick="extensionCopy('extPushDestinationUrl')"><span data-i18n="common.copy">复制</span></button></div></label>
+              <label><span data-i18n="extensions.push_source_id">来源 ID</span><div class="extension-copy-row"><input id="extPushSourceId" readonly><button type="button" class="btn-secondary" onclick="extensionCopy('extPushSourceId')"><span data-i18n="common.copy">复制</span></button></div></label>
+              <label><span data-i18n="extensions.push_key">Push 密钥</span><div class="extension-copy-row"><input id="extPushKey" type="password" readonly autocomplete="off" spellcheck="false" data-i18n-placeholder="extensions.push_key_hidden" placeholder="仅创建或轮换后显示"><button type="button" class="btn-secondary" aria-label="显示 Push 密钥" aria-pressed="false" title="显示 Push 密钥" onclick="extensionTogglePassword('extPushKey',this)">👁</button></div></label>
+              <div class="extension-console-login-actions"><button type="button" class="btn-secondary" id="extPushCreateBtn" onclick="extensionCreatePushSource()"><span data-i18n="extensions.push_create">创建 Push 凭据</span></button><button type="button" class="btn-primary hidden" id="extPushCopyBtn" onclick="extensionCopyPushConfiguration()"><span data-i18n="extensions.push_copy_configuration">复制配置</span></button><button type="button" class="btn-secondary hidden" id="extPushRotateBtn" onclick="extensionRotatePushSource()"><span data-i18n="extensions.push_rotate">轮换密钥</span></button><button type="button" class="btn-ghost hidden" id="extPushRevokeBtn" onclick="extensionRevokePushSource()"><span data-i18n="extensions.push_revoke">撤销来源</span></button></div>
+            </section>
             <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(4)"><span data-i18n="common.previous">上一步</span></button></div>
           </div>
           <div id="extensionMessage" class="extension-message" role="status" aria-live="polite"></div>
@@ -1279,6 +1287,6 @@
   <script src="/static/js/i18n.js?v=14"></script>
 <script src="/static/js/app-all.js?v=36"></script>
 <script src="/static/js/sync.js?v=7"></script>
-<script src="/static/js/extensions.js?v=22"></script>
+<script src="/static/js/extensions.js?v=23"></script>
 </body>
 </html>

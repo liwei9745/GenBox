@@ -2028,7 +2028,7 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
     assert '<script src="/static/js/i18n.js?v=14"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=22"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=23"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):
@@ -4246,6 +4246,29 @@ def test_extensions_page_has_its_own_vertical_scroll_container():
     assert ".extension-layout{min-height:0;overflow-y:auto" in css
     assert "align-items:start" in css
     assert ".extension-workspace{min-width:0;height:max-content" in css
+
+
+def test_push_source_setup_is_instance_bound_and_does_not_persist_or_put_keys_in_urls():
+    root = Path(__file__).parents[1]
+    html = (root / "static" / "index.html").read_text(encoding="utf-8")
+    js = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+
+    assert 'id="extPushSource"' in html
+    assert 'id="extPushDestinationUrl" readonly' in html
+    assert 'id="extPushSourceId" readonly' in html
+    assert 'id="extPushKey" type="password" readonly autocomplete="off"' in html
+    assert "extensionCreatePushSource" in html
+    assert "extensionRotatePushSource" in html
+    assert "extensionRevokePushSource" in html
+    block = js.split("function pushSourceHandle", 1)[1].split("window.extensionTogglePassword", 1)[0]
+    assert "/api/extensions/push-sources/" in block
+    assert "JSON.stringify({instance_handle:handle})" in block
+    assert "encodeURIComponent(handle)" in block
+    assert "key.value=''" in block
+    assert "localStorage" not in block
+    assert "sessionStorage" not in block
+    assert "window.open" not in block
+    assert "push_key" not in block.split("JSON.stringify({instance_handle:handle})", 1)[1].split("}))", 1)[0]
 
 
 def test_deployed_services_section_is_wired():

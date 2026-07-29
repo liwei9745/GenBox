@@ -12,7 +12,7 @@ chatgpt2api. The current GenBox receiver details are in
 | Capability | GenBox | chatgpt2api | Overall State |
 |---|---|---|---|
 | Pull remote image list and import | Implemented | Existing compatible API required | Implemented in GenBox; live verification pending |
-| Receive one pushed image | Implemented | Sender missing in this repository | Partial |
+| Receive one pushed image | Receiver and managed source provisioning implemented locally | Sender missing in this repository | Partial |
 | Per-generation Push selection | Receiver ready | Planned | Planned |
 | Manual batch Push | Receiver reusable | Planned | Planned |
 | Scheduled incremental Push | Receiver reusable | Planned | Planned |
@@ -33,6 +33,29 @@ chatgpt2api needs a GenBox destination with:
 - Schedule settings stored separately from destination identity.
 
 Secrets must be masked on read and excluded from normal logs and exports.
+
+## Managed Source Provisioning
+
+For a GenBox-managed isolated `chatgpt2api` instance, the Extensions final step
+can create a source-specific credential without asking the user to edit
+`GENBOX_PUSH_KEYS`. The browser submits only the instance's opaque handle.
+GenBox resolves the registered managed instance and its previously verified
+private-network URL, then returns the destination URL, source ID, and a newly
+generated Push key once. The browser never supplies a target URL, raw instance
+ID, source ID, or Push key to the provisioning API.
+
+The registry persists a random salt and PBKDF2-HMAC-SHA256 verifier, never the
+raw key. Listing returns metadata only. Rotation replaces the verifier and
+returns a new raw key once; revocation retains an inactive record so that the
+same source ID cannot fall back to an old legacy environment credential. Push
+keys are excluded from browser storage, URLs, ordinary task records, and
+normal logs. Deleting a registered target deactivates all of its managed
+sources before the target record is removed. The legacy `GENBOX_PUSH_KEYS`
+mapping remains supported only for source IDs unknown to the managed registry.
+
+This provisions receiver-side configuration only. It does not write remote
+chatgpt2api settings, prove the sender can use the credentials, or prove an
+end-to-end image Push.
 
 ## Push Request V1
 

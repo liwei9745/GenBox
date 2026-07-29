@@ -18,7 +18,7 @@ import uvicorn
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from genbox_version import __version__
 
@@ -85,7 +85,7 @@ from extensions.models import (
     ExtensionHostKeyPairingCompleteRequest, ExtensionHostKeyPairingStartRequest, ExtensionHostKeyProbeRequest, ExtensionKeyResetRequest,
     ExtensionHostKeyResetRequest,
     ExtensionTaskResumeRequest,
-    ExtensionPlanRequest, ExtensionTestRequest,
+    ExtensionPlanRequest, ExtensionTestRequest, PushSourceProvisionRequest,
     ManagedCredentialUpsertRequest, VaultPasswordRequest,
     is_canonical_host_key_trust, validate_deployment_image,
 )
@@ -114,6 +114,11 @@ from extensions.catalog import public_catalog
 from extensions.models import NetworkConnectRequest
 from extensions.network_adapters import network_tasks
 from extensions.local_tailscale import begin_login, enable_genbox_serve, local_install_tasks, local_status
+from sync.push_sources import create_source as create_push_source
+from sync.push_sources import list_sources as list_push_sources
+from sync.push_sources import revoke_source as revoke_push_source
+from sync.push_sources import revoke_target_sources as revoke_target_push_sources
+from sync.push_sources import rotate_source as rotate_push_source
 
 
 # ──────────────────────────────────────────────────────────────
@@ -3664,6 +3669,12 @@ async def extension_save_target(body: dict = {}):
 
 @app.delete("/api/extensions/targets/{target_id}")
 async def extension_delete_target(target_id: str):
+    if not extensions_store.get_target(target_id):
+        raise HTTPException(status_code=404, detail="目标不存在")
+    try:
+        revoke_target_push_sources(target_id)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Push 凭据注册表暂不可用") from exc
     if not extensions_store.delete_target(target_id):
         raise HTTPException(status_code=404, detail="目标不存在")
     return {"deleted": True}
@@ -4223,6 +4234,110 @@ async def extension_instances(target_id: str = ""):
             for item in extensions_store.list_instances(target_id)
         ]
     }
+
+
+def _managed_push_source_access(instance_handle: str):
+    """Resolve an opaque managed chatgpt2api instance and its verified destination."""
+    if re.fullmatch(r"i-[a-f0-9]{32}", instance_handle or "") is None:
+        raise HTTPException(status_code=404, detail="托管实例不存在")
+    instance = _resolve_stored_instance_handle(instance_handle)
+    if (
+        not instance
+        or not instance.managed
+        or instance.project != "chatgpt2api"
+        or not hmac.compare_digest(
+            public_instance_handle(instance.target_id, instance.id), instance_handle
+        )
+    ):
+        raise HTTPException(status_code=404, detail="托管实例不存在")
+    target = extensions_store.get_target(instance.target_id)
+    if not target or not target.network_verified_at:
+        raise HTTPException(status_code=409, detail="GenBox 私网地址尚未验证")
+    try:
+        parsed = urlsplit(target.network_url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("invalid network URL")
+        parsed.port
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="GenBox 私网地址尚未验证") from exc
+    path = parsed.path.rstrip("/") + "/api/sync/push"
+    destination_url = urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
+    return instance, destination_url
+
+
+def _push_source_error(exc: Exception):
+    if isinstance(exc, ValueError) and str(exc) == "managed Push source already exists":
+        raise HTTPException(status_code=409, detail="该实例已有有效的 Push 凭据，请轮换或撤销后再创建") from exc
+    raise HTTPException(status_code=503, detail="Push 凭据注册表暂不可用") from exc
+
+
+@app.get("/api/extensions/push-sources/{instance_handle}")
+async def extension_push_source_status(instance_handle: str):
+    instance, destination_url = _managed_push_source_access(instance_handle)
+    try:
+        sources = list_push_sources(instance.target_id, instance.id)
+    except Exception as exc:
+        _push_source_error(exc)
+    return {
+        "instance_handle": instance_handle,
+        "destination_url": destination_url,
+        "configured": bool(sources),
+        "source": sources[0] if sources else None,
+    }
+
+
+@app.post("/api/extensions/push-sources")
+async def extension_push_source_create(body: PushSourceProvisionRequest):
+    instance, destination_url = _managed_push_source_access(body.instance_handle)
+    try:
+        source, push_key = create_push_source(instance.target_id, instance.id)
+    except Exception as exc:
+        _push_source_error(exc)
+    return {
+        "instance_handle": body.instance_handle,
+        "destination_url": destination_url,
+        "source": source,
+        "push_key": push_key,
+        "shown_once": True,
+    }
+
+
+@app.post("/api/extensions/push-sources/{instance_handle}/{source_id}/rotate")
+async def extension_push_source_rotate(instance_handle: str, source_id: str):
+    instance, destination_url = _managed_push_source_access(instance_handle)
+    try:
+        rotated = rotate_push_source(source_id, instance.target_id, instance.id)
+    except Exception as exc:
+        _push_source_error(exc)
+    if rotated is None:
+        raise HTTPException(status_code=404, detail="Push 来源不存在")
+    source, push_key = rotated
+    return {
+        "instance_handle": instance_handle,
+        "destination_url": destination_url,
+        "source": source,
+        "push_key": push_key,
+        "shown_once": True,
+    }
+
+
+@app.delete("/api/extensions/push-sources/{instance_handle}/{source_id}")
+async def extension_push_source_delete(instance_handle: str, source_id: str):
+    instance, _destination_url = _managed_push_source_access(instance_handle)
+    try:
+        revoked = revoke_push_source(source_id, instance.target_id, instance.id)
+    except Exception as exc:
+        _push_source_error(exc)
+    if not revoked:
+        raise HTTPException(status_code=404, detail="Push 来源不存在")
+    return {"instance_handle": instance_handle, "revoked": True}
 
 
 def _managed_vault_instance(instance_id: str):

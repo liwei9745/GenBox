@@ -6,6 +6,24 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-30:** GenBox now provisions a dedicated Push source for one
+  registered, managed `chatgpt2api` instance after its private destination is
+  verified. The browser submits only an opaque instance handle; the backend
+  resolves the saved target, instance, and destination. The local registry
+  atomically persists only an active flag, timestamps, random salt, and
+  PBKDF2-HMAC-SHA256 verifier. Raw Push keys are returned only by explicit
+  create or rotate actions, never by status/listing; revoke retains a tombstone
+  that blocks fallback to a same-named legacy `GENBOX_PUSH_KEYS` entry. The
+  final Extensions step shows the non-secret destination and source ID, offers
+  create/copy/rotate/revoke actions, clears the one-time key after the explicit
+  copy action, and uses neither browser storage nor key-bearing URLs. Focused
+  receiver, route, DOM, and task-store suites passed `378`; Python compilation,
+  JavaScript syntax, and whitespace checks passed. A fresh loopback server
+  returned the current Extensions bundle and static page containing the Push
+  panel. No browser target was selected, no credential was entered, and no SSH,
+  VPS, container, sender, deployment, or network action was submitted. This is
+  `LOCAL` receiver/UI evidence only: chatgpt2api sender configuration and
+  isolated single-image Push E2E remain unverified.
 - **LOCAL 2026-07-30:** the final private-network completion screen now offers
   a console-login helper for the exact managed instance. It pre-fills a
   one-time management key only while that value remains in the current page;

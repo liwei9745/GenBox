@@ -54,7 +54,16 @@ def load_push_keys(raw: Optional[str] = None) -> Dict[str, str]:
 def authenticate_push_source(source_id: str, api_key: str, raw_keys: Optional[str] = None) -> bool:
     if not SOURCE_ID_PATTERN.fullmatch(source_id or ""):
         return False
-    expected = load_push_keys(raw_keys).get(source_id)
+    configured_keys = load_push_keys(raw_keys)
+    if raw_keys is not None:
+        expected = configured_keys.get(source_id)
+        return bool(expected) and hmac.compare_digest(expected, api_key or "")
+    from sync.push_sources import authenticate_source
+
+    managed = authenticate_source(source_id, api_key or "")
+    if managed is not None:
+        return managed
+    expected = configured_keys.get(source_id)
     return bool(expected) and hmac.compare_digest(expected, api_key or "")
 
 

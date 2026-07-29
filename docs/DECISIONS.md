@@ -603,3 +603,44 @@ path; the future connector is not made functional by this UX change.
   the stored algorithm/fingerprint and invalidates unfinished pairing records;
   it never contacts the host, restores credentials, or accepts a replacement
   identity automatically.
+
+## ADR-022: Managed Push Sources Use Show-Once Verifiers
+
+**Status:** Accepted
+**Date:** 2026-07-30
+
+### Context
+
+The Push receiver previously recognized only a static `GENBOX_PUSH_KEYS`
+environment mapping. That leaves a beginner who completed guided deployment and
+private-network setup with no safe way to create a per-instance sender key.
+Putting the Push key in the ordinary extension configuration, delivery task,
+or local credential vault would make it retrievable outside its intended
+one-time delivery flow.
+
+### Decision
+
+GenBox maintains a separate local managed-source registry. Each record binds a
+random source ID to the registered target and managed instance and persists
+only an active flag, timestamps, random salt, and PBKDF2-HMAC-SHA256 verifier.
+Provisioning and rotation return a raw Push key exactly once; list operations
+return metadata only. Revocation retains an inactive tombstone. Authentication
+checks the managed registry before the legacy environment mapping, and any
+known revoked source or unreadable registry fails closed.
+
+Removing a registered target deactivates every managed source bound to that
+target before its target record is deleted.
+
+The browser can request provisioning only with an opaque instance handle. The
+backend resolves the target, instance, and verified private destination itself;
+the browser cannot bind a key to an arbitrary URL, source ID, or raw instance
+ID. Push keys are never stored in browser storage, URLs, normal logs, task
+records, or the credential vault.
+
+### Consequences
+
+The guided final step can safely hand a user destination configuration for the
+isolated sender. It does not configure chatgpt2api remotely or complete the
+sender implementation. The legacy environment mapping remains available for
+existing sources, while a managed source can be independently rotated or
+revoked without changing administrator authentication.

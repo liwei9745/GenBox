@@ -19,14 +19,20 @@ GenBox 保留现有“本地主动拉取”模式作为无入站网络条件下�
 - Form `source_sha256`: 发送端预计算的图片 SHA-256，可选；提供时必须与上传字节匹配
 - Form `created_at`, `prompt`, `model`: 可选元数据
 
-GenBox 通过 `GENBOX_PUSH_KEYS` 配置来源身份：
+GenBox continues to support the legacy `GENBOX_PUSH_KEYS` environment mapping
+for pre-existing or externally managed source IDs:
 
 ```env
 GENBOX_PUSH_KEYS={"chatgpt2api-vps":"replace-with-a-long-random-key"}
 ```
 
-该路径不接受或要求 `X-Admin-Key`。专用来源密钥泄漏时可以只吊销一个 VPS，
-而不影响 GenBox 管理员会话。
+For a GenBox-managed isolated chatgpt2api instance, the Extensions final step
+can instead provision one random source ID and Push key. The raw key is returned
+only at creation or rotation; GenBox persists only a PBKDF2-HMAC-SHA256
+verifier. A revoked managed source remains a tombstone and must not fall back to
+a matching legacy environment value. This path does not accept or require
+`X-Admin-Key`. A source-key leak can therefore be revoked without rotating the
+GenBox administrator key.
 
 当前成功响应包含 `contract_version="v1"`、`sha256`、`local_file` 和
 `safe_to_delete_source=true`。该字段只表示 GenBox 已安全提交本次内容，不表示发送端
