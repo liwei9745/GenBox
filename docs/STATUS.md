@@ -115,8 +115,10 @@
   data, generated media, logs, databases, and private-key file types before
   Docker receives the build context. Sender unittest discovery passed `47`; a
   new local Docker build completed with the protected paths excluded from its
-  small build context. This is a local build/sanitization check only, not a
-  clean deployment, VPS, or cross-project transfer result.
+  small build context. That rebuilt sender then passed the disposable local
+  sender/receiver smoke: first import, idempotent retry, and source retention
+  all succeeded without published ports. This is a local build/sanitization
+  check only, not a clean deployment, VPS, or cross-project transfer result.
 - **LOCAL 2026-07-29 digest acceptance regression:** a minimal DOM execution
   test now covers the actual front-end plan gate: a pinned GHCR reference is
   accepted, while a mutable `latest` tag shows the recovery message, moves focus
