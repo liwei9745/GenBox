@@ -102,6 +102,14 @@
   plan action that will fail. The focus action performs no request. Focused
   extension tests passed `187`, and the full GenBox suite passed `520`. This is
   local UI evidence only and involved no registry, SSH, VPS, or deployment.
+- **VERIFIED 2026-07-29 GHCR artifact:** the experimental repository
+  `liwei9745/chatgpt2api-genbox-p4` completed its explicit, manual-only
+  GitHub Actions image publication run. GitHub Packages reports the published
+  multi-architecture manifest reference as
+  `ghcr.io/liwei9745/chatgpt2api@sha256:79ef9242f81faa879facb84be0592bb65f89cce297073102f52608dc2a1bfa59`.
+  The human-readable `sha-9b82c52` tag is build metadata only; GenBox must use
+  the digest reference. This is registry artifact evidence, not SSH, VPS,
+  remote-container, deployment, receiver, or end-to-end Push evidence.
 
 ## Phase 4 boundary
 
@@ -164,11 +172,12 @@ receiver proof from sender, isolated-VPS, and production claims.
 
 ## Exact next step
 
-L2 is blocked before its discovery command set. Correct the isolated
-development machine's SSH service or login policy through an independently
-trusted administration path, then obtain a fresh canonical host-key validation
-and authorize one bounded `read-only-discovery` retry. Do not treat the local
-UI/tests or the failed transport attempt as VPS or production verification.
+For a local-only UI check, enter the verified immutable GHCR reference into the
+isolated-deployment image field and confirm GenBox accepts the digest format.
+Do not generate a remote plan or start a deployment from that check. The next
+remote gate remains separately authorized isolated-development discovery and
+host-key validation; do not treat the registry artifact or local UI/tests as
+VPS or production verification.
 
 ## Phase 5 sender local batch and schedule work (2026-07-29)
 
