@@ -32,6 +32,13 @@ _LABELS = frozenset({
 })
 _NO_ARGUMENT_OPERATIONS = frozenset({
     "identity",
+    "os_release",
+    "cpu_architecture",
+    "cpu_count",
+    "memory_summary",
+    "home_directory",
+    "python_version",
+    "uv_version",
     "docker_version",
     "compose_version",
     "docker_ps",
@@ -213,9 +220,29 @@ def validate_read_only_discovery_plan(raw: Any) -> ValidatedDiscoveryPlan:
     if normalized_trust["expected_fingerprint"] != normalized_trust["observed_fingerprint"]:
         raise DiscoveryPlanValidationError("trust.observed_fingerprint")
     operations = plan["operations"]
-    if not isinstance(operations, list) or not operations or len(operations) > len(ALLOWED_OPERATIONS):
+    # A bootstrap `docker_ps` operation may safely derive a bounded set of
+    # per-container summary, mount, label, and directory-size operations.  The
+    # executor re-validates that derived plan before each new operation is used.
+    if not isinstance(operations, list) or not operations or len(operations) > 256:
         raise DiscoveryPlanValidationError("operations")
     normalized_operations = tuple(_normalize_operation(item, index) for index, item in enumerate(operations))
     if len({tuple(sorted(item.items())) for item in normalized_operations}) != len(normalized_operations):
         raise DiscoveryPlanValidationError("operations")
     return ValidatedDiscoveryPlan(normalized_authorization, normalized_trust, normalized_operations)
+
+
+def extend_read_only_discovery_plan(
+    plan: ValidatedDiscoveryPlan,
+    operations: list[dict[str, str]],
+) -> ValidatedDiscoveryPlan:
+    """Return a re-validated plan with executor-derived, bounded operations.
+
+    Callers may only pass handles and paths already returned by an approved
+    discovery operation.  This function still validates their shape and never
+    accepts a shell command or browser-provided operation.
+    """
+    return validate_read_only_discovery_plan({
+        "authorization": plan.authorization,
+        "trust": plan.trust,
+        "operations": [*plan.operations, *operations],
+    })

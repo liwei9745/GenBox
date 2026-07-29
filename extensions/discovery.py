@@ -10,6 +10,10 @@ from typing import Any
 
 from extensions.models import ExtensionDiscoveryRequest, SSHCredential
 from extensions.orchestrator import _connect, _diagnose_privileges, _elevated_command
+from extensions.read_only_discovery_plan import (
+    ValidatedDiscoveryPlan,
+    extend_read_only_discovery_plan,
+)
 
 
 async def _run(connection, command: str) -> tuple[int, str]:
@@ -185,6 +189,142 @@ def _paths_overlap(first: Any, second: Any) -> bool:
     return left == right or left.startswith(right.rstrip("/") + "/") or right.startswith(left.rstrip("/") + "/")
 
 
+class ApprovedReadOnlyCommandError(PermissionError):
+    """Raised locally before an unapproved SSH command can be sent."""
+
+
+class _ApprovedReadOnlyConnection:
+    """Bind the legacy discovery implementation to a validated operation plan.
+
+    `docker_ps` is the only bootstrap operation. Its structured output may add
+    narrowly validated operations for matching containers; every other command
+    must already map to one of those approved operations.
+    """
+
+    _SYSTEM_SUMMARY_OPERATIONS = {
+        "id -u": "identity",
+        "(. /etc/os-release 2>/dev/null && printf '%s %s' \"$ID\" \"$VERSION_ID\") || uname -s": "os_release",
+        "uname -m": "cpu_architecture",
+        "getconf _NPROCESSORS_ONLN 2>/dev/null || nproc": "cpu_count",
+        "awk '/MemTotal/{printf \"%d\", $2/1024}' /proc/meminfo": "memory_summary",
+        "printf %s \"$HOME\"": "home_directory",
+        "python3 --version 2>/dev/null": "python_version",
+        "uv --version 2>/dev/null": "uv_version",
+    }
+
+    def __init__(self, connection: Any, plan: ValidatedDiscoveryPlan):
+        self._connection = connection
+        self._plan = plan
+        self._containers: set[str] = set()
+        self._mount_paths: set[str] = set()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._connection, name)
+
+    def _contains(self, operation: dict[str, str]) -> bool:
+        return operation in self._plan.operations
+
+    def _extend(self, operations: list[dict[str, str]]) -> None:
+        additions = [operation for operation in operations if not self._contains(operation)]
+        if additions:
+            self._plan = extend_read_only_discovery_plan(self._plan, additions)
+
+    @staticmethod
+    def _container_from_command(command: str) -> str:
+        try:
+            tokens = shlex.split(command)
+        except ValueError:
+            return ""
+        return tokens[-2] if len(tokens) >= 2 and tokens[-1] == "2>/dev/null" else (tokens[-1] if tokens else "")
+
+    def _operations_for(self, command: str) -> list[dict[str, str]]:
+        if command in self._SYSTEM_SUMMARY_OPERATIONS:
+            return [{"id": self._SYSTEM_SUMMARY_OPERATIONS[command]}]
+        if command == "df -Pm / | awk 'NR==2{print $4}'":
+            return [{"id": "capacity", "path": "/"}]
+        if command == "docker version --format '{{.Server.Version}}' 2>/dev/null":
+            return [{"id": "docker_version"}]
+        if command == "docker compose version --short 2>/dev/null":
+            return [{"id": "compose_version"}]
+        if command == "docker ps -a --no-trunc --format '{{json .}}' 2>/dev/null":
+            return [{"id": "docker_ps"}]
+        if command == "docker compose ls --format json 2>/dev/null":
+            return [{"id": "compose_ls"}]
+        if command.startswith("if output=$(ss -H -ltn 2>/dev/null)"):
+            return [{"id": "listening_ports"}]
+        if command.startswith("docker inspect --format"):
+            container = self._container_from_command(command)
+            if container not in self._containers:
+                return []
+            if ".Config.Labels" in command:
+                return [
+                    {"id": "container_label", "container": container, "label": label}
+                    for label in (
+                        "com.genbox.managed",
+                        "com.genbox.instance",
+                        "com.docker.compose.project",
+                        "com.docker.compose.project.working_dir",
+                        "com.docker.compose.service",
+                    )
+                ]
+            if ".Mounts" in command:
+                return [{"id": "container_mounts", "container": container}]
+            return [{"id": "container_summary", "container": container}]
+        if command.startswith("du -sm "):
+            try:
+                path = shlex.split(command)[2]
+            except (IndexError, ValueError):
+                return []
+            return [{"id": "directory_size", "path": path}] if path in self._mount_paths else []
+        return []
+
+    def _learn(self, command: str, stdout: str) -> None:
+        if command == "docker ps -a --no-trunc --format '{{json .}}' 2>/dev/null":
+            discovered: list[dict[str, str]] = []
+            for line in stdout.splitlines():
+                try:
+                    item = json.loads(line)
+                except ValueError:
+                    continue
+                container = str(item.get("ID") or "")
+                image = str(item.get("Image") or "")
+                name = str(item.get("Names") or "")
+                if not container or "chatgpt2api" not in f"{image} {name}".lower():
+                    continue
+                self._containers.add(container)
+                discovered.extend([
+                    {"id": "container_summary", "container": container},
+                    {"id": "container_mounts", "container": container},
+                ])
+                discovered.extend(
+                    {"id": "container_label", "container": container, "label": label}
+                    for label in (
+                        "com.genbox.managed",
+                        "com.genbox.instance",
+                        "com.docker.compose.project",
+                        "com.docker.compose.project.working_dir",
+                        "com.docker.compose.service",
+                    )
+                )
+            self._extend(discovered)
+        elif command.startswith("docker inspect --format") and ".Mounts" in command:
+            path = stdout.strip()
+            if path.startswith("/"):
+                try:
+                    self._extend([{"id": "directory_size", "path": path}])
+                except ValueError:
+                    return
+                self._mount_paths.add(path)
+
+    async def run(self, command: str, **kwargs: Any) -> Any:
+        operations = self._operations_for(command)
+        if not operations or not all(self._contains(operation) for operation in operations):
+            raise ApprovedReadOnlyCommandError("unapproved_read_only_discovery_operation")
+        result = await self._connection.run(command, **kwargs)
+        self._learn(command, str(getattr(result, "stdout", "") or ""))
+        return result
+
+
 async def _evaluate_path_conditions(
     connection,
     credential: SSHCredential,
@@ -277,12 +417,30 @@ async def discover_environment(
     request: ExtensionDiscoveryRequest,
     *,
     path_checks: dict[str, dict[str, Any]] | None = None,
+    approved_plan: ValidatedDiscoveryPlan | None = None,
 ) -> dict[str, Any]:
     connection, fingerprint = await _connect(request)
     if connection is None:
         raise PermissionError("需要先确认 VPS 主机指纹")
     try:
-        privileges = await _diagnose_privileges(connection, request.credential)
+        if approved_plan is None:
+            privileges = await _diagnose_privileges(connection, request.credential)
+        else:
+            connection = _ApprovedReadOnlyConnection(connection, approved_plan)
+            user_id = (await connection.run("id -u", check=True)).stdout.strip()
+            privileges = {
+                "auth_kind": "password" if request.credential.password else "private_key",
+                "elevation_contract": request.credential.elevation,
+                "is_root": user_id == "0",
+                "docker_access": False,
+                "elevated_docker_access": False,
+                "passwordless_sudo": False,
+                "password_sudo": False,
+                "sudo_password_supplied": False,
+                "can_admin": user_id == "0",
+                "can_deploy": False,
+                "diagnostic_code": "read_only_discovery",
+            }
         facts: dict[str, str] = {}
         fact_statuses: dict[str, int] = {}
         commands = {
@@ -290,7 +448,7 @@ async def discover_environment(
             "arch": "uname -m",
             "cpu": "getconf _NPROCESSORS_ONLN 2>/dev/null || nproc",
             "memory_mb": "awk '/MemTotal/{printf \"%d\", $2/1024}' /proc/meminfo",
-            "disk_mb": "df -Pm \"$HOME\" | awk 'NR==2{print $4}'",
+            "disk_mb": "df -Pm / | awk 'NR==2{print $4}'",
             "home": "printf %s \"$HOME\"",
             "docker": "docker version --format '{{.Server.Version}}' 2>/dev/null",
             "compose": "docker compose version --short 2>/dev/null",
@@ -348,13 +506,16 @@ async def discover_environment(
                 request.credential,
                 privileges,
             )
-            _, image_digest = await _run_docker(
-                connection,
-                "docker image inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "
-                f"{shlex.quote(image_id)} 2>/dev/null",
-                request.credential,
-                privileges,
-            ) if image_id.startswith("sha256:") else (1, "")
+            if approved_plan is None and image_id.startswith("sha256:"):
+                _, image_digest = await _run_docker(
+                    connection,
+                    "docker image inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "
+                    f"{shlex.quote(image_id)} 2>/dev/null",
+                    request.credential,
+                    privileges,
+                )
+            else:
+                image_digest = ""
             source_image = image_digest or (
                 f"genbox-chatgpt2api-source:{container_id[:12]}"
                 if image_id.startswith("sha256:") else configured_image or image
@@ -419,6 +580,15 @@ async def discover_environment(
 
         docker_ok = bool(_version_number(facts["docker"]))
         compose_ok = bool(_version_number(facts["compose"]))
+        if approved_plan is not None:
+            privileges["docker_access"] = fact_statuses["docker"] == 0
+            privileges["can_deploy"] = bool(
+                privileges["docker_access"]
+                and (privileges["is_root"] or privileges["elevation_contract"] == "none")
+            )
+            privileges["diagnostic_code"] = (
+                "read_only_direct_docker" if privileges["can_deploy"] else "read_only_access_unverified"
+            )
         memory_mb = int(facts["memory_mb"] or 0)
         modes = [
             {

@@ -41,6 +41,13 @@ def valid_plan() -> dict:
         },
         "operations": [
             {"id": "identity"},
+            {"id": "os_release"},
+            {"id": "cpu_architecture"},
+            {"id": "cpu_count"},
+            {"id": "memory_summary"},
+            {"id": "home_directory"},
+            {"id": "python_version"},
+            {"id": "uv_version"},
             {"id": "docker_version"},
             {"id": "compose_version"},
             {"id": "docker_ps"},
@@ -62,7 +69,8 @@ def test_valid_plan_is_normalized_without_any_network_activity():
 
     assert validated.authorization["host"] == "safe.example"
     assert [item["id"] for item in validated.operations] == [
-        "identity", "docker_version", "compose_version", "docker_ps",
+        "identity", "os_release", "cpu_architecture", "cpu_count", "memory_summary",
+        "home_directory", "python_version", "uv_version", "docker_version", "compose_version", "docker_ps",
         "compose_ls", "listening_ports", "filesystem_summary", "capacity",
     ]
 
@@ -81,10 +89,10 @@ def test_root_is_a_valid_bounded_capacity_path():
     (lambda plan: plan["trust"].update(observed_host="other.example"), "trust.observed_host"),
     (lambda plan: plan["trust"].update(observed_algorithm="ssh-rsa"), "trust.observed_algorithm"),
     (lambda plan: plan["trust"].update(observed_fingerprint="SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"), "trust.observed_fingerprint"),
-    (lambda plan: plan["operations"].append({"id": "shell", "command": "cat /etc/shadow"}), "operations[8].id"),
-    (lambda plan: plan["operations"].append({"id": "directory_size", "path": "/srv/../etc"}), "operations[8].path"),
-    (lambda plan: plan["operations"].append({"id": "directory_size", "path": "/srv/app;restart"}), "operations[8].path"),
-    (lambda plan: plan["operations"].append({"id": "container_label", "container": "app;restart", "label": "com.genbox.managed"}), "operations[8].container"),
+    (lambda plan: plan["operations"].append({"id": "shell", "command": "cat /etc/shadow"}), "operations[15].id"),
+    (lambda plan: plan["operations"].append({"id": "directory_size", "path": "/srv/../etc"}), "operations[15].path"),
+    (lambda plan: plan["operations"].append({"id": "directory_size", "path": "/srv/app;restart"}), "operations[15].path"),
+    (lambda plan: plan["operations"].append({"id": "container_label", "container": "app;restart", "label": "com.genbox.managed"}), "operations[15].container"),
 ])
 def test_rejects_target_trust_and_operation_drift(mutate, field):
     plan = valid_plan()
@@ -115,7 +123,8 @@ def test_script_accepts_valid_json_without_echoing_target_identity():
         "scope": "read-only-discovery",
         "target_role": "isolated-development",
         "operations": [
-            "identity", "docker_version", "compose_version", "docker_ps",
+            "identity", "os_release", "cpu_architecture", "cpu_count", "memory_summary",
+            "home_directory", "python_version", "uv_version", "docker_version", "compose_version", "docker_ps",
             "compose_ls", "listening_ports", "filesystem_summary", "capacity",
         ],
     }

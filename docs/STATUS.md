@@ -6,6 +6,24 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-29:** closed the gap between the L2 read-only discovery
+  approval plan and the SSH command executor. The discovery route now passes
+  its request-scoped validated plan into a command guard. Every SSH command is
+  mapped to an explicit approved operation before it is sent; current session
+  user, OS, CPU, memory, home-directory, runtime, Docker/Compose, listener,
+  capacity, and derived container-metadata reads are separately named. Unknown
+  command drift is rejected locally before SSH execution. A successful
+  approved Docker listing may derive only validated per-container summary,
+  mount, ownership-label, and mount-derived directory-size operations. The
+  guarded L2 path does not use `sudo` and does not read image digests. Existing
+  non-L2 planning behavior remains unchanged. Focused discovery/plan tests
+  passed `230`; full local pytest recorded `543` tests with `0` failures and
+  `0` errors; Python compile, Node syntax, and diff whitespace checks passed.
+  No SSH, VPS, remote-container, deployment, network, or production operation
+  was performed. This is `LOCAL` evidence only. The next L2 entry condition is
+  the user's browser submission of the temporary SSH credential against the
+  already confirmed isolated-development target, followed by exactly one
+  guarded read-only discovery request.
 - **LOCAL 2026-07-29:** fixed the host-identity-change recovery loop in the
   Extensions onboarding. A mismatch now clears only the browser's session
   credentials and enters a dedicated recovery view; it cannot start another

@@ -2233,8 +2233,8 @@ def test_discover_validates_one_read_only_intent_before_running_discovery(monkey
     async def fake_probe(_target):
         return TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY
 
-    async def fake_discover(request):
-        calls.append(request)
+    async def fake_discover(request, *, approved_plan):
+        calls.append((request, approved_plan))
         return {"environment": {}, "instances": [], "deployment_modes": []}
 
     monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
@@ -2251,7 +2251,12 @@ def test_discover_validates_one_read_only_intent_before_running_discovery(monkey
     )))
 
     assert result["ready"] is True
-    assert calls and calls[0].target == target
+    assert calls and calls[0][0].target == target
+    assert [operation["id"] for operation in calls[0][1].operations] == [
+        "identity", "os_release", "cpu_architecture", "cpu_count", "memory_summary",
+        "home_directory", "python_version", "uv_version", "docker_version", "compose_version", "docker_ps",
+        "compose_ls", "listening_ports", "capacity",
+    ]
 
 
 def test_discover_stops_before_authentication_when_read_only_host_key_drifts(monkeypatch):
@@ -3315,7 +3320,7 @@ def test_extension_plan_discovery_and_instance_routes_expose_only_public_product
     plan_manager = DeploymentPlanManager()
     monkeypatch.setattr(main, "deployment_plans", plan_manager)
 
-    async def fake_discovery(_body, *, path_checks=None):
+    async def fake_discovery(_body, *, path_checks=None, approved_plan=None):
         return copy.deepcopy(discovery)
 
     async def fake_probe(_target):

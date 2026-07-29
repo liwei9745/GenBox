@@ -98,6 +98,7 @@ from extensions.orchestrator import (
 from extensions.discovery import discover_environment
 from extensions.read_only_discovery_plan import (
     DiscoveryPlanValidationError,
+    ValidatedDiscoveryPlan,
     validate_read_only_discovery_plan,
 )
 from extensions.capabilities import validate_deployment_capability
@@ -3708,7 +3709,9 @@ def _bind_confirmed_extension_target(body, *, plan_confirmation: bool = False):
     })
 
 
-async def _validate_read_only_discovery_intent(body: ExtensionDiscoveryRequest) -> None:
+async def _validate_read_only_discovery_intent(
+    body: ExtensionDiscoveryRequest,
+) -> ValidatedDiscoveryPlan:
     """Bind one discovery click to the saved target and freshly observed key.
 
     The probe performs SSH key exchange only. Authentication and the existing
@@ -3750,6 +3753,13 @@ async def _validate_read_only_discovery_intent(body: ExtensionDiscoveryRequest) 
         },
         "operations": [
             {"id": "identity"},
+            {"id": "os_release"},
+            {"id": "cpu_architecture"},
+            {"id": "cpu_count"},
+            {"id": "memory_summary"},
+            {"id": "home_directory"},
+            {"id": "python_version"},
+            {"id": "uv_version"},
             {"id": "docker_version"},
             {"id": "compose_version"},
             {"id": "docker_ps"},
@@ -3759,7 +3769,7 @@ async def _validate_read_only_discovery_intent(body: ExtensionDiscoveryRequest) 
         ],
     }
     try:
-        validate_read_only_discovery_plan(plan)
+        return validate_read_only_discovery_plan(plan)
     except DiscoveryPlanValidationError as exc:
         raise SSHConnectionError(
             "本次只读环境检查的安全范围无效，已拒绝连接。",
@@ -4046,8 +4056,8 @@ async def extension_start_deploy(body: ExtensionDeployRequest):
 async def extension_discover(body: ExtensionDiscoveryRequest):
     body = _bind_confirmed_extension_target(body)
     try:
-        await _validate_read_only_discovery_intent(body)
-        discovery = await discover_environment(body)
+        approved_plan = await _validate_read_only_discovery_intent(body)
+        discovery = await discover_environment(body, approved_plan=approved_plan)
         return deployment_plans.public_discovery(discovery, body.target.id)
     except Exception as exc:
         raise _safe_extension_ssh_error(

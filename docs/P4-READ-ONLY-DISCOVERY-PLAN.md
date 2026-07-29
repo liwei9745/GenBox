@@ -26,10 +26,13 @@ fingerprints, paths, or input values.
 
 ## Fixed Operations
 
-The allowlist is intentionally limited to remote identity, Docker and Compose
-versions, Docker and Compose summaries, listener summaries, and bounded
-container or filesystem metadata. The authoritative command implementation
-remains backend-owned in `extensions/discovery.py`; the browser never supplies
+The allowlist is intentionally limited to the following backend-owned,
+fixed-command summaries: current session user identity; OS release; CPU
+architecture and count; total memory; current home-directory path; Python and
+uv versions; Docker and Compose versions and summaries; TCP listener summary;
+and bounded container or filesystem metadata. It does not read SSH
+configuration, shell history, environment-variable values, application
+configuration, image digests, or secret content. The browser never supplies
 shell text.
 
 ## Operator Boundary
