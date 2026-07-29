@@ -149,22 +149,25 @@ UI/tests or the failed transport attempt as VPS or production verification.
   automatic retries for a failed scheduled item. All scheduled sends enter the
   existing batch service. This is not
   isolated-VPS, private-network, receiver, or production evidence.
-- **Verification:** focused schedule tests passed `5`; complete sender
-  unittest discovery passed `33`; Python compilation, Vue production build,
-  and `git diff --check` passed. The tests use synthetic relative paths and
-  in-memory image bytes only. The schedule API tests also prove administrator
-  protection and reject request-side Push-key projection.
-- **Browser baseline:** local Vite at `127.0.0.1:5173` rendered the sender
-  login page. The source backend does not serve Vue assets at its root by
-  design; Docker and the installer copy the built `web-vue/dist` files into
-  `web_dist`. No authenticated Phase 5 browser action is claimed yet, because
-  this check deliberately did not submit a credential, inspect saved settings,
-  or use real image data.
-- **Next local entry:** review the sender diff, run the local Vite UI with mock
-  API responses to exercise multi-select, date-range preview, progress close,
-  cancellation, failure retry, and weekly schedule controls. Then commit the
-  sanitized sender change separately. Keep Phase 5 marked planned until its
-  local UI evidence and later isolated-VPS gate are recorded.
+- **Verification:** the focused mock-harness tests, complete sender unittest
+  discovery, Python compilation, Vue production build, and `git diff --check`
+  passed locally. The tests use synthetic relative paths and in-memory image
+  bytes only. The schedule API tests also prove administrator protection and
+  reject request-side Push-key projection.
+- **Browser verification:** `LOCAL` mock only. A standalone standard-library
+  mock API accepts one fixed test-only bearer value and serves fixed synthetic
+  Gallery records without importing sender application code or reading `data/`,
+  configuration, real media, or credentials. Through local Vite, browser checks
+  completed login, multi-select, source-retention confirmation, batch progress,
+  cancellation of queued items, failed-only retry, progress-panel close,
+  date-range preview, weekly schedule save, and run-now feedback. At a narrow
+  viewport, the inspected page width had no horizontal overflow. This is a UI
+  contract check only: it does not prove a receiver, Docker, VPS, private
+  network, real image, remote generation, or production behavior.
+- **Next local entry:** rerun the complete sender test suite and Vue build with
+  the mock harness included, review the sanitized diff, then commit the sender
+  change separately. Keep Phase 5 marked planned until its later
+  isolated-VPS gate is recorded.
 
 ## Read-only discovery target-role gate (2026-07-24)
 
