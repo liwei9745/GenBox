@@ -6,6 +6,13 @@
 
 ## Current evidence
 
+- **VERIFIED 2026-07-30:** the published immutable sender image
+  `ghcr.io/liwei9745/chatgpt2api@sha256:6892af60bbb85db1963d43474e66d5551f1a0fd212cb88d658d8a3410c1dc9d0`
+  was pulled by digest and used directly in the disposable local Push smoke
+  against the clean-clone GenBox receiver image. The v1 probe, full final Push
+  endpoint input, first import, idempotent retry, and source retention passed;
+  the smoke resources were removed afterward. This verifies the published
+  sender artifact locally, not a VPS pull, configuration, or isolated-VPS E2E.
 - **LOCAL 2026-07-30:** a fresh, empty local clone of
   `liwei9745/GenBox:codex/p4-deploy-plan-ux-eai` resolved to `dea968c` with no
   working-tree changes. Its Dockerfile built a new receiver image using that
