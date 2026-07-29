@@ -6,6 +6,16 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-30:** a fresh, empty local clone of
+  `liwei9745/GenBox:codex/p4-deploy-plan-ux-eai` resolved to `dea968c` with no
+  working-tree changes. Its Dockerfile built a new receiver image using that
+  clone as the only build context and `--pull=false`. Paired with the current
+  sender image, the disposable internal-network smoke passed the v1 probe,
+  full final Push endpoint normalization, first import, idempotent retry,
+  metadata verification, and source retention. No runtime configuration, user
+  data, image, credential, VPS, registry publication, or production instance
+  was used. This is clean-source `LOCAL` evidence, not a clean isolated-VPS
+  deployment or end-to-end user workflow acceptance.
 - **VERIFIED 2026-07-30:** after a local sanitization review, the current
   GenBox Phase 4 branch was pushed to
   `liwei9745/GenBox:codex/p4-deploy-plan-ux-eai`; the current sender branch
