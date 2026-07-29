@@ -6,6 +6,15 @@
 
 ## Current evidence
 
+- **USER-CONFIRMED 2026-07-29:** the user completed the authorized single
+  host-key-verified L2 read-only environment check in the local Extensions
+  page. The visible result advanced to deployment-option review and stated that
+  no deployment had started. No host identity, credential, raw terminal output,
+  fingerprint, or VPS address was retained in this record. This is a
+  user-visible completion report, not independent `ISOLATED-VPS` verification
+  or deployment evidence. The next prerequisite before a safety plan is an
+  immutable, server-pullable image digest; no image, plan, or deployment has
+  been submitted from this evidence.
 - **LOCAL 2026-07-29:** bounded the authorized L2 read-only environment
   discovery so a stalled SSH/Docker read cannot leave the browser indefinitely
   in a loading state. The backend cancels discovery after 45 seconds and
