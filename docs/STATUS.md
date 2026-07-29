@@ -6,6 +6,13 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-29:** launched a fresh loopback-only Lab for the current
+  worktree and verified its runtime identity reports commit `fe6a3c4` and the
+  manual-current-worktree source. Browser inspection confirmed that its visible
+  credential action invokes read-only discovery and the advanced deployment
+  disclosure starts closed. No target was selected, no credential was submitted,
+  and no SSH, VPS, container, deployment, or network request was made. This is
+  `LOCAL` runtime/browser evidence only.
 - **LOCAL 2026-07-29:** narrowed the L2 credential surface for the one
   host-key-verified read-only environment check. The primary credential action
   and guide both invoke discovery rather than the deployment diagnostic. Sudo
