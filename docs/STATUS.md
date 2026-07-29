@@ -136,7 +136,7 @@ trusted administration path, then obtain a fresh canonical host-key validation
 and authorize one bounded `read-only-discovery` retry. Do not treat the local
 UI/tests or the failed transport attempt as VPS or production verification.
 
-## Phase 5 sender local batch and schedule work (2026-07-28)
+## Phase 5 sender local batch and schedule work (2026-07-29)
 
 - **Evidence class:** `LOCAL` only. The separate sender worktree now has a
   durable manual batch service for Gallery selections and server-indexed date
@@ -159,7 +159,15 @@ UI/tests or the failed transport attempt as VPS or production verification.
   metadata conflicts, and secret-safe result handling. The Vue production build
   and `git diff --check` also passed.
   Tests use synthetic relative paths and in-memory image bytes only. No real
-  receiver, VPS, SSH credential, Push key, or external network was used.
+  VPS, SSH credential, Push key, or external network was used.
+- **Local Docker smoke:** `LOCAL` only. The current sender revision built from
+  the repository Dockerfile with cached local base images and an explicit tag.
+  Its disposable internal-network harness passed the v1 probe, two concurrent
+  matching synthetic requests with one physical sender call, first import,
+  receiver idempotent retry, SHA-256 receipt, and source retention. It published
+  no ports and cleanup left no run-labeled containers, networks, or generated
+  credential files. This is not a VPS, clean-machine, registry, or production
+  verification.
 - **Browser verification:** `LOCAL` mock only. A standalone standard-library
   mock API accepts one fixed test-only bearer value and serves fixed synthetic
   Gallery records without importing sender application code or reading `data/`,
@@ -170,11 +178,11 @@ UI/tests or the failed transport attempt as VPS or production verification.
   viewport, the inspected page width had no horizontal overflow. This is a UI
   contract check only: it does not prove a receiver, Docker, VPS, private
   network, real image, remote generation, or production behavior.
-- **Next local entry:** build the dedicated sender image locally and run its
-  synthetic Docker smoke path. Keep Phase 5 marked planned until its later
-  isolated-VPS gate is recorded; the coordinator is intentionally an
-  in-process guarantee and is not evidence of multi-process or isolated-VPS
-  behavior.
+- **Next local entry:** review the remaining Phase 5 acceptance evidence against
+  the sender's batch and schedule states, then implement only a locally testable
+  gap. Keep Phase 5 marked planned until its later isolated-VPS gate is
+  recorded; the coordinator is intentionally an in-process guarantee and is not
+  evidence of multi-process or isolated-VPS behavior.
 
 ## Read-only discovery target-role gate (2026-07-24)
 
