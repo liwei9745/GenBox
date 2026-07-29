@@ -18,6 +18,15 @@
   check, and diff whitespace check passed. This is local validation tooling,
   not SSH, VPS, container, discovery, deployment, private-network, or
   production evidence.
+- **LOCAL 2026-07-29:** the Extensions environment-discovery route now creates
+  a request-scoped L2 approval record, re-reads the saved target's SSH host key
+  without authentication, and validates the fixed read-only plan before it
+  supplies the session credential to the existing discovery code. A changed
+  host key or rejected plan stops before discovery. The record is never
+  persisted, returned to the browser, or written to task/instance state.
+  Focused plan and extension tests passed `203`. This route coverage uses
+  mocks only; no SSH, VPS, container, deployment, private-network, or
+  production action was performed.
 - **VERIFIED 2026-07-23:** GenBox commits `997e78c`, `5394c42`, and `72edab0`
   locally implement the novice-oriented trusted SSH-session pairing path on top of
   Deployment Safety Contract v3. The saved trust record remains the canonical

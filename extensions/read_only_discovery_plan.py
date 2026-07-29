@@ -116,7 +116,7 @@ def _normalize_path(value: Any, field: str) -> str:
     if not _PATH_PATTERN.fullmatch(path) or "\x00" in path:
         raise DiscoveryPlanValidationError(field)
     normalized = posixpath.normpath(path)
-    if normalized == "/" or normalized != path or "/../" in f"/{path.lstrip('/')}":
+    if normalized != path or "/../" in f"/{path.lstrip('/')}":
         raise DiscoveryPlanValidationError(field)
     return normalized
 

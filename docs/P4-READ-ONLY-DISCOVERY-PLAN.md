@@ -40,3 +40,9 @@ verification and the backend-owned operations. It must stop on any target or
 host-key mismatch and may not register an instance, overwrite target metadata,
 start or stop containers, modify files, copy data, change networking, or read
 secrets. Passing this local validator is not VPS evidence.
+
+`POST /api/extensions/discover` creates this request-scoped plan only after it
+has re-read the saved target's host key without SSH authentication. A mismatch
+stops before credentials are offered to the remote server. The ephemeral
+approval identifier and timestamp are discarded after validation; they are not
+returned to the browser or written to target, task, log, or instance state.

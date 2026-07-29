@@ -15,6 +15,7 @@ import time
 import uuid
 import webbrowser
 import uvicorn
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import quote, urlsplit
@@ -94,6 +95,10 @@ from extensions.orchestrator import (
     test_connection as test_extension_connection,
 )
 from extensions.discovery import discover_environment
+from extensions.read_only_discovery_plan import (
+    DiscoveryPlanValidationError,
+    validate_read_only_discovery_plan,
+)
 from extensions.capabilities import validate_deployment_capability
 import extensions.store as extensions_store
 from extensions.store import (
@@ -3702,6 +3707,66 @@ def _bind_confirmed_extension_target(body, *, plan_confirmation: bool = False):
     })
 
 
+async def _validate_read_only_discovery_intent(body: ExtensionDiscoveryRequest) -> None:
+    """Bind one discovery click to the saved target and freshly observed key.
+
+    The probe performs SSH key exchange only. Authentication and the existing
+    backend-owned discovery commands remain in the subsequent discovery call.
+    The approval record is intentionally in-memory and request-scoped: it is
+    not target metadata, a task record, or a credential store.
+    """
+    observed_algorithm, observed_fingerprint = await probe_host_key(body.target)
+    expected_algorithm = body.expected_host_key_algorithm
+    expected_fingerprint = body.expected_host_key
+    if not (
+        hmac.compare_digest(expected_algorithm, observed_algorithm)
+        and hmac.compare_digest(expected_fingerprint, observed_fingerprint)
+    ):
+        raise SSHConnectionError(
+            "VPS 当前 SSH 主机身份与已确认记录不一致，已拒绝开始环境检查。",
+            code="ssh_host_key_mismatch",
+            stage="host_key_verification",
+        )
+    plan = {
+        "authorization": {
+            "scope": "read-only-discovery",
+            "target_role": body.target.target_role,
+            "host": body.target.host,
+            "port": body.target.port,
+            "username": body.target.username,
+            "approval_record_id": f"l2-{uuid.uuid4().hex}",
+            "approved_at": datetime.now(timezone.utc).isoformat(),
+        },
+        "trust": {
+            "expected_host": body.target.host,
+            "expected_port": body.target.port,
+            "expected_algorithm": expected_algorithm,
+            "expected_fingerprint": expected_fingerprint,
+            "observed_host": body.target.host,
+            "observed_port": body.target.port,
+            "observed_algorithm": observed_algorithm,
+            "observed_fingerprint": observed_fingerprint,
+        },
+        "operations": [
+            {"id": "identity"},
+            {"id": "docker_version"},
+            {"id": "compose_version"},
+            {"id": "docker_ps"},
+            {"id": "compose_ls"},
+            {"id": "listening_ports"},
+            {"id": "capacity", "path": "/"},
+        ],
+    }
+    try:
+        validate_read_only_discovery_plan(plan)
+    except DiscoveryPlanValidationError as exc:
+        raise SSHConnectionError(
+            "本次只读环境检查的安全范围无效，已拒绝连接。",
+            code="read_only_discovery_plan_rejected",
+            stage="discovery_authorization",
+        ) from exc
+
+
 def _safe_extension_ssh_error(exc: Exception, *, error: str, code: str, stage: str) -> HTTPException:
     if isinstance(exc, (SSHAuthenticationError, SSHConnectionError)):
         return HTTPException(
@@ -3971,6 +4036,7 @@ async def extension_start_deploy(body: ExtensionDeployRequest):
 async def extension_discover(body: ExtensionDiscoveryRequest):
     body = _bind_confirmed_extension_target(body)
     try:
+        await _validate_read_only_discovery_intent(body)
         discovery = await discover_environment(body)
         return deployment_plans.public_discovery(discovery, body.target.id)
     except Exception as exc:

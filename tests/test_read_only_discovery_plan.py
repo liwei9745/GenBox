@@ -67,6 +67,15 @@ def test_valid_plan_is_normalized_without_any_network_activity():
     ]
 
 
+def test_root_is_a_valid_bounded_capacity_path():
+    plan = valid_plan()
+    plan["operations"] = [{"id": "capacity", "path": "/"}]
+
+    assert validate_read_only_discovery_plan(plan).operations == (
+        {"id": "capacity", "path": "/"},
+    )
+
+
 @pytest.mark.parametrize(("mutate", "field"), [
     (lambda plan: plan["authorization"].update(scope="deploy"), "authorization.scope"),
     (lambda plan: plan["trust"].update(observed_host="other.example"), "trust.observed_host"),

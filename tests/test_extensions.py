@@ -2112,6 +2112,110 @@ def test_all_ssh_routes_bind_to_the_server_confirmed_target(monkeypatch):
             raise AssertionError(f"{route.__name__} accepted a client-supplied target identity")
 
 
+def test_discover_validates_one_read_only_intent_before_running_discovery(monkeypatch):
+    import main
+
+    target = ExtensionTarget(
+        id="target-read-only", name="VPS", host="safe.example", username="deploy-user",
+        host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY,
+    )
+    calls = []
+
+    async def fake_probe(_target):
+        return TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY
+
+    async def fake_discover(request):
+        calls.append(request)
+        return {"environment": {}, "instances": [], "deployment_modes": []}
+
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    monkeypatch.setattr(main, "probe_host_key", fake_probe)
+    monkeypatch.setattr(main, "discover_environment", fake_discover)
+    monkeypatch.setattr(
+        main.deployment_plans,
+        "public_discovery",
+        lambda discovery, _target_id: {"ready": True, **discovery},
+    )
+
+    result = asyncio.run(main.extension_discover(ExtensionDiscoveryRequest(
+        target=target, credential=SSHCredential(password="session-only"),
+    )))
+
+    assert result["ready"] is True
+    assert calls and calls[0].target == target
+
+
+def test_discover_stops_before_authentication_when_read_only_host_key_drifts(monkeypatch):
+    import main
+
+    target = ExtensionTarget(
+        id="target-read-only", name="VPS", host="safe.example", username="deploy-user",
+        host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY,
+    )
+    discovery_called = False
+
+    async def fake_probe(_target):
+        return TEST_HOST_KEY_ALGORITHM, "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+
+    async def forbidden_discovery(_request):
+        nonlocal discovery_called
+        discovery_called = True
+        raise AssertionError("discovery must not run after a host-key mismatch")
+
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    monkeypatch.setattr(main, "probe_host_key", fake_probe)
+    monkeypatch.setattr(main, "discover_environment", forbidden_discovery)
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(main.extension_discover(ExtensionDiscoveryRequest(
+            target=target, credential=SSHCredential(password="session-only"),
+        )))
+
+    detail = excinfo.value.detail
+    assert excinfo.value.status_code == 400
+    assert detail["diagnostic"]["code"] == "ssh_host_key_mismatch"
+    assert discovery_called is False
+    assert "safe.example" not in str(detail)
+    assert TEST_HOST_KEY not in str(detail)
+
+
+def test_discover_stops_when_read_only_plan_validation_rejects(monkeypatch):
+    import main
+    from extensions.read_only_discovery_plan import DiscoveryPlanValidationError
+
+    target = ExtensionTarget(
+        id="target-read-only", name="VPS", host="safe.example", username="deploy-user",
+        host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY,
+    )
+    discovery_called = False
+
+    async def fake_probe(_target):
+        return TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY
+
+    async def forbidden_discovery(_request):
+        nonlocal discovery_called
+        discovery_called = True
+        raise AssertionError("discovery must not run after a rejected plan")
+
+    def reject_plan(_plan):
+        raise DiscoveryPlanValidationError("operations")
+
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    monkeypatch.setattr(main, "probe_host_key", fake_probe)
+    monkeypatch.setattr(main, "validate_read_only_discovery_plan", reject_plan)
+    monkeypatch.setattr(main, "discover_environment", forbidden_discovery)
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(main.extension_discover(ExtensionDiscoveryRequest(
+            target=target, credential=SSHCredential(password="session-only"),
+        )))
+
+    detail = excinfo.value.detail
+    assert excinfo.value.status_code == 400
+    assert detail["diagnostic"]["code"] == "read_only_discovery_plan_rejected"
+    assert discovery_called is False
+
+
 def test_confirmed_target_binding_overrides_client_trust_fields(monkeypatch):
     import main
 
@@ -3105,7 +3209,11 @@ def test_extension_plan_discovery_and_instance_routes_expose_only_public_product
     async def fake_discovery(_body, *, path_checks=None):
         return copy.deepcopy(discovery)
 
+    async def fake_probe(_target):
+        return algorithm, fingerprint
+
     monkeypatch.setattr(main, "discover_environment", fake_discovery)
+    monkeypatch.setattr(main, "probe_host_key", fake_probe)
     credential = SSHCredential(password="sentinel-session-secret")
     discovery_response = asyncio.run(main.extension_discover(ExtensionDiscoveryRequest(
         target=target, credential=credential,
