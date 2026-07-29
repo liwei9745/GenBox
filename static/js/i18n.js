@@ -1462,6 +1462,7 @@
   MESSAGES['extensions.guide_step2_after'] = {"zh-CN":"给出推荐方案；部署前仍会让你确认。","en":"Recommend a plan and still ask before deployment."};
   MESSAGES['extensions.guide_step2_discovering'] = {"zh-CN":"正在安全读取 VPS 环境，不会修改现有服务。","en":"Safely reading the VPS environment without changing existing services."};
   MESSAGES['extensions.readonly_discovery_ready'] = {"zh-CN":"已可运行一次只读环境检查；部署权限会在真正部署前单独核对。","en":"A one-time read-only environment check is ready; deployment access is checked separately before an actual deployment."};
+  MESSAGES['extensions.readonly_discovery_timeout'] = {"zh-CN":"只读环境检查在限定时间内未完成，已停止本次检查。无需重新确认服务器身份；请检查 SSH 或 Docker 响应后再试。","en":"The read-only environment check did not finish in time and has stopped. You do not need to reconfirm the server identity; check SSH or Docker responsiveness before trying again."};
   MESSAGES['extensions.discovery_ready_for_planning'] = {"zh-CN":"只读环境检查完成。现在可以核对部署选项；不会自动部署。","en":"Read-only environment check complete. You can now review deployment options; deployment will not start automatically."};
   MESSAGES['extensions.discovery_deploy_access_limited'] = {"zh-CN":"只读环境检查完成，但当前会话尚未确认部署权限。请先核对结果；需要部署时再选择高级权限诊断。","en":"Read-only environment check complete, but deployment access is not confirmed for this session. Review the result first; use the advanced access diagnostic only when preparing to deploy."};
   MESSAGES['extensions.discovery_deploy_access_action'] = {"zh-CN":"部署权限尚未确认。","en":"Deployment access is not confirmed."};

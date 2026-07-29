@@ -2333,6 +2333,46 @@ def test_discover_stops_when_read_only_plan_validation_rejects(monkeypatch):
     assert discovery_called is False
 
 
+def test_discover_times_out_and_cancels_a_stalled_read_only_check(monkeypatch):
+    import main
+
+    target = ExtensionTarget(
+        id="target-read-only", name="VPS", host="safe.example", username="deploy-user",
+        host_key_algorithm=TEST_HOST_KEY_ALGORITHM, host_key=TEST_HOST_KEY,
+    )
+    cancelled = []
+
+    async def fake_probe(_target):
+        return TEST_HOST_KEY_ALGORITHM, TEST_HOST_KEY
+
+    async def stalled_discovery(_request, *, approved_plan):
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+
+    monkeypatch.setattr(main.extensions_store, "get_target", lambda _target_id: target)
+    monkeypatch.setattr(main, "probe_host_key", fake_probe)
+    monkeypatch.setattr(main, "discover_environment", stalled_discovery)
+    monkeypatch.setattr(main, "READ_ONLY_DISCOVERY_TIMEOUT_SECONDS", 0.001)
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(main.extension_discover(ExtensionDiscoveryRequest(
+            target=target, credential=SSHCredential(password="session-only-secret"),
+        )))
+
+    detail = excinfo.value.detail
+    assert excinfo.value.status_code == 400
+    assert detail["diagnostic"]["code"] == "read_only_discovery_timeout"
+    assert detail["diagnostic"]["stage"] == "environment_discovery"
+    assert cancelled == [True]
+    assert "safe.example" not in str(detail)
+    assert "deploy-user" not in str(detail)
+    assert "session-only-secret" not in str(detail)
+    assert TEST_HOST_KEY not in str(detail)
+
+
 def test_confirmed_target_binding_overrides_client_trust_fields(monkeypatch):
     import main
 

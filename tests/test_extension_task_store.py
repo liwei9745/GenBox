@@ -2808,7 +2808,7 @@ def test_ambiguous_deployment_probe_timeout_is_single_flight_and_bounded_in_node
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''
 const fs=require('fs');const vm=require('vm');let source=fs.readFileSync(process.argv[1],'utf8');
-source=source.replace('var deploymentReconcileProbeTimeoutMs=5000,deploymentReconcileIntervalMs=800;','var deploymentReconcileProbeTimeoutMs=5,deploymentReconcileIntervalMs=1;');
+source=source.replace('var deploymentReconcileProbeTimeoutMs=5000,deploymentReconcileIntervalMs=800,readOnlyDiscoveryTimeoutMs=65000;','var deploymentReconcileProbeTimeoutMs=5,deploymentReconcileIntervalMs=1,readOnlyDiscoveryTimeoutMs=65000;');
 const marker=source.lastIndexOf('})();');
 const instrumented=source.slice(0,marker)+`
 window.__test={
@@ -3059,6 +3059,24 @@ const key='SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';const target={id:
 global._authFetch=async(url,options={})=>{let body={};if(url==='/api/extensions/targets')body={targets:[target]};else if(url==='/api/extensions/catalog')body={categories:[],items:[]};else if(url==='/api/extensions/targets/batch')body={target_ids:[]};else if(url==='/api/extensions/tasks')body={tasks:[]};else if(url==='/api/extensions/ssh/test'){sshCalls+=1;body={ok:true,host_key_algorithm:'ssh-ed25519',host_key:key,privileges:{is_root:false,docker_access:false,passwordless_sudo:false,password_sudo:false,can_deploy:false,diagnostic_code:'no_sudo_or_docker'}}}else if(url==='/api/extensions/discover'){discoveryCalls+=1;body={ready:false,capabilities:{can_deploy:false,docker_available:false,compose_available:false},instances:[],deployment_modes:[]}}return {ok:true,text:async()=>JSON.stringify(body)}};
 eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();await window.extensionDiscover();
 if(discoveryCalls!==1||sshCalls!==0)throw new Error('read-only discovery was incorrectly blocked by the deployment diagnostic');if(!element('extSshNextBtn').disabled)throw new Error('unconfirmed deploy capability unlocked SSH next');if(element('extGuidePrimaryBtn').textContent!=='extensions.ssh_diagnostic_optional')throw new Error('limited discovery did not offer an optional diagnostic');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_read_only_discovery_timeout_restores_a_safe_retry_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');let source=fs.readFileSync(process.argv[1],'utf8');
+source=source.replace('readOnlyDiscoveryTimeoutMs=65000','readOnlyDiscoveryTimeoutMs=1');
+(async()=>{
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(['extDiscoveryResult','extPlanPreview'].includes(id)?['hidden']:[]);elements.set(id,{id,style:{},value:'',textContent:'',innerHTML:'',disabled:false,checked:false,dataset:{},options:[],selectedIndex:0,classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){this.focused=true},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
+const network={value:'tailscale',checked:true,classList:{toggle(){}}};global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('extNetwork'))return network;return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});
+const key='SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';const target={id:'saved',name:'Saved',host:'safe.example',port:22,username:'deploy-user',host_key_algorithm:'ssh-ed25519',host_key:key,chatgpt2api_port:33010};let discoveryCalls=0,sshCalls=0,pairingCalls=0,resetCalls=0,aborts=0;
+global._authFetch=(url,options={})=>{if(url==='/api/extensions/targets')return Promise.resolve({ok:true,text:async()=>JSON.stringify({targets:[target]})});if(url==='/api/extensions/catalog')return Promise.resolve({ok:true,text:async()=>JSON.stringify({categories:[],items:[]})});if(url==='/api/extensions/targets/batch')return Promise.resolve({ok:true,text:async()=>JSON.stringify({target_ids:[]})});if(url==='/api/extensions/tasks')return Promise.resolve({ok:true,text:async()=>JSON.stringify({tasks:[]})});if(url==='/api/extensions/ssh/test'){sshCalls+=1;return Promise.resolve({ok:true,text:async()=>JSON.stringify({})})}if(url.includes('/host-key/pair/')){pairingCalls+=1;return Promise.resolve({ok:true,text:async()=>JSON.stringify({})})}if(url.includes('/host-key/reset')){resetCalls+=1;return Promise.resolve({ok:true,text:async()=>JSON.stringify({})})}if(url==='/api/extensions/discover'){discoveryCalls+=1;return new Promise((resolve,reject)=>{const signal=options.signal;if(signal)signal.addEventListener('abort',()=>{aborts+=1;const error=new Error('aborted');error.name='AbortError';reject(error)},{once:true})})}return Promise.resolve({ok:true,text:async()=>JSON.stringify({})})};
+eval(source);window.extensionLoadServices=async()=>{};await window.loadExtensions();window.extensionLoadTarget('saved');element('extPassword').value='session-only';window.extensionCredentialChanged();await window.extensionDiscover();
+if(discoveryCalls!==1||sshCalls!==0||pairingCalls!==0||resetCalls!==0)throw new Error('timeout started an unrelated remote workflow');if(aborts!==1)throw new Error('timeout did not abort the stalled request');if(element('extDiscoverBtn').disabled)throw new Error('timeout did not restore the discovery action');if(element('extPassword').disabled)throw new Error('timeout left credential input locked');if(element('extensionMessage').textContent!=='extensions.readonly_discovery_timeout')throw new Error('timeout did not show the localized recovery');
 })();
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)

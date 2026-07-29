@@ -3778,6 +3778,9 @@ async def _validate_read_only_discovery_intent(
         ) from exc
 
 
+READ_ONLY_DISCOVERY_TIMEOUT_SECONDS = 45
+
+
 def _safe_extension_ssh_error(exc: Exception, *, error: str, code: str, stage: str) -> HTTPException:
     if isinstance(exc, (SSHAuthenticationError, SSHConnectionError)):
         return HTTPException(
@@ -4057,8 +4060,23 @@ async def extension_discover(body: ExtensionDiscoveryRequest):
     body = _bind_confirmed_extension_target(body)
     try:
         approved_plan = await _validate_read_only_discovery_intent(body)
-        discovery = await discover_environment(body, approved_plan=approved_plan)
+        discovery = await asyncio.wait_for(
+            discover_environment(body, approved_plan=approved_plan),
+            timeout=READ_ONLY_DISCOVERY_TIMEOUT_SECONDS,
+        )
         return deployment_plans.public_discovery(discovery, body.target.id)
+    except asyncio.TimeoutError as exc:
+        raise _safe_extension_ssh_error(
+            SSHConnectionError(
+                "只读环境检查在限定时间内未完成，已停止本次检查。无需重新确认服务器身份；"
+                "请检查隔离开发机的 SSH/Docker 响应后，再进行一次检查。",
+                code="read_only_discovery_timeout",
+                stage="environment_discovery",
+            ),
+            error="VPS 环境检查未完成，原始错误已隐藏。",
+            code="extension_discovery_failed",
+            stage="environment_discovery",
+        ) from exc
     except Exception as exc:
         raise _safe_extension_ssh_error(
             exc,
