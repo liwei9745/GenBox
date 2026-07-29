@@ -1475,12 +1475,37 @@ def test_frontend_immutable_image_validation_accepts_a_pinned_ghcr_reference():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''
 const fs = require('fs');
+;(async () => {
 let source = fs.readFileSync(process.argv[1], 'utf8');
-source = source.replace(/\}\)\(\);\s*$/, 'window.__imageReferenceTest={isImmutableImageReference};})();');
+source = source.replace(/\}\)\(\);\s*$/, 'window.__imageReferenceTest={isImmutableImageReference,submitInvalidPlan:async function(){sshVerified=true;return window.extensionCreatePlan()}};})();');
 global.window = global;
-global.document = {getElementById(){return null},querySelector(){return null},querySelectorAll(){return []},addEventListener(){}};
+const controls = new Map();
+function control(id) {
+  if (!controls.has(id)) {
+    controls.set(id, {
+      value: '', textContent: '', disabled: false, dataset: {}, focused: false,
+      classList: { add(){}, remove(){}, toggle(){} },
+      focus(){ this.focused = true; }, setAttribute(){}, removeAttribute(){},
+      querySelector(){ return null; }, querySelectorAll(){ return []; },
+    });
+  }
+  return controls.get(id);
+}
+global.document = {
+  getElementById: control,
+  querySelector(selector) {
+    if (selector.includes('extStrategy')) return { value: 'isolated' };
+    if (selector.includes('extDeployMode')) return { value: 'compose' };
+    if (selector.includes('extIntent')) return { value: 'development' };
+    return null;
+  },
+  querySelectorAll(){ return []; },
+  addEventListener(){},
+};
 global.i18nText = key => key;
 global.escHtml = value => String(value || '');
+let requestCount = 0;
+global._authFetch = async () => { requestCount += 1; throw new Error('network request was not expected'); };
 eval(source);
 const digest = 'a'.repeat(64);
 if (!window.__imageReferenceTest.isImmutableImageReference('ghcr.io/example/chatgpt2api@sha256:' + digest)) {
@@ -1489,6 +1514,17 @@ if (!window.__imageReferenceTest.isImmutableImageReference('ghcr.io/example/chat
 if (window.__imageReferenceTest.isImmutableImageReference('ghcr.io/example/chatgpt2api:latest')) {
   throw new Error('mutable latest tag was accepted');
 }
+control('extImage').value = 'ghcr.io/example/chatgpt2api:latest';
+await window.__imageReferenceTest.submitInvalidPlan();
+if (requestCount !== 0) throw new Error('invalid image started a plan request');
+if (!control('extImage').focused) throw new Error('invalid image did not focus the image input');
+if (control('extensionMessage').textContent !== 'extensions.image_source_required') {
+  throw new Error('invalid image did not show the recovery message');
+}
+})().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
     assert result.returncode == 0, result.stderr

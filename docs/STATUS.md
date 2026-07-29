@@ -110,9 +110,10 @@
   The human-readable `sha-9b82c52` tag is build metadata only; GenBox must use
   the digest reference. This is registry artifact evidence, not SSH, VPS,
   remote-container, deployment, receiver, or end-to-end Push evidence.
-- **LOCAL 2026-07-29 digest acceptance regression:** the executable browser
-  predicate now has direct Node coverage for a pinned GHCR reference and a
-  rejected mutable `latest` tag, alongside the backend gate that rejects a
+- **LOCAL 2026-07-29 digest acceptance regression:** a minimal DOM execution
+  test now covers the actual front-end plan gate: a pinned GHCR reference is
+  accepted, while a mutable `latest` tag shows the recovery message, moves focus
+  to the image input, and makes no request. The backend independently rejects a
   mutable empty isolated deployment before SSH discovery. `python -m pytest -q
   tests/test_extensions.py` passed `188`; full local `python -m pytest -q`
   passed `521`; `node --check static/js/extensions.js`, `node --check
