@@ -110,6 +110,16 @@
   The human-readable `sha-9b82c52` tag is build metadata only; GenBox must use
   the digest reference. This is registry artifact evidence, not SSH, VPS,
   remote-container, deployment, receiver, or end-to-end Push evidence.
+- **LOCAL 2026-07-29 digest acceptance regression:** the executable browser
+  predicate now has direct Node coverage for a pinned GHCR reference and a
+  rejected mutable `latest` tag, alongside the backend gate that rejects a
+  mutable empty isolated deployment before SSH discovery. `python -m pytest -q
+  tests/test_extensions.py` passed `188`; full local `python -m pytest -q`
+  passed `521`; `node --check static/js/extensions.js`, `node --check
+  static/js/i18n.js`, and `git diff --check` passed. The local extensions page
+  at `http://127.0.0.1:8892/#/extensions` was inspected without submitting or
+  changing any saved target, credential, plan, or connection. This is LOCAL
+  UI/test evidence only.
 
 ## Phase 4 boundary
 

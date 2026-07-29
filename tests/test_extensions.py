@@ -1471,6 +1471,29 @@ def test_image_input_explains_remote_digest_requirement_and_blocks_plan_request_
     assert "extensions.image_source_required" in translations
 
 
+def test_frontend_immutable_image_validation_accepts_a_pinned_ghcr_reference():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs = require('fs');
+let source = fs.readFileSync(process.argv[1], 'utf8');
+source = source.replace(/\}\)\(\);\s*$/, 'window.__imageReferenceTest={isImmutableImageReference};})();');
+global.window = global;
+global.document = {getElementById(){return null},querySelector(){return null},querySelectorAll(){return []},addEventListener(){}};
+global.i18nText = key => key;
+global.escHtml = value => String(value || '');
+eval(source);
+const digest = 'a'.repeat(64);
+if (!window.__imageReferenceTest.isImmutableImageReference('ghcr.io/example/chatgpt2api@sha256:' + digest)) {
+  throw new Error('pinned GHCR image was rejected');
+}
+if (window.__imageReferenceTest.isImmutableImageReference('ghcr.io/example/chatgpt2api:latest')) {
+  throw new Error('mutable latest tag was accepted');
+}
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_step_two_restores_the_visible_novice_action_guide_in_node():
     source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
     node = r'''
