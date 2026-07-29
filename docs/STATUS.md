@@ -165,10 +165,11 @@ UI/tests or the failed transport attempt as VPS or production verification.
   the repository Dockerfile with cached local base images and an explicit tag.
   Its disposable internal-network harness passed the v1 probe, two concurrent
   matching synthetic requests with one physical sender call, first import,
-  receiver idempotent retry, SHA-256 receipt, and source retention. It published
-  no ports and cleanup left no run-labeled containers, networks, or generated
-  credential files. This is not a VPS, clean-machine, registry, or production
-  verification.
+  receiver idempotent retry, SHA-256 receipt, source retention, and recovery of
+  a batch item persisted as `sending` after the receiver had already accepted
+  its image. It published no ports and cleanup left no run-labeled containers,
+  networks, or generated credential files. This is not a VPS, clean-machine,
+  registry, or production verification.
 - **Browser verification:** `LOCAL` mock only. A standalone standard-library
   mock API accepts one fixed test-only bearer value and serves fixed synthetic
   Gallery records without importing sender application code or reading `data/`,
