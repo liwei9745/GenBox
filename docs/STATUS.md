@@ -106,10 +106,17 @@
   `liwei9745/chatgpt2api-genbox-p4` completed its explicit, manual-only
   GitHub Actions image publication run. GitHub Packages reports the published
   multi-architecture manifest reference as
-  `ghcr.io/liwei9745/chatgpt2api@sha256:79ef9242f81faa879facb84be0592bb65f89cce297073102f52608dc2a1bfa59`.
-  The human-readable `sha-9b82c52` tag is build metadata only; GenBox must use
+  `ghcr.io/liwei9745/chatgpt2api@sha256:f3091475b298749e97e58051574850d63b9a63bf12b54cb74b468f5020a32c5a`.
+  The human-readable `sha-c3cabf9` tag is build metadata only; GenBox must use
   the digest reference. This is registry artifact evidence, not SSH, VPS,
   remote-container, deployment, receiver, or end-to-end Push evidence.
+- **LOCAL 2026-07-29 sender build-context containment:** the sender's
+  `.dockerignore` now excludes local environment files, runtime configuration,
+  data, generated media, logs, databases, and private-key file types before
+  Docker receives the build context. Sender unittest discovery passed `47`; a
+  new local Docker build completed with the protected paths excluded from its
+  small build context. This is a local build/sanitization check only, not a
+  clean deployment, VPS, or cross-project transfer result.
 - **LOCAL 2026-07-29 digest acceptance regression:** a minimal DOM execution
   test now covers the actual front-end plan gate: a pinned GHCR reference is
   accepted, while a mutable `latest` tag shows the recovery message, moves focus
