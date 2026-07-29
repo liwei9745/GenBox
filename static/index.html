@@ -882,7 +882,7 @@
               <label class="extension-checkbox"><input id="extReuseSshPassword" type="checkbox" onchange="extensionCredentialChanged()"><span data-i18n="extensions.reuse_ssh_password">本次请求显式使用 SSH 密码作为 sudo 密码</span></label>
             </fieldset>
             <p id="extCredentialNotice" class="extension-credential-notice" role="status"><span data-i18n="extensions.ssh_not_saved_notice">保存 VPS 连接信息，但不保存 SSH 密码、私钥或 sudo 密码；关闭页面或重启后需要重新输入。</span></p>
-            <div class="extension-actions"><button type="button" class="btn-primary" id="extCredentialTestBtn" onclick="extensionTestSSH()" data-i18n="extensions.personal_check_continue">检查并继续</button></div>
+            <div class="extension-actions"><button type="button" class="btn-primary" id="extCredentialTestBtn" onclick="extensionDiscover()" data-i18n="extensions.personal_check_continue">运行只读检查</button></div>
             </section>
             <section id="extHostKeyPairing" class="extension-confirm" aria-live="polite">
               <div class="extension-pairing-heading"><span class="extension-pairing-kicker" data-i18n="extensions.host_key_pairing_kicker">当前只做一件事</span><b data-i18n="extensions.host_key_pairing_title">确认这台服务器</b><p data-i18n="extensions.host_key_pairing_help">在你平时用来登录这台服务器的终端中完成确认。GenBox 不会要求你输入密码或私钥。</p></div>

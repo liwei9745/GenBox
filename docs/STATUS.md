@@ -19,6 +19,11 @@
   `543` tests with `0` failures and `0` errors. No SSH, VPS, remote-container,
   deployment, network, or production operation was performed. This is `LOCAL`
   evidence only.
+- **LOCAL 2026-07-29:** browser-checked the current local Lab on a separate
+  loopback port. The visible credential-panel primary action says `Run
+  read-only check` and invokes only the bounded discovery route, matching the
+  novice guide. No target was selected, no credential was submitted, and no SSH
+  or VPS request was made during this browser check.
 - **LOCAL 2026-07-29:** closed the gap between the L2 read-only discovery
   approval plan and the SSH command executor. The discovery route now passes
   its request-scoped validated plan into a command guard. Every SSH command is
