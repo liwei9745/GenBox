@@ -6,6 +6,18 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-29:** added a fail-closed L2 read-only discovery-plan gate.
+  `scripts/validate_discovery_plan.py` accepts only a secret-free,
+  target-bound `read-only-discovery` authorization, matching expected/observed
+  canonical SSH host-key identity, and fixed allowlisted operations. It rejects
+  arbitrary shell text, target or host-key drift, unknown labels, unsafe
+  container identifiers, and non-canonical paths. Its output names only an
+  approved scope/role and operation identifiers, or an invalid field; it does
+  not echo host identities, fingerprints, paths, or credentials. Focused plan
+  and extension tests passed `199`; the full local pytest suite, Python compile
+  check, and diff whitespace check passed. This is local validation tooling,
+  not SSH, VPS, container, discovery, deployment, private-network, or
+  production evidence.
 - **VERIFIED 2026-07-23:** GenBox commits `997e78c`, `5394c42`, and `72edab0`
   locally implement the novice-oriented trusted SSH-session pairing path on top of
   Deployment Safety Contract v3. The saved trust record remains the canonical
