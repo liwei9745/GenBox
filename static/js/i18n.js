@@ -1444,6 +1444,8 @@
   MESSAGES['extensions.personal_access_title'] = {"zh-CN":"运行一次只读检查","en":"Run one read-only check"};
   MESSAGES['extensions.personal_access_help'] = {"zh-CN":"凭据只用于这次检查，关闭页面后不会保留。不会部署服务，也不会使用 sudo。","en":"Credentials are used only for this check and are not kept after the page closes. It does not deploy a service or use sudo."};
   MESSAGES['extensions.personal_check_continue'] = {"zh-CN":"运行只读检查","en":"Run read-only check"};
+  MESSAGES['extensions.advanced_deployment_access'] = {"zh-CN":"高级部署权限（本次不用填）","en":"Advanced deployment access (not needed for this check)"};
+  MESSAGES['extensions.advanced_deployment_access_help'] = {"zh-CN":"只读环境检查不会使用 sudo。只有准备部署或私网设置时，才按实际需要填写。","en":"The read-only environment check does not use sudo. Provide these only when preparing deployment or private-network setup."};
   MESSAGES['extensions.personal_ready_kicker'] = {"zh-CN":"检查完成","en":"Check complete"};
   MESSAGES['extensions.personal_ready_title'] = {"zh-CN":"环境检查完成","en":"Environment check complete"};
   MESSAGES['extensions.personal_ready_help'] = {"zh-CN":"下一步核对部署选项和安全计划；不会自动部署。","en":"Next, review deployment options and the safety plan; deployment will not start automatically."};

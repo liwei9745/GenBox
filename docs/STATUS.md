@@ -6,6 +6,19 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-29:** narrowed the L2 credential surface for the one
+  host-key-verified read-only environment check. The primary credential action
+  and guide both invoke discovery rather than the deployment diagnostic. Sudo
+  choices are collapsed under an advanced deployment-only disclosure, and the
+  discovery request defensively replaces any stale or accidentally entered
+  elevation fields with `none` and empty sudo data. This does not remove the
+  separate advanced diagnostic needed before a later deployment. Focused DOM
+  regression tests prove that simulated sudo input is absent from the discovery
+  request; the full local pytest suite passed `543`; and a local browser check
+  confirmed the disclosure is closed by default and the primary action remains
+  `Run read-only check`. No target was selected, no credential was submitted,
+  and no SSH, VPS, container, deployment, or network request was made. This is
+  `LOCAL` evidence only.
 - **LOCAL 2026-07-29:** simplified the personal-server path so the credential
   view's primary action now runs the one bounded, host-key-verified read-only
   environment discovery directly. It no longer requires the separate SSH

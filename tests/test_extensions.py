@@ -1314,6 +1314,8 @@ def test_pairing_ui_has_expiry_cleanup_and_recovery_state():
     assert "'extensions.guide_step1_credential_after'" in source
     assert "does not deploy or use sudo" in (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
     assert 'id="extCredentialTestBtn" onclick="extensionDiscover()"' in markup
+    assert 'id="extElevationPanel" class="extension-advanced-credentials"' in markup
+    assert "function discoveryCredential()" in source
     assert 'id="extHostKeyPairingState"' in markup
     assert "extension-pairing-command-row" in styles
     assert "@media(max-width:700px)" in styles
