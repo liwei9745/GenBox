@@ -170,10 +170,11 @@ UI/tests or the failed transport attempt as VPS or production verification.
   viewport, the inspected page width had no horizontal overflow. This is a UI
   contract check only: it does not prove a receiver, Docker, VPS, private
   network, real image, remote generation, or production behavior.
-- **Next local entry:** review and commit the sender coordinator change
-  separately. Keep Phase 5 marked planned until its later isolated-VPS gate is
-  recorded; the coordinator is intentionally an in-process guarantee and is not
-  evidence of multi-process or isolated-VPS behavior.
+- **Next local entry:** build the dedicated sender image locally and run its
+  synthetic Docker smoke path. Keep Phase 5 marked planned until its later
+  isolated-VPS gate is recorded; the coordinator is intentionally an
+  in-process guarantee and is not evidence of multi-process or isolated-VPS
+  behavior.
 
 ## Read-only discovery target-role gate (2026-07-24)
 
