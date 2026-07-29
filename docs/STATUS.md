@@ -16,8 +16,11 @@
   deployment. Focused route/DOM regressions cover cancellation, secret-free
   error content, request abortion, and restored controls. Python compilation,
   JavaScript syntax checks, diff whitespace checks, and the full local pytest
-  suite passed `545`. No SSH, VPS, remote container, deployment, network, or
-  production action was performed. This is `LOCAL` evidence only.
+  suite passed `545`. A fresh loopback-only Lab loaded the committed runtime
+  identity and rendered `#/extensions` with no browser-console errors; no
+  target was selected and no credential or remote request was submitted. No
+  SSH, VPS, remote container, deployment, network, or production action was
+  performed. This is `LOCAL` evidence only.
 - **LOCAL 2026-07-29:** launched a fresh loopback-only Lab for the current
   worktree and verified its runtime identity reports commit `fe6a3c4` and the
   manual-current-worktree source. Browser inspection confirmed that its visible
