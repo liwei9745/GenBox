@@ -180,10 +180,10 @@ UI/tests or the failed transport attempt as VPS or production verification.
   viewport, the inspected page width had no horizontal overflow. This is a UI
   contract check only: it does not prove a receiver, Docker, VPS, private
   network, real image, remote generation, or production behavior.
-- **Next local entry:** review the remaining Phase 5 acceptance evidence against
-  the sender's batch and schedule states, then implement only a locally testable
-  gap. Keep Phase 5 marked planned until its later isolated-VPS gate is
-  recorded; the coordinator is intentionally an in-process guarantee and is not
+- **Next local entry:** retain this sender image and smoke harness as the local
+  Phase 5 baseline. The next verification gate is a separately authorized
+  isolated-VPS clone; keep Phase 5 marked planned until that evidence is
+  recorded. The coordinator is intentionally an in-process guarantee and is not
   evidence of multi-process or isolated-VPS behavior.
 
 ## Read-only discovery target-role gate (2026-07-24)
