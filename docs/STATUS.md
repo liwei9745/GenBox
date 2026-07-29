@@ -6,6 +6,34 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-30:** the sender repository's disposable Docker-only Push
+  smoke harness passed against prebuilt local sender and GenBox receiver
+  images. On one internal, unpublished network it generated a synthetic 2x2
+  PNG and test-only credentials, then verified the v1 probe, first import,
+  idempotent retry, concurrent-transfer coordination, interrupted-batch
+  recovery, receiver SHA-256 metadata, and source retention. The harness
+  removed its per-run labeled containers and network afterward. The current
+  sender address-normalization change was separately covered by sender unit
+  tests and Vue production build; a no-network Docker rebuild was not possible
+  because the Dockerfile system-dependency layer was not cached. No user image,
+  credential, VPS, SSH, production container, registry pull, publication, or
+  deployment was used. This is `LOCAL` protocol evidence only, not
+  `ISOLATED-VPS` or full current-image acceptance evidence.
+- **LOCAL 2026-07-30:** the final private-network completion view now makes
+  the chatgpt2api login handoff explicit for new users. It pre-fills the
+  one-time management key delivered in the current page, labels that state,
+  supports an intentional refill from that same delivery, and permits a manual
+  replacement key. The shortcut copies the submitted value, opens the
+  non-secret private console URL in a separate tab, then clears both page
+  inputs and disables the delivery refill. It writes neither key to browser
+  storage nor to a URL or backend endpoint. The delivery key cannot be
+  recovered after refresh or clearing; the user must manually paste it or use
+  the existing ownership-verified rotation flow. `tests/test_extensions.py`
+  passed `200`; JavaScript syntax and diff whitespace checks passed. A
+  loopback request returned the current static bundle reference. No browser
+  target was selected, no credential was entered, and no SSH, VPS, container,
+  sender, deployment, or network action was submitted. This is `LOCAL` UI/test
+  evidence only.
 - **LOCAL 2026-07-30:** GenBox now provisions a dedicated Push source for one
   registered, managed `chatgpt2api` instance after its private destination is
   verified. The browser submits only an opaque instance handle; the backend
