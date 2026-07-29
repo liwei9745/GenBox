@@ -3225,3 +3225,29 @@ if(requests!==0)throw new Error('updating the explicit retry unexpectedly made a
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_console_login_helper_prefills_only_page_memory_and_never_puts_key_in_url_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');let source=fs.readFileSync(process.argv[1],'utf8');
+source=source.replace('function setConsoleLoginAccess','window.__setConsoleLoginAccess=function setConsoleLoginAccess');
+(async()=>{
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(['extConsoleLogin'].includes(id)?['hidden']:[]);elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',disabled:false,dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){this.focused=true},select(){this.selected=true},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
+const network={value:'auto',checked:true,classList:{toggle(){}}},opens=[],copied=[];let requests=0;
+global.window=global;window.open=(...args)=>{opens.push(args);return {}};global.document={getElementById:element,querySelector(s){if(s.includes('extNetwork'))return network;return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){},execCommand(){throw new Error('clipboard fallback was not expected')}};Object.defineProperty(global,'navigator',{value:{clipboard:{writeText:async value=>copied.push(value)}},configurable:true});global.i18nText=k=>k;global.getUiLanguage=()=> 'en';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});global._authFetch=async()=>{requests+=1;throw new Error('login helper must not call the backend')};
+eval(source);
+window.__setConsoleLoginAccess({console_url:'https://console.example'},'page-memory-key');
+if(element('extConsoleLogin').classList.contains('hidden'))throw new Error('console login helper did not become visible');
+if(element('extConsoleLoginKey').value!=='page-memory-key')throw new Error('current page key was not prefilled');
+element('extConsoleLoginKey').value='';await window.extensionOpenConsoleLogin();
+if(opens.length!==0||!element('extConsoleLoginKey').focused)throw new Error('empty key opened the console instead of requesting input');
+element('extConsoleLoginKey').value='manual-replacement-key';await window.extensionOpenConsoleLogin();
+if(opens.length!==1||opens[0][0]!=='https://console.example/'||opens[0][1]!=='_blank'||opens[0][2]!=='noopener')throw new Error('console was not opened through a clean new-window URL');
+if(copied.length!==1||copied[0]!=='manual-replacement-key')throw new Error('manual key was not copied');
+if(element('extConsoleLoginKey').value)throw new Error('manual key was retained after explicit handoff');
+if(opens[0][0].includes('manual-replacement-key')||requests!==0)throw new Error('key leaked through URL or backend request');
+})();
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr

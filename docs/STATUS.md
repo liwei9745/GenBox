@@ -6,6 +6,19 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-30:** the final private-network completion screen now offers
+  a console-login helper for the exact managed instance. It pre-fills a
+  one-time management key only while that value remains in the current page;
+  after a refresh, the user can enter a replacement key manually. An explicit
+  action copies the key, opens the private console in a separate tab, then
+  clears the helper input. The key is never appended to a URL, sent to a new
+  backend endpoint, or persisted in browser storage. The console address may
+  be recovered only by matching the existing opaque managed-instance handle to
+  public instance metadata. Focused extension suites passed `325`; full local
+  `python -m pytest -q` passed `553`; JavaScript syntax, whitespace, and
+  loopback static-resource checks passed. No browser target was selected, no
+  credential was entered, and no SSH, VPS, container, deployment, or network
+  action was submitted. This is `LOCAL` UI/test evidence only.
 - **LOCAL 2026-07-30:** a VPS-network task that stops for user input now keeps
   its recovery card actionable in novice mode. The visible recovery button
   directs a missing session credential to the SSH password/private-key field;

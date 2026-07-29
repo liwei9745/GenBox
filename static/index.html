@@ -1036,6 +1036,12 @@
               <button class="btn-ghost" onclick="extensionResetAdminKey()"><span data-i18n="extensions.lost_key">管理密钥丢失？重置此实例</span></button>
             </div>
             <section id="extSuccessBanner" class="extension-success-banner hidden"><span class="extension-success-icon" aria-hidden="true">&#10003;</span><div><span>PRIVATE LINK READY</span><h3><span data-i18n="extensions.success_title">恭喜你，GenBox 私有链路已经打通</span></h3><p><span data-i18n="extensions.success_copy">接下来，你可以让远程 AI 服务安全地把图片送入 GenBox 媒体库，享受自动归档、统一管理与跨设备访问的流畅体验。</span></p></div></section>
+            <section id="extConsoleLogin" class="extension-console-login hidden" aria-labelledby="extConsoleLoginTitle">
+              <div><span data-i18n="extensions.console_login_kicker">下一步</span><h3 id="extConsoleLoginTitle"><span data-i18n="extensions.console_login_title">登录 chatgpt2api 控制台</span></h3><p data-i18n="extensions.console_login_help">管理密钥仅保留在当前页面。点击后会复制密钥并打开私网控制台，再在控制台中粘贴登录。</p></div>
+              <label><span data-i18n="extensions.console_url">控制台地址</span><input id="extConsoleLoginUrl" readonly></label>
+              <label><span data-i18n="extensions.admin_key">管理密钥</span><div class="extension-copy-row"><input id="extConsoleLoginKey" type="password" autocomplete="off" spellcheck="false" data-i18n-placeholder="extensions.console_login_key_placeholder" placeholder="粘贴管理密钥"><button type="button" class="btn-secondary" aria-label="显示管理密钥" aria-pressed="false" title="显示管理密钥" onclick="extensionTogglePassword('extConsoleLoginKey',this)">👁</button></div></label>
+              <div class="extension-console-login-actions"><button type="button" class="btn-secondary" onclick="extensionOpenConsoleOnly()"><span data-i18n="extensions.open_console_only">仅打开控制台</span></button><button type="button" class="btn-primary" onclick="extensionOpenConsoleLogin()"><span data-i18n="extensions.copy_key_open_console">复制密钥并打开控制台</span></button></div>
+            </section>
             <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(4)"><span data-i18n="common.previous">上一步</span></button></div>
           </div>
           <div id="extensionMessage" class="extension-message" role="status" aria-live="polite"></div>
@@ -1273,6 +1279,6 @@
   <script src="/static/js/i18n.js?v=14"></script>
 <script src="/static/js/app-all.js?v=36"></script>
 <script src="/static/js/sync.js?v=7"></script>
-<script src="/static/js/extensions.js?v=21"></script>
+<script src="/static/js/extensions.js?v=22"></script>
 </body>
 </html>

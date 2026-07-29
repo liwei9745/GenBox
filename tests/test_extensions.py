@@ -1946,6 +1946,7 @@ def test_network_recovery_and_auth_key_layout_stack_at_phone_width():
 
 
 def test_deploy_completion_opens_delivery_pane_without_falsely_finishing_network():
+    html = (Path(__file__).parents[1] / "static" / "index.html").read_text(encoding="utf-8")
     script = (Path(__file__).parents[1] / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
     completed_handler = script.split("renderTask=async function", 1)[1].split("reconcileAmbiguousDeployment=", 1)[0]
     resume_handler = script.split("async function restoreCompletedNetworkResume", 1)[1].split("renderTask=async function", 1)[0]
@@ -1958,6 +1959,7 @@ def test_deploy_completion_opens_delivery_pane_without_falsely_finishing_network
     assert "extensions.deploy_complete_save_key_then_network" in completed_handler
     assert "claimTaskDelivery(taskId,attemptId)" in completed_handler
     assert "el('extConsoleUrl').value=access.console_url||''" in completed_handler
+    assert "setConsoleLoginAccess(access,delivery.admin_key)" in completed_handler
     assert "el('extApiUrl').value=access.api_url||''" in completed_handler
     assert "removeAttribute('href')" in completed_handler
     assert "t.result" not in completed_handler
@@ -1969,6 +1971,11 @@ def test_deploy_completion_opens_delivery_pane_without_falsely_finishing_network
     assert "data.resumable!==true" in resume_handler
     assert "instance_handle:access.handle" in resume_handler
     assert "/api/extensions/instances?target_id=" not in script
+    assert 'id="extConsoleLogin"' in html
+    assert 'id="extConsoleLoginKey" type="password" autocomplete="off"' in html
+    assert 'onclick="extensionOpenConsoleLogin()"' in html
+    assert "window.open(url,'_blank','noopener')" in script
+    assert "keyInput.value=''" in script
 
 
 def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_states():
@@ -2021,7 +2028,7 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
     assert '<script src="/static/js/i18n.js?v=14"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=21"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=22"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):
