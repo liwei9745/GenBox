@@ -1457,6 +1457,10 @@
   MESSAGES['extensions.guide_step2_wait_discovery'] = {"zh-CN":"请稍等，检测结束后会自动告诉你下一步。","en":"Wait briefly; the next action will appear automatically."};
   MESSAGES['extensions.guide_step2_discovered'] = {"zh-CN":"VPS 环境已经检测完成。","en":"The VPS environment check is complete."};
   MESSAGES['extensions.guide_step2_make_plan'] = {"zh-CN":"根据检测结果生成一份可核对的安全计划。","en":"Generate a reviewable safety plan from the results."};
+  MESSAGES['extensions.guide_step2_image_needed'] = {"zh-CN":"部署镜像还没有准备好。","en":"The deployment image is not ready yet."};
+  MESSAGES['extensions.guide_step2_image_action'] = {"zh-CN":"先填写可由服务器拉取的镜像摘要地址。","en":"Enter the immutable image reference the server can pull."};
+  MESSAGES['extensions.guide_step2_image_after'] = {"zh-CN":"填写完成后，才能生成安全计划；不会自动部署。","en":"After entering it, you can generate a safety plan; nothing deploys automatically."};
+  MESSAGES['extensions.prepare_deploy_image'] = {"zh-CN":"填写部署镜像","en":"Enter deployment image"};
   MESSAGES['extensions.guide_step2_planning'] = {"zh-CN":"正在计算安装方式、端口和隔离范围。","en":"Calculating the installation method, ports, and isolation boundaries."};
   MESSAGES['extensions.guide_step2_wait_plan'] = {"zh-CN":"请稍等，计划生成后不会自动部署。","en":"Wait briefly; generating a plan does not deploy automatically."};
   MESSAGES['extensions.guide_step2_plan_after'] = {"zh-CN":"计划生成后，你还要亲自确认才会开始安装。","en":"You must still confirm before installation starts."};

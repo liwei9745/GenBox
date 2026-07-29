@@ -1464,6 +1464,8 @@ def test_image_input_explains_remote_digest_requirement_and_blocks_plan_request_
     assert "function needsImmutableImage(body)" in source
     assert "function isImmutableImageReference(value)" in source
     assert "function requireDeployableImage(body)" in source
+    assert "guide_step2_image_needed" in source
+    assert "extensions.prepare_deploy_image" in source
     assert "if(!requireDeployableImage(body))return" in source
     assert "extensions.image_source_help" in translations
     assert "extensions.image_source_required" in translations
