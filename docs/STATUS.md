@@ -153,11 +153,12 @@ UI/tests or the failed transport attempt as VPS or production verification.
   metadata conflict is surfaced for retry instead of being silently discarded.
   This is not
   isolated-VPS, private-network, receiver, or production evidence.
-- **Verification:** `LOCAL` sender unittest discovery passed 42 tests on
+- **Verification:** `LOCAL` sender unittest discovery passed 43 tests on
   2026-07-29, including focused coordinator coverage for concurrent outbox and
   batch delivery, retry-after-failure, changed-source refusal, path aliases,
-  metadata conflicts, and secret-safe result handling. The Vue production build
-  and `git diff --check` also passed.
+  metadata conflicts, secret-safe result handling, and a real scheduler plus
+  manual-batch contention path. The Vue production build and `git diff --check`
+  also passed.
   Tests use synthetic relative paths and in-memory image bytes only. No real
   VPS, SSH credential, Push key, or external network was used.
 - **Local Docker smoke:** `LOCAL` only. The current sender revision built from
