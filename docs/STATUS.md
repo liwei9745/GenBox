@@ -147,13 +147,19 @@ UI/tests or the failed transport attempt as VPS or production verification.
   schedule with optional date bounds, an overlap scan cursor, a short durable
   worker lease protected by an atomic cross-process lock, and no more than three
   automatic retries for a failed scheduled item. All scheduled sends enter the
-  existing batch service. This is not
+  existing batch service, and single-image, batch, and scheduled paths now share
+  an in-process content-identity coordinator so matching in-flight
+  `(relative_path, SHA-256, metadata)` requests share one physical send. A
+  metadata conflict is surfaced for retry instead of being silently discarded.
+  This is not
   isolated-VPS, private-network, receiver, or production evidence.
-- **Verification:** the focused mock-harness tests, complete sender unittest
-  discovery, Python compilation, Vue production build, and `git diff --check`
-  passed locally. The tests use synthetic relative paths and in-memory image
-  bytes only. The schedule API tests also prove administrator protection and
-  reject request-side Push-key projection.
+- **Verification:** `LOCAL` sender unittest discovery passed 42 tests on
+  2026-07-29, including focused coordinator coverage for concurrent outbox and
+  batch delivery, retry-after-failure, changed-source refusal, path aliases,
+  metadata conflicts, and secret-safe result handling. The Vue production build
+  and `git diff --check` also passed.
+  Tests use synthetic relative paths and in-memory image bytes only. No real
+  receiver, VPS, SSH credential, Push key, or external network was used.
 - **Browser verification:** `LOCAL` mock only. A standalone standard-library
   mock API accepts one fixed test-only bearer value and serves fixed synthetic
   Gallery records without importing sender application code or reading `data/`,
@@ -164,10 +170,10 @@ UI/tests or the failed transport attempt as VPS or production verification.
   viewport, the inspected page width had no horizontal overflow. This is a UI
   contract check only: it does not prove a receiver, Docker, VPS, private
   network, real image, remote generation, or production behavior.
-- **Next local entry:** rerun the complete sender test suite and Vue build with
-  the mock harness included, review the sanitized diff, then commit the sender
-  change separately. Keep Phase 5 marked planned until its later
-  isolated-VPS gate is recorded.
+- **Next local entry:** review and commit the sender coordinator change
+  separately. Keep Phase 5 marked planned until its later isolated-VPS gate is
+  recorded; the coordinator is intentionally an in-process guarantee and is not
+  evidence of multi-process or isolated-VPS behavior.
 
 ## Read-only discovery target-role gate (2026-07-24)
 
