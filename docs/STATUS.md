@@ -6,6 +6,13 @@
 
 ## Current evidence
 
+- **VERIFIED 2026-07-30:** the authorized experimental GHCR workflow completed
+  successfully for sender commit `a4217e3` and published the immutable image
+  index `ghcr.io/liwei9745/chatgpt2api@sha256:6892af60bbb85db1963d43474e66d5551f1a0fd212cb88d658d8a3410c1dc9d0`.
+  A read-only manifest inspection confirmed `linux/amd64` and `linux/arm64`
+  manifests. This is a registry artifact verified by the successful workflow
+  and manifest query; it is not evidence that a VPS has pulled, configured, or
+  run the image, and it does not complete isolated single-image Push E2E.
 - **LOCAL 2026-07-30:** the sender repository built a current local image from
   its source with `--pull=false`, reusing already available base images and
   dependency layers. Its disposable Docker-only Push smoke harness then passed
