@@ -6,19 +6,18 @@
 
 ## Current evidence
 
-- **LOCAL 2026-07-30:** the sender repository's disposable Docker-only Push
-  smoke harness passed against prebuilt local sender and GenBox receiver
-  images. On one internal, unpublished network it generated a synthetic 2x2
-  PNG and test-only credentials, then verified the v1 probe, first import,
-  idempotent retry, concurrent-transfer coordination, interrupted-batch
-  recovery, receiver SHA-256 metadata, and source retention. The harness
-  removed its per-run labeled containers and network afterward. The current
-  sender address-normalization change was separately covered by sender unit
-  tests and Vue production build; a no-network Docker rebuild was not possible
-  because the Dockerfile system-dependency layer was not cached. No user image,
-  credential, VPS, SSH, production container, registry pull, publication, or
-  deployment was used. This is `LOCAL` protocol evidence only, not
-  `ISOLATED-VPS` or full current-image acceptance evidence.
+- **LOCAL 2026-07-30:** the sender repository built a current local image from
+  its source with `--pull=false`, reusing already available base images and
+  dependency layers. Its disposable Docker-only Push smoke harness then passed
+  with the full final `/api/sync/push` address as the configured sender input.
+  On one internal, unpublished network it generated a synthetic 2x2 PNG and
+  test-only credentials, then verified the v1 probe, first import, idempotent
+  retry, concurrent-transfer coordination, interrupted-batch recovery,
+  receiver SHA-256 metadata, and source retention. The harness removed its
+  per-run labeled containers and network afterward. No user image, credential,
+  VPS, SSH, production container, registry pull, publication, or deployment
+  was used. This is `LOCAL` current-image protocol evidence only, not
+  `ISOLATED-VPS` or full user-workflow acceptance evidence.
 - **LOCAL 2026-07-30:** the final private-network completion view now makes
   the chatgpt2api login handoff explicit for new users. It pre-fills the
   one-time management key delivered in the current page, labels that state,
