@@ -27,6 +27,13 @@
   Focused plan and extension tests passed `203`. This route coverage uses
   mocks only; no SSH, VPS, container, deployment, private-network, or
   production action was performed.
+- **LOCAL 2026-07-29 browser verification:** an independently launched,
+  launcher-owned Lab loaded commit `e493fcc` and served `#/extensions` with
+  the Extensions page visible and zero browser-console errors. The runtime
+  identity matched that commit. No target metadata, pairing material,
+  credential, SSH test, host-key probe, environment discovery, deployment, or
+  network request was submitted. This is browser startup evidence only, not
+  isolated-VPS or production evidence.
 - **VERIFIED 2026-07-23:** GenBox commits `997e78c`, `5394c42`, and `72edab0`
   locally implement the novice-oriented trusted SSH-session pairing path on top of
   Deployment Safety Contract v3. The saved trust record remains the canonical
