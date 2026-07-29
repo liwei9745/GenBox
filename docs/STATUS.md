@@ -1,11 +1,23 @@
 # Current Project Status
 
-**Last updated:** 2026-07-29
+**Last updated:** 2026-07-30
 **Current branch:** `codex/p4-deploy-plan-ux-eai`
 **Current phase:** Phase 4 Single-Image Push End To End - **In Progress**
 
 ## Current evidence
 
+- **LOCAL 2026-07-30:** a VPS-network task that stops for user input now keeps
+  its recovery card actionable in novice mode. The visible recovery button
+  directs a missing session credential to the SSH password/private-key field;
+  after a session credential is present, it directs the user to the Tailscale
+  Auth Key field, then changes to an explicit retry action once the key is
+  entered. Filling a field alone never submits a network request.
+  The Extensions bundle query version was advanced so a reload receives this
+  behavior. Focused extension suites passed `324`; full local
+  `python -m pytest -q` passed `552`; JavaScript syntax and whitespace checks
+  passed. No browser target was selected, no credential was entered, and no
+  SSH, VPS, container, deployment, or network action was submitted. This is
+  `LOCAL` UI/test evidence only.
 - **LOCAL 2026-07-29:** closing the reviewed safety-plan step now requires one
   final browser confirmation immediately before the deployment request can be
   sent. Cancelling, or a browser that cannot present that confirmation, keeps

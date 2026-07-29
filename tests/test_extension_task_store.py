@@ -3193,3 +3193,35 @@ await window.extensionConnectNetwork();if(timers.length!==2)throw new Error('com
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_network_secret_recovery_exposes_one_safe_next_action_in_node():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');let source=fs.readFileSync(process.argv[1],'utf8');
+source=source.replace('function renderNetworkTask','window.__renderNetworkTask=function renderNetworkTask');
+const elements=new Map();function element(id){if(!elements.has(id)){const classes=new Set(['extNetworkRecovery','extHandoff','extSuccessBanner'].includes(id)?['hidden']:[]);elements.set(id,{style:{},value:'',textContent:'',innerHTML:'',disabled:false,dataset:{},classList:{toggle(n,on){if(on)classes.add(n);else classes.delete(n)},add(n){classes.add(n)},remove(n){classes.delete(n)},contains(n){return classes.has(n)}},querySelector(){return element('nested')},querySelectorAll(){return []},focus(){this.focused=true},setAttribute(){},removeAttribute(){},closest(){return null}})}return elements.get(id)}
+const network={value:'auto',checked:true,classList:{toggle(){}}};let requests=0;
+global.window=global;global.document={getElementById:element,querySelector(s){if(s.includes('extNetwork'))return network;return element('query')},querySelectorAll(){return []},addEventListener(){},removeEventListener(){}};global.i18nText=k=>k;global.getUiLanguage=()=> 'zh-CN';global.escHtml=v=>String(v||'');global.clearInterval=()=>{};global.setInterval=()=>({});global._authFetch=async()=>{requests+=1;return {ok:true,text:async()=>'{"targets":[]}'}};
+eval(source);
+const task={status:'needs_action',progress:33,phase:'remote_connect',steps:[],logs:[],recovery_code:'TAILSCALE_AUTH_KEY_REQUIRED',next_action:{type:'provide_secret',label_key:'extensions.enter_auth_key'}};
+window.__renderNetworkTask(task,0,'network-one');
+if(element('extNetworkRecovery').classList.contains('hidden'))throw new Error('secret recovery card stayed hidden');
+if(element('extNetworkRecoveryBtn').classList.contains('hidden'))throw new Error('secret recovery button stayed hidden');
+if(element('extNetworkRecoveryBtn').textContent!=='extensions.enter_password_button')throw new Error('missing credential did not request the session password');
+element('extNetworkRecoveryBtn').onclick();
+if(!element('extPassword').focused)throw new Error('credential recovery did not focus the password field');
+if(requests!==0)throw new Error('credential recovery unexpectedly made a network request');
+element('extPassword').value='session-only';element('extPassword').focused=false;
+window.__renderNetworkTask(task,0,'network-two');
+if(element('extNetworkRecoveryBtn').textContent!=='extensions.enter_auth_key')throw new Error('credentialed recovery did not request the Auth Key');
+element('extNetworkRecoveryBtn').onclick();
+if(!element('extNetworkToken').focused)throw new Error('Auth Key recovery did not focus the Auth Key field');
+if(requests!==0)throw new Error('Auth Key recovery unexpectedly made a network request');
+element('extNetworkToken').value='tskey-test-only';
+element('extNetworkToken').oninput();
+if(element('extNetworkRecoveryBtn').textContent!=='extensions.connect_and_test')throw new Error('completed Auth Key entry did not offer the explicit retry');
+if(requests!==0)throw new Error('updating the explicit retry unexpectedly made a network request');
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
