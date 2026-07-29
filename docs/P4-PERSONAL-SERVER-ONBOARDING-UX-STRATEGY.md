@@ -51,10 +51,11 @@ whether the server is confirmed or needs reconfirmation.
 3. **Confirm server:** this is an isolated view. It contains no SSH credential
    controls. Existing trusted-session pairing and advanced manual confirmation
    remain available behind the same backend contracts.
-4. **Check access:** only after identity confirmation does the credential view
-   appear. Credentials stay in the current page memory. `检查并继续` tests SSH
-   and deployment capability, then continues to the existing discovery and
-   safe-plan flow.
+4. **Read-only environment check:** only after identity confirmation does the
+   credential view appear. Credentials stay in the current page memory. Its
+   one primary action performs the bounded host-key-verified discovery first;
+   it does not deploy or probe sudo. A deployment-access diagnostic is a
+   separate optional action only when the user is ready to plan a deployment.
 5. **Recover precisely:** a changed server identity presents a dedicated
    recovery view with `重新确认这台服务器` and `返回修改服务器资料`. It never returns
    the user to a mixed form or masks a cleared password as `***`.

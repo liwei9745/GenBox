@@ -1312,7 +1312,7 @@ def test_pairing_ui_has_expiry_cleanup_and_recovery_state():
     assert "clearSessionCredentials()" in source.split("function requireHostKeyReconfirmation", 1)[1].split("function invalidatePlanRequest", 1)[0]
     assert "hostKeyReconfirmationRequired&&!hostKeyPairing" in source
     assert "'extensions.guide_step1_credential_after'" in source
-    assert "服务器确认已经完成；填写后仍在步骤 1 测试 SSH" in (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+    assert "does not deploy or use sudo" in (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
     assert 'id="extHostKeyPairingState"' in markup
     assert "extension-pairing-command-row" in styles
     assert "@media(max-width:700px)" in styles

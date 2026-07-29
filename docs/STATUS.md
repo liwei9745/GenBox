@@ -6,6 +6,19 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-29:** simplified the personal-server path so the credential
+  view's primary action now runs the one bounded, host-key-verified read-only
+  environment discovery directly. It no longer requires the separate SSH
+  deployment-access diagnostic first, so an authorized discovery cannot loop
+  through credentials and deployment checks. The guarded discovery uses no
+  `sudo`; it advances to the public environment result and only marks deploy
+  access verified when the read-only result proves it. A result without deploy
+  access remains visible and offers the existing deployment diagnostic as an
+  optional later action, without restarting pairing or re-reading the target.
+  Node syntax checks, focused UI/route tests, and full local pytest recorded
+  `543` tests with `0` failures and `0` errors. No SSH, VPS, remote-container,
+  deployment, network, or production operation was performed. This is `LOCAL`
+  evidence only.
 - **LOCAL 2026-07-29:** closed the gap between the L2 read-only discovery
   approval plan and the SSH command executor. The discovery route now passes
   its request-scoped validated plan into a command guard. Every SSH command is
