@@ -7,6 +7,15 @@
 
 ## Current evidence
 
+- **GITHUB + LOCAL 2026-07-31:** the owner's experimental sender repository
+  published a dedicated immutable `linux/amd64` Phase 5 image package after
+  correcting the repository workflow permission and package-ownership
+  boundaries. The digest was pulled back from GHCR and passed the disposable
+  Docker-only Push smoke, including idempotent retry, interrupted-batch
+  recovery, scheduled late-file discovery, and source retention. This proves a
+  sanitized GitHub-built sender artifact can run locally; it does not prove the
+  isolated VPS architecture, deployment, batch interruption, or scheduled scan.
+
 - **LOCAL 2026-07-31:** the sender Phase 5 batch implementation now persists
   explicit `already-imported` receipt outcomes, exposes the newest active or
   failed batch for Gallery refresh recovery, and resumes progress polling from
