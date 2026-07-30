@@ -943,11 +943,33 @@
             <fieldset class="extension-choice-group"><legend><span data-i18n="extensions.deploy_method">部署方式</span></legend><div id="extDeploymentModes" class="extension-mode-list"><span class="extension-placeholder"><span data-i18n="extensions.method_after_discovery">检测环境后显示推荐方式</span></span></div></fieldset>
             <div class="extension-form-grid"><label><span data-i18n="extensions.instance_name">实例名称</span><input id="extInstanceId" value="chatgpt2api-dev" pattern="[a-z0-9-]+"></label><label><span data-i18n="extensions.service_port">服务端口</span><input id="extServicePort" type="number" value="33010" min="1" max="65535"></label><label><span data-i18n="extensions.container_image">容器镜像</span><input id="extImage" value="" placeholder="registry.example/chatgpt2api@sha256:..." aria-describedby="extImageHelp" autocomplete="off"><small id="extImageHelp" data-i18n="extensions.image_source_help">请填写隔离开发机能拉取的不可变镜像地址。本机 Docker 标签和 latest 不能直接部署。</small></label></div>
             <div id="extPlanPreview" class="extension-plan-preview hidden"></div>
+            <section id="extPlanConfirm" class="extension-inline-confirm hidden" data-genbox-inline-confirm="plan" role="dialog" aria-modal="false" aria-labelledby="extPlanConfirmTitle">
+              <div>
+                <span data-i18n="extensions.plan_confirm_kicker">部署前复核</span>
+                <h3 id="extPlanConfirmTitle" data-i18n="extensions.plan_confirm_title">允许只读复核并生成计划</h3>
+                <p data-i18n="extensions.plan_confirm_body">GenBox 将再次读取隔离开发机的端口、目录和隔离状态，不会部署、拉取镜像或修改服务。</p>
+              </div>
+              <div class="extension-inline-confirm-actions">
+                <button type="button" class="btn-ghost" onclick="extensionCancelPlanConfirmation()" data-i18n="common.cancel">取消</button>
+                <button type="button" class="btn-primary" id="extPlanConfirmBtn" onclick="extensionConfirmPlanDiscovery()" data-i18n="extensions.plan_confirm_continue">继续生成计划</button>
+              </div>
+            </section>
             </div>
             <div class="extension-progress"><div><span id="extProgressLabel"><span data-i18n="common.waiting">等待开始</span></span><span id="extProgressPercent">0%</span></div><div class="extension-progress-track"><div id="extProgressFill"></div></div></div>
             <ol id="extTimeline" class="extension-timeline"></ol>
             <pre id="extLogs" class="extension-logs" aria-live="polite"></pre>
             <div class="extension-actions extension-advanced-only"><button class="btn-ghost" onclick="extensionNext(1)"><span data-i18n="common.previous">上一步</span></button><button class="btn-secondary" id="extPlanBtn" onclick="extensionCreatePlan()"><span data-i18n="extensions.create_plan">生成安全计划</span></button><button class="btn-primary" id="extDeployBtn" onclick="extensionStartDeploy()" disabled><span data-i18n="extensions.confirm_deploy">确认并部署</span></button><button class="btn-secondary" onclick="extensionNext(3)"><span data-i18n="extensions.continue_network">继续配置链路</span></button></div>
+            <section id="extDeployConfirm" class="extension-inline-confirm hidden" data-genbox-inline-confirm="deploy" role="dialog" aria-modal="false" aria-labelledby="extDeployConfirmTitle">
+              <div>
+                <span data-i18n="extensions.deploy_confirm_kicker">最后一步</span>
+                <h3 id="extDeployConfirmTitle" data-i18n="extensions.deploy_confirm_title">确认开始隔离部署</h3>
+                <p data-i18n="extensions.deploy_confirm_body">确认后才会在已保存的隔离开发机上创建新实例；现有服务和生产实例不会被修改。</p>
+              </div>
+              <div class="extension-inline-confirm-actions">
+                <button type="button" class="btn-ghost" onclick="extensionCancelDeploymentConfirmation()" data-i18n="common.cancel">取消</button>
+                <button type="button" class="btn-primary" id="extDeployConfirmBtn" onclick="extensionConfirmDeployment()" data-i18n="extensions.deploy_confirm_continue">确认并开始部署</button>
+              </div>
+            </section>
           </div>
           <div class="extension-pane hidden" data-pane="3">
             <h2 tabindex="-1"><span data-i18n="extensions.choose_primary_network">选择主连接方式</span></h2>
@@ -1288,6 +1310,6 @@
   <script src="/static/js/i18n.js?v=14"></script>
 <script src="/static/js/app-all.js?v=36"></script>
 <script src="/static/js/sync.js?v=7"></script>
-<script src="/static/js/extensions.js?v=25"></script>
+<script src="/static/js/extensions.js?v=26"></script>
 </body>
 </html>

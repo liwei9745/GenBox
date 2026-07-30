@@ -1513,6 +1513,10 @@
   MESSAGES['extensions.guide_step2_image_after'] = {"zh-CN":"填写完成后，才能生成安全计划；不会自动部署。","en":"After entering it, you can generate a safety plan; nothing deploys automatically."};
   MESSAGES['extensions.prepare_deploy_image'] = {"zh-CN":"填写部署镜像","en":"Enter deployment image"};
   MESSAGES['extensions.plan_discovery_confirm'] = {"zh-CN":"生成安全计划前，GenBox 会对这台隔离开发机进行两次固定的只读复核，用来核对端口、目录和隔离范围。不会部署、拉取镜像或改动服务。现在继续吗？","en":"Before generating the safety plan, GenBox will run two fixed read-only checks on this isolated development server to verify ports, directories, and isolation. It will not deploy, pull an image, or change services. Continue?"};
+  MESSAGES['extensions.plan_confirm_kicker'] = {"zh-CN":"部署前复核","en":"Pre-deployment review"};
+  MESSAGES['extensions.plan_confirm_title'] = {"zh-CN":"允许只读复核并生成计划","en":"Allow read-only review and generate the plan"};
+  MESSAGES['extensions.plan_confirm_body'] = {"zh-CN":"GenBox 将再次读取隔离开发机的端口、目录和隔离状态，不会部署、拉取镜像或修改服务。","en":"GenBox will re-check ports, directories, and isolation on the development machine. It will not deploy, pull an image, or modify services."};
+  MESSAGES['extensions.plan_confirm_continue'] = {"zh-CN":"继续生成计划","en":"Continue to generate plan"};
   MESSAGES['extensions.plan_discovery_cancelled'] = {"zh-CN":"已取消部署前只读复核；未连接服务器，也未生成计划。","en":"Deployment preflight was cancelled. The server was not contacted and no plan was created."};
   MESSAGES['extensions.plan_discovery_timeout'] = {"zh-CN":"生成安全计划前的只读复核在限定时间内未完成，已停止本次复核。无需重新确认服务器身份；请检查 SSH 或 Docker 响应后再试。","en":"The read-only checks before generating the safety plan did not finish in time and have stopped. You do not need to reconfirm the server identity; check SSH or Docker responsiveness before trying again."};
   MESSAGES['extensions.guide_step2_planning'] = {"zh-CN":"正在计算安装方式、端口和隔离范围。","en":"Calculating the installation method, ports, and isolation boundaries."};
@@ -1522,6 +1526,10 @@
   MESSAGES['extensions.guide_step2_confirm'] = {"zh-CN":"核对计划后，明确确认开始部署。","en":"Review the plan, then explicitly confirm deployment."};
   MESSAGES['extensions.guide_step2_confirm_after'] = {"zh-CN":"部署期间会显示进度；失败时只给出一个恢复动作。","en":"Progress will be shown, with one recovery action if it fails."};
   MESSAGES['extensions.deploy_confirm_prompt'] = {"zh-CN":"即将按当前安全计划修改这台隔离开发机并开始部署。请确认镜像、实例名称和端口均无误。现在开始部署吗？","en":"This will modify the isolated development server according to the current safety plan and begin deployment. Confirm that the image, instance name, and port are correct. Start deployment now?"};
+  MESSAGES['extensions.deploy_confirm_kicker'] = {"zh-CN":"最后一步","en":"Final step"};
+  MESSAGES['extensions.deploy_confirm_title'] = {"zh-CN":"确认开始隔离部署","en":"Confirm isolated deployment"};
+  MESSAGES['extensions.deploy_confirm_body'] = {"zh-CN":"确认后才会在已保存的隔离开发机上创建新实例；现有服务和生产实例不会被修改。","en":"Only after confirmation will a new instance be created on the saved development machine; existing services and the production instance will not be modified."};
+  MESSAGES['extensions.deploy_confirm_continue'] = {"zh-CN":"确认并开始部署","en":"Confirm and start deployment"};
   MESSAGES['extensions.deploy_confirm_cancelled'] = {"zh-CN":"已取消部署确认；安全计划仍保留，VPS 未被修改。","en":"Deployment confirmation was cancelled. The safety plan is still available and the VPS was not changed."};
   MESSAGES['extensions.guide_step2_deploying'] = {"zh-CN":"应用正在部署，重复点击已被锁定。","en":"The service is deploying and duplicate clicks are locked."};
   MESSAGES['extensions.guide_step2_wait_deploy'] = {"zh-CN":"请保持页面打开，等待任务完成。","en":"Keep this page open and wait for the task to finish."};

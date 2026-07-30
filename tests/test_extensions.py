@@ -1436,6 +1436,7 @@ def test_deployment_parameters_are_hidden_until_environment_discovery():
 
 def test_generated_plan_renders_a_non_secret_review_summary_before_deploy():
     root = Path(__file__).parents[1]
+    html = (root / "static" / "index.html").read_text(encoding="utf-8")
     source = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
     translations = (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
 
@@ -1465,6 +1466,12 @@ def test_generated_plan_renders_a_non_secret_review_summary_before_deploy():
         "extensions.deploy_confirm_cancelled",
     ):
         assert key in translations
+    assert 'id="extPlanConfirm"' in html
+    assert 'id="extDeployConfirm"' in html
+    assert 'extensionConfirmPlanDiscovery' in source
+    assert 'extensionConfirmDeployment' in source
+    assert "window.confirm(i18nText('extensions.plan_discovery_confirm'))" not in source
+    assert "window.confirm(i18nText('extensions.deploy_confirm_prompt'))" not in source
 
 
 def test_empty_isolated_deployment_requires_an_immutable_remote_image_before_ssh_discovery(monkeypatch):
@@ -2051,7 +2058,7 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
     assert '<script src="/static/js/i18n.js?v=14"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=25"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=26"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):
