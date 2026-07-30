@@ -25,7 +25,7 @@
   jittered exponential delay and a three-attempt limit; authentication, source
   change, and invalid-content failures remain terminal until a user explicitly
   retries after remediation. Source images remain retained for every outcome.
-  Focused sender tests passed `23`; the Vue production build passed. A freshly
+  Focused sender tests passed `24`; the Vue production build passed. A freshly
   built local sender image and the disposable Docker-only smoke passed v1
   probe, initial import, idempotent retry, coordinated transfer, interrupted
   batch recovery, visible `already-imported` recovery, delayed-file scheduled
