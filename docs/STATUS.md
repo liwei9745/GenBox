@@ -1,11 +1,29 @@
 # Current Project Status
 
-**Last updated:** 2026-07-30
+**Last updated:** 2026-07-31
 **Current branch:** `codex/p4-deploy-plan-ux-eai`
-**Current phase:** Phase 4 Single-Image Push End To End - **Complete**
-**Next phase:** Phase 5 Batch And Scheduled Incremental Push - **Not Started**
+**Current phase:** Phase 5 Batch And Scheduled Incremental Push - **In Progress**
+**Previous phase:** Phase 4 Single-Image Push End To End - **Complete**
 
 ## Current evidence
+
+- **LOCAL 2026-07-31:** the sender Phase 5 batch implementation now persists
+  explicit `already-imported` receipt outcomes, exposes the newest active or
+  failed batch for Gallery refresh recovery, and resumes progress polling from
+  that projection. Batch state mutations now use a short-lived cross-process
+  file lock, so two sender processes cannot claim the same queued item. Only
+  retryable transport or temporary server failures retry automatically, with
+  jittered exponential delay and a three-attempt limit; authentication, source
+  change, and invalid-content failures remain terminal until a user explicitly
+  retries after remediation. Source images remain retained for every outcome.
+  Focused sender tests passed `23`; the Vue production build passed. A freshly
+  built local sender image and the disposable Docker-only smoke passed v1
+  probe, initial import, idempotent retry, coordinated transfer, interrupted
+  batch recovery, visible `already-imported` recovery, and source retention.
+  Generated test credentials and a synthetic 2x2 image were removed with the
+  per-run containers and network. This is local code/protocol evidence only:
+  isolated-VPS batch interruption, late-arriving scheduled files, and clean
+  GitHub redeployment remain required before Phase 5 can be accepted.
 
 - **EVIDENCE LOCK 2026-07-30:** after the isolated sender/receiver verification,
   `python -m pytest -q tests/test_extensions.py tests/test_local_tailscale.py
