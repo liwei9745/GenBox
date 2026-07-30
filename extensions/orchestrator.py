@@ -43,18 +43,49 @@ DEPLOY_STEPS = [
     ("verify", "等待服务就绪"),
 ]
 PHASE4_DEPLOYMENT_CONTRACT_VERSION = "phase4-v3"
-_PUBLIC_INSTANCE_HANDLE_KEY = secrets.token_bytes(32)
+_PUBLIC_INSTANCE_HANDLE_KEY: bytes | None = None
+_PUBLIC_INSTANCE_HANDLE_KEY_BYTES = 32
+
+
+def _public_instance_handle_key() -> bytes:
+    """Load the local HMAC key used for restart-stable opaque instance handles."""
+    global _PUBLIC_INSTANCE_HANDLE_KEY
+    if _PUBLIC_INSTANCE_HANDLE_KEY is not None:
+        return _PUBLIC_INSTANCE_HANDLE_KEY
+
+    key_path = extensions_store.EXTENSIONS_FILE.with_name(".instance-handle-key")
+    with extensions_store._config_lock():
+        if key_path.exists():
+            key = key_path.read_bytes()
+            if len(key) != _PUBLIC_INSTANCE_HANDLE_KEY_BYTES:
+                raise RuntimeError("instance handle key is invalid")
+        else:
+            key = secrets.token_bytes(_PUBLIC_INSTANCE_HANDLE_KEY_BYTES)
+            key_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = key_path.with_name(f".{key_path.name}.{uuid.uuid4().hex}.tmp")
+            try:
+                with temporary.open("xb") as handle:
+                    handle.write(key)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                if os.name != "nt":
+                    os.chmod(temporary, 0o600)
+                os.replace(temporary, key_path)
+            finally:
+                temporary.unlink(missing_ok=True)
+        _PUBLIC_INSTANCE_HANDLE_KEY = key
+    return _PUBLIC_INSTANCE_HANDLE_KEY
 
 
 def public_instance_handle(target_id: str, instance_id: str) -> str:
     payload = f"{target_id}\0{instance_id}".encode("utf-8")
-    digest = hmac.new(_PUBLIC_INSTANCE_HANDLE_KEY, payload, hashlib.sha256).hexdigest()[:32]
+    digest = hmac.new(_public_instance_handle_key(), payload, hashlib.sha256).hexdigest()[:32]
     return f"i-{digest}"
 
 
 def _resume_target_handle(target_id: str) -> str:
     payload = b"genbox-resume-target-v1\0" + target_id.encode("utf-8")
-    digest = hmac.new(_PUBLIC_INSTANCE_HANDLE_KEY, payload, hashlib.sha256).hexdigest()[:32]
+    digest = hmac.new(_public_instance_handle_key(), payload, hashlib.sha256).hexdigest()[:32]
     return f"t-{digest}"
 
 

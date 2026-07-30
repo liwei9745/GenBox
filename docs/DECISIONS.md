@@ -644,3 +644,22 @@ isolated sender. It does not configure chatgpt2api remotely or complete the
 sender implementation. The legacy environment mapping remains available for
 existing sources, while a managed source can be independently rotated or
 revoked without changing administrator authentication.
+
+## ADR-023: Opaque Instance Handles Survive Local Restarts
+
+**Status:** Accepted
+**Date:** 2026-07-30
+
+### Decision
+
+Derive browser-facing managed-instance and resume handles with an HMAC key
+generated once and retained only in the local ignored `storage/` directory.
+The key is not a user credential and never appears in browser state, URLs,
+tasks, logs, or Git. A missing key is created atomically; an invalid key fails
+closed.
+
+### Consequences
+
+Task recovery and managed Push-source actions keep referring to the same
+opaque instance after a local GenBox restart, while raw target and instance IDs
+remain absent from browser requests.

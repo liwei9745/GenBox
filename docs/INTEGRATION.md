@@ -12,9 +12,10 @@ chatgpt2api. The current GenBox receiver details are in
 | Capability | GenBox | chatgpt2api | Overall State |
 |---|---|---|---|
 | Pull remote image list and import | Implemented | Existing compatible API required | Implemented in GenBox; live verification pending |
-| Receive one pushed image | Receiver and managed source provisioning implemented locally | Sender missing in this repository | Partial |
-| Per-generation Push selection | Receiver ready | Planned | Planned |
-| Manual batch Push | Receiver reusable | Planned | Planned |
+| Receive one pushed image | Receiver and managed source provisioning verified | Sender shared Push service and isolated Studio Push verified | Isolated-VPS single-image Push and idempotent retry verified; clean deployment remains pending |
+| Per-generation Push selection | Receiver ready | Sender implementation and isolated Studio browser workflow verified | Isolated-VPS evidence verified; clean deployment remains pending |
+| Manual Gallery Push | Receiver and receipt contract verified | Sender Gallery control and retry state verified in the isolated development clone | Isolated manual selected-image Push verified |
+| Manual batch Push | Receiver reusable | Sender workflow exists but Phase 5 acceptance is pending | Partial; interruption/resume evidence pending |
 | Scheduled incremental Push | Receiver reusable | Planned | Planned |
 | Receipt-gated source cleanup | Receipt field implemented | Planned | Planned |
 | Guided Compose deployment | Implemented in code | Deployable target | Live clone verification pending |

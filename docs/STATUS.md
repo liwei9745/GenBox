@@ -6,6 +6,63 @@
 
 ## Current evidence
 
+- **EVIDENCE LOCK 2026-07-30:** after the isolated sender/receiver verification,
+  `python -m pytest -q tests/test_extensions.py tests/test_local_tailscale.py
+  tests/test_sync_push_routes.py tests/test_extension_task_store.py` passed
+  `365`; `node --check static/js/extensions.js` and `git diff --check` also
+  passed. The reviewed diff contains only source, tests, and sanitized project
+  documentation. The isolated Studio and Gallery success states supersede the
+  earlier transient Gallery failure dialog; source retention and receiver-side
+  idempotence remain the authoritative result. No production instance was
+  selected or modified.
+
+- **ISOLATED-VPS + LOCAL RECEIVER 2026-07-30:** a selected image from the
+  authorized sender Studio generated a new image with “生成后推送到 GenBox”
+  enabled. The Studio result first showed “已推送到 GenBox，源图已保留”. The
+  same image was then selected in Gallery and pushed again; the sender retained
+  the source and the Studio task remained successful after the retry. The
+  receiver manifest gained exactly one new entry for this image and the
+  repeated request did not create a third entry. This verifies the isolated
+  browser Studio single-image Push, authenticated receipt, source retention,
+  and idempotent retry. No production instance was selected or modified.
+
+- **LOCAL + ISOLATED-VPS 2026-07-30:** the local Tailscale Serve recovery
+  path now understands the current `Foreground` status shape. When its sole
+  route is the GenBox-owned HTTP listener but targets a stale loopback port, it
+  may reset and recreate only that one route; any unrelated route fails closed
+  without mutation. After restarting the registered development lab, its
+  private Serve entry was verified to target the current process and the
+  loaded status endpoint reported the route healthy. Focused Tailscale,
+  network-adapter, and extension tests passed `236`; the focused extension,
+  route, and task-store suites then passed `364`.
+
+  The isolated sender's saved destination passed its authenticated v1 readiness
+  check. Its Gallery reported the selected generated image as complete with
+  source retention enabled. The current GenBox development receiver contained
+  one remote-imported media file and its durable manifest contained transfer
+  records, confirming that the user-visible success state corresponds to a
+  receiver-side import. This verification used only the authorized isolated
+  sender and local development receiver; no production instance was selected
+  or modified.
+
+- **ISOLATED-VPS 2026-07-30:** an explicitly authorized development-only
+  `chatgpt2api` instance was deployed from the published immutable sender
+  image. Its directory, Compose project, management key, and GenBox Push
+  source are distinct from the pre-existing managed instance. A stale local
+  GenBox process behind the existing private Tailscale entry initially rejected
+  the sender identity. The registered current GenBox lab was restarted and the
+  existing private entry was redirected to that lab; the sender then completed
+  an authenticated v1 probe.
+
+  A user-created isolated test image completed a manual authenticated Push and
+  then an identical manual retry. The sender validated the success receipt and
+  retained the source image after both requests. A local receiver query
+  immediately afterward returned exactly one media item, tagged as a remote
+  sync import, proving that the retry did not duplicate the image. Source
+  deletion remains disabled and no schedule was configured. No production
+  instance was selected or mutated. Phase 4 remains in progress pending
+  evidence-lock review and normal code/test/documentation completion steps.
+
 - **LOCAL 2026-07-30:** deployment-plan generation and final deployment
   authorization now use visible in-page confirmation cards instead of browser
   native confirmation dialogs. The cards explain the read-only preflight or
@@ -14,9 +71,9 @@
   continue action. Backend `approve_plan_discovery`, host-key verification,
   immutable-image validation, and `confirmed_plan_id` requirements are
   unchanged. `node --check static/js/extensions.js`, `git diff --check`, and
-  the focused extension/Push suites passed `363`. This is local UI/test
-  evidence only; isolated-VPS deployment and single-image Push E2E remain
-  pending a live browser SSH session.
+  the focused extension/Push suites passed `363`. This was local UI/test
+  evidence at the time recorded. The later isolated-VPS deployment and
+  single-image Push verification is recorded at the top of this document.
 
 - **LOCAL 2026-07-30:** the novice deployment guide now preserves an explicit
   path to plan a second isolated `chatgpt2api` instance after a prior managed
@@ -51,8 +108,8 @@
   was pushed to both authorized experimental repositories as
   `codex/genbox-p4-sender-image`. Neither action updated a default branch.
   The sender's immutable GHCR image is the separately verified artifact below.
-  A clean GenBox deployment from its pushed branch and an isolated VPS
-  single-image Push acceptance run are still pending.
+  A clean GenBox deployment from its pushed branch remains pending; the
+  isolated-VPS single-image Push acceptance run is recorded at the top.
 - **VERIFIED 2026-07-30:** the authorized experimental GHCR workflow completed
   successfully for sender commit `a4217e3` and published the immutable image
   index `ghcr.io/liwei9745/chatgpt2api@sha256:6892af60bbb85db1963d43474e66d5551f1a0fd212cb88d658d8a3410c1dc9d0`.
@@ -103,8 +160,8 @@
   returned the current Extensions bundle and static page containing the Push
   panel. No browser target was selected, no credential was entered, and no SSH,
   VPS, container, sender, deployment, or network action was submitted. This is
-  `LOCAL` receiver/UI evidence only: chatgpt2api sender configuration and
-  isolated single-image Push E2E remain unverified.
+  `LOCAL` receiver/UI evidence only. The later sender configuration and
+  isolated single-image Push E2E verification is recorded at the top.
 - **LOCAL 2026-07-30:** the final private-network completion screen now offers
   a console-login helper for the exact managed instance. It pre-fills a
   one-time management key only while that value remains in the current page;

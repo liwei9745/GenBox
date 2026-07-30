@@ -33,6 +33,7 @@ from extensions.models import (
     validate_deployment_image,
 )
 import extensions.store as store
+import extensions.orchestrator as orchestrator
 from extensions.orchestrator import (
     CLONE_SCRUB_KEYS,
     DeploymentSnapshotChangedError,
@@ -56,6 +57,20 @@ TEST_HOST_KEY = "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 DEPLOYMENT_ATTEMPT_ID = "0123456789abcdef0123456789abcdef"
 PHASE4_PATH_CONDITIONS_VERSION = "phase4-v3"
 TEST_DEPLOYMENT_IMAGE = "registry.example/chatgpt2api@sha256:" + ("a" * 64)
+
+
+def test_public_instance_handle_survives_process_key_reload(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    monkeypatch.setattr(orchestrator, "_PUBLIC_INSTANCE_HANDLE_KEY", None)
+
+    first = orchestrator.public_instance_handle("target-a", "instance-a")
+    key_path = tmp_path / ".instance-handle-key"
+
+    assert key_path.is_file()
+    assert len(key_path.read_bytes()) == 32
+
+    monkeypatch.setattr(orchestrator, "_PUBLIC_INSTANCE_HANDLE_KEY", None)
+    assert orchestrator.public_instance_handle("target-a", "instance-a") == first
 
 
 def ExtensionTarget(**values):

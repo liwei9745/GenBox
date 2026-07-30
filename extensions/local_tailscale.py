@@ -10,6 +10,7 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 LOGIN_URL_PATTERN = re.compile(r"https://login\.tailscale\.com/[A-Za-z0-9/?&=_-]+")
@@ -35,6 +36,91 @@ def _run(args: list[str], timeout: int = 20) -> subprocess.CompletedProcess[str]
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
 
 
+def _serve_config(binary: str) -> dict | None:
+    result = _run([binary, "serve", "status", "--json"])
+    if result.returncode != 0:
+        return None
+    try:
+        payload = json.loads(result.stdout)
+    except (TypeError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _route_config(config: dict | None) -> dict | None:
+    if not isinstance(config, dict):
+        return None
+    if "TCP" in config or "Web" in config:
+        return config
+    foreground = config.get("Foreground")
+    if not isinstance(foreground, dict) or len(foreground) != 1:
+        return None
+    candidate = next(iter(foreground.values()))
+    return candidate if isinstance(candidate, dict) else None
+
+
+def _is_expected_serve_config(config: dict | None, port: int) -> bool:
+    config = _route_config(config)
+    if config is None:
+        return False
+    expected_proxy = f"http://127.0.0.1:{GENBOX_PORT}"
+    tcp = config.get("TCP")
+    web = config.get("Web")
+    if not isinstance(tcp, dict) or not isinstance(web, dict):
+        return False
+    listener = tcp.get(str(port))
+    if not isinstance(listener, dict) or listener.get("HTTP") is not True:
+        return False
+    for host, entry in web.items():
+        if not str(host).endswith(f":{port}") or not isinstance(entry, dict):
+            continue
+        handlers = entry.get("Handlers")
+        if isinstance(handlers, dict) and handlers.get("/") == {"Proxy": expected_proxy}:
+            return True
+    return False
+
+
+def _is_replaceable_stale_serve_config(config: dict | None, port: int) -> bool:
+    """Allow replacement only for the one stale local route GenBox owns."""
+    config = _route_config(config)
+    if config is None or set(config) != {"TCP", "Web"}:
+        return False
+    tcp = config.get("TCP")
+    web = config.get("Web")
+    if not isinstance(tcp, dict) or not isinstance(web, dict) or set(tcp) != {str(port)} or len(web) != 1:
+        return False
+    listener = tcp.get(str(port))
+    if not isinstance(listener, dict) or listener != {"HTTP": True}:
+        return False
+    host, entry = next(iter(web.items()))
+    if not str(host).endswith(f":{port}") or not isinstance(entry, dict):
+        return False
+    handlers = entry.get("Handlers")
+    if not isinstance(handlers, dict) or set(handlers) != {"/"}:
+        return False
+    root = handlers.get("/")
+    if not isinstance(root, dict) or set(root) != {"Proxy"}:
+        return False
+    try:
+        target = urlsplit(str(root["Proxy"]))
+    except (TypeError, ValueError):
+        return False
+    try:
+        target_port = target.port
+    except ValueError:
+        return False
+    return (
+        target.scheme == "http"
+        and target.hostname == "127.0.0.1"
+        and target_port is not None
+        and not target.username
+        and not target.password
+        and target.path in ("", "/")
+        and not target.query
+        and not target.fragment
+    )
+
+
 def local_status() -> dict:
     binary = find_tailscale()
     if not binary:
@@ -50,14 +136,14 @@ def local_status() -> dict:
     raw_ips = self_node.get("TailscaleIPs")
     ips = [str(value) for value in raw_ips if str(value)] if isinstance(raw_ips, list) else []
     backend_state = str(data.get("BackendState") or "Unknown")
-    serve_result = _run([binary, "serve", "status", "--json"])
+    serve_config = _serve_config(binary)
     return {
         "installed": True,
         "online": backend_state == "Running" and bool(ips),
         "backend_state": backend_state,
         "ips": ips,
         "dns_name": str(self_node.get("DNSName") or "").rstrip("."),
-        "serve": serve_result.returncode == 0 and f"127.0.0.1:{GENBOX_PORT}" in serve_result.stdout,
+        "serve": _is_expected_serve_config(serve_config, TAILSCALE_SERVE_PORT),
         "app_port": GENBOX_PORT,
         "serve_port": TAILSCALE_SERVE_PORT,
     }
@@ -82,11 +168,25 @@ def enable_genbox_serve(port: int = TAILSCALE_SERVE_PORT) -> dict:
     if not status["online"]:
         raise RuntimeError("璇峰厛鐧诲綍 Tailscale")
     binary = find_tailscale()
-    result = _run([
-        binary, "serve", "--bg", f"--http={port}", f"http://127.0.0.1:{GENBOX_PORT}",
-    ])
+    current_config = _serve_config(binary)
+    if _is_expected_serve_config(current_config, port):
+        result = subprocess.CompletedProcess([], 0, "", "")
+    else:
+        if current_config is not None:
+            if not _is_replaceable_stale_serve_config(current_config, port):
+                raise RuntimeError(
+                    "Current Tailscale Serve configuration has other routes; GenBox will not overwrite it automatically."
+                )
+            reset = _run([binary, "serve", "reset"])
+            if reset.returncode != 0:
+                raise RuntimeError((reset.stderr or reset.stdout or "Tailscale Serve reset failed")[:240])
+        result = _run([
+            binary, "serve", "--bg", f"--http={port}", f"http://127.0.0.1:{GENBOX_PORT}",
+        ])
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout or "Tailscale Serve 閰嶇疆澶辫触")[:240])
+    if not _is_expected_serve_config(_serve_config(binary), port):
+        raise RuntimeError("Tailscale Serve did not target the current GenBox service")
     ipv4 = next((ip for ip in status["ips"] if ":" not in ip), "")
     if not ipv4:
         raise RuntimeError("\u672c\u673a\u6ca1\u6709 Tailscale IPv4 \u5730\u5740")
