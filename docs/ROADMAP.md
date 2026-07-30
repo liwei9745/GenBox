@@ -146,11 +146,11 @@ Establish and verify a secure route from chatgpt2api to GenBox.
 
 ## Phase 4: Single-Image Push End To End
 
-**Status:** In Progress
+**Status:** Complete
 
-**Current boundary:** In progress and not complete. The work is intentionally
-split into the following evidence-ordered slices; completion of one does not
-claim the next.
+**Current boundary:** 4A through 4D are accepted for the isolated single-image
+workflow. Batch, scheduling, source cleanup, and clean-deployment release
+evidence remain separate later phases and release gates.
 
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`

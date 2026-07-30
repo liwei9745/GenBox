@@ -2,7 +2,8 @@
 
 **Last updated:** 2026-07-30
 **Current branch:** `codex/p4-deploy-plan-ux-eai`
-**Current phase:** Phase 4 Single-Image Push End To End - **In Progress**
+**Current phase:** Phase 4 Single-Image Push End To End - **Complete**
+**Next phase:** Phase 5 Batch And Scheduled Incremental Push - **Not Started**
 
 ## Current evidence
 
@@ -60,8 +61,8 @@
   immediately afterward returned exactly one media item, tagged as a remote
   sync import, proving that the retry did not duplicate the image. Source
   deletion remains disabled and no schedule was configured. No production
-  instance was selected or mutated. Phase 4 remains in progress pending
-  evidence-lock review and normal code/test/documentation completion steps.
+  instance was selected or mutated. The later evidence-lock result at the top
+  completes Phase 4; Phase 5 has not started.
 
 - **LOCAL 2026-07-30:** deployment-plan generation and final deployment
   authorization now use visible in-page confirmation cards instead of browser
