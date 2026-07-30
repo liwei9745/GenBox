@@ -427,6 +427,8 @@
     "extensions.console_login_url_required":{"zh-CN":"控制台地址尚未准备好，请从已部署服务中打开控制台。","en":"The console address is not ready. Open the console from Deployed Services."},
     "extensions.console_login_key_required":{"zh-CN":"请先粘贴管理密钥。","en":"Paste the management key first."},
     "extensions.console_login_opened":{"zh-CN":"已复制管理密钥并打开控制台，请在新页面粘贴登录。","en":"The management key was copied and the console opened. Paste it on the new page to sign in."},
+    "extensions.start_new_isolated":{"zh-CN":"新建隔离实例","en":"Create new isolated instance"},
+    "extensions.new_isolated_started":{"zh-CN":"已开始新的隔离部署准备；现有受管实例不会被修改。","en":"A new isolated deployment is ready to plan. The existing managed instance will not be changed."},
     "extensions.push_source_kicker":{"zh-CN":"图片 Push 配置","en":"Image Push setup"},
     "extensions.push_source_title":{"zh-CN":"连接 chatgpt2api 与 GenBox","en":"Connect chatgpt2api to GenBox"},
     "extensions.push_source_help":{"zh-CN":"为这个隔离实例创建独立的 GenBox Push 凭据。密钥只会在创建或轮换后显示一次。","en":"Create an independent GenBox Push credential for this isolated instance. The key is shown only after creation or rotation."},

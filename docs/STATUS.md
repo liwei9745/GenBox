@@ -6,6 +6,16 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-30:** the novice deployment guide now preserves an explicit
+  path to plan a second isolated `chatgpt2api` instance after a prior managed
+  deployment has completed. The new action clears only the browser's transient
+  historical deployment and delivery state; it preserves the saved target and
+  does not stop, replace, reconfigure, or send a request to the existing
+  instance. It then returns the user to the credential-gated plan workflow.
+  `python -m pytest -q tests/test_extensions.py` passed `201`; JavaScript
+  syntax and whitespace checks passed. No credential was read or logged, and
+  no SSH, VPS, container, network, or deployment action was submitted. This is
+  `LOCAL` UI/test evidence only.
 - **VERIFIED 2026-07-30:** the published immutable sender image
   `ghcr.io/liwei9745/chatgpt2api@sha256:6892af60bbb85db1963d43474e66d5551f1a0fd212cb88d658d8a3410c1dc9d0`
   was pulled by digest and used directly in the disposable local Push smoke

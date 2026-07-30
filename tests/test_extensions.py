@@ -1982,6 +1982,25 @@ def test_deploy_completion_opens_delivery_pane_without_falsely_finishing_network
     assert "keyInput.value=''" in script
 
 
+def test_completed_deployment_keeps_a_visible_path_to_plan_a_new_isolated_instance():
+    root = Path(__file__).parents[1]
+    html = (root / "static" / "index.html").read_text(encoding="utf-8")
+    script = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    translations = (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+
+    assert 'id="extGuideNewDeploymentBtn"' in html
+    assert 'onclick="extensionStartNewIsolatedDeployment()"' in html
+    assert "window.extensionStartNewIsolatedDeployment=function" in script
+    assert "currentDeployment=null;historicalCompletion=null" in script
+    assert "clearDeploymentDelivery()" in script
+    assert "extensionNext(2)" in script
+    assert "/api/extensions/deploy" not in script.split(
+        "window.extensionStartNewIsolatedDeployment=function", 1
+    )[1].split("function focusSessionCredential", 1)[0]
+    assert '"extensions.start_new_isolated"' in translations
+    assert '"extensions.new_isolated_started"' in translations
+
+
 def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_states():
     root = Path(__file__).parents[1]
     html = (root / "static" / "index.html").read_text(encoding="utf-8")
@@ -2032,7 +2051,7 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
     assert '<script src="/static/js/i18n.js?v=14"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=24"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=25"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):

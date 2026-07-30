@@ -824,7 +824,7 @@
               <div><b data-i18n="extensions.guide_action">你现在只需</b><p id="extGuideAction"></p></div>
               <div><b data-i18n="extensions.guide_after">完成后会</b><p id="extGuideAfter"></p></div>
             </div>
-            <div class="extension-guide-actions"><button type="button" class="btn-ghost" id="extGuideAdvancedBtn" onclick="extensionToggleAdvanced()" aria-expanded="false"><span data-i18n="extensions.show_advanced">查看高级设置和日志</span></button><button type="button" class="btn-primary" id="extGuidePrimaryBtn" onclick="extensionPrimaryAction()"><span data-i18n="common.continue">继续</span></button></div>
+            <div class="extension-guide-actions"><button type="button" class="btn-ghost" id="extGuideAdvancedBtn" onclick="extensionToggleAdvanced()" aria-expanded="false"><span data-i18n="extensions.show_advanced">查看高级设置和日志</span></button><button type="button" class="btn-secondary hidden" id="extGuideNewDeploymentBtn" onclick="extensionStartNewIsolatedDeployment()"><span data-i18n="extensions.start_new_isolated">新建隔离实例</span></button><button type="button" class="btn-primary" id="extGuidePrimaryBtn" onclick="extensionPrimaryAction()"><span data-i18n="common.continue">继续</span></button></div>
           </section>
           <div class="extension-pane" data-pane="1">
             <section id="extOnboardingLanding" class="extension-connection-paths" aria-labelledby="extConnectionPathsTitle">
@@ -1288,6 +1288,6 @@
   <script src="/static/js/i18n.js?v=14"></script>
 <script src="/static/js/app-all.js?v=36"></script>
 <script src="/static/js/sync.js?v=7"></script>
-<script src="/static/js/extensions.js?v=24"></script>
+<script src="/static/js/extensions.js?v=25"></script>
 </body>
 </html>
