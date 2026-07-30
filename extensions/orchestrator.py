@@ -27,6 +27,7 @@ from extensions.models import (
     ExtensionTestRequest,
     SSHCredential,
     is_canonical_host_key_trust,
+    is_immutable_image_reference,
 )
 from extensions.capabilities import validate_deployment_capability
 from extensions.deployment_failures import deployment_failure
@@ -117,6 +118,8 @@ def _public_project(value: Any) -> str:
 def public_instance_access(instance: Any) -> dict[str, Any]:
     """Return the complete allowlisted, non-secret instance/access DTO."""
     status = str(getattr(instance, "status", "") or "").lower()
+    strategy = str(getattr(instance, "strategy", "") or "")
+    deployment_mode = str(getattr(instance, "deployment_mode", "") or "")
     return {
         "handle": public_instance_handle(
             str(getattr(instance, "target_id", "") or ""),
@@ -124,6 +127,8 @@ def public_instance_access(instance: Any) -> dict[str, Any]:
         ),
         "project": _public_project(getattr(instance, "project", "")),
         "managed": getattr(instance, "managed", False) is True,
+        "strategy": strategy if strategy in {"existing", "isolated", "new"} else "",
+        "deployment_mode": deployment_mode if deployment_mode in {"compose", "warp", "python"} else "",
         "running": status.startswith("up") or status in {"running", "healthy"},
         "console_url": _public_access_url(getattr(instance, "console_url", "")),
         "api_url": _public_access_url(getattr(instance, "api_url", "")),
@@ -2364,6 +2369,128 @@ async def reset_managed_admin_key(request: ExtensionKeyResetRequest) -> dict:
             raise RuntimeError("新密钥验证失败，已恢复原配置")
         await connection.run(f"rm -f {shlex.quote(env_backup)}", check=False)
         return {"ok": True, "instance_id": instance.id, "admin_key": new_key, "shown_once": True}
+    finally:
+        connection.close()
+        await connection.wait_closed()
+
+
+async def update_managed_image(
+    *,
+    instance_id: str,
+    target: ExtensionTarget,
+    credential: SSHCredential,
+    image: str,
+) -> dict:
+    """Replace only the image of a verified GenBox-managed dev Compose app.
+
+    The caller owns credential retrieval. This function deliberately accepts no
+    browser command strings and never returns remote output or secret material.
+    """
+    image = str(image or "").strip()
+    if not is_immutable_image_reference(image):
+        raise ValueError("隔离实例更新需要不可变镜像摘要地址")
+    if target.target_role != "isolated-development":
+        raise PermissionError("仅隔离开发机允许更新托管镜像")
+    instance = extensions_store.get_instance(instance_id)
+    if (
+        not instance
+        or not instance.managed
+        or instance.target_id != target.id
+        or instance.project != "chatgpt2api"
+        or instance.deployment_mode != "compose"
+        or instance.strategy != "isolated"
+    ):
+        raise PermissionError("仅 GenBox 托管的隔离 Compose 实例允许更新")
+
+    request = ExtensionKeyResetRequest(
+        target=target,
+        credential=credential,
+        trust_host_key=True,
+        expected_host_key_algorithm=target.host_key_algorithm,
+        expected_host_key=target.host_key,
+        instance_id=instance.id,
+    )
+    connection, _ = await _connect(request)
+    if connection is None:
+        raise PermissionError("需要先确认 VPS 主机指纹")
+    try:
+        privileges = await _diagnose_privileges(connection, credential)
+        if not privileges["can_deploy"]:
+            raise PermissionError("保存的 SSH 凭据没有经过验证的 Docker 管理能力")
+
+        async def run_docker(command: str):
+            if privileges["docker_access"]:
+                return await connection.run(command, check=False)
+            wrapped, input_data = _elevated_command(command, credential, privileges)
+            return await connection.run(wrapped, input=input_data, check=False)
+
+        marker = await connection.run(
+            f"cat {shlex.quote(instance.install_dir + '/.genbox-instance')}", check=False,
+        )
+        try:
+            ownership = json.loads(marker.stdout)
+        except ValueError:
+            ownership = {}
+        if marker.exit_status != 0 or ownership.get("id") != instance.id or ownership.get("managed") is not True:
+            raise PermissionError("远程实例所有权标记不匹配，已拒绝更新")
+
+        pull = await run_docker(f"docker pull {shlex.quote(image)}")
+        if pull.exit_status != 0:
+            raise RuntimeError("新镜像无法拉取，原实例未改动")
+
+        env_path = f"{instance.install_dir}/.env"
+        current_env = await connection.run(f"cat {shlex.quote(env_path)}", check=False)
+        if current_env.exit_status != 0:
+            raise RuntimeError("无法读取受管实例配置，原实例未改动")
+        lines = current_env.stdout.splitlines()
+        replaced = False
+        updated_lines: list[str] = []
+        for line in lines:
+            if line.startswith("CHATGPT2API_IMAGE="):
+                updated_lines.append(f"CHATGPT2API_IMAGE={image}")
+                replaced = True
+            else:
+                updated_lines.append(line)
+        if not replaced:
+            updated_lines.append(f"CHATGPT2API_IMAGE={image}")
+        updated_env = "\n".join(updated_lines).rstrip("\n") + "\n"
+        backup_path = f"{env_path}.genbox-image-update-{int(time.time())}"
+        backup = await connection.run(
+            f"umask 077; cp {shlex.quote(env_path)} {shlex.quote(backup_path)}", check=False,
+        )
+        if backup.exit_status != 0:
+            raise RuntimeError("创建更新回滚点失败，原实例未改动")
+
+        async def rollback() -> None:
+            await connection.run(
+                f"cp {shlex.quote(backup_path)} {shlex.quote(env_path)}", check=False,
+            )
+            await run_docker(
+                f"cd {shlex.quote(instance.install_dir)} && docker compose -p {shlex.quote(instance.compose_project)} "
+                "-f compose.yml up -d --force-recreate app"
+            )
+
+        encoded = base64.b64encode(updated_env.encode("utf-8")).decode("ascii")
+        written = await connection.run(
+            f"umask 077; base64 -d > {shlex.quote(env_path)}", input=encoded, check=False,
+        )
+        restart = await run_docker(
+            f"cd {shlex.quote(instance.install_dir)} && docker compose -p {shlex.quote(instance.compose_project)} "
+            "-f compose.yml up -d --force-recreate app"
+        )
+        verified = await connection.run(
+            f"cd {shlex.quote(instance.install_dir)} && set -a && . ./.env && set +a && "
+            "for i in 1 2 3 4 5 6 7 8 9 10; do "
+            f"curl -fsS -X POST -H \"Authorization: Bearer $CHATGPT2API_AUTH_KEY\" "
+            f"http://127.0.0.1:{instance.service_port}/auth/login >/dev/null && exit 0; sleep 2; done; exit 1",
+            check=False,
+        )
+        if written.exit_status != 0 or restart.exit_status != 0 or verified.exit_status != 0:
+            await rollback()
+            raise RuntimeError("新镜像健康检查失败，已恢复原实例")
+        await connection.run(f"rm -f {shlex.quote(backup_path)}", check=False)
+        extensions_store.upsert_instance({**instance.model_dump(), "image": image, "status": "running"})
+        return {"ok": True, "instance_id": instance.id, "image": image, "health_verified": True}
     finally:
         connection.close()
         await connection.wait_closed()

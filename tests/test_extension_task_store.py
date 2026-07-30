@@ -1064,8 +1064,8 @@ def test_resume_route_requires_exact_ephemeral_binding_and_returns_only_safe_acc
     assert resumed.json() == {
         "resumable": True,
         "instance": {
-            "handle": public_instance_handle("target-a", "instance-a"),
-            "project": "chatgpt2api", "managed": True, "running": True,
+                "handle": public_instance_handle("target-a", "instance-a"),
+                "project": "chatgpt2api", "managed": True, "strategy": "", "deployment_mode": "", "running": True,
             "console_url": "https://console.example",
             "api_url": "https://console.example/v1",
         },

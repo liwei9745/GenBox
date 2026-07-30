@@ -7,6 +7,20 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-31:** GenBox now has a controlled update path for an
+  already registered managed `chatgpt2api` isolated Compose instance. The
+  browser supplies only an opaque instance handle and immutable image digest;
+  a single-use five-minute plan is bound to those values. Application occurs
+  only after the local credential vault is unlocked, verifies the isolated
+  target role and remote ownership marker, pulls before changing `.env`, then
+  recreates and health-checks the app. A failed write, start, or health check
+  restores the prior configuration and recreates the prior app; the local
+  instance image record changes only after health succeeds. The endpoint and
+  UI never return saved SSH credentials. Focused GenBox extension suites passed
+  `369`. Remote controlled update and schedule-progress verification remain
+  pending one local vault unlock; no production instance was selected or
+  modified.
+
 - **ISOLATED-VPS + LOCAL RECEIVER 2026-07-31:** the authorized isolated
   sender completed a two-item Gallery batch Push with source retention. A
   manual scheduled scan then created two recoverable items but the deployed

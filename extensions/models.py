@@ -209,6 +209,17 @@ class ExtensionKeyResetRequest(ExtensionDiscoveryRequest):
     instance_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,39}$")
 
 
+class ManagedImageUpdatePlanRequest(BaseModel):
+    """A browser may request only a reviewed immutable-image update plan."""
+
+    instance_handle: str = Field(pattern=r"^i-[a-f0-9]{32}$")
+    image: str = Field(min_length=20, max_length=320)
+
+
+class ManagedImageUpdateApplyRequest(BaseModel):
+    plan_id: str = Field(pattern=r"^[A-Za-z0-9_-]{20,128}$")
+
+
 class VaultPasswordRequest(BaseModel):
     password: str = Field(min_length=8, max_length=1024)
 

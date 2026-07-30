@@ -1096,6 +1096,22 @@
         </div>
       </aside>
 
+      <!-- Controlled update for an already registered isolated service -->
+      <div id="extImageUpdateModal" class="ext-reset-modal hidden" role="dialog" aria-modal="true" aria-labelledby="extImageUpdateTitle">
+        <div class="ext-reset-box glass-panel">
+          <h3 id="extImageUpdateTitle"><span data-i18n="extensions.update_image_title">更新隔离实例镜像</span></h3>
+          <p class="ext-reset-hint" data-i18n="extensions.update_image_warning">只会更新已登记的隔离开发实例。镜像必须使用不可变的 @sha256 摘要；生产实例不会出现在这里。</p>
+          <div id="extImageUpdateInstance" class="ext-reset-instance"></div>
+          <label><span data-i18n="extensions.update_image_digest">新镜像摘要地址</span><input id="extImageUpdateDigest" type="text" autocomplete="off" spellcheck="false" placeholder="registry.example/chatgpt2api@sha256:..." data-i18n-placeholder="extensions.image_source_placeholder"></label>
+          <div id="extImageUpdatePlan" class="ext-reset-result hidden"></div>
+          <div class="ext-reset-actions">
+            <button class="btn-ghost" type="button" onclick="extensionCloseImageUpdateModal()"><span data-i18n="common.cancel">取消</span></button>
+            <button class="btn-secondary" type="button" id="extImageUpdatePlanBtn" onclick="extensionPlanImageUpdate()"><span data-i18n="extensions.review_update">生成核对清单</span></button>
+            <button class="btn-primary" type="button" id="extImageUpdateApplyBtn" onclick="extensionApplyImageUpdate()" disabled><span data-i18n="extensions.confirm_update">确认更新</span></button>
+          </div>
+        </div>
+      </div>
+
       <!-- Reset managed key modal -->
       <div id="extResetKeyModal" class="ext-reset-modal hidden" role="dialog" aria-modal="true" aria-label="重置管理密钥" data-i18n-aria-label="extensions.reset_key_label">
         <div class="ext-reset-box glass-panel">

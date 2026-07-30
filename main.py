@@ -13,6 +13,7 @@ import asyncio
 import json as _json
 import time
 import uuid
+import secrets
 import webbrowser
 import uvicorn
 from datetime import datetime, timezone
@@ -87,11 +88,13 @@ from extensions.models import (
     ExtensionTaskResumeRequest,
     ExtensionPlanRequest, ExtensionTestRequest, PushSourceProvisionRequest,
     ManagedCredentialUpsertRequest, VaultPasswordRequest,
-    is_canonical_host_key_trust, validate_deployment_image,
+    ManagedImageUpdatePlanRequest, ManagedImageUpdateApplyRequest, SSHCredential,
+    is_canonical_host_key_trust, is_immutable_image_reference, validate_deployment_image,
 )
 from extensions.orchestrator import (
     DeploymentAttemptConflictError, DeploymentNoTaskError, SSHAuthenticationError, SSHConnectionError,
     deployment_plans, extension_tasks, public_instance_access, public_instance_handle, reset_managed_admin_key,
+    update_managed_image,
     probe_host_key,
     test_connection as test_extension_connection,
 )
@@ -4357,6 +4360,62 @@ def _vault_error(exc: Exception):
     raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+# Image updates are deliberately short-lived and single-use.  The plan binds
+# an opaque public handle to an immutable image, while the SSH credential is
+# retrieved only by the apply request after the vault has been unlocked.
+_managed_image_update_plans: dict[str, dict] = {}
+_managed_image_update_plans_lock = threading.RLock()
+_MANAGED_IMAGE_UPDATE_PLAN_TTL_SECONDS = 300
+
+
+def _managed_image_update_instance(instance_handle: str):
+    if re.fullmatch(r"i-[a-f0-9]{32}", instance_handle or "") is None:
+        raise HTTPException(status_code=404, detail="managed_instance_not_found")
+    instance = _resolve_stored_instance_handle(instance_handle)
+    if (
+        not instance
+        or not instance.managed
+        or instance.project != "chatgpt2api"
+        or instance.strategy != "isolated"
+        or instance.deployment_mode != "compose"
+        or not hmac.compare_digest(public_instance_handle(instance.target_id, instance.id), instance_handle)
+    ):
+        raise HTTPException(status_code=404, detail="managed_instance_not_found")
+    target = extensions_store.get_target(instance.target_id)
+    if not target or target.target_role != "isolated-development":
+        raise HTTPException(status_code=403, detail="isolated_development_only")
+    return instance, target
+
+
+def _stored_ssh_credential(instance, target) -> SSHCredential:
+    saved = credential_vault.get(instance.id)
+    if saved.ssh_password and saved.ssh_private_key:
+        raise ValueError("saved_ssh_credential_invalid")
+    if not saved.ssh_password and not saved.ssh_private_key:
+        raise PermissionError("saved_ssh_credential_required")
+    elevation = "password_sudo" if saved.sudo_password else "none"
+    return SSHCredential(
+        password=saved.ssh_password,
+        private_key=saved.ssh_private_key,
+        passphrase=saved.ssh_passphrase,
+        sudo_password=saved.sudo_password,
+        elevation=elevation,
+    )
+
+
+def _take_managed_image_update_plan(plan_id: str) -> dict:
+    now = time.time()
+    with _managed_image_update_plans_lock:
+        expired = [key for key, item in _managed_image_update_plans.items()
+                   if float(item.get("expires_at", 0)) <= now]
+        for key in expired:
+            _managed_image_update_plans.pop(key, None)
+        plan = _managed_image_update_plans.pop(plan_id, None)
+    if not plan:
+        raise HTTPException(status_code=409, detail="managed_image_update_plan_unavailable")
+    return plan
+
+
 @app.get("/api/extensions/vault/status")
 async def extension_vault_status():
     return credential_vault.status()
@@ -4436,6 +4495,71 @@ async def extension_vault_delete(instance_id: str):
         return {"deleted": True}
     except Exception as exc:
         _vault_error(exc)
+
+
+@app.post("/api/extensions/instances/image-update/plan")
+async def extension_managed_image_update_plan(body: ManagedImageUpdatePlanRequest):
+    """Prepare a reviewed update for one GenBox-managed isolated instance."""
+    if not is_immutable_image_reference(body.image):
+        raise HTTPException(status_code=400, detail="immutable_image_required")
+    instance, target = _managed_image_update_instance(body.instance_handle)
+    try:
+        # This checks that the vault is unlocked and contains a usable SSH
+        # credential without returning or persisting any secret material.
+        _stored_ssh_credential(instance, target)
+    except Exception as exc:
+        _vault_error(exc)
+    plan_id = "iu-" + secrets.token_urlsafe(24)
+    expires_at = time.time() + _MANAGED_IMAGE_UPDATE_PLAN_TTL_SECONDS
+    plan = {
+        "plan_id": plan_id,
+        "instance_id": instance.id,
+        "instance_handle": body.instance_handle,
+        "target_id": target.id,
+        "image": body.image.strip(),
+        "expires_at": expires_at,
+    }
+    with _managed_image_update_plans_lock:
+        _managed_image_update_plans[plan_id] = plan
+    return {
+        "plan_id": plan_id,
+        "instance_handle": body.instance_handle,
+        "image": body.image.strip(),
+        "expires_at": int(expires_at),
+        "operations": ["pull_immutable_image", "backup_configuration", "recreate_app", "verify_health"],
+    }
+
+
+@app.post("/api/extensions/instances/image-update/apply")
+async def extension_managed_image_update_apply(body: ManagedImageUpdateApplyRequest):
+    """Consume one update plan and perform the bounded remote operation."""
+    plan = _take_managed_image_update_plan(body.plan_id)
+    instance, target = _managed_image_update_instance(plan["instance_handle"])
+    if instance.id != plan["instance_id"] or target.id != plan["target_id"]:
+        raise HTTPException(status_code=409, detail="managed_image_update_context_changed")
+    try:
+        credential = _stored_ssh_credential(instance, target)
+        result = await update_managed_image(
+            instance_id=instance.id,
+            target=target,
+            credential=credential,
+            image=plan["image"],
+        )
+        return {
+            "ok": True,
+            "instance_handle": plan["instance_handle"],
+            "image": plan["image"],
+            "health_verified": bool(result.get("health_verified")),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _safe_extension_ssh_error(
+            exc,
+            error="隔离开发实例镜像更新未完成，原实例配置已保留或已回滚。",
+            code="managed_image_update_failed",
+            stage="managed_image_update",
+        ) from exc
 
 
 @app.post("/api/extensions/instances/reset-admin-key")

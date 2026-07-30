@@ -2677,7 +2677,7 @@ def test_deploy_task_reports_success(tmp_path, monkeypatch):
         delivered = manager.take_delivery(task_id, DEPLOYMENT_ATTEMPT_ID)
         assert delivered["admin_key"].startswith("gbx-")
         assert set(delivered["instance"]) == {
-            "handle", "project", "managed", "running", "console_url", "api_url",
+            "handle", "project", "managed", "strategy", "deployment_mode", "running", "console_url", "api_url",
         }
         assert manager.take_delivery(task_id, DEPLOYMENT_ATTEMPT_ID) is None
 
@@ -3548,7 +3548,7 @@ def test_extension_plan_discovery_and_instance_routes_expose_only_public_product
     }
     assert plan_response["discovery"] == discovery_response
     assert set(instance_response["instances"][0]) == {
-        "handle", "project", "managed", "running", "console_url", "api_url",
+        "handle", "project", "managed", "strategy", "deployment_mode", "running", "console_url", "api_url",
     }
     assert instance_response["instances"][0]["console_url"] == "https://sentinel.example/console"
     assert instance_response["instances"][0]["api_url"] == "https://sentinel.example/api"
@@ -3578,7 +3578,7 @@ def test_public_instance_access_dto_rejects_credential_or_query_bearing_urls():
 
     public = public_instance_access(instance)
     assert set(public) == {
-        "handle", "project", "managed", "running", "console_url", "api_url",
+        "handle", "project", "managed", "strategy", "deployment_mode", "running", "console_url", "api_url",
     }
     assert public["console_url"] == ""
     assert public["api_url"] == ""
