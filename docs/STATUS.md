@@ -7,6 +7,29 @@
 
 ## Current evidence
 
+- **ISOLATED-VPS + LOCAL RECEIVER 2026-07-31:** the authorized isolated
+  sender completed a two-item Gallery batch Push with source retention. A
+  manual scheduled scan then created two recoverable items but the deployed
+  Settings page continued to show its initial queued projection after the
+  batches had been handed to the worker. The sender fix makes schedule reads
+  refresh batch projections and adds bounded Settings-page polling; focused
+  transfer, batch, and schedule tests passed `25`, and the Vue production build
+  passed. A new immutable experimental sender image was published from the
+  reviewed fix. The already-running isolated instance is still on the prior
+  immutable image: remote verification of the fixed schedule progress display
+  requires an approved controlled update or replacement deployment. No
+  production instance was selected or modified.
+
+- **ISOLATED-VPS + LOCAL RECEIVER 2026-07-31:** an authorized Gallery
+  single-item Push initially showed a transient failure state, then recovered
+  to a completed receipt with source retention. A second explicit Push of the
+  same selected source completed without sender browser errors. The local
+  receiver's remote-media thumbnail set was identical immediately before and
+  after that retry, proving no duplicate media was created. This is a focused
+  user-visible retry/idempotence check only; Phase 5 still requires isolated
+  batch-interruption recovery and scheduled late-file discovery evidence. No
+  production instance was selected or modified.
+
 - **GITHUB + LOCAL 2026-07-31:** the owner's experimental sender repository
   published a dedicated immutable `linux/amd64` Phase 5 image package after
   correcting the repository workflow permission and package-ownership
