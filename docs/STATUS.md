@@ -6,6 +6,18 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-30:** deployment-plan generation and final deployment
+  authorization now use visible in-page confirmation cards instead of browser
+  native confirmation dialogs. The cards explain the read-only preflight or
+  the isolated deployment scope, keep cancellation on the reviewed page, and
+  invoke the existing backend gates only after the user selects the explicit
+  continue action. Backend `approve_plan_discovery`, host-key verification,
+  immutable-image validation, and `confirmed_plan_id` requirements are
+  unchanged. `node --check static/js/extensions.js`, `git diff --check`, and
+  the focused extension/Push suites passed `363`. This is local UI/test
+  evidence only; isolated-VPS deployment and single-image Push E2E remain
+  pending a live browser SSH session.
+
 - **LOCAL 2026-07-30:** the novice deployment guide now preserves an explicit
   path to plan a second isolated `chatgpt2api` instance after a prior managed
   deployment has completed. The new action clears only the browser's transient
