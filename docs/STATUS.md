@@ -19,7 +19,8 @@
   Focused sender tests passed `23`; the Vue production build passed. A freshly
   built local sender image and the disposable Docker-only smoke passed v1
   probe, initial import, idempotent retry, coordinated transfer, interrupted
-  batch recovery, visible `already-imported` recovery, and source retention.
+  batch recovery, visible `already-imported` recovery, delayed-file scheduled
+  scan recovery, and source retention.
   Generated test credentials and a synthetic 2x2 image were removed with the
   per-run containers and network. This is local code/protocol evidence only:
   isolated-VPS batch interruption, late-arriving scheduled files, and clean
