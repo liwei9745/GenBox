@@ -12,7 +12,9 @@
   service port, deployment time, and the local credential-save timestamp when
   available. The public projection remains allowlisted and excludes keys,
   passwords, paths, container IDs, and image configuration. Focused extension
-  and vault tests passed `341`.
+  and vault tests passed `341`. The detail rows are now translated in both
+  supported UI languages and collapsed by default; service-drawer loading is
+  single-flight so repeated route/drawer refreshes do not duplicate controls.
 
 - **LOCAL 2026-07-31:** GenBox now has a controlled update path for an
   already registered managed `chatgpt2api` isolated Compose instance. The

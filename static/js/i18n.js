@@ -498,6 +498,7 @@
     "extensions.vps_host":{"zh-CN":"VPS 地址 / SSH 端口","en":"VPS address / SSH port"},
     "extensions.deployed_at":{"zh-CN":"部署时间","en":"Deployed"},
     "extensions.credential_saved_at":{"zh-CN":"凭证保存时间","en":"Credential saved"},
+    "extensions.view_details":{"zh-CN":"查看连接详情","en":"View connection details"},
     "extensions.primary_link":{"zh-CN":"主链路","en":"Primary network"},
     "extensions.credential":{"zh-CN":"凭证","en":"Credential"},
     "extensions.credential_session":{"zh-CN":"仅在当前任务中使用","en":"Used only for the current task"},

@@ -4369,9 +4369,11 @@ def test_deployed_services_cards_use_non_secret_fields_only():
     assert "common.open_console" in card_block
     assert "extensionCopyServiceUrl" in card_block
     assert "extAttachServiceMetadata" in js
+    assert "extServicesLoadInFlight" in js
     assert "item.vps_host" in js
     assert "item.service_port" in js
     assert "credential_saved_at" in js
+    assert "extensions.view_details" in js
     assert "admin_key" not in card_block
     css = (Path(__file__).parents[1] / "static" / "css" / "extensions.css").read_text(encoding="utf-8")
     assert ".ext-service-card{" in css

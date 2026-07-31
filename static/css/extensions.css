@@ -59,6 +59,7 @@
 .ext-service-meta>div{display:flex;justify-content:space-between;gap:12px;border-bottom:1px dashed rgba(0,0,0,.06);padding-bottom:5px}
 .ext-service-meta dt{color:#6e6e73;margin:0}
 .ext-service-meta dd{margin:0;color:#1d1d1f;font-weight:500}
+.ext-service-details{font-size:11px}.ext-service-details summary{cursor:pointer;color:var(--accent);font-weight:600;list-style-position:inside;padding:2px 0}.ext-service-details[open] summary{margin-bottom:8px}
 .ext-service-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
 .ext-reset-btn{color:#FF3B30}
 .ext-reset-modal{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:rgba(0,0,0,.4);padding:20px}
