@@ -17,8 +17,12 @@
   restores the prior configuration and recreates the prior app; the local
   instance image record changes only after health succeeds. The endpoint and
   UI never return saved SSH credentials. Focused GenBox extension suites passed
-  `369`. Remote controlled update and schedule-progress verification remain
-  pending one local vault unlock; no production instance was selected or
+  `369`. The vault was later unlocked for a controlled-update preflight, which
+  then stopped before SSH because its saved SSH credential belongs to a
+  different managed isolated instance. The sender instance being verified has
+  no locally saved SSH credential yet. Remote controlled update and
+  schedule-progress verification therefore remain pending an explicit
+  per-instance credential save; no production instance was selected or
   modified.
 
 - **ISOLATED-VPS + LOCAL RECEIVER 2026-07-31:** the authorized isolated
