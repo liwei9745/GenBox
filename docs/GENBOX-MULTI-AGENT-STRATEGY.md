@@ -9,6 +9,65 @@ external automation to damage verified work. `docs/PRODUCT.md`,
 sources of truth. Files under `.planning/` are historical or tool-local input
 when they conflict with those documents.
 
+## First-Principles Task Card
+
+Every non-trivial loop starts with a short task card. This is a reasoning
+check, not a new planning system:
+
+1. **User outcome:** what observable user result must become true?
+2. **Invariants:** what must remain true even when the operation fails,
+   retries, or restarts?
+3. **Evidence:** which command, test, or runtime observation can prove it?
+4. **Non-goals:** which nearby behavior is explicitly out of scope?
+
+For cross-project Push work, the default invariants are authenticated
+receipts, matching SHA-256, idempotent retry, source retention, isolated
+resources, and production non-mutation. A passing mock or a plausible UI state
+cannot satisfy an isolated-VPS gate by itself.
+
+## Capability Role Cards
+
+Role names describe a review mandate, never a claimed vendor identity. A role
+may use public engineering practices associated with a company, but its output
+must be grounded in this repository's contracts and evidence. No role may use a
+company name as authority, invent a runtime fact, or grant deployment or
+publication permission.
+
+- **Orchestrator:** owns the task card, preservation snapshot, scope, evidence
+  class, handoffs, and final accept/reject decision. It is the only role that
+  stages, commits, or requests external authorization.
+- **Receiver/deployment builder:** the single writer for GenBox code, fixed
+  plans, UI, and receiver tests. It never edits the sender repository or a live
+  VPS.
+- **Sender/integration builder:** works only in the isolated chatgpt2api
+  repository and owns Push, batch, schedule, receipt, and lease behavior.
+- **Security reviewer:** read-only review of credentials, host-key trust,
+  SSRF, remote commands, deletion, rollback, and production isolation.
+- **Reliability reviewer:** read-only review of restart recovery, idempotency,
+  concurrency, leases, bounded retry, and observable progress.
+- **UX/contract reviewer:** checks that visible actions, recovery text, API
+  contracts, and tests agree and remain understandable to a novice.
+
+Role cards must state allowed files, forbidden actions, required artifacts, and
+verification commands. The resolved runtime model is recorded only when the
+dispatch system actually exposes that identity; otherwise the collaboration is
+generic role collaboration.
+
+## Risk-Triggered Review
+
+Multi-agent review is not a permanent ceremony for every edit. Use this
+minimum trigger policy:
+
+| Change surface | Required review |
+| --- | --- |
+| Copy, styling, isolated UI text | Builder self-check and focused test |
+| Local behavior or route contract | One independent test/contract reviewer |
+| Credentials, SSH, Push, retries, leases, or cross-project state | Security + reliability + contract reviewers |
+| VPS mutation, immutable image update, release, GitHub publication, or upstream PR | All relevant reviewers plus explicit user authorization |
+
+Reviewers inspect a frozen commit or diff and remain read-only. A P1 finding
+returns the loop to the writer; passing tests do not override it.
+
 ## Mandatory Preservation Gate
 
 Before every non-trivial task, the orchestrator records a sanitized task
