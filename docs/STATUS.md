@@ -7,6 +7,16 @@
 
 ## Current evidence
 
+- **ISOLATED-VPS 2026-07-31:** Gallery's visible failed-only retry control
+  retried one previously failed item without resubmitting any other item. Its
+  terminal receipt projection was `already-imported`, and the page confirmed
+  that the source image remained retained. A subsequent two-item Gallery batch
+  was started and the browser was refreshed immediately. The reloaded page
+  restored that same batch and later reported `2` `already-imported` outcomes
+  with source retention. This is user-visible browser-refresh recovery and
+  idempotent completion evidence; it does not substitute for a sender-process
+  interruption or an independent concurrent-schedule invocation.
+
 - **ISOLATED-VPS 2026-07-31:** the registered isolated sender received the
   reviewed immutable Phase 5 image through the controlled update path. The
   updater accepted only its opaque instance handle and immutable digest, used
