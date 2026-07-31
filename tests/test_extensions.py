@@ -2073,7 +2073,7 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
     assert '<script src="/static/js/i18n.js?v=15"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=27"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=28"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):
@@ -4343,6 +4343,11 @@ def test_deployed_services_section_is_wired():
     assert "extensionToggleGroup" in js
     assert "extensionOpenResetModal" in js
     assert "extensionCopyText" in js
+    assert 'id="extVaultPassword"' in html
+    assert 'onkeydown="extensionVaultPasswordKeydown(event)"' in html
+    assert "window.extensionVaultPasswordKeydown" in js
+    assert "event.key!=='Enter'||event.isComposing" in js
+    assert "window.extensionVaultUnlock()" in js
     assert "extResetKeyModal" in html
     assert "查看已部署服务" in html
     assert "ext-service-launcher" in html

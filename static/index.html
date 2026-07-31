@@ -1091,7 +1091,7 @@
           </button>
         </header>
         <div class="ext-drawer-body">
-          <div class="ext-vault-toolbar"><div><b><span data-i18n="extensions.vault">本机凭证库</span></b><span id="extVaultStatus"><span data-i18n="extensions.checking">正在检查…</span></span></div><input id="extVaultPassword" type="password" autocomplete="off" placeholder="解锁密码（至少 8 位）" data-i18n-placeholder="extensions.vault_password"><button class="btn-secondary" id="extVaultUnlockBtn" onclick="extensionVaultUnlock()"><span data-i18n="extensions.setup_unlock">设置 / 解锁</span></button><button class="btn-ghost" id="extVaultLockBtn" onclick="extensionVaultLock()"><span data-i18n="extensions.lock">锁定</span></button></div>
+          <div class="ext-vault-toolbar"><div><b><span data-i18n="extensions.vault">本机凭证库</span></b><span id="extVaultStatus"><span data-i18n="extensions.checking">正在检查…</span></span></div><input id="extVaultPassword" type="password" autocomplete="off" placeholder="解锁密码（至少 8 位）" data-i18n-placeholder="extensions.vault_password" onkeydown="extensionVaultPasswordKeydown(event)"><button class="btn-secondary" id="extVaultUnlockBtn" onclick="extensionVaultUnlock()"><span data-i18n="extensions.setup_unlock">设置 / 解锁</span></button><button class="btn-ghost" id="extVaultLockBtn" onclick="extensionVaultLock()"><span data-i18n="extensions.lock">锁定</span></button></div>
           <div id="extDrawerList" class="ext-bento"><span class="extension-placeholder"><span data-i18n="common.loading_ellipsis">正在加载…</span></span></div>
         </div>
       </aside>
@@ -1327,6 +1327,6 @@
   <script src="/static/js/i18n.js?v=15"></script>
 <script src="/static/js/app-all.js?v=36"></script>
 <script src="/static/js/sync.js?v=7"></script>
-<script src="/static/js/extensions.js?v=27"></script>
+<script src="/static/js/extensions.js?v=28"></script>
 </body>
 </html>
