@@ -1138,6 +1138,7 @@
       <!-- Local managed-instance credential modal -->
       <div id="extCredentialModal" class="ext-reset-modal hidden" role="dialog" aria-modal="true" aria-label="本机保存的凭证" data-i18n-aria-label="extensions.saved_credential_label">
         <div class="ext-reset-box glass-panel">
+          <button type="button" class="ext-modal-close" aria-label="Close" title="Close" onclick="extensionCloseCredentialModal()">&#215;</button>
           <h3><span data-i18n="extensions.saved_credential_label">本机保存的凭证</span></h3><div id="extCredentialInstance" class="ext-reset-instance"></div>
            <label><span data-i18n="extensions.admin_key">管理密钥</span><input id="extCredentialAdminKey" type="password" autocomplete="off"></label>
            <label><span data-i18n="extensions.vps_password">VPS SSH 密码</span><input id="extCredentialSshPassword" type="password" autocomplete="off"></label>

@@ -64,6 +64,12 @@ def test_vault_models_reject_short_password_and_empty_credential():
         ManagedCredentialUpsertRequest(credential={"note": "not a credential"})
 
 
+def test_vault_accepts_ssh_only_managed_credential():
+    credential = ManagedCredential(ssh_password="isolated-vps-password")
+
+    assert credential.ssh_password == "isolated-vps-password"
+
+
 def test_vault_unlock_sets_running_status(tmp_path):
     vault = CredentialVault(tmp_path / "credentials.vault.json")
     vault.setup("unlock-test-password")
@@ -108,6 +114,7 @@ def test_vault_routes_and_frontend_are_wired():
         assert route in main
     assert 'name="extCredentialDelivery"' in html
     assert 'id="extCredentialModal"' in html
+    assert 'class="ext-modal-close"' in html
     assert "extensionSaveDeliveredCredential" in js
     assert "extensionSaveResetCredential" in js
     assert "extensionOpenCredential" in js

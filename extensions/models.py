@@ -237,7 +237,15 @@ class ManagedCredential(BaseModel):
 
     @model_validator(mode="after")
     def require_credential(self):
-        if not any((self.admin_key, self.username, self.password, self.api_key)):
+        # SSH-only access is valid for controlled maintenance and image updates.
+        if not any((
+            self.admin_key,
+            self.ssh_password,
+            self.ssh_private_key,
+            self.username,
+            self.password,
+            self.api_key,
+        )):
             raise ValueError("至少填写一项托管实例凭证")
         return self
 

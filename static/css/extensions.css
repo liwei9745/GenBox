@@ -62,7 +62,8 @@
 .ext-service-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
 .ext-reset-btn{color:#FF3B30}
 .ext-reset-modal{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:rgba(0,0,0,.4);padding:20px}
-.ext-reset-box{width:min(440px,100%);padding:22px;border-radius:24px}
+.ext-reset-box{width:min(440px,100%);padding:22px;border-radius:24px;position:relative}
+.ext-modal-heading{display:flex;align-items:center;gap:12px;margin-bottom:8px}.ext-modal-heading h3{margin:0;flex:1}.ext-modal-close{position:absolute;right:14px;top:14px;width:32px;height:32px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:transparent;color:var(--text-secondary);font-size:24px;line-height:1;cursor:pointer}.ext-modal-close:hover{background:var(--bg-surface);color:var(--text-primary)}
 .ext-reset-box h3{margin:0 0 8px;font-size:16px}
 .ext-reset-hint{margin:0 0 14px;font-size:11px;line-height:1.7;color:var(--text-muted)}
 .ext-reset-instance{font-size:12px;font-weight:600;color:var(--accent);margin-bottom:12px}
