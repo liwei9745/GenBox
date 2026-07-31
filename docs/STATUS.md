@@ -7,6 +7,13 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-31:** the deployed-services drawer now shows non-secret
+  instance metadata for disambiguation: VPS name and address, SSH port,
+  service port, deployment time, and the local credential-save timestamp when
+  available. The public projection remains allowlisted and excludes keys,
+  passwords, paths, container IDs, and image configuration. Focused extension
+  and vault tests passed `341`.
+
 - **LOCAL 2026-07-31:** GenBox now has a controlled update path for an
   already registered managed `chatgpt2api` isolated Compose instance. The
   browser supplies only an opaque instance handle and immutable image digest;

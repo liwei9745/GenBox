@@ -1044,6 +1044,10 @@ def test_resume_route_requires_exact_ephemeral_binding_and_returns_only_safe_acc
         "extensions.orchestrator.extensions_store.list_instances",
         lambda target_id="": [matching] if target_id == "target-a" else [unrelated_instance],
     )
+    monkeypatch.setattr(
+        "extensions.orchestrator.extensions_store.get_target",
+        lambda _target_id: None,
+    )
     manager._persist()
     monkeypatch.setattr(main, "extension_tasks", manager)
     client = TestClient(main.app, base_url="http://testserver")
@@ -1068,6 +1072,12 @@ def test_resume_route_requires_exact_ephemeral_binding_and_returns_only_safe_acc
                 "project": "chatgpt2api", "managed": True, "strategy": "", "deployment_mode": "", "running": True,
             "console_url": "https://console.example",
             "api_url": "https://console.example/v1",
+            "target_name": "",
+            "vps_host": "",
+            "vps_port": 0,
+            "service_port": 0,
+            "created_at": "",
+            "updated_at": "",
         },
     }
     assert manager.deliveries["historical"]["admin_key"] == "must-remain-unclaimed"

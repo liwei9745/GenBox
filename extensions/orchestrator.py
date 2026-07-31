@@ -115,11 +115,34 @@ def _public_project(value: Any) -> str:
     return project
 
 
+def _public_host(value: Any) -> str:
+    host = str(value or "").strip()
+    if (
+        not host
+        or len(host) > 255
+        or any(char in host for char in "\r\n\t /?#@")
+    ):
+        return ""
+    return host
+
+
+def _public_port(value: Any) -> int:
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return port if 1 <= port <= 65535 else 0
+
+
 def public_instance_access(instance: Any) -> dict[str, Any]:
     """Return the complete allowlisted, non-secret instance/access DTO."""
     status = str(getattr(instance, "status", "") or "").lower()
     strategy = str(getattr(instance, "strategy", "") or "")
     deployment_mode = str(getattr(instance, "deployment_mode", "") or "")
+    target = extensions_store.get_target(str(getattr(instance, "target_id", "") or ""))
+    target_host = _public_host(getattr(target, "host", "")) if target else ""
+    target_name = str(getattr(target, "name", "") or "").strip()[:128] if target else ""
+    target_port = _public_port(getattr(target, "port", 0)) if target else 0
     return {
         "handle": public_instance_handle(
             str(getattr(instance, "target_id", "") or ""),
@@ -132,6 +155,12 @@ def public_instance_access(instance: Any) -> dict[str, Any]:
         "running": status.startswith("up") or status in {"running", "healthy"},
         "console_url": _public_access_url(getattr(instance, "console_url", "")),
         "api_url": _public_access_url(getattr(instance, "api_url", "")),
+        "target_name": target_name,
+        "vps_host": target_host,
+        "vps_port": target_port,
+        "service_port": _public_port(getattr(instance, "service_port", 0)),
+        "created_at": str(getattr(instance, "created_at", "") or ""),
+        "updated_at": str(getattr(instance, "updated_at", "") or ""),
     }
 
 

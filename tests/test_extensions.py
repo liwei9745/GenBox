@@ -2678,6 +2678,7 @@ def test_deploy_task_reports_success(tmp_path, monkeypatch):
         assert delivered["admin_key"].startswith("gbx-")
         assert set(delivered["instance"]) == {
             "handle", "project", "managed", "strategy", "deployment_mode", "running", "console_url", "api_url",
+            "target_name", "vps_host", "vps_port", "service_port", "created_at", "updated_at",
         }
         assert manager.take_delivery(task_id, DEPLOYMENT_ATTEMPT_ID) is None
 
@@ -3549,9 +3550,14 @@ def test_extension_plan_discovery_and_instance_routes_expose_only_public_product
     assert plan_response["discovery"] == discovery_response
     assert set(instance_response["instances"][0]) == {
         "handle", "project", "managed", "strategy", "deployment_mode", "running", "console_url", "api_url",
+        "target_name", "vps_host", "vps_port", "service_port", "created_at", "updated_at",
     }
     assert instance_response["instances"][0]["console_url"] == "https://sentinel.example/console"
     assert instance_response["instances"][0]["api_url"] == "https://sentinel.example/api"
+    assert instance_response["instances"][0]["target_name"] == "VPS"
+    assert instance_response["instances"][0]["vps_host"] == "sentinel-host.example"
+    assert instance_response["instances"][0]["vps_port"] == 2222
+    assert instance_response["instances"][0]["service_port"] == 34567
 
     serialized = json.dumps({
         "discovery": discovery_response,
@@ -3559,14 +3565,15 @@ def test_extension_plan_discovery_and_instance_routes_expose_only_public_product
         "instances": instance_response,
     }, ensure_ascii=False)
     for sentinel in (
-        "sentinel-host.example", fingerprint, "sentinel-user", "/srv/sentinel",
-        "sentinel-image", "34567", "127.0.0.1",
+        fingerprint, "sentinel-user", "/srv/sentinel",
+        "sentinel-image", "127.0.0.1",
         "sentinel-compose", "sentinel-container", "sentinel-session-secret",
     ):
         assert sentinel not in serialized
 
 
-def test_public_instance_access_dto_rejects_credential_or_query_bearing_urls():
+def test_public_instance_access_dto_rejects_credential_or_query_bearing_urls(monkeypatch):
+    monkeypatch.setattr(orchestrator.extensions_store, "get_target", lambda _target_id: None)
     instance = SimpleNamespace(
         id="managed-app", target_id="target-a", project="chatgpt2api",
         managed=True, status="running",
@@ -3579,6 +3586,7 @@ def test_public_instance_access_dto_rejects_credential_or_query_bearing_urls():
     public = public_instance_access(instance)
     assert set(public) == {
         "handle", "project", "managed", "strategy", "deployment_mode", "running", "console_url", "api_url",
+        "target_name", "vps_host", "vps_port", "service_port", "created_at", "updated_at",
     }
     assert public["console_url"] == ""
     assert public["api_url"] == ""
@@ -3588,7 +3596,8 @@ def test_public_instance_access_dto_rejects_credential_or_query_bearing_urls():
     ))
 
 
-def test_public_instance_access_dto_allowlists_bounded_project_identifier():
+def test_public_instance_access_dto_allowlists_bounded_project_identifier(monkeypatch):
+    monkeypatch.setattr(orchestrator.extensions_store, "get_target", lambda _target_id: None)
     base = {
         "id": "managed-app", "target_id": "target-a", "managed": True,
         "status": "running", "console_url": "", "api_url": "",
@@ -4359,7 +4368,10 @@ def test_deployed_services_cards_use_non_secret_fields_only():
     assert "item.api_url" in card_block
     assert "common.open_console" in card_block
     assert "extensionCopyServiceUrl" in card_block
-    assert "service_port" not in card_block
+    assert "extAttachServiceMetadata" in js
+    assert "item.vps_host" in js
+    assert "item.service_port" in js
+    assert "credential_saved_at" in js
     assert "admin_key" not in card_block
     css = (Path(__file__).parents[1] / "static" / "css" / "extensions.css").read_text(encoding="utf-8")
     assert ".ext-service-card{" in css
