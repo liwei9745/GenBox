@@ -18,9 +18,12 @@
   reloading the sender page, the durable progress dialog reappeared from the
   server-side batch projection while selection reset to zero. This confirms
   browser-refresh recovery. A later one-image duplicate Push remained in
-  `sending` beyond the bounded observation window, so this run is not accepted
-  as a completed idempotent-retry result and the batch/sender timeout remains a
-  blocker for Phase 5 acceptance.
+  `sending` beyond the bounded observation window, then disappeared from the
+  recoverable projection after its dialog was closed. The current UI has no
+  terminal batch-history view, so the final result cannot be observed safely.
+  This run is not accepted as a completed idempotent-retry result; terminal
+  batch history and the delayed-transfer diagnosis remain blockers for Phase 5
+  acceptance.
 
 - **LOCAL 2026-07-31:** the sender now exposes a recoverable-batch projection,
   persists distinct `already-imported` item outcomes, and displays a
