@@ -228,7 +228,7 @@ and update status only when 4A-4C evidence supports the Phase 4 criteria.
 
 ## Phase 5: Batch And Scheduled Incremental Push
 
-**Status:** Planned
+**Status:** In Progress
 
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`

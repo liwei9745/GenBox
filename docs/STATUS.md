@@ -31,6 +31,13 @@
   completed its health check. The user-facing batch behavior is unchanged;
   this removes ambiguity before the remaining interruption-resume test.
 
+- **USER-CONFIRMED ISOLATED-VPS 2026-07-31:** the updated Gallery completed a
+  manual two-image batch Push to GenBox, reporting `2` processed items and
+  retaining both source images. This validates the visible manual-batch success
+  path, but does not yet prove interruption recovery, late-file discovery,
+  concurrent schedule lease behavior, failure-only retry, or the later clean
+  redeployment and upstream-delivery gates.
+
 - **LOCAL 2026-07-31:** the deployed-services drawer now shows non-secret
   instance metadata for disambiguation: VPS name and address, SSH port,
   service port, deployment time, and the local credential-save timestamp when
