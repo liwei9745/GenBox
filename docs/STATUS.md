@@ -7,6 +7,28 @@
 
 ## Current evidence
 
+- **GITHUB + ISOLATED-VPS 2026-07-31:** sender commits `9e80af3` and
+  `efae62f` were published from the owner's experimental repository. The final
+  immutable image digest `sha256:c9357b45b1339d2be4e4a02eb48f059562890f14bd9757b924d7fd7621b9e076`
+  was applied only to the registered isolated sender through GenBox's controlled
+  update path; pull, rebuild, and health verification completed successfully.
+  No production instance was selected or modified.
+
+- **ISOLATED-VPS 2026-07-31:** after starting a two-image Gallery batch and
+  reloading the sender page, the durable progress dialog reappeared from the
+  server-side batch projection while selection reset to zero. This confirms
+  browser-refresh recovery. A later one-image duplicate Push remained in
+  `sending` beyond the bounded observation window, so this run is not accepted
+  as a completed idempotent-retry result and the batch/sender timeout remains a
+  blocker for Phase 5 acceptance.
+
+- **LOCAL 2026-07-31:** the sender now exposes a recoverable-batch projection,
+  persists distinct `already-imported` item outcomes, and displays a
+  compatibility-safe progress count. Focused sender tests passed `13` and the
+  Vue production build passed. Cross-process batch locking and bounded retry
+  policy are not yet present in the current sender branch and remain follow-up
+  work; do not treat earlier planning text as implementation evidence.
+
 - **LOCAL + ISOLATED-VPS 2026-07-31:** fixed the managed-service drawer so
   opaque instance handles containing quotes cannot leave the visible `Update
   image` or key-reset actions inert. After each render, the card's encoded
@@ -142,24 +164,12 @@
   sanitized GitHub-built sender artifact can run locally; it does not prove the
   isolated VPS architecture, deployment, batch interruption, or scheduled scan.
 
-- **LOCAL 2026-07-31:** the sender Phase 5 batch implementation now persists
-  explicit `already-imported` receipt outcomes, exposes the newest active or
-  failed batch for Gallery refresh recovery, and resumes progress polling from
-  that projection. Batch state mutations now use a short-lived cross-process
-  file lock, so two sender processes cannot claim the same queued item. Only
-  retryable transport or temporary server failures retry automatically, with
-  jittered exponential delay and a three-attempt limit; authentication, source
-  change, and invalid-content failures remain terminal until a user explicitly
-  retries after remediation. Source images remain retained for every outcome.
-  Focused sender tests passed `24`; the Vue production build passed. A freshly
-  built local sender image and the disposable Docker-only smoke passed v1
-  probe, initial import, idempotent retry, coordinated transfer, interrupted
-  batch recovery, visible `already-imported` recovery, delayed-file scheduled
-  scan recovery, and source retention.
-  Generated test credentials and a synthetic 2x2 image were removed with the
-  per-run containers and network. This is local code/protocol evidence only:
-  isolated-VPS batch interruption, late-arriving scheduled files, and clean
-  GitHub redeployment remain required before Phase 5 can be accepted.
+- **LOCAL 2026-07-31 (superseded wording):** the sender batch implementation
+    now persists explicit `already-imported` outcomes and exposes the newest
+    active or failed batch for Gallery refresh recovery. The current branch
+    does not yet provide cross-process batch locking or bounded automatic retry
+    policy; those are separate Phase 5 follow-ups. Local Docker smoke evidence
+    remains distinct from isolated-VPS acceptance.
 
 - **EVIDENCE LOCK 2026-07-30:** after the isolated sender/receiver verification,
   `python -m pytest -q tests/test_extensions.py tests/test_local_tailscale.py
