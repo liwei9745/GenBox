@@ -7,6 +7,22 @@
 
 ## Current evidence
 
+- **ISOLATED-VPS 2026-07-31:** a baseline manual incremental scan completed
+  with `2` completed items and no queued or failed items. One newly generated,
+  development-only test image was then added within the same scan range. The
+  next overlapping manual scan first reported `2` completed and `1` queued,
+  then converged to `3` completed, `0` queued, and `0` failed, with all source
+  images retained. This verifies late-arriving source discovery on the
+  isolated sender without production mutation.
+
+- **ISOLATED-VPS 2026-07-31:** two independently loaded, authenticated
+  Settings pages clicked the bounded `run now` UI control concurrently. Both
+  requests completed before a visible lease conflict could occur because the
+  three-item scan was too short. This is not concurrency-lease acceptance
+  evidence; the remaining live check needs an intentionally overlapping scan
+  or independent worker process. Cross-process lease protection remains
+  locally covered by focused sender tests.
+
 - **ISOLATED-VPS 2026-07-31:** Gallery's visible failed-only retry control
   retried one previously failed item without resubmitting any other item. Its
   terminal receipt projection was `already-imported`, and the page confirmed
