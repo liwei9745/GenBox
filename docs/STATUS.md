@@ -7,6 +7,25 @@
 
 ## Current evidence
 
+- **LOCAL + ISOLATED-VPS 2026-07-31:** fixed the managed-service drawer so
+  opaque instance handles containing quotes cannot leave the visible `Update
+  image` or key-reset actions inert. After each render, the card's encoded
+  handle is rebound from its `data-instance-handle` attribute and the malformed
+  inline handler is removed. `node --check static/js/extensions.js`,
+  `git diff --check`, `python -m pytest -q tests/test_extensions.py` (`202`
+  passed), and the focused cross-module suite (`365` passed) succeeded. The
+  local development lab was then safely restarted from the current source and
+  rendered both managed sender cards without browser errors. The controlled
+  remote-update/restart action remains intentionally unavailable until the
+  user unlocks the per-instance local credential vault; no direct SSH fallback
+  will be used.
+
+- **ISOLATED-VPS 2026-07-31:** an authorized manual scheduled scan was run
+  again through the sender Settings UI. It completed with `3` completed, `0`
+  waiting, and `0` failed items, with source-image retention still enabled.
+  This is an operational health check only and does not replace the remaining
+  controlled interruption-recovery or independent-worker lease evidence.
+
 - **ISOLATED-VPS 2026-07-31:** a baseline manual incremental scan completed
   with `2` completed items and no queued or failed items. One newly generated,
   development-only test image was then added within the same scan range. The
