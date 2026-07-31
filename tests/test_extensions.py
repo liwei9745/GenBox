@@ -2072,8 +2072,8 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "Do not deploy again; reload and check task status manually." in translations
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
-    assert '<script src="/static/js/i18n.js?v=14"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=26"></script>' in html
+    assert '<script src="/static/js/i18n.js?v=15"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=27"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):
@@ -4375,6 +4375,10 @@ def test_deployed_services_cards_use_non_secret_fields_only():
     assert "credential_saved_at" in js
     assert "extensions.view_details" in js
     assert "admin_key" not in card_block
+    assert "extWireManagedServiceActions" in js
+    assert "data-instance-handle" in js.split("function extWireManagedServiceActions", 1)[1]
+    assert "removeAttribute('onclick')" in js
+    assert "stopImmediatePropagation" in js
     css = (Path(__file__).parents[1] / "static" / "css" / "extensions.css").read_text(encoding="utf-8")
     assert ".ext-service-card{" in css
     assert ".ext-bento-grid{" in css
