@@ -7,6 +7,16 @@
 
 ## Current evidence
 
+- **ISOLATED-VPS 2026-07-31:** the registered isolated sender received the
+  reviewed immutable Phase 5 image through the controlled update path. The
+  updater accepted only its opaque instance handle and immutable digest, used
+  the saved per-instance SSH credential internally, and completed the bounded
+  pull, configuration backup, app recreation, and health-check operation. The
+  local registration changed only after that health check; the other registered
+  instance and all production systems remained unchanged. **Next evidence:**
+  reload the sender Settings page and run one manual scheduled scan to verify
+  the repaired batch-progress projection in the deployed browser.
+
 - **LOCAL 2026-07-31:** the deployed-services drawer now shows non-secret
   instance metadata for disambiguation: VPS name and address, SSH port,
   service port, deployment time, and the local credential-save timestamp when
