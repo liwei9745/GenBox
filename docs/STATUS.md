@@ -24,6 +24,13 @@
   recovery, late-file overlap discovery, and lease behavior remain to be
   exercised before Phase 5 can be accepted.
 
+- **ISOLATED-VPS + GITHUB 2026-07-31:** a focused Gallery usability fix made
+  both selected-image actions explicitly name GenBox as their destination. The
+  experimental AMD64 workflow built and published a new immutable sender image,
+  then the controlled updater replaced only the registered isolated sender and
+  completed its health check. The user-facing batch behavior is unchanged;
+  this removes ambiguity before the remaining interruption-resume test.
+
 - **LOCAL 2026-07-31:** the deployed-services drawer now shows non-secret
   instance metadata for disambiguation: VPS name and address, SSH port,
   service port, deployment time, and the local credential-save timestamp when
