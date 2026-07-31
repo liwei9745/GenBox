@@ -17,6 +17,13 @@
   reload the sender Settings page and run one manual scheduled scan to verify
   the repaired batch-progress projection in the deployed browser.
 
+- **USER-CONFIRMED ISOLATED-VPS 2026-07-31:** after the controlled image
+  update, the sender Settings page's manual scheduled scan reported `2`
+  completed, `0` waiting, and `0` failed items, with source images retained.
+  This confirms the deployed schedule-progress refresh path; batch interruption
+  recovery, late-file overlap discovery, and lease behavior remain to be
+  exercised before Phase 5 can be accepted.
+
 - **LOCAL 2026-07-31:** the deployed-services drawer now shows non-secret
   instance metadata for disambiguation: VPS name and address, SSH port,
   service port, deployment time, and the local credential-save timestamp when
