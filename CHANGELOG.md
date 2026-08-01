@@ -14,6 +14,10 @@ All notable GenBox changes are recorded here. The format follows
   adversarial test cases.
 - Destructive cleanup is still disabled. The contracts are not an
   implementation, a deployment, or a stable-release feature claim.
+- The isolated sender now has a local implementation candidate with receipt
+  records, restart recovery, path-alias checks, automatic-retention protection,
+  runtime identity markers, bounded receipt parsing, and `85` passing tests.
+  It has not been pushed as a release image or deployed to a VPS.
 
 ### Planned
 

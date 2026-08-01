@@ -20,6 +20,10 @@ The platform must make the safe operation the easy operation:
 - Development cleanup is hard-disabled unless a separately scoped test-only
   runtime override is present. A browser request, Push checkbox, schedule, or
   inherited environment variable cannot enable it.
+- An execute-capable sender must also prove its isolated runtime identity: the
+  server-side environment must match the owned image-storage root, a unique
+  instance ID and development role, a non-browser capability marker, a
+  data-directory marker file, and a previously verified destination scope.
 - Production instances remain read-only during implementation and isolated
   verification. A Phase 6 test must not reuse production data, credentials,
   ports, Compose names, or Push identities.
@@ -64,6 +68,11 @@ sync where supported, then an atomic rename. A write failure occurs before any
 unlink attempt and produces a retained/delete-failed audit outcome. Recovery
 must tolerate a missing or partially written record without guessing that a
 deletion succeeded.
+
+The legacy image-retention and free-space cleanup paths must skip every
+Push-tracked source whose cleanup record is not terminal `deleted`. A malformed
+cleanup state file fails closed for those automatic paths. Only the Phase 6
+receipt-gated storage primitive may remove a tracked source.
 
 The cleanup identity is the protocol identity from the Phase 6 contract:
 
@@ -134,6 +143,12 @@ The implementation should expose separate logical settings for:
 - Audit retention and maximum operation size, with conservative bounded
   defaults.
 
+The isolated execute gate is not a browser setting. Its destination trust
+marker is created only after a server-side probe confirms the configured
+GenBox endpoint and is bound to the current destination scope. HTTPS and
+explicitly verified private-network destinations are the only accepted trust
+classes.
+
 Changing Push or schedule settings must not change cleanup policy. The server
 must reject browser attempts to provide a development override, source path,
 receipt, destination scope, or cleanup decision. The server derives all
@@ -171,7 +186,7 @@ restart is part of Phase 6 evidence.
 
 ## 8. Observability And Audit Projection
 
-Every dry-run and execute operation writes sanitized, durable audit events. The
+Every dry-run, execute, and restart-recovery operation writes sanitized, durable audit events. The
 projection must support per-item explanations and aggregate totals for:
 
 - candidates, eligible, deleted, retained, failed;

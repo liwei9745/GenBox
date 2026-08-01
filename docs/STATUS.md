@@ -14,10 +14,16 @@
   gates, and the A1-A12 adversarial matrix. These are specifications, not an
   implementation or deployment claim.
 - **SECURITY GATE / BLOCKED 2026-08-01:** destructive cleanup must not run yet.
-  The sender still needs durable cleanup records, a storage-owned no-alias
-  deletion primitive, process-shared claims, deletion-intent recovery,
-  server-side development gating, authenticated/CSRF-protected cleanup APIs,
-  bounded audit output, and local tests for the full Phase 6 matrix.
+  The sender now has the first implementation slice and local evidence, but
+  the adversarial review still requires a fresh PASS for endpoint trust,
+  filesystem identity, runtime-marker isolation, and the remaining A1-A12
+  matrix before any destructive deployment.
+- **LOCAL / VERIFIED 2026-08-01:** isolated sender commits `a530091`, `0b5d08c`,
+  `cdf4fe0`, `92d0e2e`, `fe6878e`, and `a874a95` add receipt-gated records,
+  storage-rooted path checks, shared claims, restart recovery, automatic
+  retention protection, isolated runtime markers, bounded receipt parsing, and
+  focused adversarial tests. The sender full suite passes `85`; no VPS or
+  production instance was changed.
 - **NEXT ACTION:** implement and test the Phase 6 sender slice in the isolated
   `E:\AI\chatgpt2api-dev` checkout only. Keep cleanup disabled, do not modify
   the receiver contract, do not deploy to any VPS, and do not touch production.

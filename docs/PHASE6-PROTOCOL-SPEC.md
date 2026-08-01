@@ -76,6 +76,12 @@ destination_scope is a non-secret, one-way destination identity; it must change 
 
 Do not persist Push keys, authorization headers, full request/response bodies, prompts, cookies, or image bytes in cleanup records. Existing batch and outbox projections may expose a non-sensitive cleanup status and aggregate counts, but not credentials or raw receipt payloads.
 
+Automatic retention and free-space cleanup are not cleanup authority. Once a
+source is represented in Push/cleanup state, those legacy paths must retain it
+until the Phase 6 record reaches terminal `deleted`; malformed state fails
+closed. Startup recovery may reconcile `deleting` intents and append audit
+events, but it never starts a deletion operation.
+
 A previously recorded receipt may be reconsidered only when its transfer identity, current destination scope, current source ID, normalized path, and current source SHA-256 all still match. A path reused with different bytes is a new identity and requires a new Push and receipt.
 
 ## 4. Cleanup State Machine
@@ -171,4 +177,3 @@ This document specifies sender cleanup only. It does not claim that GenBox has a
 ## 9. Implementation Handoff
 
 Start with the durable cleanup-authority record and dry-run evaluator, then add the storage-rooted deletion primitive, execute path, audit projection, API/UI, and isolated-test gate. Keep the existing v1 Push validation as the only source of receipt eligibility. Do not alter receiver code, mutate a VPS, or enable production cleanup as part of this phase's implementation work.
-
