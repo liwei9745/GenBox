@@ -8,11 +8,27 @@ All notable GenBox changes are recorded here. The format follows
 
 ### Planned
 
-- chatgpt2api sender-side per-generation Push.
-- Batch and scheduled incremental transfer with durable cursor, retry, and lease.
-- Receipt-gated source cleanup and reclaimed-space reporting.
-- Durable extension deployment-task recovery after process restart.
-- Clean GitHub redeployment acceptance and upstream delivery gates.
+- Receipt-gated source cleanup and reclaimed-space reporting (Phase 6).
+- Upstream delivery proposal and reviewable PR slices after the clean-release gate.
+
+### Completed In Experimental Branch
+
+- Completed isolated Phase 5 batch and scheduled incremental Push acceptance:
+  interruption recovery, failed-only retry, late-arriving image discovery,
+  concurrent schedule lease rejection, bounded retry, and source retention.
+- Published the experimental sender branch and immutable GHCR image used by the
+  isolated sender; the production instance remains unchanged.
+- Rebuilt GenBox and the sender from clean GitHub clones, ran their full local
+  suites, and verified loopback-only startup from those clean builds.
+- Completed the tracked-file and Git-history sanitization review; only test
+  sentinels, documentation placeholders, and synthetic network fixtures were
+  found.
+
+### Release Boundary
+
+- These entries describe the experimental branch, not a new stable GenBox tag.
+- The frozen `v2.5.1` notes remain unchanged until a separately approved
+  version tag and GitHub Release are created.
 
 ## [2.5.1] - 2026-07-16
 
