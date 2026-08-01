@@ -3,7 +3,7 @@
 **Last updated:** 2026-08-01
 **Current branch:** `codex/p4-deploy-plan-ux-eai`
 **Current phase:** Phase 6 Verified Source Cleanup - **In Progress / Destructive Execution Blocked**
-**Previous phase:** Phase 4 Single-Image Push End To End - **Complete**
+**Previous phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
 
 ## Phase 6 resume point
 
