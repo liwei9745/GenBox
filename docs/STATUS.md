@@ -22,12 +22,14 @@
   checks are clean, and the sender worktree has no uncommitted changes.
 - **SECURITY GATE / BLOCKED 2026-08-01:** the fresh independent A1-A12 review
   keeps the merge and destructive-execution gate blocked. The remaining gaps
-  are true FastAPI lifespan/restart evidence (A7), isolated-VPS runtime and
-  production non-mutation evidence plus per-item environment ownership checks
-  (A9), and a real wall-clock slow-drip receipt test (A12). Directory and
-  marker symlink cases remain platform-skipped because this Windows host lacks
-  symlink privilege; the directory-junction control passes. Cleanup remains
-  disabled in development and no production instance may be modified.
+  are a remaining POSIX directory-entry replacement window between final stat
+  and unlink (A4), true FastAPI lifespan/restart evidence (A7), isolated-VPS
+  runtime and production non-mutation evidence plus per-item environment
+  ownership checks (A9), and a real wall-clock slow-drip receipt test (A12).
+  Directory and marker symlink cases remain platform-skipped because this
+  Windows host lacks symlink privilege; the directory-junction control passes.
+  Cleanup remains disabled in development and no production instance may be
+  modified.
 - **RELEASE BOUNDARY / VERIFIED 2026-08-01:** the last published experimental
   sender image is still the pre-Phase-6 commit `ca6f1ba`; its immutable digest
   was used only for the isolated sender. Commit `32bb3b6` has not been pushed
