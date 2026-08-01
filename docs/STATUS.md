@@ -85,6 +85,15 @@
   This digest is a candidate for the isolated sender only; no VPS update has
   been performed from it yet, and production remains unchanged.
 
+- **LOCAL 2026-08-01:** Docker pulled the published image by its full digest
+  and reported the same `sha256:3c812bc385b8d911e54183a27a926cef729fc6911fb29e6da64f3582ab2795cf`.
+  The GenBox Extensions page shows two registered managed chatgpt2api cards,
+  while the local credential vault is locked and therefore keeps both remote
+  `Update image` actions disabled. No direct SSH fallback was used. The next
+  remote step requires unlocking the local vault, then generating and
+  explicitly confirming the bounded update plan for the intended isolated
+  instance; production remains untouched.
+
 - **LOCAL + ISOLATED-VPS 2026-07-31:** fixed the managed-service drawer so
   opaque instance handles containing quotes cannot leave the visible `Update
   image` or key-reset actions inert. After each render, the card's encoded
