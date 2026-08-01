@@ -49,23 +49,42 @@ does not prove a clean deployment, production behavior, or upstream readiness.
 
 ## Remaining Phase 5 Evidence
 
-Phase 5 remains **In Progress**. The remaining live acceptance gaps are:
+Phase 5 remains **In Progress**. Two previously open live checks now have
+isolated evidence:
 
-- A mixed batch with one confirmed successful item and one retryable failed
-  item, followed by a failed-only retry that proves the successful peer was
-  not submitted again.
-- Independent overlapping scheduled scans that visibly demonstrate the worker
-  lease rejects or blocks the second scan without duplicate processing.
+- **Mixed batch and failed-only retry (2026-08-01):** A two-image Gallery
+  batch ran only on the registered isolated sender. A reversible local-only
+  receiver fault allowed one item to reach `already-imported` after one
+  attempt while its peer reached a retryable failure after three attempts.
+  Source retention remained enabled. After the normal local receiver route
+  was restored, only `Retry failed items` was used. The failed peer reached
+  `already-imported` after four attempts; the successful peer remained at one
+  attempt. This proves the successful peer was not resubmitted, and both
+  sender source images remained present.
+- **Concurrent schedule lease (2026-08-01):** The weekly schedule was
+  temporarily disabled to remove background interference, then restored to
+  its prior enabled state after the test. Six concurrent manual scan requests
+  were issued from separate authenticated pages of the same isolated sender.
+  Three requests displayed `Another automatic Push scan is already running.
+  Wait for it to finish.` The other requests completed after the lease was
+  available. Final schedule status reported four completed items with zero
+  pending and zero failed items, while source retention remained enabled.
+  This is direct evidence that an overlapping scan is rejected rather than
+  processing the same schedule at the same time.
+
+The remaining live acceptance gap is:
+
+- A newly arriving image inside the configured scan range is discovered after
+  an earlier scan has advanced its cursor. The currently retained isolated
+  Gallery images have already been recorded by the schedule, so this requires
+  a new isolated source image or another approved non-production fixture.
 
 ## Current Resume Blocker
 
-The isolated sender's public root document and all referenced static JavaScript
-and CSS assets returned successfully after the update. The available automated
-browser session could read the fully loaded Gallery DOM but could not paint or
-operate the Gallery selection controls, so it cannot provide honest live mixed
-batch evidence. Do not treat this transport/rendering problem as a completed
-mixed-batch test. Resume with a working interactive browser session, verify the
-new receipt rows, then run the two remaining acceptance checks below.
+The interactive browser session recovered and supplied the evidence above.
+The only current blocker is the absence of a new, unrecorded isolated Gallery
+image for the late-arrival scan check. Do not create or modify a production
+source image to satisfy this test.
 
 ## Resume Notes
 
@@ -73,9 +92,9 @@ new receipt rows, then run the two remaining acceptance checks below.
   receiver on port `8895` through Tailnet port `8893`.
 - Use only the registered isolated sender on service port `33010` for further
   Phase 5 checks.
-- Before the mixed-batch test, confirm the Tailscale Serve route is still
-  `8893 -> 127.0.0.1:8895`. Use a reversible local-only receiver-path fault
-  after at least one batch receipt has succeeded, restore the route, click
-  failed-only retry, and verify the successful receipt's attempt count is
-  unchanged.
-- Do not mark Phase 5 complete until both remaining live gaps have evidence.
+- Generate or otherwise provide one new isolated test image inside the saved
+  date bounds. Run a scan once, then introduce the new image without changing
+  the range and run the scan again. Record its discovery, Push outcome, source
+  retention, and the unchanged production boundary.
+- Do not mark Phase 5 complete until the late-arrival check also has direct
+  evidence.
