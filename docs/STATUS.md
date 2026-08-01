@@ -14,10 +14,11 @@
   gates, and the A1-A12 adversarial matrix. These are specifications, not an
   implementation or deployment claim.
 - **SECURITY GATE / BLOCKED 2026-08-01:** destructive cleanup must not run yet.
-  The sender implementation candidate is locally built and its full suite
-  passes, but the adversarial review still requires a fresh PASS for endpoint
-  trust, filesystem identity, runtime-marker isolation, and the remaining
-  A1-A12 matrix before any destructive deployment.
+  Sender commit `b766170` has a fresh independent review, but A3/A4 remain
+  blocked by destination/policy rotation and unlink TOCTOU races. A5-A10 also
+  need isolated evidence for Windows aliases, separate processes, startup
+  recovery, runtime ownership, and mixed-result totals. No sender commit or
+  GHCR image from this Phase 6 wave has been published.
 - **LOCAL / VERIFIED 2026-08-01:** isolated sender commits `a530091`, `0b5d08c`,
   `cdf4fe0`, `92d0e2e`, `fe6878e`, and `a874a95` add receipt-gated records,
   storage-rooted path checks, shared claims, restart recovery, automatic
@@ -25,18 +26,16 @@
   focused adversarial tests. The sender full suite passes `85`; no VPS or
   production instance was changed.
 - **LOCAL / VERIFIED 2026-08-01:** the isolated sender branch
-  `codex/genbox-p5-resume-worker` is six commits ahead of the owner's
-  published `ca6f1ba` branch. The local Docker build completed successfully
-  as `chatgpt2api:phase6-local` with image ID
-  `sha256:54a80e0078c83fd0d8aebf1febc9b67befa141304743e73e86f9e3ba509e8766`.
-  Sender compile checks, the full suite (`85 passed`), and diff checks passed.
-  A tracked-file/history scan found only the documented `.env.example`
-  placeholder pattern; no real credential was added.
-- **NEXT ACTION:** obtain a fresh independent A1-A12 adversarial PASS for
-  commit `a874a95`, then push the reviewed sender branch and publish an
-  immutable GHCR image. Keep cleanup disabled until that review and the
-  isolated dry-run/explicit synthetic execute gate both pass; do not modify
-  the receiver contract, deploy to `33018`, or touch production.
+  `codex/genbox-p5-resume-worker` is nine commits ahead of the owner's
+  published `ca6f1ba` branch. The current fixed candidate is `b766170`; its
+  full suite passes `94` with one platform skip, compile and diff checks pass,
+  and local Docker builds have succeeded. The tracked-file/history scan found
+  only the documented `.env.example` placeholder pattern; no real credential
+  was added.
+- **NEXT ACTION:** close the remaining A3/A4 races, then collect A5-A10
+  isolated evidence before another independent A1-A12 review. Only after a
+  PASS may the sender branch be pushed and an immutable GHCR image published;
+  cleanup remains disabled, `33018` is out of scope, and production is read-only.
 
 ## Current evidence
 

@@ -1,8 +1,29 @@
 # Phase 6 Verified Source Cleanup Security Review
 
-**Review status:** `BLOCK` for destructive execution until the blocking gates
-below have implementation and test evidence. This is a design review only; no
-cleanup-capable sender, VPS, or production instance was changed.
+**Review status:** `BLOCK` for destructive execution and release publication.
+The latest independent review of sender commit `b766170` (2026-08-01) passed
+`94` full-suite tests with one Windows platform skip, but still blocks A3/A4
+and requires isolated evidence for A5-A10. No cleanup-capable sender, VPS, or
+production instance was changed.
+
+## Latest Re-review Result
+
+`b766170` closes the public-host bypass for `private-verified`, rejects HTTP
+cleanup destinations, bounds streamed receipts, makes `delete_unknown`
+terminal, rechecks policy before intent, and avoids persisting terminal state
+before its audit append. The remaining blockers are:
+
+- A3: destination and Push-key rotation are not held through unlink.
+- A4: final hash/open verification is followed by path-based unlink, leaving a
+  replacement race; policy can also change immediately after its last check.
+- A5-A6: no Windows junction/reparse or cleanup-specific separate-process
+  evidence.
+- A7-A10: no app-lifespan/crash-process, runtime-ownership/stale-clone, or
+  mixed-outcome aggregate evidence; audit/state recovery still needs a
+  deliberate failure test.
+
+The sender branch and GHCR remain unpublished until a fresh review changes this
+status to `PASS`.
 
 **Reviewed contracts:**
 
