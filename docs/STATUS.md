@@ -76,6 +76,15 @@
   control-script compatibility fix was verified with the full GenBox suite:
   `582 passed`. All evidence is local; no VPS or production instance changed.
 
+- **LOCAL + GITHUB 2026-08-01:** the sender branch
+  `experimental/codex/genbox-p5-batch-recovery` was pushed to the owner's
+  experimental repository after the local test and secret scan. The amd64
+  workflow run `30682843048` completed successfully and published the
+  immutable experimental image
+  `ghcr.io/liwei9745/chatgpt2api-genbox-p5@sha256:3c812bc385b8d911e54183a27a926cef729fc6911fb29e6da64f3582ab2795cf`.
+  This digest is a candidate for the isolated sender only; no VPS update has
+  been performed from it yet, and production remains unchanged.
+
 - **LOCAL + ISOLATED-VPS 2026-07-31:** fixed the managed-service drawer so
   opaque instance handles containing quotes cannot leave the visible `Update
   image` or key-reset actions inert. After each render, the card's encoded
