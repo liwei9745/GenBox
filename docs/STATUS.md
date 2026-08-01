@@ -1,12 +1,30 @@
 # Current Project Status
 
-**Last updated:** 2026-07-31
+**Last updated:** 2026-08-01
 **Current branch:** `codex/p4-deploy-plan-ux-eai`
-**Current phase:** Phase 5 Batch And Scheduled Incremental Push - **In Progress**
+**Current phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
 **Previous phase:** Phase 4 Single-Image Push End To End - **Complete**
 
 ## Current evidence
 
+- **GITHUB + GHCR + ISOLATED-VPS 2026-08-01:** the experimental sender branch
+  codex/genbox-p5-resume-worker is published in the owner's experimental
+  repository at commit ca6f1ba. The corresponding GHCR package is pinned by
+  immutable digest
+  ghcr.io/liwei9745/chatgpt2api-genbox-p5@sha256:da5c8200b39833e5a9b2c74be72480bc772608711f0543a423fd49d4d18cd77d
+  and was the image applied to the registered isolated sender on service port
+  33010. The separately registered 33018 instance and production systems
+  were not selected or modified.
+
+- **ISOLATED-VPS 2026-08-01:** the Phase 5 batch, failed-only retry,
+  concurrent schedule lease, and late-arriving image checks all have direct
+  evidence in docs/PHASE5-EVIDENCE-2026-08-01.md. Five source images were
+  retained, and the normal private receiver route was restored after testing.
+
+- **LOCAL 2026-08-01:** the GenBox full test suite passed 582; the reviewed
+  Phase 5 evidence, roadmap, and integration capability matrix were committed
+  as 5baa2fb and pushed to the current experimental GenBox branch. A clean
+  GitHub-clone rebuild and deployment remain a separate release gate.
 - **LOCAL 2026-08-01:** the deployment image field now includes a bilingual
   `Check GenBox integration` action and a compact image-option menu. The
   reviewed GenBox image stays read-only; only the custom option unlocks manual
@@ -1565,3 +1583,17 @@ VPS or production verification.
 - **Next local entry:** treat the next work as a separate Phase 5
   batch/scheduler design or an explicitly authorized isolated-VPS Phase 4
   gate; neither is implied by this local evidence.
+
+## Phase 5 isolated acceptance run (2026-08-01)
+
+This earlier browser run is superseded by the final isolated evidence in
+docs/PHASE5-EVIDENCE-2026-08-01.md. Its duplicate progress dialog and zero-
+count projection were captured before the sender worker/projection fixes and
+are retained only as historical debugging context. They are not current
+blockers and must not be used to describe the final Phase 5 result.
+
+The final isolated evidence records successful batch interruption/recovery,
+failed-only retry, concurrent schedule lease rejection, late-arriving image
+discovery, source retention, and restoration of the private receiver route.
+The production boundary remains unchanged. Clean GitHub-clone redeployment,
+full sanitization review, and public release remain later gates.
