@@ -1597,3 +1597,26 @@ failed-only retry, concurrent schedule lease rejection, late-arriving image
 discovery, source retention, and restoration of the private receiver route.
 The production boundary remains unchanged. Clean GitHub-clone redeployment,
 full sanitization review, and public release remain later gates.
+
+## Clean GitHub redeployment and sanitization check (2026-08-01)
+
+- **CLEAN-GITHUB-CLONE:** a new clone of the GenBox experimental branch at
+  commit f6f3186 built successfully from its repository Dockerfile. The
+  isolated Compose deployment reported a healthy container; its setup-status
+  endpoint and home page both returned HTTP 200. The clean clone test suite
+  passed 582 tests. The deployment used only generated local configuration and
+  a separate temporary storage directory.
+- **CLEAN-SENDER-CLONE:** a new clone of the experimental sender branch at
+  commit ca6f1ba built successfully from its Dockerfile, including the Vue
+  production build. The sender test suite passed 66 tests. A disposable
+  loopback-only container started with a generated test key and returned HTTP
+  200 for its home page; no VPS, production data, or user credentials were
+  mounted.
+- **SANITIZATION:** tracked-file and Git-history scans for private-key blocks,
+  provider tokens, GitHub tokens, Tailscale enrollment tokens, and non-example
+  administrator keys found no real credential. Matches were limited to test
+  sentinels, ghp_xxx-style documentation placeholders, and synthetic network
+  fixtures. The clean clones had no Git worktree changes.
+- **BOUNDARY:** this proves reproducible clean local deployment and sanitized
+  source state. It does not authorize a production upgrade or an upstream PR;
+  those remain separate release decisions.
