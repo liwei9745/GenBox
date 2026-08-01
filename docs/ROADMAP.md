@@ -254,7 +254,8 @@ Transfer existing and future images reliably without manual per-image work.
 
 ## Phase 6: Verified Source Cleanup
 
-**Status:** Planned
+**Status:** In Progress (design complete; implementation and destructive
+execution remain blocked)
 
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`

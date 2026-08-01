@@ -6,6 +6,15 @@ All notable GenBox changes are recorded here. The format follows
 
 ## [Unreleased]
 
+### In Progress
+
+- Phase 6 source-cleanup contracts are now documented for the isolated sender:
+  default retention, validated GenBox v1 receipts, SHA-256 rechecks,
+  storage-rooted deletion, crash recovery, server-side environment gates, and
+  adversarial test cases.
+- Destructive cleanup is still disabled. The contracts are not an
+  implementation, a deployment, or a stable-release feature claim.
+
 ### Planned
 
 - Receipt-gated source cleanup and reclaimed-space reporting (Phase 6).

@@ -2,8 +2,25 @@
 
 **Last updated:** 2026-08-01
 **Current branch:** `codex/p4-deploy-plan-ux-eai`
-**Current phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
+**Current phase:** Phase 6 Verified Source Cleanup - **In Progress / Destructive Execution Blocked**
 **Previous phase:** Phase 4 Single-Image Push End To End - **Complete**
+
+## Phase 6 resume point
+
+- **LOCAL / VERIFIED 2026-08-01:** Phase 6 protocol, platform, multi-agent, and
+  adversarial-review contracts are committed locally in `0911c16`, `08a66a7`,
+  and `ee5f32f`. They define default-retain behavior, receipt and SHA-256
+  binding, storage-rooted deletion, crash recovery, server-side environment
+  gates, and the A1-A12 adversarial matrix. These are specifications, not an
+  implementation or deployment claim.
+- **SECURITY GATE / BLOCKED 2026-08-01:** destructive cleanup must not run yet.
+  The sender still needs durable cleanup records, a storage-owned no-alias
+  deletion primitive, process-shared claims, deletion-intent recovery,
+  server-side development gating, authenticated/CSRF-protected cleanup APIs,
+  bounded audit output, and local tests for the full Phase 6 matrix.
+- **NEXT ACTION:** implement and test the Phase 6 sender slice in the isolated
+  `E:\AI\chatgpt2api-dev` checkout only. Keep cleanup disabled, do not modify
+  the receiver contract, do not deploy to any VPS, and do not touch production.
 
 ## Current evidence
 
