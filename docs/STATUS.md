@@ -13,29 +13,31 @@
   binding, storage-rooted deletion, crash recovery, server-side environment
   gates, and the A1-A12 adversarial matrix. These are specifications, not an
   implementation or deployment claim.
-- **SECURITY GATE / BLOCKED 2026-08-01:** destructive cleanup must not run yet.
-  Sender commit `b766170` has a fresh independent review, but A3/A4 remain
-  blocked by destination/policy rotation and unlink TOCTOU races. A5-A10 also
-  need isolated evidence for Windows aliases, separate processes, startup
-  recovery, runtime ownership, and mixed-result totals. No sender commit or
-  GHCR image from this Phase 6 wave has been published.
-- **LOCAL / VERIFIED 2026-08-01:** isolated sender commits `a530091`, `0b5d08c`,
-  `cdf4fe0`, `92d0e2e`, `fe6878e`, and `a874a95` add receipt-gated records,
-  storage-rooted path checks, shared claims, restart recovery, automatic
-  retention protection, isolated runtime markers, bounded receipt parsing, and
-  focused adversarial tests. The sender full suite passes `85`; no VPS or
-  production instance was changed.
-- **LOCAL / VERIFIED 2026-08-01:** the isolated sender branch
-  `codex/genbox-p5-resume-worker` is nine commits ahead of the owner's
-  published `ca6f1ba` branch. The current fixed candidate is `b766170`; its
-  full suite passes `94` with one platform skip, compile and diff checks pass,
-  and local Docker builds have succeeded. The tracked-file/history scan found
-  only the documented `.env.example` placeholder pattern; no real credential
-  was added.
-- **NEXT ACTION:** close the remaining A3/A4 races, then collect A5-A10
-  isolated evidence before another independent A1-A12 review. Only after a
-  PASS may the sender branch be pushed and an immutable GHCR image published;
-  cleanup remains disabled, `33018` is out of scope, and production is read-only.
+- **LOCAL / VERIFIED 2026-08-01:** the latest isolated sender candidate is
+  commit `32bb3b6` on `codex/genbox-p5-resume-worker`. It includes the shared
+  cleanup/settings coordination lock, final destination and policy rechecks,
+  handle-based deletion, duplicate-receipt rejection, and bounded streamed
+  receipt parsing. The sender full suite passes `105` with `2` platform skips;
+  the focused cleanup, storage, and Phase 6 suites also pass. Compile and diff
+  checks are clean, and the sender worktree has no uncommitted changes.
+- **SECURITY GATE / BLOCKED 2026-08-01:** the fresh independent A1-A12 review
+  keeps the merge and destructive-execution gate blocked. The remaining gaps
+  are true FastAPI lifespan/restart evidence (A7), isolated-VPS runtime and
+  production non-mutation evidence plus per-item environment ownership checks
+  (A9), and a real wall-clock slow-drip receipt test (A12). Directory and
+  marker symlink cases remain platform-skipped because this Windows host lacks
+  symlink privilege; the directory-junction control passes. Cleanup remains
+  disabled in development and no production instance may be modified.
+- **RELEASE BOUNDARY / VERIFIED 2026-08-01:** the last published experimental
+  sender image is still the pre-Phase-6 commit `ca6f1ba`; its immutable digest
+  was used only for the isolated sender. Commit `32bb3b6` has not been pushed
+  to the owner's experimental repository and has not been published to GHCR.
+  The stable GenBox `v2.5.1` release must not claim Phase 6 completion.
+- **NEXT ACTION:** close the A7/A9/A12 evidence gaps and repeat the independent
+  adversarial review. Only a `PASS` may unlock the Phase 6 branch push, a new
+  immutable GHCR image, isolated deployment, and the clean GitHub-clone rebuild
+  plus sensitive-information scan. `33018` remains out of scope and production
+  remains read-only.
 
 ## Current evidence
 
