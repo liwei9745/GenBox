@@ -15,16 +15,17 @@ All notable GenBox changes are recorded here. The format follows
 - Destructive cleanup is still disabled. The contracts are not an
   implementation, a deployment, or a stable-release feature claim.
 - The isolated sender's latest local implementation candidate is commit
-  `32bb3b6`. It adds shared cleanup/settings coordination, final destination
-  and policy rechecks, handle-based deletion, duplicate-receipt rejection, and
-  bounded streamed receipt parsing. The full sender suite passes `105` tests
-  with `2` platform skips, and compile/diff checks are clean.
+  `99b7715`. It adds shared cleanup/settings coordination, final destination
+  and policy rechecks, handle-based deletion, duplicate-receipt rejection,
+  bounded streamed receipt parsing, a real FastAPI lifespan recovery test, and a
+  real local chunked slow-drip Push test. The full sender suite passes `108`
+  tests with `2` platform skips, and compile/diff checks are clean.
 - The independent A1-A12 review still blocks merge and destructive execution.
   A POSIX directory-entry replacement window remains between final identity
-  inspection and unlink, and true FastAPI lifespan/restart evidence,
-  isolated-VPS ownership and production non-mutation evidence, and a real
-  wall-clock slow-drip receipt test remain open. Cleanup stays disabled.
-- Commit `32bb3b6` has not been pushed to the owner's experimental repository
+  inspection and unlink, and isolated-VPS ownership and production
+  non-mutation evidence remain open. A7 and A12 now have real local evidence;
+  cleanup stays disabled.
+- Commit `99b7715` has not been pushed to the owner's experimental repository
   and has not been published to GHCR. The last published experimental image is
   the pre-Phase-6 `ca6f1ba` artifact used only by the isolated sender.
 

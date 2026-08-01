@@ -1,14 +1,16 @@
 # Phase 6 Verified Source Cleanup Security Review
 
 **Review status:** `BLOCK` for destructive execution and release publication.
-The latest independent review of sender commit `b766170` (2026-08-01) passed
-`94` full-suite tests with one Windows platform skip, but still blocks A3/A4
-and requires isolated evidence for A5-A10. No cleanup-capable sender, VPS, or
-production instance was changed.
+The latest independent review of sender commit `99b7715` (2026-08-01) passed
+`108` full-suite tests with two Windows platform skips. A7 now has a real
+FastAPI lifespan recovery test and A12 has a real local chunked slow-drip Push
+test, but A4 remains blocked on the POSIX directory-entry replacement window
+and A9 still requires isolated runtime ownership and production non-mutation
+evidence. No cleanup-capable sender, VPS, or production instance was changed.
 
 ## Latest Re-review Result
 
-`b766170` closes the public-host bypass for `private-verified`, rejects HTTP
+`99b7715` closes the public-host bypass for `private-verified`, rejects HTTP
 cleanup destinations, bounds streamed receipts, makes `delete_unknown`
 terminal, rechecks policy before intent, and avoids persisting terminal state
 before its audit append. The remaining blockers are:
@@ -16,11 +18,14 @@ before its audit append. The remaining blockers are:
 - A3: destination and Push-key rotation are not held through unlink.
 - A4: final hash/open verification is followed by path-based unlink, leaving a
   replacement race; policy can also change immediately after its last check.
-- A5-A6: no Windows junction/reparse or cleanup-specific separate-process
-  evidence.
-- A7-A10: no app-lifespan/crash-process, runtime-ownership/stale-clone, or
-  mixed-outcome aggregate evidence; audit/state recovery still needs a
-  deliberate failure test.
+- A5-A6: Windows junction and cleanup-specific separate-process evidence now
+  pass locally; directory and marker symlink cases remain platform-skipped.
+- A7: real FastAPI lifespan recovery now passes locally, but isolated restart
+  evidence remains required.
+- A9: runtime-ownership, stale-clone, isolated-image/port/Compose identity,
+  and production non-mutation evidence remain missing.
+- A10/A12: mixed-outcome totals and a real local slow-drip Push now pass; the
+  isolated controls and release-level transport evidence remain required.
 
 The sender branch and GHCR remain unpublished until a fresh review changes this
 status to `PASS`.
