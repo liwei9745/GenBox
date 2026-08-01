@@ -55,6 +55,16 @@
   policy are not yet present in the current sender branch and remain follow-up
   work; do not treat earlier planning text as implementation evidence.
 
+- **LOCAL 2026-08-01:** target-mode parallel review completed in the isolated
+  `E:\AI\chatgpt2api-dev` sender checkout. Commit `c7367dc` preserves
+  `duplicate-local` receipts as distinct `already-imported` batch outcomes and
+  safely handles legacy or malformed retry timestamps. The sender branch
+  already contains latest-recoverable hydration, cross-process item claiming,
+  bounded retry/backoff, and failure classification. Focused batch, transfer,
+  service, and API tests passed `35`; the Vue production build and diff checks
+  passed. This is local sender evidence only; no VPS or production instance
+  was changed, and isolated Phase 5 acceptance remains pending.
+
 - **LOCAL + ISOLATED-VPS 2026-07-31:** fixed the managed-service drawer so
   opaque instance handles containing quotes cannot leave the visible `Update
   image` or key-reset actions inert. After each render, the card's encoded
