@@ -205,6 +205,10 @@ class ExtensionPlanRequest(ExtensionDiscoveryRequest):
     approve_plan_discovery: bool = False
 
 
+class ImageIntegrationCheckRequest(BaseModel):
+    image: str = Field(min_length=1, max_length=320)
+
+
 class ExtensionKeyResetRequest(ExtensionDiscoveryRequest):
     instance_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,39}$")
 

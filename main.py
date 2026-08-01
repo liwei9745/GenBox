@@ -87,6 +87,7 @@ from extensions.models import (
     ExtensionHostKeyResetRequest,
     ExtensionTaskResumeRequest,
     ExtensionPlanRequest, ExtensionTestRequest, PushSourceProvisionRequest,
+    ImageIntegrationCheckRequest,
     ManagedCredentialUpsertRequest, VaultPasswordRequest,
     ManagedImageUpdatePlanRequest, ManagedImageUpdateApplyRequest, SSHCredential,
     is_canonical_host_key_trust, is_immutable_image_reference, validate_deployment_image,
@@ -105,6 +106,7 @@ from extensions.read_only_discovery_plan import (
     validate_read_only_discovery_plan,
 )
 from extensions.capabilities import validate_deployment_capability
+from extensions.image_capabilities import check_image_integration
 import extensions.store as extensions_store
 from extensions.store import (
     build_host_key_pairing_helper,
@@ -3662,6 +3664,15 @@ async def extension_save_batch_targets(body: ExtensionBatchTargetsRequest):
 @app.get("/api/extensions/catalog")
 async def extension_catalog():
     return public_catalog()
+
+
+@app.post("/api/extensions/images/integration-check")
+async def extension_image_integration_check(body: ImageIntegrationCheckRequest):
+    """Classify a pinned image from the local capability catalog only."""
+    try:
+        return {"image": body.image.strip(), **check_image_integration(body.image)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="immutable_image_required") from exc
 
 
 @app.post("/api/extensions/targets")

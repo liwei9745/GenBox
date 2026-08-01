@@ -1626,7 +1626,9 @@ def test_image_input_explains_remote_digest_requirement_and_blocks_plan_request_
     assert 'name="extImagePreset" value="project" checked' in html
     assert 'name="extImagePreset" value="upstream" disabled' in html
     assert 'name="extImagePreset" value="custom"' in html
-    assert 'aria-describedby="extImageHelp extImagePresetNotice"' in html
+    assert 'aria-describedby="extImageHelp extImagePresetNotice extImageCheckStatus"' in html
+    assert 'id="extImageCheckBtn" onclick="extensionCheckImageIntegration()"' in html
+    assert 'id="extImageCheckStatus"' in html
     assert 'data-i18n="extensions.image_source_help"' in html
     assert "function needsImmutableImage(body)" in source
     assert "function isImmutableImageReference(value)" in source
@@ -1639,7 +1641,10 @@ def test_image_input_explains_remote_digest_requirement_and_blocks_plan_request_
     assert "extensions.image_preset_project" in translations
     assert "extensions.image_preset_upstream" in translations
     assert "extensions.image_preset_custom" in translations
+    assert "extensions.image_check_action" in translations
+    assert "extensions.image_check_integrated" in translations
     assert "extensionSelectImagePreset" in source
+    assert "extensionCheckImageIntegration" in source
 
 
 def test_frontend_immutable_image_validation_accepts_a_pinned_ghcr_reference():
@@ -1737,6 +1742,48 @@ if (notice.textContent !== 'extensions.image_preset_project_status') throw new E
 window.__presetTest.select('custom');
 if (image.readOnly || image.value !== '' || image.placeholder !== 'extensions.image_custom_placeholder') throw new Error('custom preset did not clear and unlock the image input');
 if (notice.textContent !== 'extensions.image_preset_custom_status') throw new Error('custom status was not shown');
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_frontend_image_integration_check_only_uses_local_check_endpoint():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs = require('fs');
+let source = fs.readFileSync(process.argv[1], 'utf8');
+global.window = global;
+const elements = new Map();
+function element(id) {
+  if (!elements.has(id)) {
+    const classes = new Set();
+    elements.set(id, {
+      value: '', readOnly: false, placeholder: '', textContent: '', disabled: false, className: '', checked: false,
+      classList: { add(name){classes.add(name)}, remove(name){classes.delete(name)}, toggle(name, on){if(on)classes.add(name);else classes.delete(name)}, contains(name){return classes.has(name)} },
+      focus(){}, setAttribute(){}, removeAttribute(){}, querySelector(){return null}, querySelectorAll(){return []}, appendChild(){}, contains(){return false},
+    });
+  }
+  return elements.get(id);
+}
+global.document = {
+  getElementById(id) { return id === 'extGuidePrimaryBtn' ? null : element(id); },
+  querySelector() { return null; }, querySelectorAll() { return []; }, addEventListener() {},
+};
+global.i18nText = key => key;
+let request;
+global._authFetch = async (url, options) => {
+  request = {url, options};
+  return {ok:true, text:async()=>JSON.stringify({image:element('extImage').value,status:'integrated',integration:'genbox-push-v1'})};
+};
+eval(source);
+element('extImage').value = 'ghcr.io/liwei9745/chatgpt2api@sha256:' + 'c9357b45b1339d2be4e4a02eb48f059562890f14bd9757b924d7fd7621b9e076';
+(async () => {
+  await window.extensionCheckImageIntegration();
+  if (!request || request.url !== '/api/extensions/images/integration-check') throw new Error('wrong integration-check endpoint');
+  if (JSON.parse(request.options.body).image !== element('extImage').value) throw new Error('wrong image payload');
+  if (element('extImageCheckStatus').textContent !== 'extensions.image_check_integrated') throw new Error('integrated image result was not rendered');
+  if (element('extImageCheckBtn').disabled) throw new Error('check button was not restored');
+})().catch(error => { console.error(error); process.exitCode = 1; });
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
@@ -2120,8 +2167,8 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "Do not deploy again; reload and check task status manually." in translations
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
-    assert '<script src="/static/js/i18n.js?v=16"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=29"></script>' in html
+    assert '<script src="/static/js/i18n.js?v=17"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=30"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):
