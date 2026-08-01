@@ -17,7 +17,9 @@ All notable GenBox changes are recorded here. The format follows
 - The isolated sender now has a local implementation candidate with receipt
   records, restart recovery, path-alias checks, automatic-retention protection,
   runtime identity markers, bounded receipt parsing, and `85` passing tests.
-  It has not been pushed as a release image or deployed to a VPS.
+  The local Docker build also passes. It has not yet been pushed as a Phase 6
+  release image or deployed to a VPS; the independent adversarial gate remains
+  open.
 
 ### Planned
 

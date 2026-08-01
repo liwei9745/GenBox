@@ -14,19 +14,29 @@
   gates, and the A1-A12 adversarial matrix. These are specifications, not an
   implementation or deployment claim.
 - **SECURITY GATE / BLOCKED 2026-08-01:** destructive cleanup must not run yet.
-  The sender now has the first implementation slice and local evidence, but
-  the adversarial review still requires a fresh PASS for endpoint trust,
-  filesystem identity, runtime-marker isolation, and the remaining A1-A12
-  matrix before any destructive deployment.
+  The sender implementation candidate is locally built and its full suite
+  passes, but the adversarial review still requires a fresh PASS for endpoint
+  trust, filesystem identity, runtime-marker isolation, and the remaining
+  A1-A12 matrix before any destructive deployment.
 - **LOCAL / VERIFIED 2026-08-01:** isolated sender commits `a530091`, `0b5d08c`,
   `cdf4fe0`, `92d0e2e`, `fe6878e`, and `a874a95` add receipt-gated records,
   storage-rooted path checks, shared claims, restart recovery, automatic
   retention protection, isolated runtime markers, bounded receipt parsing, and
   focused adversarial tests. The sender full suite passes `85`; no VPS or
   production instance was changed.
-- **NEXT ACTION:** implement and test the Phase 6 sender slice in the isolated
-  `E:\AI\chatgpt2api-dev` checkout only. Keep cleanup disabled, do not modify
-  the receiver contract, do not deploy to any VPS, and do not touch production.
+- **LOCAL / VERIFIED 2026-08-01:** the isolated sender branch
+  `codex/genbox-p5-resume-worker` is six commits ahead of the owner's
+  published `ca6f1ba` branch. The local Docker build completed successfully
+  as `chatgpt2api:phase6-local` with image ID
+  `sha256:54a80e0078c83fd0d8aebf1febc9b67befa141304743e73e86f9e3ba509e8766`.
+  Sender compile checks, the full suite (`85 passed`), and diff checks passed.
+  A tracked-file/history scan found only the documented `.env.example`
+  placeholder pattern; no real credential was added.
+- **NEXT ACTION:** obtain a fresh independent A1-A12 adversarial PASS for
+  commit `a874a95`, then push the reviewed sender branch and publish an
+  immutable GHCR image. Keep cleanup disabled until that review and the
+  isolated dry-run/explicit synthetic execute gate both pass; do not modify
+  the receiver contract, deploy to `33018`, or touch production.
 
 ## Current evidence
 
