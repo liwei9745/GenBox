@@ -35,11 +35,11 @@
   was used only for the isolated sender. Commit `32bb3b6` has not been pushed
   to the owner's experimental repository and has not been published to GHCR.
   The stable GenBox `v2.5.1` release must not claim Phase 6 completion.
-- **NEXT ACTION:** close the A7/A9/A12 evidence gaps and repeat the independent
-  adversarial review. Only a `PASS` may unlock the Phase 6 branch push, a new
-  immutable GHCR image, isolated deployment, and the clean GitHub-clone rebuild
-  plus sensitive-information scan. `33018` remains out of scope and production
-  remains read-only.
+- **NEXT ACTION:** close the A4/A7/A9/A12 evidence gaps and repeat the
+  independent adversarial review. Only a `PASS` may unlock the Phase 6 branch
+  push, a new immutable GHCR image, isolated deployment, and the clean
+  GitHub-clone rebuild plus sensitive-information scan. `33018` remains out of
+  scope and production remains read-only.
 
 ## Current evidence
 
