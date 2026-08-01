@@ -47,10 +47,9 @@ The registered service on port `33018` was not selected or modified.
 This is isolated sender restart/recovery and idempotent receipt evidence. It
 does not prove a clean deployment, production behavior, or upstream readiness.
 
-## Remaining Phase 5 Evidence
+## Phase 5 Final Isolated Evidence
 
-Phase 5 remains **In Progress**. Two previously open live checks now have
-isolated evidence:
+All Phase 5 acceptance criteria now have isolated evidence:
 
 - **Mixed batch and failed-only retry (2026-08-01):** A two-image Gallery
   batch ran only on the registered isolated sender. A reversible local-only
@@ -71,30 +70,26 @@ isolated evidence:
   pending and zero failed items, while source retention remained enabled.
   This is direct evidence that an overlapping scan is rejected rather than
   processing the same schedule at the same time.
+- **Late-arriving image discovery (2026-08-01):** The schedule previously
+  reported four completed items. A new image was then created on the isolated
+  sender inside the unchanged configured date range, and the sender Gallery
+  increased from four to five retained images. The next manual scan first
+  reported one queued item, then reported five completed items, zero queued,
+  and zero failed. The five source images remained in the sender Gallery. This
+  proves that an image arriving after an earlier cursor advance is discovered
+  and sent during the next overlap scan.
 
-The remaining live acceptance gap is:
-
-- A newly arriving image inside the configured scan range is discovered after
-  an earlier scan has advanced its cursor. The currently retained isolated
-  Gallery images have already been recorded by the schedule, so this requires
-  a new isolated source image or another approved non-production fixture.
-
-## Current Resume Blocker
-
-The interactive browser session recovered and supplied the evidence above.
-The only current blocker is the absence of a new, unrecorded isolated Gallery
-image for the late-arrival scan check. Do not create or modify a production
-source image to satisfy this test.
+This completes the Phase 5 acceptance criteria for the isolated development
+clone. It does not claim a clean redeployment, production validation, or
+upstream readiness.
 
 ## Resume Notes
 
 - Keep the local Tailscale Serve route pointed at the active local GenBox
   receiver on port `8895` through Tailnet port `8893`.
 - Use only the registered isolated sender on service port `33010` for further
-  Phase 5 checks.
-- Generate or otherwise provide one new isolated test image inside the saved
-  date bounds. Run a scan once, then introduce the new image without changing
-  the range and run the scan again. Record its discovery, Push outcome, source
-  retention, and the unchanged production boundary.
-- Do not mark Phase 5 complete until the late-arrival check also has direct
-  evidence.
+  development work.
+- The verified final state has five retained sender images, no temporary local
+  receiver proxy, and the normal private receiver route restored.
+- Future work begins with the next roadmap phase; do not use this evidence to
+  modify a production source instance.
