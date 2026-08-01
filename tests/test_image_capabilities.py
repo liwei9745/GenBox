@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 import main
-from extensions.image_capabilities import PROJECT_IMAGE_REFERENCE, check_image_integration
+from extensions.image_capabilities import PROJECT_IMAGE_REFERENCE, UPSTREAM_IMAGE_REFERENCE, check_image_integration
 from extensions.models import ImageIntegrationCheckRequest
 
 
@@ -25,6 +25,16 @@ def test_unknown_but_immutable_image_is_not_presented_as_integrated():
         "status": "unknown",
         "integration": "",
         "evidence": "not-in-local-capability-catalog",
+    }
+
+
+def test_upstream_image_is_selectable_but_explicitly_not_integrated():
+    result = check_image_integration(UPSTREAM_IMAGE_REFERENCE)
+
+    assert result == {
+        "status": "not_integrated",
+        "integration": "",
+        "evidence": "known-upstream-image",
     }
 
 

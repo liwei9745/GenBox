@@ -12,10 +12,12 @@
   reviewed GenBox image stays read-only; only the custom option unlocks manual
   digest entry. It validates the immutable digest against the local
   reviewed-image capability catalog only: the current GenBox sender preset
-  reports `genbox-push-v1`; an unregistered custom digest is explicitly
-  `unknown`, never presented as integrated. The action does not contact a VPS,
+  reports `genbox-push-v1`; the pinned `yukkcat` upstream digest is selectable
+  but reports `not_integrated`, leaving the deployment decision to the user.
+  An unregistered custom digest is explicitly `unknown`, never presented as
+  integrated. The action does not contact a VPS,
   registry, Docker daemon, or image runtime. Focused extension and image
-  capability tests passed `212`; Python compilation, JavaScript syntax, and
+  capability tests passed `213`; Python compilation, JavaScript syntax, and
   diff checks passed. This is local UI and route evidence only.
 
 - **LOCAL 2026-07-31:** the deployment form now presents three image-source
