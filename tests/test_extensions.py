@@ -1622,8 +1622,11 @@ def test_image_input_explains_remote_digest_requirement_and_blocks_plan_request_
     source = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
     translations = (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
 
-    assert 'id="extImage" value=""' in html
-    assert 'aria-describedby="extImageHelp"' in html
+    assert 'id="extImage" value="ghcr.io/liwei9745/chatgpt2api@sha256:c9357b45b1339d2be4e4a02eb48f059562890f14bd9757b924d7fd7621b9e076"' in html
+    assert 'name="extImagePreset" value="project" checked' in html
+    assert 'name="extImagePreset" value="upstream" disabled' in html
+    assert 'name="extImagePreset" value="custom"' in html
+    assert 'aria-describedby="extImageHelp extImagePresetNotice"' in html
     assert 'data-i18n="extensions.image_source_help"' in html
     assert "function needsImmutableImage(body)" in source
     assert "function isImmutableImageReference(value)" in source
@@ -1633,6 +1636,10 @@ def test_image_input_explains_remote_digest_requirement_and_blocks_plan_request_
     assert "if(!requireDeployableImage(body))return" in source
     assert "extensions.image_source_help" in translations
     assert "extensions.image_source_required" in translations
+    assert "extensions.image_preset_project" in translations
+    assert "extensions.image_preset_upstream" in translations
+    assert "extensions.image_preset_custom" in translations
+    assert "extensionSelectImagePreset" in source
 
 
 def test_frontend_immutable_image_validation_accepts_a_pinned_ghcr_reference():
@@ -1689,6 +1696,47 @@ if (control('extensionMessage').textContent !== 'extensions.image_source_require
   console.error(error);
   process.exitCode = 1;
 });
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_frontend_image_presets_toggle_project_and_custom_input_modes():
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs = require('fs');
+let source = fs.readFileSync(process.argv[1], 'utf8');
+source = source.replace(/\}\)\(\);\s*$/, 'window.__presetTest={select:window.extensionSelectImagePreset};})();');
+global.window = global;
+const elements = new Map();
+function element(id) {
+  if (!elements.has(id)) {
+    const classes = new Set();
+    elements.set(id, {
+      value: '', readOnly: false, placeholder: '', textContent: '', disabled: false,
+      checked: false,
+      classList: { add(name){classes.add(name)}, remove(name){classes.delete(name)}, toggle(name, on){if(on)classes.add(name);else classes.delete(name)}, contains(name){return classes.has(name)} },
+      focus(){}, setAttribute(){}, removeAttribute(){}, querySelector(){return null}, querySelectorAll(){return []}, appendChild(){}, contains(){return false},
+    });
+  }
+  return elements.get(id);
+}
+global.document = {
+  getElementById(id) { return id === 'extGuidePrimaryBtn' ? null : element(id); },
+  querySelector() { return null; },
+  querySelectorAll() { return []; },
+  addEventListener() {},
+};
+global.i18nText = key => key;
+eval(source);
+const image = element('extImage');
+const notice = element('extImagePresetNotice');
+window.__presetTest.select('project');
+if (!image.readOnly || !image.value.startsWith('ghcr.io/liwei9745/chatgpt2api@sha256:')) throw new Error('project preset did not lock and fill the image input');
+if (notice.textContent !== 'extensions.image_preset_project_status') throw new Error('project status was not shown');
+window.__presetTest.select('custom');
+if (image.readOnly || image.value !== '' || image.placeholder !== 'extensions.image_custom_placeholder') throw new Error('custom preset did not clear and unlock the image input');
+if (notice.textContent !== 'extensions.image_preset_custom_status') throw new Error('custom status was not shown');
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
@@ -2072,8 +2120,8 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "Do not deploy again; reload and check task status manually." in translations
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
-    assert '<script src="/static/js/i18n.js?v=15"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=28"></script>' in html
+    assert '<script src="/static/js/i18n.js?v=16"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=29"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):

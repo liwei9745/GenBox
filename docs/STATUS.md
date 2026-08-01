@@ -7,6 +7,16 @@
 
 ## Current evidence
 
+- **LOCAL 2026-07-31:** the deployment form now presents three image-source
+  choices in beginner-friendly order: the verified GenBox integration build is
+  selected by default, the upstream image remains visible but disabled until
+  its integration PR is merged, and a custom immutable digest can be entered
+  manually. The project choice locks the digest field while the custom choice
+  clears and unlocks it; both languages have matching labels and status text.
+  Extension and managed-image tests passed `208`, `node --check
+  static/js/extensions.js`, and `git diff --check`. This is local UI evidence
+  only; no VPS or production instance was changed.
+
 - **GITHUB + ISOLATED-VPS 2026-07-31:** sender commits `9e80af3` and
   `efae62f` were published from the owner's experimental repository. The final
   immutable image digest `sha256:c9357b45b1339d2be4e4a02eb48f059562890f14bd9757b924d7fd7621b9e076`
