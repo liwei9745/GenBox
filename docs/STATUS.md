@@ -65,6 +65,17 @@
   passed. This is local sender evidence only; no VPS or production instance
   was changed, and isolated Phase 5 acceptance remains pending.
 
+- **LOCAL 2026-08-01:** the next target-mode fix wave closed the P1 outbox
+  claim race. Sender commits `dbd661d` and `b9293aa` add a process-shared state
+  lock plus a per-entry lock held through transfer completion, recover only
+  stale `sending` entries whose claim lock is free, and preserve duplicate
+  receipts as `already-imported`. The schedule projection now exposes the same
+  duplicate count, and Gallery polling ignores stale or overlapping responses.
+  Sender full tests passed `63`; Phase 5 focused tests passed `49`; the Vue
+  production build, compile checks, and diff checks passed. A GenBox offline
+  control-script compatibility fix was verified with the full GenBox suite:
+  `582 passed`. All evidence is local; no VPS or production instance changed.
+
 - **LOCAL + ISOLATED-VPS 2026-07-31:** fixed the managed-service drawer so
   opaque instance handles containing quotes cannot leave the visible `Update
   image` or key-reset actions inert. After each render, the card's encoded
