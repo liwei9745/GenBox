@@ -14,12 +14,18 @@ All notable GenBox changes are recorded here. The format follows
   adversarial test cases.
 - Destructive cleanup is still disabled. The contracts are not an
   implementation, a deployment, or a stable-release feature claim.
-- The isolated sender now has a local implementation candidate with receipt
-  records, restart recovery, path-alias checks, automatic-retention protection,
-  runtime identity markers, bounded receipt parsing, and `94` passing tests.
-  The local Docker build also passes. It has not yet been pushed as a Phase 6
-  release image or deployed to a VPS; the independent adversarial gate remains
-  open.
+- The isolated sender's latest local implementation candidate is commit
+  `32bb3b6`. It adds shared cleanup/settings coordination, final destination
+  and policy rechecks, handle-based deletion, duplicate-receipt rejection, and
+  bounded streamed receipt parsing. The full sender suite passes `105` tests
+  with `2` platform skips, and compile/diff checks are clean.
+- The independent A1-A12 review still blocks merge and destructive execution.
+  True FastAPI lifespan/restart evidence, isolated-VPS ownership and
+  production non-mutation evidence, and a real wall-clock slow-drip receipt
+  test remain open. Cleanup stays disabled.
+- Commit `32bb3b6` has not been pushed to the owner's experimental repository
+  and has not been published to GHCR. The last published experimental image is
+  the pre-Phase-6 `ca6f1ba` artifact used only by the isolated sender.
 
 ### Planned
 
