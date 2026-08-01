@@ -8,9 +8,11 @@
 ## Current evidence
 
 - **LOCAL 2026-08-01:** the deployment image field now includes a bilingual
-  `Check GenBox integration` action. It validates the immutable digest against
-  the local reviewed-image capability catalog only: the current GenBox sender
-  preset reports `genbox-push-v1`; an unregistered custom digest is explicitly
+  `Check GenBox integration` action and a compact image-option menu. The
+  reviewed GenBox image stays read-only; only the custom option unlocks manual
+  digest entry. It validates the immutable digest against the local
+  reviewed-image capability catalog only: the current GenBox sender preset
+  reports `genbox-push-v1`; an unregistered custom digest is explicitly
   `unknown`, never presented as integrated. The action does not contact a VPS,
   registry, Docker daemon, or image runtime. Focused extension and image
   capability tests passed `212`; Python compilation, JavaScript syntax, and

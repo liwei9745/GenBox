@@ -941,12 +941,7 @@
               <div class="extension-clone-warning"><span data-i18n="extensions.working_copy_warning">工作副本含账号等敏感业务配置，仅用于独立开发验收。源实例保持运行且不会被写入。</span></div>
             </fieldset>
             <fieldset class="extension-choice-group"><legend><span data-i18n="extensions.deploy_method">部署方式</span></legend><div id="extDeploymentModes" class="extension-mode-list"><span class="extension-placeholder"><span data-i18n="extensions.method_after_discovery">检测环境后显示推荐方式</span></span></div></fieldset>
-            <fieldset class="extension-choice-group extension-image-presets" id="extImagePresets"><legend><span data-i18n="extensions.image_source_mode">镜像来源</span></legend>
-              <label><input type="radio" name="extImagePreset" value="project" checked onchange="extensionSelectImagePreset(this)"><span><b data-i18n="extensions.image_preset_project">1. GenBox 集成构建镜像</b><small data-i18n="extensions.image_preset_project_hint">当前项目维护，已包含 GenBox Push 联动代码；优先使用。</small></span></label>
-              <label class="extension-choice-disabled"><input type="radio" name="extImagePreset" value="upstream" disabled><span><b data-i18n="extensions.image_preset_upstream">2. 上游作者镜像</b><small data-i18n="extensions.image_preset_upstream_hint">上游 PR 尚未合并，暂不能保证与 GenBox 联动；当前不可选。</small></span></label>
-              <label><input type="radio" name="extImagePreset" value="custom" onchange="extensionSelectImagePreset(this)"><span><b data-i18n="extensions.image_preset_custom">3. 自定义镜像</b><small data-i18n="extensions.image_preset_custom_hint">适用于你已核验的其他不可变镜像摘要。</small></span></label>
-            </fieldset>
-            <div class="extension-form-grid"><label><span data-i18n="extensions.instance_name">实例名称</span><input id="extInstanceId" value="chatgpt2api-dev" pattern="[a-z0-9-]+"></label><label><span data-i18n="extensions.service_port">服务端口</span><input id="extServicePort" type="number" value="33010" min="1" max="65535"></label><label class="extension-image-field"><span data-i18n="extensions.container_image">容器镜像</span><div class="extension-image-input-row"><input id="extImage" value="ghcr.io/liwei9745/chatgpt2api@sha256:c9357b45b1339d2be4e4a02eb48f059562890f14bd9757b924d7fd7621b9e076" placeholder="registry.example/chatgpt2api@sha256:..." aria-describedby="extImageHelp extImagePresetNotice extImageCheckStatus" autocomplete="off" readonly><button type="button" class="btn-secondary" id="extImageCheckBtn" onclick="extensionCheckImageIntegration()"><span data-i18n="extensions.image_check_action">检查 GenBox 联动</span></button></div><small id="extImageHelp" data-i18n="extensions.image_source_help">请填写隔离开发机能拉取的不可变镜像地址。本机 Docker 标签和 latest 不能直接部署。</small><small id="extImagePresetNotice" role="status" aria-live="polite" data-i18n="extensions.image_preset_project_status">已选择 GenBox 集成构建镜像。</small><small id="extImageCheckStatus" class="extension-image-check-status" role="status" aria-live="polite" data-i18n="extensions.image_check_idle">未检查。此操作不会拉取、启动或部署镜像。</small></label></div>
+            <div class="extension-form-grid"><label><span data-i18n="extensions.instance_name">实例名称</span><input id="extInstanceId" value="chatgpt2api-dev" pattern="[a-z0-9-]+"></label><label><span data-i18n="extensions.service_port">服务端口</span><input id="extServicePort" type="number" value="33010" min="1" max="65535"></label><label class="extension-image-field"><span data-i18n="extensions.container_image">容器镜像</span><select id="extImagePreset" onchange="extensionSelectImagePreset(this)" aria-describedby="extImagePresetHelp"><option value="project" data-i18n="extensions.image_preset_project">GenBox 集成构建镜像（推荐）</option><option value="upstream" disabled data-i18n="extensions.image_preset_upstream">上游作者镜像（暂不可用）</option><option value="custom" data-i18n="extensions.image_preset_custom">自定义不可变镜像</option></select><small id="extImagePresetHelp" data-i18n="extensions.image_source_select_help">只有选择“自定义不可变镜像”后，才可以手动填写摘要。</small><div class="extension-image-input-row"><input id="extImage" value="ghcr.io/liwei9745/chatgpt2api@sha256:c9357b45b1339d2be4e4a02eb48f059562890f14bd9757b924d7fd7621b9e076" placeholder="registry.example/chatgpt2api@sha256:..." aria-describedby="extImageHelp extImagePresetNotice extImageCheckStatus" autocomplete="off" readonly><button type="button" class="btn-secondary" id="extImageCheckBtn" onclick="extensionCheckImageIntegration()"><span data-i18n="extensions.image_check_action">检查 GenBox 联动</span></button></div><small id="extImageHelp" data-i18n="extensions.image_source_help">请填写隔离开发机能拉取的不可变镜像地址。本机 Docker 标签和 latest 不能直接部署。</small><small id="extImagePresetNotice" role="status" aria-live="polite" data-i18n="extensions.image_preset_project_status">已选择 GenBox 集成构建镜像。</small><small id="extImageCheckStatus" class="extension-image-check-status" role="status" aria-live="polite" data-i18n="extensions.image_check_idle">未检查。此操作不会拉取、启动或部署镜像。</small></label></div>
             <div id="extPlanPreview" class="extension-plan-preview hidden"></div>
             <section id="extPlanConfirm" class="extension-inline-confirm hidden" data-genbox-inline-confirm="plan" role="dialog" aria-modal="false" aria-labelledby="extPlanConfirmTitle">
               <div>
@@ -1304,7 +1299,7 @@
 </div>
 
 <link rel="stylesheet" href="/static/css/sync.css?v=8">
-<link rel="stylesheet" href="/static/css/extensions.css?v=7">
+<link rel="stylesheet" href="/static/css/extensions.css?v=8">
   <script>
     (function () {
       var next = 'zh-CN';
@@ -1329,9 +1324,9 @@
       } catch (error3) {}
     })();
   </script>
-  <script src="/static/js/i18n.js?v=17"></script>
+  <script src="/static/js/i18n.js?v=18"></script>
 <script src="/static/js/app-all.js?v=36"></script>
 <script src="/static/js/sync.js?v=7"></script>
-<script src="/static/js/extensions.js?v=30"></script>
+<script src="/static/js/extensions.js?v=31"></script>
 </body>
 </html>

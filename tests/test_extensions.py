@@ -1623,9 +1623,11 @@ def test_image_input_explains_remote_digest_requirement_and_blocks_plan_request_
     translations = (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
 
     assert 'id="extImage" value="ghcr.io/liwei9745/chatgpt2api@sha256:c9357b45b1339d2be4e4a02eb48f059562890f14bd9757b924d7fd7621b9e076"' in html
-    assert 'name="extImagePreset" value="project" checked' in html
-    assert 'name="extImagePreset" value="upstream" disabled' in html
-    assert 'name="extImagePreset" value="custom"' in html
+    assert 'id="extImagePreset" onchange="extensionSelectImagePreset(this)"' in html
+    assert '<option value="project" data-i18n="extensions.image_preset_project">' in html
+    assert '<option value="upstream" disabled data-i18n="extensions.image_preset_upstream">' in html
+    assert '<option value="custom" data-i18n="extensions.image_preset_custom">' in html
+    assert 'id="extImagePresetHelp" data-i18n="extensions.image_source_select_help"' in html
     assert 'aria-describedby="extImageHelp extImagePresetNotice extImageCheckStatus"' in html
     assert 'id="extImageCheckBtn" onclick="extensionCheckImageIntegration()"' in html
     assert 'id="extImageCheckStatus"' in html
@@ -1641,6 +1643,7 @@ def test_image_input_explains_remote_digest_requirement_and_blocks_plan_request_
     assert "extensions.image_preset_project" in translations
     assert "extensions.image_preset_upstream" in translations
     assert "extensions.image_preset_custom" in translations
+    assert "extensions.image_source_select_help" in translations
     assert "extensions.image_check_action" in translations
     assert "extensions.image_check_integrated" in translations
     assert "extensionSelectImagePreset" in source
@@ -1738,9 +1741,11 @@ const image = element('extImage');
 const notice = element('extImagePresetNotice');
 window.__presetTest.select('project');
 if (!image.readOnly || !image.value.startsWith('ghcr.io/liwei9745/chatgpt2api@sha256:')) throw new Error('project preset did not lock and fill the image input');
+if (element('extImagePreset').value !== 'project') throw new Error('project preset did not synchronize the select');
 if (notice.textContent !== 'extensions.image_preset_project_status') throw new Error('project status was not shown');
 window.__presetTest.select('custom');
 if (image.readOnly || image.value !== '' || image.placeholder !== 'extensions.image_custom_placeholder') throw new Error('custom preset did not clear and unlock the image input');
+if (element('extImagePreset').value !== 'custom') throw new Error('custom preset did not synchronize the select');
 if (notice.textContent !== 'extensions.image_preset_custom_status') throw new Error('custom status was not shown');
 '''
     result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
@@ -2167,8 +2172,8 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "Do not deploy again; reload and check task status manually." in translations
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
-    assert '<script src="/static/js/i18n.js?v=17"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=30"></script>' in html
+    assert '<script src="/static/js/i18n.js?v=18"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=31"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):
