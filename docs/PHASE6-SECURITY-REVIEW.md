@@ -1,34 +1,42 @@
 # Phase 6 Verified Source Cleanup Security Review
 
 **Review status:** `BLOCK` for destructive execution and release publication.
-The latest independent review of sender commit `99b7715` (2026-08-01) passed
-`108` full-suite tests with two Windows platform skips. A7 now has a real
-FastAPI lifespan recovery test and A12 has a real local chunked slow-drip Push
-test, but A4 remains blocked on the POSIX directory-entry replacement window
-and A9 still requires isolated runtime ownership and production non-mutation
-evidence. No cleanup-capable sender, VPS, or production instance was changed.
+The current sender candidate is commit `f0d5beb`. Its Windows suite passes
+`121` tests with five platform skips, and clean Linux-container verification
+adds `102 passed, 1 platform skip`. This is strong new evidence for A4, A7, and
+A12, but it has not yet been accepted by a fresh independent adversarial
+review. A9 remains open because the isolated runtime reports environment class
+`unknown` and execute unavailable; no destructive cleanup was attempted.
 
 ## Latest Re-review Result
 
-`99b7715` closes the public-host bypass for `private-verified`, rejects HTTP
-cleanup destinations, bounds streamed receipts, makes `delete_unknown`
-terminal, rechecks policy before intent, and avoids persisting terminal state
-before its audit append. The remaining blockers are:
+`f0d5beb` includes the previously reviewed transport, state, policy, and audit
+controls plus platform-specific exact-delete primitives and durable
+crash-intent recovery. New Linux evidence exercises replacement races, hard
+links, symlinks, POSIX exchange, crashes before and after unlink, lifespan
+recovery, cross-process claims, slow-drip and bounded receipt parsing,
+redirects, destination rotation, and generic cleanup-disabled regressions. The
+remaining review blockers are:
 
 - A3: destination and Push-key rotation are not held through unlink.
-- A4: final hash/open verification is followed by path-based unlink, leaving a
-  replacement race; policy can also change immediately after its last check.
-- A5-A6: Windows junction and cleanup-specific separate-process evidence now
-  pass locally; directory and marker symlink cases remain platform-skipped.
-- A7: real FastAPI lifespan recovery now passes locally, but isolated restart
-  evidence remains required.
-- A9: runtime-ownership, stale-clone, isolated-image/port/Compose identity,
-  and production non-mutation evidence remain missing.
-- A10/A12: mixed-outcome totals and a real local slow-drip Push now pass; the
-  isolated controls and release-level transport evidence remain required.
+- A4: the candidate now has direct Linux replacement-race and POSIX exchange
+  tests, but the independent reviewer must confirm the exact-delete primitive
+  closes the previously identified path replacement window.
+- A5-A6: Windows and Linux alias/concurrency evidence is substantially stronger;
+  platform-specific skips remain explicit and must not be treated as passes.
+- A7: local and Linux crash/lifespan recovery pass, but an authorized isolated
+  restart exercise remains gated behind review and explicit approval.
+- A9: the isolated `33010` preview fails closed as `unknown` with execute
+  unavailable. GenBox selected or sent no control-plane operation to production
+  `33018`, and its local registration timestamps did not change. Per-item
+  ownership for an actual isolated deletion is still unproved; this is not a
+  claim about remotely inspected production runtime state.
+- A10/A12: mixed-outcome, slow-drip, bounded parsing, redirect, and rotation
+  controls pass locally/Linux; independent acceptance remains pending.
 
-The sender branch and GHCR remain unpublished until a fresh review changes this
-status to `PASS`.
+The sender branch and immutable GHCR image are published only as experimental
+artifacts and were applied only to isolated `33010`. Publication does not
+change this `BLOCK` verdict or authorize deletion.
 
 **Reviewed contracts:**
 
@@ -218,15 +226,15 @@ prevents malformed responses from reaching cleanup decision code.
 | A1 | False receipt from wrong endpoint | No eligibility; source retained | `BLOCK` until evidence |
 | A2 | Redirect or transport downgrade | Request rejected; no record | `BLOCK` until evidence |
 | A3 | Replay after destination/key rotation | Scope mismatch; no deletion | `PASS` in design, test required |
-| A4 | Changed bytes at same path | Final identity/hash mismatch; retained | `BLOCK` until race test |
+| A4 | Changed bytes at same path | Final identity/hash mismatch; retained | `REVIEW PENDING` after Linux race evidence |
 | A5 | Symlink, hard link, junction, traversal | Rejected before unlink | `BLOCK` until filesystem tests |
 | A6 | Two processes claim one item | One claimant; no duplicate unlink | `BLOCK` until process test |
-| A7 | Crash around unlink/audit commit | No guessed success or substitute deletion | `BLOCK` until recovery test |
+| A7 | Crash around unlink/audit commit | No guessed success or substitute deletion | `REVIEW PENDING`; local/Linux recovery passes |
 | A8 | Browser-forged path/receipt/override | Authorization and schema rejection | `BLOCK` until API test |
-| A9 | Production or stale-clone state selected | Execute unavailable; production unchanged | `BLOCK` until isolation evidence |
+| A9 | Production or stale-clone state selected | Execute unavailable; no production operation selected | `PARTIAL / BLOCK`; negative gate passes, positive identity absent |
 | A10 | Mixed execute outcomes | Only eligible unchanged items delete; totals reconcile | `PASS` in design, test required |
 | A11 | Secrets or prompts in audit/logs | Sanitized output only | `PASS` in design, scan required |
-| A12 | Oversized/slow malformed receipt | Bounded failure; source retained | `P1` test required |
+| A12 | Oversized/slow malformed receipt | Bounded failure; source retained | `REVIEW PENDING` after Linux transport evidence |
 
 ## Explicit Decision Gates
 
@@ -263,11 +271,10 @@ and reverts to source retention.
 
 ## Review Conclusion
 
-The Phase 6 contracts are directionally safe and preserve the project's
-accepted ADR-002/ADR-003 rules. They are not yet an approval to delete source
-media. The highest-risk gaps are transport trust for an unsigned v1 receipt,
-filesystem TOCTOU/alias handling, crash consistency around unlink and audit,
-and proving that the destructive capability cannot escape the isolated target.
-Resolve those gates, rerun this adversarial matrix on the fixed commit, and
-record the result as `PASS`, `FAIL`, or `NOT RUN` with `VERIFIED`, `UNVERIFIED`,
-or `USER-CONFIRMED` evidence labels.
+The candidate now has materially stronger Windows and Linux evidence for
+filesystem races, alias handling, crash consistency, and bounded transport.
+That evidence is not self-approval. The isolated dry-run correctly retained its
+candidate because cleanup was disabled and the environment was `unknown`; this
+is positive fail-closed evidence, not proof that deletion is safe. Keep the
+destructive gate blocked until an independent review accepts A4/A7/A12 and A9
+is closed by an explicitly authorized, synthetic, isolated-only exercise.

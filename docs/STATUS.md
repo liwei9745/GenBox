@@ -59,6 +59,21 @@
   primitives and durable crash-intent recovery. This refreshes local evidence
   only; the independent A4/A9 review status remains blocked until the required
   race and isolated ownership/non-mutation evidence is independently recorded.
+- **LINUX SENDER / VERIFIED 2026-08-02:** the same `f0d5beb` source was tested
+  in a clean Linux container. POSIX storage-race coverage passed `8` tests with
+  one Windows-only junction skip; cleanup, crash, and transport coverage passed
+  `56`; and the generic deletion guard plus transfer, batch, and schedule
+  regressions passed `38`. Total new Linux evidence is `102 passed, 1 platform
+  skip`. This covers replacement races, hard links, symlinks, POSIX exchange,
+  crash points around unlink, lifespan recovery, cross-process claims,
+  slow-drip and bounded receipts, redirects, destination rotation, and cleanup-
+  disabled regressions.
+- **ISOLATED CLEANUP DRY-RUN / VERIFIED 2026-08-02:** the unlocked local vault
+  supplied the isolated `33010` management credential in memory only. The
+  deployed sender reported cleanup disabled, environment class `unknown`, and
+  execute unavailable. Its non-destructive preview found one candidate, zero
+  eligible items, one retained item, and reason `cleanup-policy-disabled`; no
+  cleanup execute endpoint was called.
 
 ## Phase 6 resume point
 
@@ -77,23 +92,26 @@
   The sender full suite passes `121` tests with `5` platform skips; the focused
   Phase 6 selection passes `68` with the same platform skips.
 - **SECURITY GATE / BLOCKED 2026-08-02:** destructive cleanup and release
-  approval remain blocked. Current isolated evidence now covers the reviewed
-  image update, live health, current private-route identity, matching
-  receipt/source SHA-256, idempotent retry, source retention, and the absence of
-  any connection or mutation request to production `33018`. It does not yet
-  independently close the POSIX replacement-race evidence gate (A4), isolated
-  cleanup restart/crash evidence (A7), per-item isolated ownership evidence for
-  deletion (A9), or release-level transport evidence (A12). Cleanup execution
-  remains prohibited until a fresh independent review returns `PASS`.
+  approval remain blocked. A4, A7, and A12 now have strong Linux evidence in
+  addition to Windows coverage, but a fresh independent adversarial review has
+  not yet accepted that evidence. A9 remains open: the isolated runtime fails
+  closed as `unknown` with execute unavailable, but per-item deletion ownership
+  and an authorized isolated execute/recovery exercise have not been proved.
+  Current evidence also confirms matching receipt/source SHA-256, idempotent
+  retry, source retention, and no connection or mutation request to production
+  `33018`. Cleanup execution remains prohibited until review returns `PASS` and
+  the user separately authorizes the bounded isolated test.
 - **RELEASE BOUNDARY / VERIFIED 2026-08-02:** sender commit `f0d5beb` is pushed
   to the owner's experimental branch and its immutable GHCR image has been
   applied only to the isolated sender on port `33010`. This is experimental
   deployment evidence, not authorization for source deletion, a stable GenBox
   release, or upstream delivery.
-- **NEXT ACTION:** independently review the new A4/A7/A9/A12 evidence, perform
-  an isolated non-destructive cleanup dry-run and controlled restart/recovery
-  check, and permit deletion only after the review gate is `PASS`. `33018`
-  remains out of scope and must not be connected or mutated.
+- **NEXT ACTION:** complete the fresh independent A4/A7/A9/A12 review. If and
+  only if it returns `PASS`, define a narrowly bounded isolated `33010`
+  execution marker and request explicit authorization for one synthetic cleanup
+  plus restart/recovery controls. Do not enable cleanup while the environment
+  class remains `unknown`. `33018` remains out of scope and must not be
+  connected or mutated.
 
 ## Current evidence
 

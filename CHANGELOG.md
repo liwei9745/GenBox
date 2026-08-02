@@ -36,10 +36,17 @@ All notable GenBox changes are recorded here. The format follows
   a real FastAPI lifespan recovery test, and a real local chunked slow-drip
   Push test. The full sender suite passes `121` tests with `5` platform skips.
 - The independent A1-A12 review still blocks merge and destructive execution.
-  A POSIX directory-entry replacement window remains between final identity
-  inspection and unlink, and isolated-VPS ownership and production
-  non-mutation evidence remain open. A7 and A12 now have real local evidence;
-  cleanup stays disabled.
+  The current sender source subsequently passed `102` Linux tests with one
+  Windows-only platform skip, adding direct POSIX replacement-race, hard-link,
+  symlink, exchange, crash-recovery, cross-process claim, and bounded-transport
+  evidence for A4/A7/A12. A fresh independent review is still required, and A9
+  remains open for authorized per-item isolated deletion ownership evidence.
+  Cleanup stays disabled.
+- Ran the isolated `33010` cleanup preview without executing deletion. The
+  sender reported cleanup disabled, environment class `unknown`, and execute
+  unavailable; one candidate was retained with reason
+  `cleanup-policy-disabled`. No cleanup execute endpoint was called, and
+  GenBox selected or sent no control-plane operation to production `33018`.
 - Commit `f0d5beb` is published on the owner's experimental sender branch, and
   its immutable GHCR image was applied only to the isolated sender. Publication
   and isolated update evidence do not override the remaining destructive

@@ -262,10 +262,14 @@ returns a task ID immediately, exposes refresh-recoverable progress, and was
 completed once for the isolated sender on port `33010` using the reviewed
 immutable digest. After replacing a stale owned local private-entry route, one
 isolated Push produced matching source/receiver SHA-256 evidence, an idempotent
-`already imported` retry, and verified source retention. Production `33018`
-was not connected or mutated. Phase 6 remains In Progress because isolated
-cleanup dry-run/execute evidence, crash-recovery evidence, and the remaining
-A4/A7/A9/A12 adversarial gates are not yet complete.
+`already imported` retry, and verified source retention. A cleanup dry-run on
+`33010` then failed closed with cleanup disabled, environment class `unknown`,
+execute unavailable, and its sole candidate retained. The current sender source
+also passed `102` Linux tests with one Windows-only platform skip, strengthening
+A4/A7/A12 race, crash, and bounded-transport evidence. Production `33018` was
+not connected or mutated. Phase 6 remains In Progress because the fresh
+independent A4/A7/A9/A12 review is pending, A9 lacks authorized per-item
+isolated deletion evidence, and no destructive cleanup test is approved.
 
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`
