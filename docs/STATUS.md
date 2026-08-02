@@ -34,6 +34,13 @@
   and `runtime_source=ce1271fbbdd298e6`; the controlled verification page was
   moved there. The new runtime's credential vault is locked, so the 33010
   update has not been retried.
+- **LOCAL SENDER / VERIFIED 2026-08-02:** the current isolated sender checkout
+  at commit `f0d5beb` passes the full local suite with `121 passed, 5 skipped`
+  and the Phase 6 focused cleanup/transfer/batch/schedule selection with
+  `68 passed, 5 skipped`. The sender includes platform-specific exact-delete
+  primitives and durable crash-intent recovery. This refreshes local evidence
+  only; the independent A4/A9 review status remains blocked until the required
+  race and isolated ownership/non-mutation evidence is independently recorded.
 
 ## Phase 6 resume point
 
