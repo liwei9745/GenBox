@@ -27,6 +27,13 @@
   33010 remains unchanged from the last authorized state, and production 33018
   was not connected, selected, restarted, or modified. The next remote action
   is allowed only after observing a complete task lifecycle through GenBox.
+- **LOCAL / VERIFIED 2026-08-02:** the previously open `8895` page reported an
+  empty runtime identity and its task projection did not record the attempted
+  update, so it was treated as a stale, unregistered process. It was not
+  stopped. A fresh launcher-owned lab on `8910` reports `runtime_head=fbcf7c3`
+  and `runtime_source=ce1271fbbdd298e6`; the controlled verification page was
+  moved there. The new runtime's credential vault is locked, so the 33010
+  update has not been retried.
 
 ## Phase 6 resume point
 
