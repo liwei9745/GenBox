@@ -10,9 +10,18 @@ All notable GenBox changes are recorded here. The format follows
 
 - Fixed the managed isolated-image update feedback chain: `Confirm update` now
   returns a task ID, the UI polls sanitized progress and terminal state, and
-  restart recovery marks in-flight updates interrupted without replaying them.
-  Local verification passes `583` tests; no sender or production deployment was
-  retried.
+  refresh recovery rediscovers active/interrupted tasks without replaying them.
+  Persisted task records now use a strict public schema, overlapping polls are
+  prevented, and a local registration failure rolls the remote update back.
+  Local verification passes `586` tests.
+- Applied the reviewed immutable sender image once through GenBox's controlled
+  path to the isolated port `33010` instance. The managed task reached
+  `completed / 100%`, the sender health endpoint passed, and production port
+  `33018` was not connected or changed.
+- Rebound the single GenBox-owned stale private-entry route from an unidentified
+  old runtime to the current `8910 / 21fd3ad` lab. A sender-side Push v1 probe
+  then passed. One recoverable Push produced matching source/receiver SHA-256
+  evidence, an idempotent `already imported` result, and source retention.
 
 - Phase 6 source-cleanup contracts are now documented for the isolated sender:
   default retention, validated GenBox v1 receipts, SHA-256 rechecks,
@@ -20,20 +29,21 @@ All notable GenBox changes are recorded here. The format follows
   adversarial test cases.
 - Destructive cleanup is still disabled. The contracts are not an
   implementation, a deployment, or a stable-release feature claim.
-- The isolated sender's latest local implementation candidate is commit
-  `99b7715`. It adds shared cleanup/settings coordination, final destination
-  and policy rechecks, handle-based deletion, duplicate-receipt rejection,
-  bounded streamed receipt parsing, a real FastAPI lifespan recovery test, and a
-  real local chunked slow-drip Push test. The full sender suite passes `108`
-  tests with `2` platform skips, and compile/diff checks are clean.
+- The isolated sender's current implementation candidate is commit `f0d5beb`.
+  It includes shared cleanup/settings coordination, final destination and
+  policy rechecks, platform-specific exact deletion, duplicate-receipt
+  rejection, bounded streamed receipt parsing, durable crash-intent recovery,
+  a real FastAPI lifespan recovery test, and a real local chunked slow-drip
+  Push test. The full sender suite passes `121` tests with `5` platform skips.
 - The independent A1-A12 review still blocks merge and destructive execution.
   A POSIX directory-entry replacement window remains between final identity
   inspection and unlink, and isolated-VPS ownership and production
   non-mutation evidence remain open. A7 and A12 now have real local evidence;
   cleanup stays disabled.
-- Commit `99b7715` has not been pushed to the owner's experimental repository
-  and has not been published to GHCR. The last published experimental image is
-  the pre-Phase-6 `ca6f1ba` artifact used only by the isolated sender.
+- Commit `f0d5beb` is published on the owner's experimental sender branch, and
+  its immutable GHCR image was applied only to the isolated sender. Publication
+  and isolated update evidence do not override the remaining destructive
+  cleanup and release-review blocks.
 
 ### Planned
 

@@ -21,19 +21,37 @@
   in memory, never persists it, and clears it after the bounded operation. The
   existing immutable-image, isolated-target, health-verification, rollback, and
   single-use plan checks remain in force.
-- **LOCAL / VERIFIED:** `python -m pytest -q` -> `583 passed`; `python -m
+- **LOCAL / VERIFIED:** `python -m pytest -q` -> `586 passed`; `python -m
   py_compile main.py`; `node --check static/js/extensions.js`; `git diff --check`.
-- **BOUNDARY:** no remote update was retried during this investigation. Sender
-  33010 remains unchanged from the last authorized state, and production 33018
-  was not connected, selected, restarted, or modified. The next remote action
-  is allowed only after observing a complete task lifecycle through GenBox.
-- **LOCAL / VERIFIED 2026-08-02:** the previously open `8895` page reported an
-  empty runtime identity and its task projection did not record the attempted
-  update, so it was treated as a stale, unregistered process. It was not
-  stopped. A fresh launcher-owned lab on `8910` reports `runtime_head=fbcf7c3`
-  and `runtime_source=ce1271fbbdd298e6`; the controlled verification page was
-  moved there. The new runtime's credential vault is locked, so the 33010
-  update has not been retried.
+- **LOCAL + GITHUB / VERIFIED 2026-08-02:** commit `21fd3ad` adds a strict
+  public-only schema for persisted image-update tasks, a task-list endpoint and
+  browser-refresh recovery, single-flight polling, and remote rollback when
+  the local instance registration cannot be committed. The branch
+  `codex/p4-deploy-plan-ux-eai` is pushed to the owner's GenBox repository.
+- **ISOLATED-VPS / VERIFIED 2026-08-02:** launcher-owned GenBox runtime `8910`
+  reported `runtime_head=21fd3ad`. Its single-use managed update plan selected
+  only the registered isolated sender on port `33010` and applied immutable
+  image `ghcr.io/liwei9745/chatgpt2api-genbox-p5@sha256:ff602c575b3bcabae24f73ef079582ff147cf25c3506dddb9b190f04fe67e5ac`.
+  The task returned immediately, persisted its task ID, and reached
+  `completed / 100%` with connect, update, and health-verification steps all
+  successful. The sender then returned HTTP 200 from `/version` and a healthy
+  JSON `/health` response.
+- **PRIVATE ROUTE / VERIFIED 2026-08-02:** the sender's saved Push URL initially
+  resolved to the stale local `8895` runtime with empty runtime identity, so no
+  Push was accepted as evidence there. GenBox's fixed local Tailscale Serve
+  action replaced only that single owned stale route and bound the same private
+  entry to current runtime `8910 / 21fd3ad`; a new sender-side protocol probe
+  then reported GenBox Push v1 ready.
+- **PROTOCOL / VERIFIED 2026-08-02:** one recoverable isolated Push was retried
+  after the private route was corrected. The sender reached the terminal
+  `already imported` outcome, the downloaded source bytes and GenBox manifest
+  carried the same SHA-256 (value withheld from Git), and the source remained
+  present with the same byte length. This proves receipt/hash binding,
+  idempotent retry, and retention for this item; it does not prove cleanup
+  execution or crash recovery.
+- **PRODUCTION BOUNDARY / VERIFIED 2026-08-02:** the locally registered `33018`
+  record retained its original creation/update timestamps. No HTTP, SSH,
+  restart, image update, deployment, or cleanup request was sent to `33018`.
 - **LOCAL SENDER / VERIFIED 2026-08-02:** the current isolated sender checkout
   at commit `f0d5beb` passes the full local suite with `121 passed, 5 skipped`
   and the Phase 6 focused cleanup/transfer/batch/schedule selection with
@@ -50,35 +68,32 @@
   binding, storage-rooted deletion, crash recovery, server-side environment
   gates, and the A1-A12 adversarial matrix. These are specifications, not an
   implementation or deployment claim.
-- **LOCAL / VERIFIED 2026-08-01:** the latest isolated sender candidate is
-  commit `99b7715` on `codex/genbox-p5-resume-worker`. It includes the shared
-  cleanup/settings coordination lock, final destination and policy rechecks,
-  handle-based deletion, duplicate-receipt rejection, bounded streamed receipt
-  parsing, a real FastAPI lifespan recovery test, and a real local chunked
-  slow-drip Push test. The sender full suite passes `108` with `2` platform
-  skips; focused cleanup, storage, and Push suites pass. Source compilation by
-  reading the changed modules and diff checks are clean.
-- **SECURITY GATE / BLOCKED 2026-08-01:** the fresh independent A1-A12 review
-  keeps the merge and destructive-execution gate blocked. The remaining gaps
-  are a remaining POSIX directory-entry replacement window between final stat
-  and unlink (A4), and isolated-VPS runtime and production non-mutation
-  evidence plus per-item environment ownership checks (A9). A7 and A12 now
-  have real local evidence, but isolated restart and release-level transport
-  evidence are still required. Directory and marker symlink cases remain
-  platform-skipped because this Windows host lacks symlink privilege; the
-  directory-junction control passes.
-  Cleanup remains disabled in development and no production instance may be
-  modified.
-- **RELEASE BOUNDARY / VERIFIED 2026-08-01:** the last published experimental
-  sender image is still the pre-Phase-6 commit `ca6f1ba`; its immutable digest
-  was used only for the isolated sender. Commit `99b7715` has not been pushed
-  to the owner's experimental repository and has not been published to GHCR.
-  The stable GenBox `v2.5.1` release must not claim Phase 6 completion.
-- **NEXT ACTION:** close the A4/A7/A9/A12 evidence gaps and repeat the
-  independent adversarial review. Only a `PASS` may unlock the Phase 6 branch
-  push, a new immutable GHCR image, isolated deployment, and the clean
-  GitHub-clone rebuild plus sensitive-information scan. `33018` remains out of
-  scope and production remains read-only.
+- **LOCAL / VERIFIED 2026-08-02:** the current isolated sender candidate is
+  commit `f0d5beb` on `codex/genbox-p5-resume-worker`. It includes shared
+  cleanup/settings coordination, final destination and policy rechecks,
+  platform-specific exact-delete primitives, duplicate-receipt rejection,
+  bounded streamed receipt parsing, durable crash-intent recovery, a real
+  FastAPI lifespan recovery test, and a real local chunked slow-drip Push test.
+  The sender full suite passes `121` tests with `5` platform skips; the focused
+  Phase 6 selection passes `68` with the same platform skips.
+- **SECURITY GATE / BLOCKED 2026-08-02:** destructive cleanup and release
+  approval remain blocked. Current isolated evidence now covers the reviewed
+  image update, live health, current private-route identity, matching
+  receipt/source SHA-256, idempotent retry, source retention, and the absence of
+  any connection or mutation request to production `33018`. It does not yet
+  independently close the POSIX replacement-race evidence gate (A4), isolated
+  cleanup restart/crash evidence (A7), per-item isolated ownership evidence for
+  deletion (A9), or release-level transport evidence (A12). Cleanup execution
+  remains prohibited until a fresh independent review returns `PASS`.
+- **RELEASE BOUNDARY / VERIFIED 2026-08-02:** sender commit `f0d5beb` is pushed
+  to the owner's experimental branch and its immutable GHCR image has been
+  applied only to the isolated sender on port `33010`. This is experimental
+  deployment evidence, not authorization for source deletion, a stable GenBox
+  release, or upstream delivery.
+- **NEXT ACTION:** independently review the new A4/A7/A9/A12 evidence, perform
+  an isolated non-destructive cleanup dry-run and controlled restart/recovery
+  check, and permit deletion only after the review gate is `PASS`. `33018`
+  remains out of scope and must not be connected or mutated.
 
 ## Current evidence
 
