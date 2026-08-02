@@ -52,13 +52,14 @@
 - **PRODUCTION BOUNDARY / VERIFIED 2026-08-02:** the locally registered `33018`
   record retained its original creation/update timestamps. No HTTP, SSH,
   restart, image update, deployment, or cleanup request was sent to `33018`.
-- **LOCAL SENDER / VERIFIED 2026-08-02:** the current isolated sender checkout
-  at commit `f0d5beb` passes the full local suite with `121 passed, 5 skipped`
-  and the Phase 6 focused cleanup/transfer/batch/schedule selection with
-  `68 passed, 5 skipped`. The sender includes platform-specific exact-delete
-  primitives and durable crash-intent recovery. This refreshes local evidence
-  only; the independent A4/A9 review status remains blocked until the required
-  race and isolated ownership/non-mutation evidence is independently recorded.
+- **LOCAL SENDER / VERIFIED 2026-08-02:** the current isolated sender candidate
+  is commit `96d57de`, pushed to the owner's experimental sender repository.
+  Windows full verification passes `121 passed, 10 skipped`; clean Linux-
+  container full verification passes `130 passed, 1 skipped`. The candidate
+  adds a kernel write lease/Windows write-sharing fence, final and post-
+  tombstone content rechecks, deterministic cleanup transaction names,
+  read-only artifact inspection during recovery, and real exchange/tombstone/
+  audit-boundary crash tests. No image built from `96d57de` has been deployed.
 - **LINUX SENDER / VERIFIED 2026-08-02:** the same `f0d5beb` source was tested
   in a clean Linux container. POSIX storage-race coverage passed `8` tests with
   one Windows-only junction skip; cleanup, crash, and transport coverage passed
@@ -68,6 +69,14 @@
   crash points around unlink, lifespan recovery, cross-process claims,
   slow-drip and bounded receipts, redirects, destination rotation, and cleanup-
   disabled regressions.
+- **A4/A7 FOCUSED / VERIFIED 2026-08-02:** on the updated `96d57de` source,
+  Linux storage-race coverage passes `11` tests with one Windows-only skip and
+  cleanup/crash/transport coverage passes `46` tests with one platform skip.
+  The cross-process writer test proves the result is either a retained changed
+  source or deletion after the writer is blocked; it never permits changed
+  content to be deleted. Exchange/tombstone crashes leave deterministic,
+  hash-checkable artifacts and recovery records `retained` or
+  `delete_unknown` without deleting during startup.
 - **ISOLATED CLEANUP DRY-RUN / VERIFIED 2026-08-02:** the unlocked local vault
   supplied the isolated `33010` management credential in memory only. The
   deployed sender reported cleanup disabled, environment class `unknown`, and
@@ -84,28 +93,29 @@
   gates, and the A1-A12 adversarial matrix. These are specifications, not an
   implementation or deployment claim.
 - **LOCAL / VERIFIED 2026-08-02:** the current isolated sender candidate is
-  commit `f0d5beb` on `codex/genbox-p5-resume-worker`. It includes shared
+  commit `96d57de` on `codex/genbox-p5-resume-worker`. It includes shared
   cleanup/settings coordination, final destination and policy rechecks,
   platform-specific exact-delete primitives, duplicate-receipt rejection,
   bounded streamed receipt parsing, durable crash-intent recovery, a real
   FastAPI lifespan recovery test, and a real local chunked slow-drip Push test.
-  The sender full suite passes `121` tests with `5` platform skips; the focused
-  Phase 6 selection passes `68` with the same platform skips.
+  The sender full suites pass `121` Windows tests with `10` platform skips and
+  `130` Linux tests with one platform skip.
 - **SECURITY GATE / BLOCKED 2026-08-02:** destructive cleanup and release
-  approval remain blocked. A4, A7, and A12 now have strong Linux evidence in
-  addition to Windows coverage, but a fresh independent adversarial review has
-  not yet accepted that evidence. A9 remains open: the isolated runtime fails
-  closed as `unknown` with execute unavailable, but per-item deletion ownership
-  and an authorized isolated execute/recovery exercise have not been proved.
+  approval remain blocked. A4 and A7 now have direct Linux and Windows evidence
+  on `96d57de`, including cross-process write blocking and real atomic-crash
+  recovery, but independent adversarial acceptance is still pending. A9 remains
+  open: the isolated runtime fails closed as `unknown` with execute unavailable;
+  positive per-item ownership, Compose/image/storage binding, and an authorized
+  isolated execute/recovery exercise have not been proved.
   Current evidence also confirms matching receipt/source SHA-256, idempotent
   retry, source retention, and no connection or mutation request to production
   `33018`. Cleanup execution remains prohibited until review returns `PASS` and
   the user separately authorizes the bounded isolated test.
-- **RELEASE BOUNDARY / VERIFIED 2026-08-02:** sender commit `f0d5beb` is pushed
-  to the owner's experimental branch and its immutable GHCR image has been
-  applied only to the isolated sender on port `33010`. This is experimental
-  deployment evidence, not authorization for source deletion, a stable GenBox
-  release, or upstream delivery.
+- **RELEASE BOUNDARY / VERIFIED 2026-08-02:** sender commit `96d57de` is pushed
+  to the owner's experimental branch, but its immutable image has not been
+  built or applied. Isolated sender `33010` remains on the previously reviewed
+  `f0d5beb` image. This is development evidence, not authorization for source
+  deletion, a stable GenBox release, or upstream delivery.
 - **NEXT ACTION:** complete the fresh independent A4/A7/A9/A12 review. If and
   only if it returns `PASS`, define a narrowly bounded isolated `33010`
   execution marker and request explicit authorization for one synthetic cleanup

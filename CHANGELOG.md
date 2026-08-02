@@ -51,6 +51,12 @@ All notable GenBox changes are recorded here. The format follows
   its immutable GHCR image was applied only to the isolated sender. Publication
   and isolated update evidence do not override the remaining destructive
   cleanup and release-review blocks.
+- Sender commit `96d57de` is now published on the same experimental branch.
+  It adds a POSIX write lease and Windows write-sharing fence, final and post-
+  tombstone content checks, deterministic interrupted-cleanup artifacts, and
+  real multi-process exchange/tombstone/audit-boundary crash tests. Local
+  verification passes `130` Linux tests with one skip and `121` Windows tests
+  with ten skips. No image from this commit has been deployed.
 
 ### Planned
 

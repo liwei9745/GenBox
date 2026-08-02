@@ -1,31 +1,35 @@
 # Phase 6 Verified Source Cleanup Security Review
 
 **Review status:** `BLOCK` for destructive execution and release publication.
-The current sender candidate is commit `f0d5beb`. Its Windows suite passes
-`121` tests with five platform skips, and clean Linux-container verification
-adds `102 passed, 1 platform skip`. This is strong new evidence for A4, A7, and
-A12, but it has not yet been accepted by a fresh independent adversarial
-review. A9 remains open because the isolated runtime reports environment class
-`unknown` and execute unavailable; no destructive cleanup was attempted.
+The current sender candidate is commit `96d57de`. Its Windows suite passes
+`121` tests with ten platform skips, and clean Linux-container verification
+passes `130` tests with one platform skip. This is materially stronger evidence
+for A4 and A7, but it has not yet been accepted by a fresh independent
+adversarial review. A9 remains open because the isolated runtime reports
+environment class `unknown` and execute unavailable; no destructive cleanup was
+attempted and the new candidate has not been deployed.
 
 ## Latest Re-review Result
 
-`f0d5beb` includes the previously reviewed transport, state, policy, and audit
-controls plus platform-specific exact-delete primitives and durable
-crash-intent recovery. New Linux evidence exercises replacement races, hard
-links, symlinks, POSIX exchange, crashes before and after unlink, lifespan
-recovery, cross-process claims, slow-drip and bounded receipt parsing,
-redirects, destination rotation, and generic cleanup-disabled regressions. The
+`96d57de` includes the previously reviewed transport, state, policy, and audit
+controls plus a POSIX write lease, Windows write-sharing fence, final and post-
+tombstone content rechecks, deterministic cleanup transaction artifacts, and
+read-only artifact inspection during startup recovery. New Linux evidence
+exercises same-inode writes, a real cross-process writer, replacement races,
+hard links, POSIX exchange/tombstone crashes, the terminal audit/state boundary,
+lifespan recovery, slow-drip receipts, redirects, and destination rotation. The
 remaining review blockers are:
 
 - A3: destination and Push-key rotation are not held through unlink.
-- A4: the candidate now has direct Linux replacement-race and POSIX exchange
-  tests, but the independent reviewer must confirm the exact-delete primitive
-  closes the previously identified path replacement window.
+- A4: the candidate now has direct Linux same-inode, cross-process writer,
+  replacement-race, and POSIX exchange tests plus Windows handle-sharing
+  coverage. Independent reviewer acceptance is still required.
 - A5-A6: Windows and Linux alias/concurrency evidence is substantially stronger;
   platform-specific skips remain explicit and must not be treated as passes.
-- A7: local and Linux crash/lifespan recovery pass, but an authorized isolated
-  restart exercise remains gated behind review and explicit approval.
+- A7: local and Linux crash/lifespan recovery pass, including exchange,
+  tombstone, and terminal-audit boundary crashes. Recovery is read-only and
+  records deterministic artifact names; an authorized isolated restart exercise
+  remains gated behind review and explicit approval.
 - A9: the isolated `33010` preview fails closed as `unknown` with execute
   unavailable. GenBox selected or sent no control-plane operation to production
   `33018`, and its local registration timestamps did not change. Per-item
@@ -34,9 +38,10 @@ remaining review blockers are:
 - A10/A12: mixed-outcome, slow-drip, bounded parsing, redirect, and rotation
   controls pass locally/Linux; independent acceptance remains pending.
 
-The sender branch and immutable GHCR image are published only as experimental
-artifacts and were applied only to isolated `33010`. Publication does not
-change this `BLOCK` verdict or authorize deletion.
+Sender commit `96d57de` is published only on the experimental branch. No GHCR
+image from it has been built or applied; isolated `33010` remains on the prior
+`f0d5beb` image. Publication does not change this `BLOCK` verdict or authorize
+deletion.
 
 **Reviewed contracts:**
 
