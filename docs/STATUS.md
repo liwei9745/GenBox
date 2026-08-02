@@ -1,9 +1,32 @@
 # Current Project Status
 
-**Last updated:** 2026-08-01
+**Last updated:** 2026-08-02
 **Current branch:** `codex/p4-deploy-plan-ux-eai`
 **Current phase:** Phase 6 Verified Source Cleanup - **In Progress / Destructive Execution Blocked**
 **Previous phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
+
+## Image-update feedback investigation (2026-08-02)
+
+- **LOCAL / VERIFIED:** the managed isolated-image update endpoint previously
+  awaited the full SSH/Docker operation in the browser request and exposed no
+  task ID, status projection, progress, or restart state. The browser therefore
+  had no reliable feedback chain after `Confirm update`.
+- **LOCAL / VERIFIED:** the apply path now consumes the single-use plan, returns
+  a public-only `task_id` immediately, and exposes a status endpoint with queued,
+  running, completed, failed, and interrupted states, phase progress, sanitized
+  logs, and recovery guidance. The UI polls this task and keeps the modal state
+  visible until a terminal result; refresh recovery is represented as an
+  `interrupted` task and never replays remote work automatically.
+- **LOCAL / VERIFIED:** the task runner retrieves the saved SSH credential only
+  in memory, never persists it, and clears it after the bounded operation. The
+  existing immutable-image, isolated-target, health-verification, rollback, and
+  single-use plan checks remain in force.
+- **LOCAL / VERIFIED:** `python -m pytest -q` -> `583 passed`; `python -m
+  py_compile main.py`; `node --check static/js/extensions.js`; `git diff --check`.
+- **BOUNDARY:** no remote update was retried during this investigation. Sender
+  33010 remains unchanged from the last authorized state, and production 33018
+  was not connected, selected, restarted, or modified. The next remote action
+  is allowed only after observing a complete task lifecycle through GenBox.
 
 ## Phase 6 resume point
 

@@ -4379,6 +4379,111 @@ _managed_image_update_plans_lock = threading.RLock()
 _MANAGED_IMAGE_UPDATE_PLAN_TTL_SECONDS = 300
 
 
+class ManagedImageUpdateTaskManager:
+    """Public-only task projection for the bounded managed-image update."""
+
+    def __init__(self):
+        self.path = STORAGE_DIR / "managed_image_update_tasks.json"
+        self.lock = threading.RLock()
+        self.tasks: dict[str, dict] = {}
+        self.runners: dict[str, asyncio.Task] = {}
+        self._load()
+
+    def _load(self):
+        try:
+            payload = _json.loads(self.path.read_text(encoding="utf-8"))
+            records = payload.get("tasks", []) if isinstance(payload, dict) else []
+            self.tasks = {item["id"]: item for item in records if isinstance(item, dict) and item.get("id")}
+        except (OSError, ValueError, TypeError):
+            self.tasks = {}
+        changed = False
+        for state in self.tasks.values():
+            if state.get("status") in {"queued", "running"}:
+                state["status"] = "interrupted"
+                state["phase"] = "recovery"
+                state["error"] = "GenBox 重启时更新任务中断，请检查隔离实例后重新生成核对清单。"
+                changed = True
+        if changed:
+            self._persist()
+
+    def _persist(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.path.with_suffix(".tmp")
+        temporary.write_text(_json.dumps({"tasks": list(self.tasks.values())}, ensure_ascii=True), encoding="utf-8")
+        os.replace(temporary, self.path)
+
+    def _state(self, task_id: str) -> dict | None:
+        state = self.tasks.get(task_id)
+        return _json.loads(_json.dumps(state, ensure_ascii=True)) if state else None
+
+    def get(self, task_id: str) -> dict | None:
+        with self.lock:
+            return self._state(task_id)
+
+    def create(self, instance_handle: str, image: str, runner_factory) -> str:
+        task_id = "iu-task-" + uuid.uuid4().hex[:16]
+        now = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        state = {
+            "id": task_id, "status": "queued", "phase": "queued", "progress": 0,
+            "instance_handle": instance_handle, "image": image, "error": None,
+            "steps": [
+                {"id": "connect", "status": "pending"},
+                {"id": "update", "status": "pending"},
+                {"id": "verify", "status": "pending"},
+            ], "logs": [], "created_at": now, "updated_at": now,
+        }
+        with self.lock:
+            self.tasks[task_id] = state
+            self._persist()
+            runner = asyncio.create_task(self._run(task_id, runner_factory))
+            self.runners[task_id] = runner
+        return task_id
+
+    async def _run(self, task_id: str, runner_factory):
+        def update(status, phase, progress, step_index=None, step_status=None, message=None):
+            with self.lock:
+                state = self.tasks.get(task_id)
+                if not state:
+                    return
+                state.update({"status": status, "phase": phase, "progress": progress,
+                              "updated_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")})
+                if step_index is not None:
+                    state["steps"][step_index]["status"] = step_status or status
+                if message:
+                    state["logs"].append({"time": time.strftime("%H:%M:%S"), "message": message})
+                self._persist()
+        try:
+            update("running", "connect", 10, 0, "running", "正在连接隔离实例")
+            update("running", "update", 25, 1, "running", "正在拉取并切换不可变镜像")
+            result = await runner_factory()
+            if not result.get("health_verified"):
+                raise RuntimeError("health_verification_failed")
+            update("running", "verify", 90, 2, "running", "健康检查通过，正在保存结果")
+            with self.lock:
+                state = self.tasks.get(task_id)
+                if state:
+                    state["status"] = "completed"; state["progress"] = 100; state["phase"] = "complete"
+                    for step in state["steps"]: step["status"] = "success"
+                    state["result"] = {"health_verified": True}
+                    state["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+                    self._persist()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            with self.lock:
+                state = self.tasks.get(task_id)
+                if state:
+                    state["status"] = "failed"; state["phase"] = "failed"; state["error"] = "镜像更新未完成，原实例配置已保留或已回滚。"
+                    state["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+                    self._persist()
+        finally:
+            with self.lock:
+                self.runners.pop(task_id, None)
+
+
+managed_image_update_tasks = ManagedImageUpdateTaskManager()
+
+
 def _managed_image_update_instance(instance_handle: str):
     if re.fullmatch(r"i-[a-f0-9]{32}", instance_handle or "") is None:
         raise HTTPException(status_code=404, detail="managed_instance_not_found")
@@ -4543,34 +4648,37 @@ async def extension_managed_image_update_plan(body: ManagedImageUpdatePlanReques
 
 @app.post("/api/extensions/instances/image-update/apply")
 async def extension_managed_image_update_apply(body: ManagedImageUpdateApplyRequest):
-    """Consume one update plan and perform the bounded remote operation."""
+    """Consume one update plan and return a task immediately."""
     plan = _take_managed_image_update_plan(body.plan_id)
     instance, target = _managed_image_update_instance(plan["instance_handle"])
     if instance.id != plan["instance_id"] or target.id != plan["target_id"]:
         raise HTTPException(status_code=409, detail="managed_image_update_context_changed")
     try:
         credential = _stored_ssh_credential(instance, target)
-        result = await update_managed_image(
-            instance_id=instance.id,
-            target=target,
-            credential=credential,
-            image=plan["image"],
-        )
-        return {
-            "ok": True,
-            "instance_handle": plan["instance_handle"],
-            "image": plan["image"],
-            "health_verified": bool(result.get("health_verified")),
-        }
-    except HTTPException:
-        raise
     except Exception as exc:
-        raise _safe_extension_ssh_error(
-            exc,
-            error="隔离开发实例镜像更新未完成，原实例配置已保留或已回滚。",
-            code="managed_image_update_failed",
-            stage="managed_image_update",
-        ) from exc
+        _vault_error(exc)
+
+    async def run_update():
+        try:
+            return await update_managed_image(
+                instance_id=instance.id, target=target, credential=credential, image=plan["image"],
+            )
+        finally:
+            credential.password = None
+            credential.private_key = None
+            credential.passphrase = None
+            credential.sudo_password = None
+
+    task_id = managed_image_update_tasks.create(plan["instance_handle"], plan["image"], run_update)
+    return {"ok": True, "task_id": task_id, "instance_handle": plan["instance_handle"], "image": plan["image"]}
+
+
+@app.get("/api/extensions/instances/image-update/tasks/{task_id}")
+async def extension_managed_image_update_task_status(task_id: str):
+    state = managed_image_update_tasks.get(task_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="managed_image_update_task_not_found")
+    return state
 
 
 @app.post("/api/extensions/instances/reset-admin-key")

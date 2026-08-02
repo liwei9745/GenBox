@@ -257,6 +257,12 @@ Transfer existing and future images reliably without manual per-image work.
 **Status:** In Progress (implementation candidate complete locally;
 adversarial approval and destructive execution remain blocked)
 
+**Feedback-chain note (2026-08-02):** the controlled isolated-image update now
+returns a task ID immediately and exposes polled progress and terminal recovery
+state. This is local implementation evidence only; isolated sender execution,
+receipt/SHA-256 acceptance, idempotent retry, crash recovery, and production
+non-mutation evidence remain required before Phase 6 can become Complete.
+
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`
 

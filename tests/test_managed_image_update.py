@@ -83,9 +83,11 @@ def test_update_plan_is_single_use_and_never_returns_vault_secret(tmp_path, monk
     vault = Vault(ManagedCredential(ssh_password="session-secret", password="metadata"))
     monkeypatch.setattr(main, "credential_vault", vault)
     calls = []
+    seen_passwords = []
 
     async def update(**kwargs):
         calls.append(kwargs)
+        seen_passwords.append(kwargs["credential"].password)
         return {"health_verified": True}
 
     monkeypatch.setattr(main, "update_managed_image", update)
@@ -97,15 +99,26 @@ def test_update_plan_is_single_use_and_never_returns_vault_secret(tmp_path, monk
     assert plan["instance_handle"] == handle
     assert plan["image"] == NEW_IMAGE
 
-    applied = asyncio.run(main.extension_managed_image_update_apply(ManagedImageUpdateApplyRequest(
-        plan_id=plan["plan_id"],
-    )))
-    assert applied == {
-        "ok": True, "instance_handle": handle, "image": NEW_IMAGE, "health_verified": True,
-    }
+    async def apply_and_wait():
+        applied = await main.extension_managed_image_update_apply(ManagedImageUpdateApplyRequest(
+            plan_id=plan["plan_id"],
+        ))
+        assert applied["ok"] is True
+        assert applied["task_id"]
+        for _ in range(20):
+            state = main.managed_image_update_tasks.get(applied["task_id"])
+            if state and state["status"] == "completed":
+                return applied, state
+            await asyncio.sleep(0)
+        raise AssertionError("managed image update task did not complete")
+
+    applied, state = asyncio.run(apply_and_wait())
+    assert state["instance_handle"] == handle
+    assert state["image"] == NEW_IMAGE
     assert len(calls) == 1
     assert calls[0]["instance_id"] == instance.id
-    assert calls[0]["credential"].password == "session-secret"
+    assert seen_passwords == ["session-secret"]
+    assert calls[0]["credential"].password is None
     assert "session-secret" not in json.dumps(applied)
 
     with pytest.raises(HTTPException) as exc:
@@ -161,6 +174,26 @@ def test_update_rejects_marker_mismatch_before_image_pull(tmp_path, monkeypatch)
 
     assert not any("docker pull" in command for command, _input in connection.commands)
     assert connection.closed is True
+
+
+def test_update_task_projection_recovers_inflight_state(tmp_path, monkeypatch):
+    manager = main.ManagedImageUpdateTaskManager()
+    manager.path = tmp_path / "managed-image-tasks.json"
+    manager.tasks = {
+        "iu-task-restart": {
+            "id": "iu-task-restart", "status": "running", "phase": "update", "progress": 25,
+            "instance_handle": "i-" + "a" * 32, "image": NEW_IMAGE,
+            "steps": [], "logs": [], "created_at": "2026-08-02T00:00:00Z",
+            "updated_at": "2026-08-02T00:00:01Z",
+        }
+    }
+    manager._persist()
+    recovered = main.ManagedImageUpdateTaskManager()
+    recovered.path = manager.path
+    recovered._load()
+    state = recovered.get("iu-task-restart")
+    assert state["status"] == "interrupted"
+    assert "更新任务中断" in state["error"]
 
 
 def test_update_rolls_back_env_and_keeps_local_image_on_health_failure(tmp_path, monkeypatch):

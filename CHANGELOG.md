@@ -8,6 +8,12 @@ All notable GenBox changes are recorded here. The format follows
 
 ### In Progress
 
+- Fixed the managed isolated-image update feedback chain: `Confirm update` now
+  returns a task ID, the UI polls sanitized progress and terminal state, and
+  restart recovery marks in-flight updates interrupted without replaying them.
+  Local verification passes `583` tests; no sender or production deployment was
+  retried.
+
 - Phase 6 source-cleanup contracts are now documented for the isolated sender:
   default retention, validated GenBox v1 receipts, SHA-256 rechecks,
   storage-rooted deletion, crash recovery, server-side environment gates, and
