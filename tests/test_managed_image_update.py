@@ -183,7 +183,7 @@ def test_update_task_projection_recovers_inflight_state(tmp_path, monkeypatch):
     manager.path = tmp_path / "managed-image-tasks.json"
     manager.tasks = {
         "iu-task-restart": {
-            "id": "iu-task-restart", "status": "running", "phase": "update", "progress": 25,
+            "id": "iu-task-" + "b" * 16, "status": "running", "phase": "update", "progress": 25,
             "instance_handle": "i-" + "a" * 32, "image": NEW_IMAGE,
             "steps": [], "logs": [], "created_at": "2026-08-02T00:00:00Z",
             "updated_at": "2026-08-02T00:00:01Z",
@@ -193,9 +193,52 @@ def test_update_task_projection_recovers_inflight_state(tmp_path, monkeypatch):
     recovered = main.ManagedImageUpdateTaskManager()
     recovered.path = manager.path
     recovered._load()
-    state = recovered.get("iu-task-restart")
+    state = recovered.get("iu-task-" + "b" * 16)
     assert state["status"] == "interrupted"
     assert "更新任务中断" in state["error"]
+
+
+def test_update_task_projection_filters_tampered_public_fields(tmp_path):
+    manager = main.ManagedImageUpdateTaskManager()
+    manager.path = tmp_path / "managed-image-tasks.json"
+    manager.path.write_text(json.dumps({"tasks": [
+        {
+            "id": "iu-task-" + "c" * 16, "status": "completed", "phase": "complete", "progress": 100,
+            "instance_handle": "i-" + "d" * 32, "image": NEW_IMAGE,
+            "steps": [{"id": "verify", "status": "success", "secret": "drop-me"}],
+            "logs": [{"time": "now", "message": "safe", "authorization": "drop-me"}],
+            "created_at": "2026-08-02T00:00:00Z", "updated_at": "2026-08-02T00:00:01Z",
+            "credential": "drop-me", "authorization": "Bearer drop-me",
+            "result": {"health_verified": True, "private_key": "drop-me"},
+        },
+        {"id": "not-a-managed-update", "credential": "drop-me"},
+    ]}), encoding="utf-8")
+    manager._load()
+
+    state = manager.get("iu-task-" + "c" * 16)
+    assert state is not None
+    assert "credential" not in state and "authorization" not in state
+    assert "secret" not in json.dumps(state)
+    assert state["result"] == {"health_verified": True}
+    assert manager.get("not-a-managed-update") is None
+
+
+def test_update_task_list_supports_browser_recovery(tmp_path):
+    manager = main.ManagedImageUpdateTaskManager()
+    manager.path = tmp_path / "managed-image-tasks.json"
+    handle = "i-" + "f" * 32
+    task_id = "iu-task-" + "e" * 16
+    manager.tasks = {
+        task_id: {
+            "id": task_id, "status": "interrupted", "phase": "recovery", "progress": 25,
+            "instance_handle": handle, "image": NEW_IMAGE, "steps": [], "logs": [],
+            "created_at": "2026-08-02T00:00:00Z", "updated_at": "2026-08-02T00:00:02Z",
+        },
+    }
+    listed = manager.list(handle)
+    assert len(listed) == 1
+    assert listed[0]["status"] == "interrupted"
+    assert manager.list("i-" + "0" * 32) == []
 
 
 def test_update_rolls_back_env_and_keeps_local_image_on_health_failure(tmp_path, monkeypatch):
@@ -223,4 +266,33 @@ def test_update_rolls_back_env_and_keeps_local_image_on_health_failure(tmp_path,
     health_index = next(index for index, command in enumerate(commands) if "curl -fsS" in command)
     rollback_index = max(index for index, command in enumerate(commands) if "cp /srv/update-app/.env.genbox-image-update-" in command)
     assert pull_index < backup_index < write_index < health_index < rollback_index
+    assert extension_store.get_instance(instance.id).image == OLD_IMAGE
+
+
+def test_update_rolls_back_remote_when_local_instance_persist_fails(tmp_path, monkeypatch):
+    target, instance, _handle = managed_target_and_instance(tmp_path, monkeypatch)
+    connection = FakeConnection(instance.id)
+
+    async def connect(_request):
+        return connection, None
+
+    async def privileges(_connection, _credential):
+        return {"can_deploy": True, "docker_access": True}
+
+    def fail_persist(_payload):
+        raise OSError("local store unavailable")
+
+    monkeypatch.setattr(orchestrator, "_connect", connect)
+    monkeypatch.setattr(orchestrator, "_diagnose_privileges", privileges)
+    monkeypatch.setattr(orchestrator.extensions_store, "upsert_instance", fail_persist)
+
+    with pytest.raises(RuntimeError, match="remote_rollback_completed"):
+        asyncio.run(orchestrator.update_managed_image(
+            instance_id=instance.id, target=target, credential=SSHCredential(password="session"), image=NEW_IMAGE,
+        ))
+
+    commands = [command for command, _input in connection.commands]
+    health_index = next(index for index, command in enumerate(commands) if "curl -fsS" in command)
+    rollback_index = max(index for index, command in enumerate(commands) if "cp /srv/update-app/.env.genbox-image-update-" in command)
+    assert rollback_index > health_index
     assert extension_store.get_instance(instance.id).image == OLD_IMAGE

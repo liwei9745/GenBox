@@ -2517,8 +2517,21 @@ async def update_managed_image(
         if written.exit_status != 0 or restart.exit_status != 0 or verified.exit_status != 0:
             await rollback()
             raise RuntimeError("新镜像健康检查失败，已恢复原实例")
+        try:
+            extensions_store.upsert_instance({**instance.model_dump(), "image": image, "status": "running"})
+        except Exception as exc:
+            # Commit the local registration before deleting the rollback point.
+            # If that commit fails, restore the remote env and Compose app.
+            try:
+                await rollback()
+            except Exception as rollback_exc:
+                raise RuntimeError(
+                    "managed_image_update_local_state_failed_remote_rollback_failed"
+                ) from rollback_exc
+            raise RuntimeError(
+                "managed_image_update_local_state_failed_remote_rollback_completed"
+            ) from exc
         await connection.run(f"rm -f {shlex.quote(backup_path)}", check=False)
-        extensions_store.upsert_instance({**instance.model_dump(), "image": image, "status": "running"})
         return {"ok": True, "instance_id": instance.id, "image": image, "health_verified": True}
     finally:
         connection.close()

@@ -4382,6 +4382,11 @@ _MANAGED_IMAGE_UPDATE_PLAN_TTL_SECONDS = 300
 class ManagedImageUpdateTaskManager:
     """Public-only task projection for the bounded managed-image update."""
 
+    _TASK_ID_RE = re.compile(r"^iu-task-[a-f0-9]{16}$")
+    _STATUSES = {"queued", "running", "completed", "failed", "interrupted"}
+    _PHASES = {"queued", "connect", "update", "verify", "complete", "failed", "recovery"}
+    _STEP_IDS = ("connect", "update", "verify")
+
     def __init__(self):
         self.path = STORAGE_DIR / "managed_image_update_tasks.json"
         self.lock = threading.RLock()
@@ -4393,7 +4398,11 @@ class ManagedImageUpdateTaskManager:
         try:
             payload = _json.loads(self.path.read_text(encoding="utf-8"))
             records = payload.get("tasks", []) if isinstance(payload, dict) else []
-            self.tasks = {item["id"]: item for item in records if isinstance(item, dict) and item.get("id")}
+            self.tasks = {}
+            for item in records:
+                state = self._public_state(item)
+                if state:
+                    self.tasks[state["id"]] = state
         except (OSError, ValueError, TypeError):
             self.tasks = {}
         changed = False
@@ -4409,16 +4418,76 @@ class ManagedImageUpdateTaskManager:
     def _persist(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(".tmp")
-        temporary.write_text(_json.dumps({"tasks": list(self.tasks.values())}, ensure_ascii=True), encoding="utf-8")
+        records = [state for state in (self._public_state(item) for item in self.tasks.values()) if state]
+        temporary.write_text(_json.dumps({"tasks": records}, ensure_ascii=True), encoding="utf-8")
         os.replace(temporary, self.path)
+
+    @classmethod
+    def _public_state(cls, raw: dict | None) -> dict | None:
+        """Return only the bounded, secret-free task projection."""
+        if not isinstance(raw, dict):
+            return None
+        task_id = str(raw.get("id", ""))
+        if not cls._TASK_ID_RE.fullmatch(task_id):
+            return None
+        status = str(raw.get("status", ""))
+        if status not in cls._STATUSES:
+            return None
+        phase = str(raw.get("phase", "queued"))
+        if phase not in cls._PHASES:
+            phase = "recovery" if status == "interrupted" else "queued"
+        try:
+            progress = max(0, min(100, int(raw.get("progress", 0))))
+        except (TypeError, ValueError):
+            progress = 0
+        handle = str(raw.get("instance_handle", ""))
+        if re.fullmatch(r"i-[a-f0-9]{32}", handle) is None:
+            return None
+        image = str(raw.get("image", ""))
+        if not is_immutable_image_reference(image):
+            return None
+        raw_steps = raw.get("steps", [])
+        by_id = {item.get("id"): item for item in raw_steps if isinstance(item, dict)} if isinstance(raw_steps, list) else {}
+        steps = []
+        for step_id in cls._STEP_IDS:
+            item = by_id.get(step_id, {})
+            step_status = str(item.get("status", "pending"))
+            if step_status not in {"pending", "running", "success", "failed", "interrupted"}:
+                step_status = "pending"
+            steps.append({"id": step_id, "status": step_status})
+        logs = []
+        raw_logs = raw.get("logs", [])
+        if isinstance(raw_logs, list):
+            for item in raw_logs[-100:]:
+                if isinstance(item, dict):
+                    logs.append({"time": str(item.get("time", ""))[:32], "message": str(item.get("message", ""))[:240]})
+        state = {
+            "id": task_id, "status": status, "phase": phase, "progress": progress,
+            "instance_handle": handle, "image": image,
+            "error": str(raw.get("error"))[:240] if raw.get("error") else None,
+            "steps": steps, "logs": logs,
+            "created_at": str(raw.get("created_at", ""))[:64], "updated_at": str(raw.get("updated_at", ""))[:64],
+        }
+        result = raw.get("result")
+        if isinstance(result, dict) and isinstance(result.get("health_verified"), bool):
+            state["result"] = {"health_verified": result["health_verified"]}
+        return state
 
     def _state(self, task_id: str) -> dict | None:
         state = self.tasks.get(task_id)
-        return _json.loads(_json.dumps(state, ensure_ascii=True)) if state else None
+        public = self._public_state(state)
+        return _json.loads(_json.dumps(public, ensure_ascii=True)) if public else None
 
     def get(self, task_id: str) -> dict | None:
         with self.lock:
             return self._state(task_id)
+
+    def list(self, instance_handle: str | None = None) -> list[dict]:
+        with self.lock:
+            states = [self._public_state(item) for item in self.tasks.values()]
+            states = [item for item in states if item and (not instance_handle or item["instance_handle"] == instance_handle)]
+            ordered = sorted(states, key=lambda item: item.get("updated_at", ""), reverse=True)
+            return _json.loads(_json.dumps(ordered, ensure_ascii=True))
 
     def create(self, instance_handle: str, image: str, runner_factory) -> str:
         task_id = "iu-task-" + uuid.uuid4().hex[:16]
@@ -4671,6 +4740,13 @@ async def extension_managed_image_update_apply(body: ManagedImageUpdateApplyRequ
 
     task_id = managed_image_update_tasks.create(plan["instance_handle"], plan["image"], run_update)
     return {"ok": True, "task_id": task_id, "instance_handle": plan["instance_handle"], "image": plan["image"]}
+
+
+@app.get("/api/extensions/instances/image-update/tasks")
+async def extension_managed_image_update_task_list(instance_handle: str | None = None):
+    if instance_handle and re.fullmatch(r"i-[a-f0-9]{32}", instance_handle) is None:
+        raise HTTPException(status_code=400, detail="managed_instance_handle_invalid")
+    return {"tasks": managed_image_update_tasks.list(instance_handle)}
 
 
 @app.get("/api/extensions/instances/image-update/tasks/{task_id}")
