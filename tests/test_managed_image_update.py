@@ -80,6 +80,8 @@ def test_update_plan_rejects_production_target_before_vault_or_ssh(tmp_path, mon
 
 def test_update_plan_is_single_use_and_never_returns_vault_secret(tmp_path, monkeypatch):
     _target, instance, handle = managed_target_and_instance(tmp_path, monkeypatch)
+    main.managed_image_update_tasks.path = tmp_path / "managed-image-update-tasks.json"
+    main.managed_image_update_tasks.tasks = {}
     vault = Vault(ManagedCredential(ssh_password="session-secret", password="metadata"))
     monkeypatch.setattr(main, "credential_vault", vault)
     calls = []
