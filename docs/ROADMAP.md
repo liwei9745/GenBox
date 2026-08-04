@@ -265,13 +265,15 @@ isolated Push produced matching source/receiver SHA-256 evidence, an idempotent
 `already imported` retry, and verified source retention. A cleanup dry-run on
 `33010` then failed closed with cleanup disabled, environment class `unknown`,
 execute unavailable, and its sole candidate retained.
-Sender commit `1463c69` fixes the recovery-audit failure that could leave a
-durable `deleting` intent. Its clean Windows suite passes `131` tests with `17`
-skips, and its clean Linux-container suite passes `147` tests with one skip;
-both include the direct and FastAPI-lifespan audit-failure regressions.
+Sender commit `9e475cb` includes the A7 recovery-audit fix and closes the A4
+Windows hard-link race: it re-hashes the opened content and rechecks handle,
+path, and link-count identity immediately before deletion. The clean Windows
+suite passes `132` tests with `17` skips and the clean Linux-container suite
+passes `147` tests with two skips. The Windows evidence uses a real concurrent
+hard-link operation after the earlier identity check and retains both names.
 Production `33018` was not selected or sent any control-plane operation. Phase
-6 remains In Progress because A4 and A9 remain blocked and no destructive
-cleanup test is approved.
+6 remains In Progress because A9 remains blocked and no destructive cleanup
+test is approved.
 
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`

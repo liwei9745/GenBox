@@ -1,12 +1,14 @@
 # Phase 6 Verified Source Cleanup Security Review
 
 **Review status:** `BLOCK` for destructive execution and release publication.
-The current A7 sender candidate is commit `1463c69`. Its clean Windows suite
-passes `131` tests with `17` skips, and clean Linux-container verification
-passes `147` tests with one skip. The candidate adds a regression for recovery
-audit-write failure: it persists terminal `delete_unknown` and FastAPI lifespan
-startup continues. A4 and A9 remain open; no destructive cleanup was attempted
-and the candidate has not been deployed.
+The current A4/A7 sender candidate is commit `9e475cb`. Its clean Windows suite
+passes `132` tests with `17` skips, and clean Linux-container verification
+passes `147` tests with two skips. It re-hashes the opened source and rechecks
+handle, path, and link-count identity before Windows deletion; a real Windows
+hard-link race retains both names. It also keeps the A7 recovery-audit fix that
+persists terminal `delete_unknown` and lets FastAPI lifespan startup continue.
+A9 remains open; no destructive cleanup was attempted and the candidate has not
+been deployed.
 
 ## Latest Re-review Result
 
@@ -20,9 +22,12 @@ lifespan recovery, slow-drip receipts, redirects, and destination rotation. The
 remaining review blockers are:
 
 - A3: destination and Push-key rotation are not held through unlink.
-- A4: the candidate now has direct Linux same-inode, cross-process writer,
-  replacement-race, and POSIX exchange tests plus Windows handle-sharing
-  coverage. Independent reviewer acceptance is still required.
+- A4: commit `9e475cb` closes the Windows hard-link window by re-hashing the
+  opened source and rechecking both opened-handle and path identity plus link
+  count after the final-check test seam. A real Windows concurrent hard-link
+  test retains both names. Linux cross-process writer, replacement-race, and
+  POSIX exchange coverage pass; independent reviewer acceptance is still
+  required.
 - A5-A6: Windows and Linux alias/concurrency evidence is substantially stronger;
   platform-specific skips remain explicit and must not be treated as passes.
 - A7: local and Linux crash/lifespan recovery pass, including exchange,
@@ -232,7 +237,7 @@ prevents malformed responses from reaching cleanup decision code.
 | A1 | False receipt from wrong endpoint | No eligibility; source retained | `BLOCK` until evidence |
 | A2 | Redirect or transport downgrade | Request rejected; no record | `BLOCK` until evidence |
 | A3 | Replay after destination/key rotation | Scope mismatch; no deletion | `PASS` in design, test required |
-| A4 | Changed bytes at same path | Final identity/hash mismatch; retained | `REVIEW PENDING` after Linux race evidence |
+| A4 | Changed bytes at same path | Final identity/hash mismatch; retained | `PASS` locally on `9e475cb`; independent re-review remains required |
 | A5 | Symlink, hard link, junction, traversal | Rejected before unlink | `BLOCK` until filesystem tests |
 | A6 | Two processes claim one item | One claimant; no duplicate unlink | `BLOCK` until process test |
 | A7 | Crash around unlink/audit commit | No guessed success or substitute deletion | `PASS` locally on `1463c69`; isolated restart remains unapproved |

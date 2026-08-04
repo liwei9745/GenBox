@@ -63,6 +63,12 @@ All notable GenBox changes are recorded here. The format follows
   deleting the source. Clean verification passes `131` Windows tests with `17`
   skips and `147` Linux-container tests with one skip. This does not authorize
   cleanup: A4, A9, isolated execution, and release publication remain blocked.
+- Sender commit `9e475cb` closes the Phase 6 A4 Windows hard-link race. Before
+  deletion it re-hashes the opened source and checks opened-handle, path, and
+  link-count identity again; a real Windows concurrent hard-link race retains
+  both source names. Clean verification passes `132` Windows tests with `17`
+  skips and `147` Linux-container tests with two skips. A9, isolated execution,
+  independent re-review, and release publication remain blocked.
 
 ### Planned
 

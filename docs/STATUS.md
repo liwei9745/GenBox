@@ -107,10 +107,19 @@
   retained source. A clean worktree at that exact commit passes `131 passed,
   17 skipped, 10 subtests passed` on Windows and `147 passed, 1 skipped, 10
   subtests passed` in a clean Linux Docker container. No remote command ran.
+- **LOCAL / VERIFIED 2026-08-04:** sender commit `9e475cb` closes the A4
+  Windows hard-link race. Immediately before deletion it re-hashes the opened
+  source and rechecks both handle and path identity plus link count. A real
+  Windows thread adds a hard link after the earlier identity check; cleanup
+  returns `retained / path-alias` and both source names retain identical bytes.
+  The fixed commit passes `132 passed, 17 skipped, 10 subtests passed` on
+  Windows and `147 passed, 2 skipped, 10 subtests passed` in a clean Linux
+  Docker container. No remote command ran.
 - **SECURITY GATE / BLOCKED 2026-08-04:** destructive cleanup and release
   approval remain blocked. A7's recovery-audit failure is fixed and locally
-  verified on `1463c69`; A4 still needs the Windows final identity/hard-link
-  protection and A9 still lacks positive isolated identity evidence. The
+  verified on `1463c69`; A4's Windows final identity/hard-link protection is
+  locally verified on `9e475cb`; A9 still lacks positive isolated identity
+  evidence. The
   isolated runtime continues to fail closed as `unknown` with execute
   unavailable; positive per-item ownership, Compose/image/storage binding, and
   an authorized isolated execute/recovery exercise have not been proved.
@@ -123,8 +132,8 @@
   built or applied. Isolated sender `33010` remains on the previously reviewed
   `f0d5beb` image. This is development evidence, not authorization for source
   deletion, a stable GenBox release, or upstream delivery.
-- **NEXT ACTION:** close A4 and A9 on a fixed sender candidate, then complete
-  the fresh independent A4/A7/A9/A12 review. If and only if it returns `PASS`,
+- **NEXT ACTION:** close A9 on a fixed sender candidate, then complete the
+  fresh independent A4/A7/A9/A12 review. If and only if it returns `PASS`,
   define a narrowly bounded isolated `33010`
   execution marker and request explicit authorization for one synthetic cleanup
   plus restart/recovery controls. Do not enable cleanup while the environment
