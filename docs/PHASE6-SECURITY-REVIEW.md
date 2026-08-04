@@ -1,13 +1,12 @@
 # Phase 6 Verified Source Cleanup Security Review
 
 **Review status:** `BLOCK` for destructive execution and release publication.
-The current sender candidate is commit `96d57de`. Its Windows suite passes
-`121` tests with ten platform skips, and clean Linux-container verification
-passes `130` tests with one platform skip. This is materially stronger evidence
-for A4 and A7, but it has not yet been accepted by a fresh independent
-adversarial review. A9 remains open because the isolated runtime reports
-environment class `unknown` and execute unavailable; no destructive cleanup was
-attempted and the new candidate has not been deployed.
+The current A7 sender candidate is commit `1463c69`. Its clean Windows suite
+passes `131` tests with `17` skips, and clean Linux-container verification
+passes `147` tests with one skip. The candidate adds a regression for recovery
+audit-write failure: it persists terminal `delete_unknown` and FastAPI lifespan
+startup continues. A4 and A9 remain open; no destructive cleanup was attempted
+and the candidate has not been deployed.
 
 ## Latest Re-review Result
 
@@ -28,8 +27,10 @@ remaining review blockers are:
   platform-specific skips remain explicit and must not be treated as passes.
 - A7: local and Linux crash/lifespan recovery pass, including exchange,
   tombstone, and terminal-audit boundary crashes. Recovery is read-only and
-  records deterministic artifact names; an authorized isolated restart exercise
-  remains gated behind review and explicit approval.
+  records deterministic artifact names. Commit `1463c69` also closes the
+  recovery-audit `OSError` path: it terminalizes the record as `delete_unknown`
+  and the actual FastAPI lifespan regression completes. An authorized isolated
+  restart exercise remains gated behind review and explicit approval.
 - A9: the isolated `33010` preview fails closed as `unknown` with execute
   unavailable. GenBox selected or sent no control-plane operation to production
   `33018`, and its local registration timestamps did not change. Per-item
@@ -234,7 +235,7 @@ prevents malformed responses from reaching cleanup decision code.
 | A4 | Changed bytes at same path | Final identity/hash mismatch; retained | `REVIEW PENDING` after Linux race evidence |
 | A5 | Symlink, hard link, junction, traversal | Rejected before unlink | `BLOCK` until filesystem tests |
 | A6 | Two processes claim one item | One claimant; no duplicate unlink | `BLOCK` until process test |
-| A7 | Crash around unlink/audit commit | No guessed success or substitute deletion | `REVIEW PENDING`; local/Linux recovery passes |
+| A7 | Crash around unlink/audit commit | No guessed success or substitute deletion | `PASS` locally on `1463c69`; isolated restart remains unapproved |
 | A8 | Browser-forged path/receipt/override | Authorization and schema rejection | `BLOCK` until API test |
 | A9 | Production or stale-clone state selected | Execute unavailable; no production operation selected | `PARTIAL / BLOCK`; negative gate passes, positive identity absent |
 | A10 | Mixed execute outcomes | Only eligible unchanged items delete; totals reconcile | `PASS` in design, test required |

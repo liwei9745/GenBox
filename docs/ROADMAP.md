@@ -264,13 +264,14 @@ immutable digest. After replacing a stale owned local private-entry route, one
 isolated Push produced matching source/receiver SHA-256 evidence, an idempotent
 `already imported` retry, and verified source retention. A cleanup dry-run on
 `33010` then failed closed with cleanup disabled, environment class `unknown`,
-execute unavailable, and its sole candidate retained. Sender candidate
-`96d57de` now passes `130` Linux tests with one platform skip and `121` Windows
-tests with ten skips, including same-inode, cross-process, atomic-crash, and
-audit-boundary coverage. Production `33018` was not selected or sent any
-control-plane operation. Phase 6 remains In Progress because independent A4/A7
-acceptance is pending, A9 lacks positive isolated identity evidence, and no
-destructive cleanup test is approved.
+execute unavailable, and its sole candidate retained.
+Sender commit `1463c69` fixes the recovery-audit failure that could leave a
+durable `deleting` intent. Its clean Windows suite passes `131` tests with `17`
+skips, and its clean Linux-container suite passes `147` tests with one skip;
+both include the direct and FastAPI-lifespan audit-failure regressions.
+Production `33018` was not selected or sent any control-plane operation. Phase
+6 remains In Progress because A4 and A9 remain blocked and no destructive
+cleanup test is approved.
 
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`

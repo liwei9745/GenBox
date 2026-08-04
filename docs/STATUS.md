@@ -100,13 +100,20 @@
   FastAPI lifespan recovery test, and a real local chunked slow-drip Push test.
   The sender full suites pass `121` Windows tests with `10` platform skips and
   `130` Linux tests with one platform skip.
-- **SECURITY GATE / BLOCKED 2026-08-02:** destructive cleanup and release
-  approval remain blocked. A4 and A7 now have direct Linux and Windows evidence
-  on `96d57de`, including cross-process write blocking and real atomic-crash
-  recovery, but independent adversarial acceptance is still pending. A9 remains
-  open: the isolated runtime fails closed as `unknown` with execute unavailable;
-  positive per-item ownership, Compose/image/storage binding, and an authorized
-  isolated execute/recovery exercise have not been proved.
+- **LOCAL / VERIFIED 2026-08-04:** sender commit `1463c69` closes the A7
+  recovery-audit failure: a recovery audit `OSError` now persists a terminal
+  `delete_unknown` record rather than leaving `deleting`; the actual FastAPI
+  lifespan regression test proves startup completes without deleting the
+  retained source. A clean worktree at that exact commit passes `131 passed,
+  17 skipped, 10 subtests passed` on Windows and `147 passed, 1 skipped, 10
+  subtests passed` in a clean Linux Docker container. No remote command ran.
+- **SECURITY GATE / BLOCKED 2026-08-04:** destructive cleanup and release
+  approval remain blocked. A7's recovery-audit failure is fixed and locally
+  verified on `1463c69`; A4 still needs the Windows final identity/hard-link
+  protection and A9 still lacks positive isolated identity evidence. The
+  isolated runtime continues to fail closed as `unknown` with execute
+  unavailable; positive per-item ownership, Compose/image/storage binding, and
+  an authorized isolated execute/recovery exercise have not been proved.
   Current evidence also confirms matching receipt/source SHA-256, idempotent
   retry, source retention, and no connection or mutation request to production
   `33018`. Cleanup execution remains prohibited until review returns `PASS` and
@@ -116,8 +123,9 @@
   built or applied. Isolated sender `33010` remains on the previously reviewed
   `f0d5beb` image. This is development evidence, not authorization for source
   deletion, a stable GenBox release, or upstream delivery.
-- **NEXT ACTION:** complete the fresh independent A4/A7/A9/A12 review. If and
-  only if it returns `PASS`, define a narrowly bounded isolated `33010`
+- **NEXT ACTION:** close A4 and A9 on a fixed sender candidate, then complete
+  the fresh independent A4/A7/A9/A12 review. If and only if it returns `PASS`,
+  define a narrowly bounded isolated `33010`
   execution marker and request explicit authorization for one synthetic cleanup
   plus restart/recovery controls. Do not enable cleanup while the environment
   class remains `unknown`. `33018` remains out of scope and must not be

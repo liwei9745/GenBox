@@ -57,6 +57,12 @@ All notable GenBox changes are recorded here. The format follows
   real multi-process exchange/tombstone/audit-boundary crash tests. Local
   verification passes `130` Linux tests with one skip and `121` Windows tests
   with ten skips. No image from this commit has been deployed.
+- Sender commit `1463c69` closes the Phase 6 A7 recovery-audit failure. A
+  recovery audit write error now leaves a persisted terminal `delete_unknown`,
+  and the FastAPI lifespan regression verifies that startup completes without
+  deleting the source. Clean verification passes `131` Windows tests with `17`
+  skips and `147` Linux-container tests with one skip. This does not authorize
+  cleanup: A4, A9, isolated execution, and release publication remain blocked.
 
 ### Planned
 
