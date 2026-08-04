@@ -69,6 +69,14 @@ All notable GenBox changes are recorded here. The format follows
   both source names. Clean verification passes `132` Windows tests with `17`
   skips and `147` Linux-container tests with two skips. A9, isolated execution,
   independent re-review, and release publication remain blocked.
+- Sender commit `3acb1e8` closes the A9 implementation gap: cleanup capability
+  is issued from a protected startup attestation and held in process memory;
+  copied clone state, marker, environment, or replayed capability cannot grant
+  authority. Receipt/state/audit/lease records are bound to the runtime identity
+  digest. Windows verification passes `137` tests with `17` skips and clean
+  Linux-container verification passes `152` tests with `2` skips. No cleanup
+  execution or connection to `33010`/`33018` was performed; independent review
+  and isolated positive ownership acceptance remain blocked.
 
 ### Planned
 

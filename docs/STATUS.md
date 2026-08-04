@@ -1,6 +1,6 @@
 # Current Project Status
 
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-04
 **Current branch:** `codex/p4-deploy-plan-ux-eai`
 **Current phase:** Phase 6 Verified Source Cleanup - **In Progress / Destructive Execution Blocked**
 **Previous phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
@@ -115,11 +115,21 @@
   The fixed commit passes `132 passed, 17 skipped, 10 subtests passed` on
   Windows and `147 passed, 2 skipped, 10 subtests passed` in a clean Linux
   Docker container. No remote command ran.
+- **LOCAL / VERIFIED 2026-08-04:** sender commit `3acb1e8` closes the A9
+  implementation gap on a clean sender worktree. Cleanup authority now uses a
+  launcher-issued runtime attestation plus a process-held capability; the
+  environment variable is descriptive and cannot issue authority. Receipt
+  records, audit events, and source leases carry the runtime identity digest,
+  and cloned state/attestation or capability replay fails closed. The Windows
+  full suite passes `137 passed, 17 skipped, 9 subtests`; a clean Linux
+  container passes `152 passed, 2 skipped, 9 subtests`. No `33010` or `33018`
+  connection, execute marker, or cleanup operation was used.
 - **SECURITY GATE / BLOCKED 2026-08-04:** destructive cleanup and release
   approval remain blocked. A7's recovery-audit failure is fixed and locally
   verified on `1463c69`; A4's Windows final identity/hard-link protection is
-  locally verified on `9e475cb`; A9 still lacks positive isolated identity
-  evidence. The
+  locally verified on `9e475cb`; A9 is locally implemented and verified on
+  `3acb1e8`, but independent adversarial acceptance and positive isolated
+  ownership evidence remain pending. The
   isolated runtime continues to fail closed as `unknown` with execute
   unavailable; positive per-item ownership, Compose/image/storage binding, and
   an authorized isolated execute/recovery exercise have not been proved.
@@ -132,8 +142,8 @@
   built or applied. Isolated sender `33010` remains on the previously reviewed
   `f0d5beb` image. This is development evidence, not authorization for source
   deletion, a stable GenBox release, or upstream delivery.
-- **NEXT ACTION:** close A9 on a fixed sender candidate, then complete the
-  fresh independent A4/A7/A9/A12 review. If and only if it returns `PASS`,
+- **NEXT ACTION:** complete the fresh independent A4/A7/A9/A12 review against
+  fixed sender candidate `3acb1e8`. If and only if it returns `PASS`,
   define a narrowly bounded isolated `33010`
   execution marker and request explicit authorization for one synthetic cleanup
   plus restart/recovery controls. Do not enable cleanup while the environment
