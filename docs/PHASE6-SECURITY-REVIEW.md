@@ -1,13 +1,13 @@
 # Phase 6 Verified Source Cleanup Security Review
 
 **Review status:** `BLOCK` for destructive execution and release publication.
-The current locally verified sender candidate is commit `bd9ec81`. Its Windows
-suite passes `138` tests with `17` skips, and clean Linux-container verification
-passes `153` tests with two skips. It retains the A4 Windows hard-link defense
-and A7 terminal recovery fix and fixes an explicit-attestation-path regression.
-The independent A9 review is `BLOCK`: the application still constructs and
-signs its own runtime attestation from environment values. No destructive
-cleanup was attempted and the candidate has not been deployed.
+The current locally verified sender candidate is commit `5d1b9cd`. Its Windows
+suite passes `141` tests with `17` skips, and a clean no-network/read-only Linux
+container passes `55` cleanup-security tests. It retains the A4 Windows
+hard-link defense and A7 terminal recovery fix. A9 has a new external-signing
+implementation but remains `UNVERIFIED` pending a fresh independent review and
+an actual macOS CI result. No destructive cleanup was attempted and the
+candidate has not been deployed.
 
 ## Latest Re-review Result
 
@@ -35,14 +35,13 @@ remaining review blockers are:
   recovery-audit `OSError` path: it terminalizes the record as `delete_unknown`
   and the actual FastAPI lifespan regression completes. An authorized isolated
   restart exercise remains gated behind review and explicit approval.
-- A9: commit `bd9ec81` keeps the environment-only capability, copied-state,
-  replay, substitution, and browser-boundary regressions, but fails the
-  positive identity requirement. `initialize_runtime_capability()` reads every
-  claimed identity value from the application environment and calls
-  `issue_runtime_attestation()` itself. The later gate compares that generated
-  file back to the same environment. A copied marker plus forged environment
-  can therefore self-attest at startup. Require a host/launcher-issued signed
-  deployment record that the application verifies but cannot issue.
+- A9: commit `5d1b9cd` replaces application-side issuance with a host-only
+  Ed25519 signer. Startup only reads a capability file, signed attestation, and
+  public-key file; it rejects missing, changed, expired, replayed, aliased, or
+  runtime-binding-mismatched inputs. The issuer is excluded from the app image,
+  and browser operation bodies still forbid authority fields. This is strong
+  local evidence, not an independent `PASS`: verify the launcher/container
+  mount contract and obtain macOS runner output before authorizing cleanup.
 - A10/A12: mixed-outcome, slow-drip, bounded parsing, redirect, and rotation
   controls pass locally/Linux; independent acceptance remains pending.
 

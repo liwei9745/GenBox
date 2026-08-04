@@ -122,6 +122,16 @@
   self-issues its attestation from environment claims, so it does not prove the
   actual Compose/container/image identity. No `33010` or `33018` connection,
   execute marker, or cleanup operation was used.
+- **LOCAL / VERIFIED 2026-08-04:** sender commit `5d1b9cd` replaces in-process
+  capability/attestation issuance with a host-only Ed25519 signing launcher.
+  Startup now requires externally mounted capability, signed-attestation, and
+  public-key files; it reads and verifies them but never writes or regenerates
+  them. Missing, replayed, expired, tampered, aliased, or runtime-binding-
+  mismatched artifacts fail closed. Windows full verification passes `141
+  passed, 17 skipped, 9 subtests`; a clean, no-network, read-only Linux
+  container passes `55` cleanup-security tests. Browser requests remain
+  intent-only. A macOS CI job is configured but has no runner result yet, and
+  a fresh independent A9 review is still required. No remote command ran.
 - **SECURITY GATE / BLOCKED 2026-08-04:** destructive cleanup and release
   approval remain blocked. A7's recovery-audit failure is fixed and locally
   verified on `1463c69`; A4's Windows final identity/hard-link protection is
@@ -140,8 +150,8 @@
   built or applied. Isolated sender `33010` remains on the previously reviewed
   `f0d5beb` image. This is development evidence, not authorization for source
   deletion, a stable GenBox release, or upstream delivery.
-- **NEXT ACTION:** implement host/launcher-issued attestation verification for
-  A9, then complete a fresh independent A4/A7/A9/A12 review. If and only if it
+- **NEXT ACTION:** obtain a fresh independent A4/A7/A9/A12 review of sender
+  commit `5d1b9cd` and a macOS CI result. If and only if it
   returns `PASS`,
   define a narrowly bounded isolated `33010`
   execution marker and request explicit authorization for one synthetic cleanup

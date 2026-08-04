@@ -8,6 +8,10 @@ All notable GenBox changes are recorded here. The format follows
 
 ### In Progress
 
+- Phase 6 sender candidate `5d1b9cd` now requires host-issued signed cleanup
+  attestation artifacts. Windows and clean Linux security tests pass; macOS
+  CI and independent A9 review remain pending. Cleanup remains disabled.
+
 - Fixed the managed isolated-image update feedback chain: `Confirm update` now
   returns a task ID, the UI polls sanitized progress and terminal state, and
   refresh recovery rediscovers active/interrupted tasks without replaying them.
