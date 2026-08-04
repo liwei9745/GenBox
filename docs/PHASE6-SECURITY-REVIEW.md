@@ -1,13 +1,13 @@
 # Phase 6 Verified Source Cleanup Security Review
 
 **Review status:** `BLOCK` for destructive execution and release publication.
-The current locally verified sender candidate is commit `3acb1e8`. Its Windows
-suite passes `137` tests with `17` skips, and clean Linux-container verification
-passes `152` tests with two skips. It retains the A4 Windows hard-link defense
-and A7 terminal recovery fix. For A9 it issues a fresh process-held capability
-through a protected startup attestation, then binds receipt/state/audit/lease
-records to the revalidated runtime identity. No destructive cleanup was
-attempted and the candidate has not been deployed.
+The current locally verified sender candidate is commit `bd9ec81`. Its Windows
+suite passes `138` tests with `17` skips, and clean Linux-container verification
+passes `153` tests with two skips. It retains the A4 Windows hard-link defense
+and A7 terminal recovery fix and fixes an explicit-attestation-path regression.
+The independent A9 review is `BLOCK`: the application still constructs and
+signs its own runtime attestation from environment values. No destructive
+cleanup was attempted and the candidate has not been deployed.
 
 ## Latest Re-review Result
 
@@ -35,13 +35,14 @@ remaining review blockers are:
   recovery-audit `OSError` path: it terminalizes the record as `delete_unknown`
   and the actual FastAPI lifespan regression completes. An authorized isolated
   restart exercise remains gated behind review and explicit approval.
-- A9: commit `3acb1e8` rejects an environment-only capability, copied
-  clone state/attestation, capability replay, and instance/image/container/root
-  substitution. Browser cleanup requests still reject sensitive fields. The
-  sender revalidates instance, role, root, Compose/container, image digest,
-  marker hash, and trusted destination scope before execute. Independent
-  acceptance and actual isolated per-item ownership remain unproved; no
-  isolated execute was run.
+- A9: commit `bd9ec81` keeps the environment-only capability, copied-state,
+  replay, substitution, and browser-boundary regressions, but fails the
+  positive identity requirement. `initialize_runtime_capability()` reads every
+  claimed identity value from the application environment and calls
+  `issue_runtime_attestation()` itself. The later gate compares that generated
+  file back to the same environment. A copied marker plus forged environment
+  can therefore self-attest at startup. Require a host/launcher-issued signed
+  deployment record that the application verifies but cannot issue.
 - A10/A12: mixed-outcome, slow-drip, bounded parsing, redirect, and rotation
   controls pass locally/Linux; independent acceptance remains pending.
 
@@ -243,7 +244,7 @@ prevents malformed responses from reaching cleanup decision code.
 | A6 | Two processes claim one item | One claimant; no duplicate unlink | `BLOCK` until process test |
 | A7 | Crash around unlink/audit commit | No guessed success or substitute deletion | `PASS` locally on `1463c69`; isolated restart remains unapproved |
 | A8 | Browser-forged path/receipt/override | Authorization and schema rejection | `BLOCK` until API test |
-| A9 | Production or stale-clone state selected | Execute unavailable; no production operation selected | `LOCAL PASS / REVIEW PENDING`; positive isolated ownership absent |
+| A9 | Production or stale-clone state selected | Execute unavailable; no production operation selected | `BLOCK`; app self-attests environment claims |
 | A10 | Mixed execute outcomes | Only eligible unchanged items delete; totals reconcile | `PASS` in design, test required |
 | A11 | Secrets or prompts in audit/logs | Sanitized output only | `PASS` in design, scan required |
 | A12 | Oversized/slow malformed receipt | Bounded failure; source retained | `REVIEW PENDING` after Linux transport evidence |

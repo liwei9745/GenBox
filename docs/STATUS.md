@@ -115,21 +115,19 @@
   The fixed commit passes `132 passed, 17 skipped, 10 subtests passed` on
   Windows and `147 passed, 2 skipped, 10 subtests passed` in a clean Linux
   Docker container. No remote command ran.
-- **LOCAL / VERIFIED 2026-08-04:** sender commit `3acb1e8` closes the A9
-  implementation gap on a clean sender worktree. Cleanup authority now uses a
-  launcher-issued runtime attestation plus a process-held capability; the
-  environment variable is descriptive and cannot issue authority. Receipt
-  records, audit events, and source leases carry the runtime identity digest,
-  and cloned state/attestation or capability replay fails closed. The Windows
-  full suite passes `137 passed, 17 skipped, 9 subtests`; a clean Linux
-  container passes `152 passed, 2 skipped, 9 subtests`. No `33010` or `33018`
-  connection, execute marker, or cleanup operation was used.
+- **LOCAL / VERIFIED 2026-08-04:** sender commit `bd9ec81` fixes the explicit
+  attestation-path fallback and passes `138 passed, 17 skipped, 9 subtests` on
+  Windows plus `153 passed, 2 skipped, 9 subtests` in a clean Linux container.
+  The independent A9 review nevertheless returns `BLOCK`: the application
+  self-issues its attestation from environment claims, so it does not prove the
+  actual Compose/container/image identity. No `33010` or `33018` connection,
+  execute marker, or cleanup operation was used.
 - **SECURITY GATE / BLOCKED 2026-08-04:** destructive cleanup and release
   approval remain blocked. A7's recovery-audit failure is fixed and locally
   verified on `1463c69`; A4's Windows final identity/hard-link protection is
-  locally verified on `9e475cb`; A9 is locally implemented and verified on
-  `3acb1e8`, but independent adversarial acceptance and positive isolated
-  ownership evidence remain pending. The
+  locally verified on `9e475cb`; A9 is blocked on `bd9ec81` until an external
+  trusted launcher or host-owned signed deployment record replaces in-process
+  self-attestation. The
   isolated runtime continues to fail closed as `unknown` with execute
   unavailable; positive per-item ownership, Compose/image/storage binding, and
   an authorized isolated execute/recovery exercise have not been proved.
@@ -142,8 +140,9 @@
   built or applied. Isolated sender `33010` remains on the previously reviewed
   `f0d5beb` image. This is development evidence, not authorization for source
   deletion, a stable GenBox release, or upstream delivery.
-- **NEXT ACTION:** complete the fresh independent A4/A7/A9/A12 review against
-  fixed sender candidate `3acb1e8`. If and only if it returns `PASS`,
+- **NEXT ACTION:** implement host/launcher-issued attestation verification for
+  A9, then complete a fresh independent A4/A7/A9/A12 review. If and only if it
+  returns `PASS`,
   define a narrowly bounded isolated `33010`
   execution marker and request explicit authorization for one synthetic cleanup
   plus restart/recovery controls. Do not enable cleanup while the environment

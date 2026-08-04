@@ -265,18 +265,18 @@ isolated Push produced matching source/receiver SHA-256 evidence, an idempotent
 `already imported` retry, and verified source retention. A cleanup dry-run on
 `33010` then failed closed with cleanup disabled, environment class `unknown`,
 execute unavailable, and its sole candidate retained.
-Sender commit `3acb1e8` includes the A7 recovery-audit fix and closes the A4
+Sender commit `bd9ec81` includes the A7 recovery-audit fix and closes the A4
 Windows hard-link race: it re-hashes the opened content and rechecks handle,
 path, and link-count identity immediately before deletion. The clean Windows
-suite passes `137` tests with `17` skips and the clean Linux-container suite
-passes `152` tests with two skips. A9 now uses a launcher-issued runtime
-attestation and process-held capability, and binds receipt/state/audit/lease
-records to the runtime identity digest. The Windows evidence uses a real
+suite passes `138` tests with `17` skips and the clean Linux-container suite
+passes `153` tests with two skips. A9 is blocked because the application still
+self-issues its runtime attestation from environment claims; it needs a
+host/launcher-issued signed deployment record. The Windows evidence uses a real
 concurrent hard-link operation after the earlier identity check and retains
 both names.
 Production `33018` was not selected or sent any control-plane operation. Phase
-6 remains In Progress because independent review and positive isolated identity
-acceptance remain pending; no destructive cleanup test is approved.
+6 remains In Progress because A9 identity proof is blocked; no destructive
+cleanup test is approved.
 
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`

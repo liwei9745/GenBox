@@ -77,6 +77,11 @@ All notable GenBox changes are recorded here. The format follows
   Linux-container verification passes `152` tests with `2` skips. No cleanup
   execution or connection to `33010`/`33018` was performed; independent review
   and isolated positive ownership acceptance remain blocked.
+- Sender commit `bd9ec81` fixes the explicit attestation-path fallback and
+  passes `138` Windows tests with `17` skips plus `153` clean Linux-container
+  tests with `2` skips. Independent A9 review found that the application still
+  signs its own attestation from environment claims, so A9 remains blocked
+  pending a host/launcher-issued signed deployment record.
 
 ### Planned
 
