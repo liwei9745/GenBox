@@ -132,6 +132,19 @@
   container passes `55` cleanup-security tests. Browser requests remain
   intent-only. A macOS CI job is configured but has no runner result yet, and
   a fresh independent A9 review is still required. No remote command ran.
+- **LOCAL / VERIFIED 2026-08-04:** sender commit `c8a4b01` closes the follow-up
+  A9 runtime-launcher gaps. Linux cgroup-v1 now accepts repeated copies of one
+  container ID while rejecting different, missing, or malformed IDs. The
+  host-only launcher requires an exact immutable repository digest, obtains and
+  re-checks Docker's actual container ID before issuing artifacts, derives the
+  public key outside the image, mounts only public artifacts read-only, and
+  rejects a private key under either application-mounted host tree. It also
+  rejects a same-hash digest from another repository. Windows focused sender
+  security tests pass `59 passed, 5 skipped`; a no-network, read-only Linux
+  container passes `64 passed`. A local Docker image build confirms neither
+  host-only issuer nor launcher is in the application image. A fresh
+  independent A9 code review returned `PASS`; macOS remains `UNVERIFIED` until
+  an actual GitHub runner result exists. No remote command ran.
 - **SECURITY GATE / BLOCKED 2026-08-04:** destructive cleanup and release
   approval remain blocked. A7's recovery-audit failure is fixed and locally
   verified on `1463c69`; A4's Windows final identity/hard-link protection is
@@ -150,8 +163,8 @@
   built or applied. Isolated sender `33010` remains on the previously reviewed
   `f0d5beb` image. This is development evidence, not authorization for source
   deletion, a stable GenBox release, or upstream delivery.
-- **NEXT ACTION:** obtain a fresh independent A4/A7/A9/A12 review of sender
-  commit `5d1b9cd` and a macOS CI result. If and only if it
+- **NEXT ACTION:** obtain a fresh independent A4/A7/A9/A12 final review of
+  sender commit `c8a4b01` and a macOS CI result. If and only if it
   returns `PASS`,
   define a narrowly bounded isolated `33010`
   execution marker and request explicit authorization for one synthetic cleanup
