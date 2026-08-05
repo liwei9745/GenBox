@@ -19,16 +19,16 @@ def test_release_version_is_consistent():
     assert main.app.version == __version__
     assert updater.CURRENT_VERSION == __version__
     assert __version__ in (ROOT / "genbox_version.py").read_text(encoding="utf-8")
-    assert __version__ == "2.5.1"
+    assert __version__ == "2.6.0-rc.1"
 
 
 def test_compose_release_uses_ghcr_and_safe_internal_port():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     env_template = (ROOT / ".env.docker.example").read_text(encoding="utf-8")
 
-    versioned_image = f"ghcr.io/liwei9745/genbox:{__version__}"
-    assert f"GENBOX_IMAGE:-{versioned_image}" in compose
-    assert f"GENBOX_IMAGE={versioned_image}" in env_template
+    stable_image = "ghcr.io/liwei9745/genbox:2.5.1"
+    assert f"GENBOX_IMAGE:-{stable_image}" in compose
+    assert f"GENBOX_IMAGE={stable_image}" in env_template
     assert "ghcr.io/liwei9745/genbox:latest" not in compose
     assert "ghcr.io/liwei9745/genbox:latest" not in env_template
     assert '${GENBOX_PORT:-8891}:8891' in compose
@@ -116,6 +116,14 @@ def test_release_notes_lead_with_download_and_first_run_guidance():
         assert "GenBox-Docker-Compose-v2.5.0.zip" in visible_lead
         assert "http://localhost:8891" in visible_lead
         assert "v2.4.1" in visible_lead
+
+
+def test_release_candidate_version_ordering_is_supported():
+    from updater import compare_versions
+
+    assert compare_versions("2.6.0-rc.1", "v2.6.0-rc.2")
+    assert compare_versions("2.6.0-rc.1", "v2.6.0")
+    assert not compare_versions("2.6.0", "v2.6.0-rc.1")
 
 
 def test_readme_lab_content_matches_source_documents():

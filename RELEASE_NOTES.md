@@ -1,13 +1,12 @@
-# GenBox v2.5.1
+# GenBox v2.6.0-rc.1 (Experimental Candidate)
 
-This rolling file points to the prepared version-specific release notes:
+This rolling file points to the prepared experimental-candidate notes:
 
-- [中文发布说明](release-notes-v2.5.1-zh.md)
-- [English release notes](release-notes-v2.5.1.md)
+- [中文实验候选说明](release-notes-v2.6.0-rc.1-zh.md)
+- [English experimental candidate notes](release-notes-v2.6.0-rc.1.md)
 
-The prepared v2.5.1 release focuses on startup authentication, fail-closed
-browser sign-in behavior, and a version-pinned Docker Compose image.
+This candidate collects the completed GenBox and chatgpt2api integration work.
+It is not a stable release, and it does not enable source-file cleanup.
 
-The versioned notes become frozen when the GitHub Release is published. Ongoing
-implementation details belong in `docs/STATUS.md`; future version-level changes
-belong under `Unreleased` in `CHANGELOG.md`.
+The versioned notes become frozen only when a separately approved release is
+published. Ongoing implementation details belong in `docs/STATUS.md`.

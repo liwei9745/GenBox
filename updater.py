@@ -7,6 +7,7 @@ import sys
 import subprocess
 import time
 import json
+import re
 from pathlib import Path
 from typing import Optional, List
 from dataclasses import dataclass
@@ -164,8 +165,17 @@ async def check_latest_release(mirror_url: str = "") -> Optional[dict]:
 
 def parse_version(tag: str) -> tuple:
     """解析版本号 'v2.2.0' -> (2, 2, 0)"""
-    v = tag.lstrip("v").split(".")
-    return tuple(int(x) for x in v[:3])
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?", tag.strip())
+    if not match:
+        raise ValueError(f"unsupported_version: {tag}")
+    major, minor, patch, candidate = match.groups()
+    return (
+        int(major),
+        int(minor),
+        int(patch),
+        0 if candidate is not None else 1,
+        int(candidate or 0),
+    )
 
 
 def compare_versions(current: str, latest: str) -> bool:

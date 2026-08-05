@@ -111,6 +111,23 @@ All notable GenBox changes are recorded here. The format follows
 - The frozen `v2.5.1` notes remain unchanged until a separately approved
   version tag and GitHub Release are created.
 
+## [2.6.0-rc.1] - 2026-08-05
+
+### Experimental Candidate
+
+- Prepared the client experimental candidate for the completed GenBox and
+  chatgpt2api integration: single-image Push, batch Push, and scheduled
+  incremental Push remain available with source retention by default.
+- Added pre-release version ordering support for the packaged-client updater.
+
+### Release Boundary
+
+- `v2.6.0-rc.1` is an experimental candidate only. No stable tag or GitHub
+  Release is created by this change.
+- Source-file cleanup remains disabled and is not a usable candidate feature.
+- Phase 6 security gates remain outside this candidate; unresolved A1, A2, A3,
+  A10, and A11 findings continue to block any stable release or cleanup claim.
+
 ## [2.5.1] - 2026-07-16
 
 ### Security
