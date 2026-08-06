@@ -155,80 +155,68 @@ def test_target_delete_revokes_its_managed_push_source(source_registry, tmp_path
     assert authenticate_push_source(created["source"]["source_id"], created["push_key"]) is False
 
 
-def test_push_key_vault_opt_in_rotation_and_local_delete(source_registry, tmp_path, monkeypatch):
-    _target, instance, handle = _managed_instance(tmp_path, monkeypatch)
-    vault = CredentialVault(tmp_path / "credentials.vault.json")
-    vault.setup("vault-password")
-    monkeypatch.setattr(main, "credential_vault", vault)
-    created = asyncio.run(main.extension_push_source_create(main.PushSourceProvisionRequest(instance_handle=handle)))
-    assert vault.list_metadata() == []
-    saved = asyncio.run(main.extension_vault_save_push_key(handle, main.PushKeyLocalSaveRequest(
-        source_id=created["source"]["source_id"], destination_url=created["destination_url"],
-        push_key=created["push_key"], save_push_key_locally=True,
-    )))
-    assert saved == {"saved_locally": True, "remote_unchanged": True}
-    assert vault.get(instance.id).genbox_push_key == created["push_key"]
-    rotated = asyncio.run(main.extension_push_source_rotate(
-        handle, created["source"]["source_id"], main.PushSourceRotateRequest(save_push_key_locally=True)))
-    assert vault.get(instance.id).genbox_push_key == rotated["push_key"]
-    assert vault.get(instance.id).genbox_push_key != created["push_key"]
-    assert asyncio.run(main.extension_vault_delete_push_key(handle)) == {"deleted": True, "remote_unchanged": True}
-    assert authenticate_push_source(rotated["source"]["source_id"], rotated["push_key"]) is True
-    with pytest.raises(KeyError):
-        vault.get(instance.id)
+def _push_key_confirmation(client, instance_handle, source_id, push_key):
+    response = client.post(
+        f"/api/extensions/vault/credentials/{instance_handle}/push-key/confirmation",
+        json={"source_id": source_id, "push_key": push_key},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"confirmation_token", "expires_in_seconds"}
+    assert body["expires_in_seconds"] > 0
+    return body["confirmation_token"]
 
 
-def test_rotation_reports_recoverable_vault_failure_and_allows_retry(source_registry, tmp_path, monkeypatch):
-    _target, instance, handle = _managed_instance(tmp_path, monkeypatch)
-    vault = CredentialVault(tmp_path / "credentials.vault.json")
-    vault.setup("vault-password")
-    monkeypatch.setattr(main, "credential_vault", vault)
-    created = asyncio.run(main.extension_push_source_create(
-        main.PushSourceProvisionRequest(instance_handle=handle)
-    ))
-    original_upsert = vault.upsert
-    calls = 0
-
-    def fail_once(instance_id, credential):
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            raise OSError("simulated local vault write failure")
-        return original_upsert(instance_id, credential)
-
-    monkeypatch.setattr(vault, "upsert", fail_once)
-    rotated = asyncio.run(main.extension_push_source_rotate(
-        handle,
-        created["source"]["source_id"],
-        main.PushSourceRotateRequest(save_push_key_locally=True),
-    ))
-
-    assert rotated["remote_rotated"] is True
-    assert rotated["push_key"].startswith("gpk-")
-    assert rotated["local_save"] == {
-        "requested": True,
-        "saved": False,
-        "pending": True,
-        "recovery_action": "save_push_key_locally",
-        "error": "vault_save_failed",
+def _save_push_key(client, instance_handle, created, confirmation_token="", **extra):
+    payload = {
+        "source_id": created["source"]["source_id"],
+        "destination_url": created["destination_url"],
+        "push_key": created["push_key"],
+        "confirmation_token": confirmation_token,
+        **extra,
     }
-    assert authenticate_push_source(created["source"]["source_id"], created["push_key"]) is False
-    assert authenticate_push_source(created["source"]["source_id"], rotated["push_key"]) is True
-    with pytest.raises(KeyError):
-        vault.get(instance.id)
-
-    retried = asyncio.run(main.extension_vault_save_push_key(handle, main.PushKeyLocalSaveRequest(
-        source_id=rotated["source"]["source_id"],
-        destination_url=rotated["destination_url"],
-        push_key=rotated["push_key"],
-        save_push_key_locally=True,
-    )))
-    assert retried == {"saved_locally": True, "remote_unchanged": True}
-    assert vault.get(instance.id).genbox_push_key == rotated["push_key"]
+    return client.put(
+        f"/api/extensions/vault/credentials/{instance_handle}/push-key", json=payload,
+    )
 
 
-def test_push_key_save_rejects_foreign_source_and_wrong_key(source_registry, tmp_path, monkeypatch):
-    target, instance, handle = _managed_instance(tmp_path, monkeypatch)
+def test_push_key_save_requires_server_confirmation_and_never_auto_saves(source_registry, tmp_path, monkeypatch):
+    _target, instance, handle = _managed_instance(tmp_path, monkeypatch)
+    vault = CredentialVault(tmp_path / "credentials.vault.json")
+    vault.setup("vault-password")
+    monkeypatch.setattr(main, "credential_vault", vault)
+    client = TestClient(main.app)
+
+    created = client.post("/api/extensions/push-sources", json={
+        "instance_handle": handle, "save_push_key_locally": True,
+    })
+    assert created.status_code == 200
+    created = created.json()
+    assert vault.list_metadata() == []
+
+    # A browser-supplied opt-in flag cannot replace the server confirmation.
+    bypass = _save_push_key(client, handle, created, save_push_key_locally=True)
+    assert bypass.status_code == 409
+    assert vault.list_metadata() == []
+
+    token = _push_key_confirmation(client, handle, created["source"]["source_id"], created["push_key"])
+    saved = _save_push_key(client, handle, created, token)
+    assert saved.status_code == 200
+    assert saved.json() == {"saved_locally": True, "remote_unchanged": True}
+    assert vault.get(instance.id).genbox_push_key == created["push_key"]
+
+    rotated = client.post(
+        f"/api/extensions/push-sources/{handle}/{created['source']['source_id']}/rotate",
+        json={"save_push_key_locally": True},
+    )
+    assert rotated.status_code == 200
+    rotated = rotated.json()
+    assert rotated["local_save"]["requested"] is False
+    assert vault.get(instance.id).genbox_push_key != rotated["push_key"]
+
+
+def test_push_key_confirmation_is_bound_short_lived_and_single_use(source_registry, tmp_path, monkeypatch):
+    target, _instance, handle = _managed_instance(tmp_path, monkeypatch)
     other = extension_store.upsert_instance({
         "id": "chatgpt2api-other", "target_id": target.id, "project": "chatgpt2api",
         "service_port": 33011, "install_dir": "/srv/chatgpt2api-other",
@@ -240,129 +228,80 @@ def test_push_key_save_rejects_foreign_source_and_wrong_key(source_registry, tmp
     vault = CredentialVault(tmp_path / "credentials.vault.json")
     vault.setup("vault-password")
     monkeypatch.setattr(main, "credential_vault", vault)
-    created = asyncio.run(main.extension_push_source_create(
-        main.PushSourceProvisionRequest(instance_handle=handle)
-    ))
-    foreign = asyncio.run(main.extension_push_source_create(
-        main.PushSourceProvisionRequest(instance_handle=other_handle)
-    ))
+    client = TestClient(main.app)
+    created = client.post("/api/extensions/push-sources", json={"instance_handle": handle}).json()
 
-    with pytest.raises(main.HTTPException) as wrong_key:
-        asyncio.run(main.extension_vault_save_push_key(handle, main.PushKeyLocalSaveRequest(
-            source_id=created["source"]["source_id"],
-            destination_url=created["destination_url"],
-            push_key="gpk-browser-forged-value",
-            save_push_key_locally=True,
-        )))
-    assert wrong_key.value.status_code == 409
+    missing = _save_push_key(client, handle, created, save_push_key_locally=True)
+    assert missing.status_code == 409
 
-    with pytest.raises(main.HTTPException) as foreign_source:
-        asyncio.run(main.extension_vault_save_push_key(handle, main.PushKeyLocalSaveRequest(
-            source_id=foreign["source"]["source_id"],
-            destination_url=created["destination_url"],
-            push_key=foreign["push_key"],
-            save_push_key_locally=True,
-        )))
-    assert foreign_source.value.status_code == 409
-    assert vault.list_metadata() == []
+    token = _push_key_confirmation(client, handle, created["source"]["source_id"], created["push_key"])
+    wrong_key = _save_push_key(client, handle, created, token, push_key="gpk-forged")
+    assert wrong_key.status_code == 409
+
+    token = _push_key_confirmation(client, handle, created["source"]["source_id"], created["push_key"])
+    wrong_source = _save_push_key(client, handle, created, token, source_id="gbxps-wrong-source")
+    assert wrong_source.status_code == 409
+
+    token = _push_key_confirmation(client, handle, created["source"]["source_id"], created["push_key"])
+    wrong_instance = _save_push_key(client, other_handle, created, token)
+    assert wrong_instance.status_code == 409
+
+    token = _push_key_confirmation(client, handle, created["source"]["source_id"], created["push_key"])
+    main._push_key_save_confirmations._records[token]["expires_at"] = 0
+    expired = _save_push_key(client, handle, created, token)
+    assert expired.status_code == 409
+
+    token = _push_key_confirmation(client, handle, created["source"]["source_id"], created["push_key"])
+    assert _save_push_key(client, handle, created, token).status_code == 200
+    replayed = _save_push_key(client, handle, created, token)
+    assert replayed.status_code == 409
+    assert vault.list_metadata()[0]["instance_id"] != other.id
 
 
-def test_locked_vault_leaves_remote_push_key_recoverable_for_retry(source_registry, tmp_path, monkeypatch):
+def test_push_key_confirmation_keeps_vault_failures_recoverable(source_registry, tmp_path, monkeypatch):
     _target, instance, handle = _managed_instance(tmp_path, monkeypatch)
     vault = CredentialVault(tmp_path / "credentials.vault.json")
     vault.setup("vault-password")
-    vault.lock()
     monkeypatch.setattr(main, "credential_vault", vault)
-    created = asyncio.run(main.extension_push_source_create(
-        main.PushSourceProvisionRequest(instance_handle=handle)
-    ))
+    client = TestClient(main.app)
+    created = client.post("/api/extensions/push-sources", json={"instance_handle": handle}).json()
 
-    with pytest.raises(main.HTTPException) as locked:
-        asyncio.run(main.extension_vault_save_push_key(handle, main.PushKeyLocalSaveRequest(
-            source_id=created["source"]["source_id"],
-            destination_url=created["destination_url"],
-            push_key=created["push_key"],
-            save_push_key_locally=True,
-        )))
-    assert locked.value.status_code == 423
-    assert authenticate_push_source(created["source"]["source_id"], created["push_key"]) is True
+    vault.lock()
+    token = _push_key_confirmation(client, handle, created["source"]["source_id"], created["push_key"])
+    locked = _save_push_key(client, handle, created, token)
+    assert locked.status_code == 423
     assert vault.list_metadata() == []
 
     vault.unlock("vault-password")
-    retried = asyncio.run(main.extension_vault_save_push_key(handle, main.PushKeyLocalSaveRequest(
-        source_id=created["source"]["source_id"],
-        destination_url=created["destination_url"],
-        push_key=created["push_key"],
-        save_push_key_locally=True,
-    )))
-    assert retried == {"saved_locally": True, "remote_unchanged": True}
+    original_upsert = vault.upsert
+    monkeypatch.setattr(vault, "upsert", lambda *_args: (_ for _ in ()).throw(OSError("write failed")))
+    token = _push_key_confirmation(client, handle, created["source"]["source_id"], created["push_key"])
+    failed = _save_push_key(client, handle, created, token)
+    assert failed.status_code == 503
+    assert vault.list_metadata() == []
+
+    monkeypatch.setattr(vault, "upsert", original_upsert)
+    token = _push_key_confirmation(client, handle, created["source"]["source_id"], created["push_key"])
+    assert _save_push_key(client, handle, created, token).status_code == 200
     assert vault.get(instance.id).genbox_push_key == created["push_key"]
 
 
-def test_rotation_with_locked_vault_returns_key_and_pending_save_state(source_registry, tmp_path, monkeypatch):
-    _target, instance, handle = _managed_instance(tmp_path, monkeypatch)
-    vault = CredentialVault(tmp_path / "credentials.vault.json")
-    vault.setup("vault-password")
-    vault.lock()
-    monkeypatch.setattr(main, "credential_vault", vault)
-    created = asyncio.run(main.extension_push_source_create(
-        main.PushSourceProvisionRequest(instance_handle=handle)
-    ))
-
-    rotated = asyncio.run(main.extension_push_source_rotate(
-        handle,
-        created["source"]["source_id"],
-        main.PushSourceRotateRequest(save_push_key_locally=True),
-    ))
-    assert rotated["remote_rotated"] is True
-    assert rotated["local_save"] == {
-        "requested": True,
-        "saved": False,
-        "pending": True,
-        "recovery_action": "save_push_key_locally",
-        "error": "vault_locked",
-    }
-    assert authenticate_push_source(created["source"]["source_id"], created["push_key"]) is False
-    assert authenticate_push_source(rotated["source"]["source_id"], rotated["push_key"]) is True
-
-    vault.unlock("vault-password")
-    asyncio.run(main.extension_vault_save_push_key(handle, main.PushKeyLocalSaveRequest(
-        source_id=rotated["source"]["source_id"],
-        destination_url=rotated["destination_url"],
-        push_key=rotated["push_key"],
-        save_push_key_locally=True,
-    )))
-    assert vault.get(instance.id).genbox_push_key == rotated["push_key"]
-
-
-def test_generic_credential_push_update_requires_confirmation_and_current_source_key(source_registry, tmp_path, monkeypatch):
-    _target, instance, handle = _managed_instance(tmp_path, monkeypatch)
+def test_generic_credential_route_cannot_bypass_push_key_confirmation(source_registry, tmp_path, monkeypatch):
+    _target, _instance, handle = _managed_instance(tmp_path, monkeypatch)
     vault = CredentialVault(tmp_path / "credentials.vault.json")
     vault.setup("vault-password")
     monkeypatch.setattr(main, "credential_vault", vault)
-    created = asyncio.run(main.extension_push_source_create(
-        main.PushSourceProvisionRequest(instance_handle=handle)
-    ))
-    credential = main.ManagedCredential(
-        admin_key="managed-admin-key",
-        genbox_push_key=created["push_key"],
-        genbox_push_source_id=created["source"]["source_id"],
-        genbox_push_url=created["destination_url"],
-    )
+    client = TestClient(main.app)
+    created = client.post("/api/extensions/push-sources", json={"instance_handle": handle}).json()
 
-    with pytest.raises(ValueError, match="explicit create or rotation confirmation"):
-        main.ManagedCredentialUpsertRequest(credential=credential)
-
-    with pytest.raises(main.HTTPException) as forged:
-        asyncio.run(main.extension_vault_upsert(handle, main.ManagedCredentialUpsertRequest(
-            credential=credential.model_copy(update={"genbox_push_key": "gpk-browser-forged-value"}),
-            push_key_save_confirmed=True,
-        )))
-    assert forged.value.status_code == 409
-
-    saved = asyncio.run(main.extension_vault_upsert(handle, main.ManagedCredentialUpsertRequest(
-        credential=credential,
-        push_key_save_confirmed=True,
-    )))
-    assert "genbox_push_key" in saved["credential"]["fields"]
-    assert vault.get(instance.id).genbox_push_key == created["push_key"]
+    response = client.put(f"/api/extensions/vault/credentials/{handle}", json={
+        "credential": {
+            "admin_key": "managed-admin-key",
+            "genbox_push_key": created["push_key"],
+            "genbox_push_source_id": created["source"]["source_id"],
+            "genbox_push_url": created["destination_url"],
+        },
+        "push_key_save_confirmed": True,
+    })
+    assert response.status_code == 409
+    assert vault.list_metadata() == []

@@ -86,7 +86,8 @@ from extensions.models import (
     ExtensionHostKeyPairingCompleteRequest, ExtensionHostKeyPairingStartRequest, ExtensionHostKeyProbeRequest, ExtensionKeyResetRequest,
     ExtensionHostKeyResetRequest,
     ExtensionTaskResumeRequest,
-    ExtensionPlanRequest, ExtensionTestRequest, PushKeyLocalSaveRequest, PushSourceProvisionRequest, PushSourceRotateRequest,
+    ExtensionPlanRequest, ExtensionTestRequest, PushKeyLocalSaveConfirmationRequest, PushKeyLocalSaveRequest,
+    PushSourceProvisionRequest, PushSourceRotateRequest,
     ImageIntegrationCheckRequest,
     ManagedCredential, ManagedCredentialUpsertRequest, VaultPasswordRequest,
     ManagedImageUpdatePlanRequest, ManagedImageUpdateApplyRequest, SSHCredential,
@@ -3615,7 +3616,9 @@ async def sync_push_image(
             "local_file": filename,
             "width": metadata["width"],
             "height": metadata["height"],
-            "safe_to_delete_source": True,
+            # No cleanup authority is enabled in this receiver, so a committed
+            # Push receipt never grants source-deletion permission by itself.
+            "safe_to_delete_source": False,
         }
 
 
@@ -4293,6 +4296,54 @@ def _push_source_error(exc: Exception):
     raise HTTPException(status_code=503, detail="Push 凭据注册表暂不可用") from exc
 
 
+_PUSH_KEY_SAVE_CONFIRMATION_TTL_SECONDS = 120
+
+
+class _PushKeySaveConfirmations:
+    """Short-lived, one-time, in-memory authorization for local Push-key save."""
+
+    def __init__(self):
+        self._lock = threading.RLock()
+        self._records: dict[str, dict[str, object]] = {}
+
+    @staticmethod
+    def _key_digest(push_key: str) -> str:
+        return hashlib.sha256(push_key.encode("utf-8")).hexdigest()
+
+    def issue(self, instance_handle: str, source_id: str, push_key: str) -> tuple[str, int]:
+        now = time.time()
+        token = secrets.token_urlsafe(32)
+        with self._lock:
+            self._records = {
+                item_token: record
+                for item_token, record in self._records.items()
+                if float(record["expires_at"]) > now
+            }
+            self._records[token] = {
+                "expires_at": now + _PUSH_KEY_SAVE_CONFIRMATION_TTL_SECONDS,
+                "instance_handle": instance_handle,
+                "source_id": source_id,
+                "key_digest": self._key_digest(push_key),
+            }
+        return token, _PUSH_KEY_SAVE_CONFIRMATION_TTL_SECONDS
+
+    def consume(self, instance_handle: str, source_id: str, push_key: str, token: str) -> bool:
+        if not token:
+            return False
+        with self._lock:
+            record = self._records.pop(token, None)
+        if not record or float(record["expires_at"]) <= time.time():
+            return False
+        return all((
+            hmac.compare_digest(str(record["instance_handle"]), instance_handle),
+            hmac.compare_digest(str(record["source_id"]), source_id),
+            hmac.compare_digest(str(record["key_digest"]), self._key_digest(push_key)),
+        ))
+
+
+_push_key_save_confirmations = _PushKeySaveConfirmations()
+
+
 @app.get("/api/extensions/push-sources/{instance_handle}")
 async def extension_push_source_status(instance_handle: str):
     instance, destination_url = _managed_push_source_access(instance_handle)
@@ -4323,12 +4374,6 @@ async def extension_push_source_create(body: PushSourceProvisionRequest):
         source, push_key = create_push_source(instance.target_id, instance.id)
     except Exception as exc:
         _push_source_error(exc)
-    if body.save_push_key_locally:
-        try:
-            credential_vault._require_unlocked()
-            _save_managed_push_configuration(instance, destination_url, source["source_id"], push_key)
-        except Exception as exc:
-            _push_source_error(exc)
     return {
         "instance_handle": body.instance_handle,
         "destination_url": destination_url,
@@ -4350,26 +4395,12 @@ async def extension_push_source_rotate(instance_handle: str, source_id: str, bod
         raise HTTPException(status_code=404, detail="Push 来源不存在")
     source, push_key = rotated
     local_save = {
-        "requested": body.save_push_key_locally,
+        "requested": False,
         "saved": False,
         "pending": False,
         "recovery_action": "",
         "error": "",
     }
-    if body.save_push_key_locally:
-        try:
-            credential_vault._require_unlocked()
-            _save_managed_push_configuration(instance, destination_url, source["source_id"], push_key)
-        except Exception as exc:
-            # The remote rotation is already durable. Preserve the newly issued
-            # key in this response so the user can unlock the vault and retry.
-            local_save.update({
-                "pending": True,
-                "recovery_action": "save_push_key_locally",
-                "error": _local_push_save_error(exc),
-            })
-        else:
-            local_save["saved"] = True
     return {
         "instance_handle": instance_handle,
         "destination_url": destination_url,
@@ -4426,11 +4457,43 @@ def _local_push_save_error(exc: Exception) -> str:
     return "vault_save_failed"
 
 
-@app.put("/api/extensions/vault/credentials/{instance_id}/push-key")
-async def extension_vault_save_push_key(instance_id: str, body: PushKeyLocalSaveRequest):
-    """Save the displayed key only after an explicit, confirmed local-save intent."""
+@app.post("/api/extensions/vault/credentials/{instance_id}/push-key/confirmation")
+async def extension_confirm_vault_save_push_key(
+    instance_id: str, body: PushKeyLocalSaveConfirmationRequest,
+):
+    """Issue a short-lived, one-time confirmation bound to the displayed key."""
     instance = _managed_vault_instance(instance_id)
     try:
+        _instance, _destination_url = _managed_push_source_access(instance_id)
+        sources = list_push_sources(instance.target_id, instance.id)
+        if not any(item.get("source_id") == body.source_id for item in sources):
+            raise ValueError("Push source is no longer active; create or rotate again")
+        if not source_key_belongs_to_instance(
+            body.source_id, instance.target_id, instance.id, body.push_key,
+        ):
+            raise ValueError("Push key does not match the current managed source; create or rotate again")
+        token, expires_in_seconds = _push_key_save_confirmations.issue(
+            instance_id, body.source_id, body.push_key,
+        )
+        return {
+            "confirmation_token": token,
+            "expires_in_seconds": expires_in_seconds,
+        }
+    except Exception as exc:
+        if isinstance(exc, ValueError) and str(exc).startswith("Push "):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        _vault_error(exc)
+
+
+@app.put("/api/extensions/vault/credentials/{instance_id}/push-key")
+async def extension_vault_save_push_key(instance_id: str, body: PushKeyLocalSaveRequest):
+    """Save a Push key only after consuming its server-issued confirmation."""
+    instance = _managed_vault_instance(instance_id)
+    try:
+        if not _push_key_save_confirmations.consume(
+            instance_id, body.source_id, body.push_key, body.confirmation_token,
+        ):
+            raise ValueError("Push-key local-save confirmation is missing, expired, replayed, or invalid")
         _instance, destination_url = _managed_push_source_access(instance_id)
         if destination_url != body.destination_url:
             raise ValueError("Push destination changed; create or rotate again")
@@ -4443,7 +4506,11 @@ async def extension_vault_save_push_key(instance_id: str, body: PushKeyLocalSave
         _save_managed_push_configuration(instance, destination_url, body.source_id, body.push_key)
         return {"saved_locally": True, "remote_unchanged": True}
     except Exception as exc:
-        if isinstance(exc, ValueError) and str(exc).startswith("Push "):
+        if isinstance(exc, PermissionError):
+            raise HTTPException(status_code=423, detail=str(exc)) from exc
+        if isinstance(exc, OSError):
+            raise HTTPException(status_code=503, detail="vault_save_failed") from exc
+        if isinstance(exc, ValueError) and str(exc).startswith("Push"):
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         _vault_error(exc)
 
@@ -4763,15 +4830,7 @@ async def extension_vault_upsert(instance_id: str, body: ManagedCredentialUpsert
         push_fields = ("genbox_push_key", "genbox_push_source_id", "genbox_push_url")
         submitted_push = any(values[name] for name in push_fields)
         if submitted_push:
-            if not all(values[name] for name in push_fields):
-                raise ValueError("Complete GenBox Push configuration is required")
-            _instance, destination_url = _managed_push_source_access(instance_id)
-            if destination_url != values["genbox_push_url"]:
-                raise ValueError("Push destination changed; create or rotate again")
-            if not source_key_belongs_to_instance(
-                values["genbox_push_source_id"], instance.target_id, instance.id, values["genbox_push_key"],
-            ):
-                raise ValueError("Push key does not match the current managed source; create or rotate again")
+            raise ValueError("GenBox Push configuration must use the dedicated confirmation flow")
         elif existing:
             old = existing.model_dump()
             values.update({name: old[name] for name in push_fields})
@@ -4782,7 +4841,7 @@ async def extension_vault_upsert(instance_id: str, body: ManagedCredentialUpsert
             "fields": list(saved.get("fields", [])),
         }}
     except Exception as exc:
-        if isinstance(exc, ValueError) and str(exc).startswith(("Push ", "Complete GenBox")):
+        if isinstance(exc, ValueError) and str(exc).startswith(("Push", "GenBox Push")):
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         _vault_error(exc)
 

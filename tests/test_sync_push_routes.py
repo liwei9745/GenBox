@@ -195,7 +195,7 @@ def test_push_route_imports_then_is_idempotent_and_deduplicates_by_content(push_
         "source_id": SOURCE_ID,
         "remote_path": "2026/07/19/image.png",
         "sha256": digest,
-        "safe_to_delete_source": True,
+        "safe_to_delete_source": False,
     }
     assert first_receipt["local_file"]
     saved_file = push_environment / first_receipt["local_file"]
@@ -210,6 +210,7 @@ def test_push_route_imports_then_is_idempotent_and_deduplicates_by_content(push_
     assert repeated_receipt["contract_version"] == PUSH_CONTRACT_VERSION
     assert repeated_receipt["status"] == "already-imported"
     assert repeated_receipt["local_file"] == first_receipt["local_file"]
+    assert repeated_receipt["safe_to_delete_source"] is False
 
     duplicate = _push(client, payload, remote_path="2026/07/19/other.png")
     assert duplicate.status_code == 200
@@ -218,6 +219,7 @@ def test_push_route_imports_then_is_idempotent_and_deduplicates_by_content(push_
     assert duplicate_receipt["contract_version"] == PUSH_CONTRACT_VERSION
     assert duplicate_receipt["status"] == "duplicate-local"
     assert duplicate_receipt["local_file"] == first_receipt["local_file"]
+    assert duplicate_receipt["safe_to_delete_source"] is False
     assert len(list(push_environment.glob("*.png"))) == 1
 
 

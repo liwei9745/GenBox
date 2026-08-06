@@ -196,13 +196,17 @@ class PushKeyLocalSaveRequest(BaseModel):
     source_id: str = Field(min_length=1, max_length=256)
     destination_url: str = Field(min_length=1, max_length=500)
     push_key: str = Field(min_length=1, max_length=8192)
+    confirmation_token: str = Field(default="", min_length=0, max_length=512)
     save_push_key_locally: bool = False
 
-    @model_validator(mode="after")
-    def require_explicit_save_intent(self):
-        if not self.save_push_key_locally:
-            raise ValueError("Explicit local Push-key save confirmation is required")
-        return self
+
+class PushKeyLocalSaveConfirmationRequest(BaseModel):
+    """Request a one-time server confirmation for one displayed Push key."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: str = Field(min_length=1, max_length=256)
+    push_key: str = Field(min_length=1, max_length=8192)
 
 
 class ExtensionDiscoveryRequest(BaseModel):
@@ -281,12 +285,6 @@ class ManagedCredential(BaseModel):
 class ManagedCredentialUpsertRequest(BaseModel):
     credential: ManagedCredential
     push_key_save_confirmed: bool = False
-
-    @model_validator(mode="after")
-    def reject_browser_supplied_push_configuration(self):
-        if any((self.credential.genbox_push_key, self.credential.genbox_push_source_id, self.credential.genbox_push_url)) and not self.push_key_save_confirmed:
-            raise ValueError("GenBox Push configuration requires explicit create or rotation confirmation")
-        return self
 
 
 class ExtensionTestRequest(BaseModel):
