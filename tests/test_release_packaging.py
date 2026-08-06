@@ -19,7 +19,7 @@ def test_release_version_is_consistent():
     assert main.app.version == __version__
     assert updater.CURRENT_VERSION == __version__
     assert __version__ in (ROOT / "genbox_version.py").read_text(encoding="utf-8")
-    assert __version__ == "2.6.0-rc.1"
+    assert __version__ == "2.6.0-rc.2"
 
 
 def test_compose_release_uses_ghcr_and_safe_internal_port():

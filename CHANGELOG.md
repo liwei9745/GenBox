@@ -4,6 +4,13 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.0-rc.2] - 2026-08-06
+
+- Revised ADR-022 and aligned Push Key handling with the encrypted local vault.
+- Push Keys are shown once by default; only explicit user confirmation enables
+  local encrypted-vault saving. Rotation requires fresh consent and local
+  deletion leaves the remote source unchanged.
+
 ## [Unreleased]
 
 ### In Progress
