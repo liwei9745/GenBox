@@ -1,5 +1,6 @@
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -284,6 +285,78 @@ def test_push_key_confirmation_keeps_vault_failures_recoverable(source_registry,
     token = _push_key_confirmation(client, handle, created["source"]["source_id"], created["push_key"])
     assert _save_push_key(client, handle, created, token).status_code == 200
     assert vault.get(instance.id).genbox_push_key == created["push_key"]
+
+
+def test_push_key_local_copy_full_synthetic_lifecycle_preserves_remote_source(
+    source_registry, tmp_path, monkeypatch,
+):
+    """Saving or deleting the optional local copy never changes the remote source."""
+    _target, instance, handle = _managed_instance(tmp_path, monkeypatch)
+    vault = CredentialVault(tmp_path / "credentials.vault.json")
+    vault.setup("synthetic-vault-password")
+    monkeypatch.setattr(main, "credential_vault", vault)
+    client = TestClient(main.app)
+
+    created = client.post("/api/extensions/push-sources", json={"instance_handle": handle})
+    assert created.status_code == 200
+    created = created.json()
+
+    rotated = client.post(
+        f"/api/extensions/push-sources/{handle}/{created['source']['source_id']}/rotate"
+    )
+    assert rotated.status_code == 200
+    rotated = rotated.json()
+    assert authenticate_push_source(created["source"]["source_id"], created["push_key"]) is False
+    assert authenticate_push_source(created["source"]["source_id"], rotated["push_key"]) is True
+
+    token = _push_key_confirmation(
+        client, handle, rotated["source"]["source_id"], rotated["push_key"],
+    )
+    saved = _save_push_key(client, handle, rotated, token)
+    assert saved.status_code == 200
+    assert saved.json() == {"saved_locally": True, "remote_unchanged": True}
+
+    vault.lock()
+    with pytest.raises(PermissionError):
+        vault.get(instance.id)
+
+    vault.unlock("synthetic-vault-password")
+    assert vault.get(instance.id).genbox_push_key == rotated["push_key"]
+    assert vault.delete(instance.id) is True
+    assert vault.list_metadata() == []
+    assert authenticate_push_source(created["source"]["source_id"], rotated["push_key"]) is True
+
+
+def test_push_key_save_ui_requires_a_current_key_confirmation_and_unlocked_vault():
+    root = Path(__file__).parents[1]
+    js = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+
+    state_block = js.split("function setPushSourceAccess", 1)[1].split(
+        "async function resolvePushSourceHandle", 1,
+    )[0]
+    save_block = js.split("window.extensionSavePushConfiguration", 1)[1].split(
+        "window.extensionOpenExistingPushSource", 1,
+    )[0]
+
+    # Without a just-created, rotated, or unlocked locally stored key, saving is unavailable.
+    assert (
+        "save.classList.toggle('hidden',!key.value)" in state_block
+        or "save.classList.toggle('hidden',!pushKey)" in state_block
+        or "save.disabled" in state_block
+    )
+    assert "extensions.push_key_not_available" in save_block
+    assert "pushKeySaveEligible" in save_block
+    assert "||!key.value)" in save_block
+
+    # The UI obtains a server-side confirmation only after explicit opt-in and vault unlock.
+    assert "extensions.push_save_opt_in_required" in save_block
+    assert "extensions.push_save_confirm" in save_block
+    assert "confirm(i18nText('extensions.push_save_confirm'))" in save_block
+    assert "await extLoadVaultState()" in save_block
+    assert "!extVaultStatus.configured||!extVaultStatus.unlocked" in save_block
+    assert "/push-key/confirmation" in save_block
+    assert "confirmation_token:confirmation.confirmation_token" in save_block
+    assert "save_push_key_locally:true" in save_block
 
 
 def test_generic_credential_route_cannot_bypass_push_key_confirmation(source_registry, tmp_path, monkeypatch):
