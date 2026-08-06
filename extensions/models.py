@@ -2,7 +2,7 @@
 
 import re
 
-from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 
 HOST_KEY_ALGORITHMS = frozenset({
@@ -183,6 +183,26 @@ class PushSourceProvisionRequest(BaseModel):
     """Request a Push source for one opaque managed-instance handle."""
 
     instance_handle: str = Field(pattern=r"^i-[a-f0-9]{32}$")
+    save_push_key_locally: bool = False
+
+
+class PushSourceRotateRequest(BaseModel):
+    save_push_key_locally: bool = False
+
+
+class PushKeyLocalSaveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: str = Field(min_length=1, max_length=256)
+    destination_url: str = Field(min_length=1, max_length=500)
+    push_key: str = Field(min_length=1, max_length=8192)
+    save_push_key_locally: bool = False
+
+    @model_validator(mode="after")
+    def require_explicit_save_intent(self):
+        if not self.save_push_key_locally:
+            raise ValueError("Explicit local Push-key save confirmation is required")
+        return self
 
 
 class ExtensionDiscoveryRequest(BaseModel):
@@ -260,6 +280,13 @@ class ManagedCredential(BaseModel):
 
 class ManagedCredentialUpsertRequest(BaseModel):
     credential: ManagedCredential
+    push_key_save_confirmed: bool = False
+
+    @model_validator(mode="after")
+    def reject_browser_supplied_push_configuration(self):
+        if any((self.credential.genbox_push_key, self.credential.genbox_push_source_id, self.credential.genbox_push_url)) and not self.push_key_save_confirmed:
+            raise ValueError("GenBox Push configuration requires explicit create or rotation confirmation")
+        return self
 
 
 class ExtensionTestRequest(BaseModel):
