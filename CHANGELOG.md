@@ -4,6 +4,15 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.0-rc.3] - 2026-08-06
+
+- Final testing candidate replacing the unsuitable rc.1 and original rc.2
+  candidates; no stable release is implied.
+- Frozen the Push Key vault behavior: saving is opt-in after explicit user
+  confirmation, the default is no local save, locked vault contents cannot be
+  read, rotation requires fresh confirmation, and local deletion leaves the
+  remote Push source unchanged.
+
 ## [2.6.0-rc.2] - 2026-08-06
 
 - Revised ADR-022 and aligned Push Key handling with the encrypted local vault.
