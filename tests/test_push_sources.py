@@ -8,6 +8,7 @@ import extensions.store as extension_store
 import main
 import sync.push_sources as push_sources
 from extensions.orchestrator import public_instance_handle
+from extensions.credential_vault import CredentialVault
 from sync.ingest import authenticate_push_source
 
 
@@ -152,3 +153,26 @@ def test_target_delete_revokes_its_managed_push_source(source_registry, tmp_path
 
     assert asyncio.run(main.extension_delete_target(target.id)) == {"deleted": True}
     assert authenticate_push_source(created["source"]["source_id"], created["push_key"]) is False
+
+
+def test_push_key_vault_opt_in_rotation_and_local_delete(source_registry, tmp_path, monkeypatch):
+    _target, instance, handle = _managed_instance(tmp_path, monkeypatch)
+    vault = CredentialVault(tmp_path / "credentials.vault.json")
+    vault.setup("vault-password")
+    monkeypatch.setattr(main, "credential_vault", vault)
+    created = asyncio.run(main.extension_push_source_create(main.PushSourceProvisionRequest(instance_handle=handle)))
+    assert vault.list_metadata() == []
+    saved = asyncio.run(main.extension_vault_save_push_key(handle, main.PushKeyLocalSaveRequest(
+        source_id=created["source"]["source_id"], destination_url=created["destination_url"],
+        push_key=created["push_key"], save_push_key_locally=True,
+    )))
+    assert saved == {"saved_locally": True, "remote_unchanged": True}
+    assert vault.get(instance.id).genbox_push_key == created["push_key"]
+    rotated = asyncio.run(main.extension_push_source_rotate(
+        handle, created["source"]["source_id"], main.PushSourceRotateRequest(save_push_key_locally=True)))
+    assert vault.get(instance.id).genbox_push_key == rotated["push_key"]
+    assert vault.get(instance.id).genbox_push_key != created["push_key"]
+    assert asyncio.run(main.extension_vault_delete_push_key(handle)) == {"deleted": True, "remote_unchanged": True}
+    assert authenticate_push_source(rotated["source"]["source_id"], rotated["push_key"]) is True
+    with pytest.raises(KeyError):
+        vault.get(instance.id)

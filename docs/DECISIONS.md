@@ -604,19 +604,18 @@ path; the future connector is not made functional by this UX change.
   it never contacts the host, restores credentials, or accepts a replacement
   identity automatically.
 
-## ADR-022: Managed Push Sources Use Show-Once Verifiers
+## ADR-022: Managed Push Sources Use Explicit Show-Once Or Vault-Save Flow
 
-**Status:** Accepted
-**Date:** 2026-07-30
+**Status:** Accepted (revised 2026-08-06)
+**Date:** 2026-07-30; revised 2026-08-06
 
 ### Context
 
 The Push receiver previously recognized only a static `GENBOX_PUSH_KEYS`
 environment mapping. That leaves a beginner who completed guided deployment and
 private-network setup with no safe way to create a per-instance sender key.
-Putting the Push key in the ordinary extension configuration, delivery task,
-or local credential vault would make it retrievable outside its intended
-one-time delivery flow.
+Putting the Push key in ordinary extension configuration, delivery tasks, or
+browser-managed storage would make it retrievable outside its intended flow.
 
 ### Decision
 
@@ -635,7 +634,13 @@ The browser can request provisioning only with an opaque instance handle. The
 backend resolves the target, instance, and verified private destination itself;
 the browser cannot bind a key to an arbitrary URL, source ID, or raw instance
 ID. Push keys are never stored in browser storage, URLs, normal logs, task
-records, or the credential vault.
+records, public instance/source projections, or screenshots. They are not
+saved locally by default. A user may explicitly check “permanently save to the
+local vault” and confirm a warning for a newly issued key. Only the existing
+encrypted local vault may hold it, and only while unlocked. Rotation requires
+fresh confirmation before replacing a local copy. Locking the vault prevents
+Push-key reads. Deleting the local copy is vault-only and never revokes or
+changes the remote Push source. Cleanup deletion logic is unchanged.
 
 ### Consequences
 
@@ -643,7 +648,8 @@ The guided final step can safely hand a user destination configuration for the
 isolated sender. It does not configure chatgpt2api remotely or complete the
 sender implementation. The legacy environment mapping remains available for
 existing sources, while a managed source can be independently rotated or
-revoked without changing administrator authentication.
+revoked without changing administrator authentication. Local vault persistence
+is a user-controlled opt-in and is never implied by provisioning or rotation.
 
 ## ADR-023: Opaque Instance Handles Survive Local Restarts
 

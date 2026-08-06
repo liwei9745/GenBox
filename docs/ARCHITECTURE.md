@@ -200,6 +200,10 @@ is a two-way synchronization system with conflict resolution.
 
 - GenBox administrator authentication is separate from Push source identity.
 - Each sender uses a stable source ID and independently revocable Push key.
+- Push keys are show-once by default. A user may explicitly confirm permanent
+  local saving to the existing encrypted vault; vault lock blocks reads,
+  rotation requires fresh save consent, and vault-only deletion never changes
+  the remote source.
 - SSH credentials and network enrollment tokens are session secrets, not
   ordinary target metadata.
 - Message-channel bot tokens, app secrets, signing secrets, and refresh tokens

@@ -162,3 +162,35 @@ def test_push_copy_keeps_the_key_visible_and_vault_save_is_explicit():
     )[0]
     assert "key.value=''" not in copy_block
     assert "extensionSavePushConfiguration" in js
+
+
+def test_push_key_is_not_saved_until_the_user_explicitly_upserts_it(tmp_path):
+    vault = CredentialVault(tmp_path / "credentials.vault.json")
+    vault.setup("vault-password")
+    assert vault.list_metadata() == []
+    with pytest.raises(KeyError):
+        vault.get("managed-one")
+    vault.upsert("managed-one", ManagedCredential(
+        genbox_push_key="gpk-explicit-opt-in-only",
+        genbox_push_source_id="gbxps-explicit",
+        genbox_push_url="https://genbox.example/api/sync/push",
+    ))
+    assert vault.get("managed-one").genbox_push_key == "gpk-explicit-opt-in-only"
+
+
+def test_locked_vault_blocks_push_key_read_and_local_copy_can_be_deleted(tmp_path):
+    vault = CredentialVault(tmp_path / "credentials.vault.json")
+    vault.setup("vault-password")
+    vault.upsert("managed-one", ManagedCredential(
+        genbox_push_key="gpk-local-copy-to-remove",
+        genbox_push_source_id="gbxps-local-copy",
+        genbox_push_url="https://genbox.example/api/sync/push",
+    ))
+    vault.lock()
+    with pytest.raises(PermissionError):
+        vault.get("managed-one")
+    with pytest.raises(PermissionError):
+        vault.delete("managed-one")
+    vault.unlock("vault-password")
+    assert vault.delete("managed-one") is True
+    assert vault.list_metadata() == []
