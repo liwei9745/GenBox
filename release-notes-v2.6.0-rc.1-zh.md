@@ -8,6 +8,7 @@
 - 单张图片 Push 到 GenBox 媒体库。
 - 支持重试和幂等导入的批量 Push。
 - 保存进度并处理迟到图片的计划增量 Push。
+- 已部署 chatgpt2api 可重新打开 GenBox Push 配置、复制配置，并将 Push Key、Source ID 和 URL 显式保存到加密的本机凭证库。
 - 打包客户端对 `-rc.N` 预发布版本的更新比较支持。
 
 ## 重要限制

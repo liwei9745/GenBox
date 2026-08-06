@@ -237,6 +237,9 @@ class ManagedCredential(BaseModel):
     username: str = Field(default="", max_length=512)
     password: str = Field(default="", max_length=8192)
     api_key: str = Field(default="", max_length=8192)
+    genbox_push_key: str = Field(default="", max_length=8192)
+    genbox_push_source_id: str = Field(default="", max_length=256)
+    genbox_push_url: str = Field(default="", max_length=500)
     note: str = Field(default="", max_length=8192)
 
     @model_validator(mode="after")
@@ -249,6 +252,7 @@ class ManagedCredential(BaseModel):
             self.username,
             self.password,
             self.api_key,
+            self.genbox_push_key,
         )):
             raise ValueError("至少填写一项托管实例凭证")
         return self

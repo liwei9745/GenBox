@@ -2177,8 +2177,8 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "Do not deploy again; reload and check task status manually." in translations
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
-    assert '<script src="/static/js/i18n.js?v=19"></script>' in html
-    assert '<script src="/static/js/extensions.js?v=32"></script>' in html
+    assert '<script src="/static/js/i18n.js?v=20"></script>' in html
+    assert '<script src="/static/js/extensions.js?v=34"></script>' in html
 
 
 def test_target_store_never_persists_credentials(tmp_path, monkeypatch):
@@ -4423,7 +4423,11 @@ def test_push_source_setup_is_instance_bound_and_does_not_persist_or_put_keys_in
     assert "/api/extensions/push-sources/" in block
     assert "JSON.stringify({instance_handle:handle})" in block
     assert "encodeURIComponent(handle)" in block
-    assert "key.value=''" in block
+    assert "key.value=''" not in block
+    assert "extensionSavePushConfiguration" in block
+    assert "fillSavedPushConfiguration" in block
+    assert "extensionOpenExistingPushSource" in block
+    assert "/api/extensions/vault/credentials/" in block
     assert "localStorage" not in block
     assert "sessionStorage" not in block
     assert "window.open" not in block
@@ -4468,7 +4472,7 @@ def test_deployed_services_section_is_wired():
 
 def test_deployed_services_cards_use_non_secret_fields_only():
     js = (Path(__file__).parents[1] / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
-    card_block = js.split("extRenderServiceGroups=function", 1)[1].split("renderDiscovery=function", 1)[0]
+    card_block = js.split("extRenderServiceGroups=function", 2)[2].split("// The service-card renderer", 1)[0]
     assert "item.handle" in card_block
     assert "item.project" in card_block
     assert "item.managed" in card_block
@@ -4478,6 +4482,9 @@ def test_deployed_services_cards_use_non_secret_fields_only():
     assert "item.api_url" in card_block
     assert "common.open_console" in card_block
     assert "extensionCopyServiceUrl" in card_block
+    assert "extensionOpenExistingPushSource" in card_block
+    assert "manage_push_configuration" in card_block
+    assert "item.managed===true&&item.project==='chatgpt2api'" in card_block
     assert "extAttachServiceMetadata" in js
     assert "extServicesLoadInFlight" in js
     assert "item.vps_host" in js
@@ -4489,6 +4496,7 @@ def test_deployed_services_cards_use_non_secret_fields_only():
     assert "data-instance-handle" in js.split("function extWireManagedServiceActions", 1)[1]
     assert "removeAttribute('onclick')" in js
     assert "stopImmediatePropagation" in js
+    assert "extensionOpenExistingPushSource(handle)" in js
     css = (Path(__file__).parents[1] / "static" / "css" / "extensions.css").read_text(encoding="utf-8")
     assert ".ext-service-card{" in css
     assert ".ext-bento-grid{" in css

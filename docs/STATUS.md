@@ -1,9 +1,27 @@
 # Current Project Status
 
-**Last updated:** 2026-08-04
+**Last updated:** 2026-08-06
 **Current branch:** `codex/p4-deploy-plan-ux-eai`
 **Current phase:** Phase 6 Verified Source Cleanup - **In Progress / Destructive Execution Blocked**
 **Previous phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
+
+## Client candidate verification (2026-08-06)
+
+- **LOCAL / VERIFIED:** `v2.6.0-rc.1` is a client-only experimental candidate.
+  It retains the completed Push UI: a deployed managed chatgpt2api card can
+  open Push configuration; users can copy its destination URL, source ID, and
+  Push key; and they can explicitly save and later reopen those values in the
+  encrypted local credential vault. Push keys are not sent to browser storage
+  or URLs.
+- **LOCAL / VERIFIED:** `python -m pytest -q tests/test_credential_vault.py
+  tests/test_push_sources.py tests/test_extensions.py tests/test_release_packaging.py`
+  -> `234 passed`; `python -m pytest -q` -> `589 passed`.
+- **LOCAL / VERIFIED:** `python build.py` produced `dist/GenBox.exe`
+  (`38,072,785` bytes; SHA-256
+  `ED15561345F3BA3900EB882AD8E2EC1EA112957F9EE7D8EE7C5E95CBEC6DB456`).
+  `python scripts/smoke_client.py --executable dist/GenBox.exe --timeout 60`
+  passed on a random loopback port.
+- **BOUNDARY:** this candidate is limited to local validation and branch delivery.
 
 ## Image-update feedback investigation (2026-08-02)
 

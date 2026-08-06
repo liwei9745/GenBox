@@ -8,6 +8,9 @@
 - Single-image Push into the GenBox media library.
 - Batch Push with retry and idempotent import behavior.
 - Scheduled incremental Push with persisted progress and late-image handling.
+- Deployed chatgpt2api instances can reopen their GenBox Push configuration,
+  copy it, and explicitly save the Push key, source ID, and URL in the
+  encrypted local credential vault.
 - Packaged-client updater support for `-rc.N` version ordering.
 
 ## Important Limits

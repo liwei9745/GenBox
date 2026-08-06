@@ -118,6 +118,9 @@ All notable GenBox changes are recorded here. The format follows
 - Prepared the client experimental candidate for the completed GenBox and
   chatgpt2api integration: single-image Push, batch Push, and scheduled
   incremental Push remain available with source retention by default.
+- Added management of Push configuration for deployed chatgpt2api instances:
+  users can copy the destination URL, source ID, and Push key, then explicitly
+  save or reopen that configuration from the encrypted local credential vault.
 - Added pre-release version ordering support for the packaged-client updater.
 
 ### Release Boundary

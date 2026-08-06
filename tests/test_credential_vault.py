@@ -70,6 +70,33 @@ def test_vault_accepts_ssh_only_managed_credential():
     assert credential.ssh_password == "isolated-vps-password"
 
 
+def test_vault_encrypts_genbox_push_configuration(tmp_path):
+    vault = CredentialVault(tmp_path / "credentials.vault.json")
+    push_key = "gpk-local-test-key-must-not-appear"
+
+    vault.setup("vault-password")
+    metadata = vault.upsert(
+        "managed-one",
+        ManagedCredential(
+            genbox_push_key=push_key,
+            genbox_push_source_id="gbxps-local-test",
+            genbox_push_url="http://127.0.0.1:8900/api/sync/push",
+        ),
+    )
+
+    raw = vault.path.read_text(encoding="utf-8")
+    assert push_key not in raw
+    assert "gbxps-local-test" not in raw
+    assert metadata["fields"] == [
+        "genbox_push_key",
+        "genbox_push_source_id",
+        "genbox_push_url",
+    ]
+    saved = vault.get("managed-one")
+    assert saved.genbox_push_key == push_key
+    assert saved.genbox_push_source_id == "gbxps-local-test"
+
+
 def test_vault_unlock_sets_running_status(tmp_path):
     vault = CredentialVault(tmp_path / "credentials.vault.json")
     vault.setup("unlock-test-password")
@@ -119,4 +146,19 @@ def test_vault_routes_and_frontend_are_wired():
     assert "extensionSaveResetCredential" in js
     assert "extensionOpenCredential" in js
     assert "extensionDeleteCredential" in js
+    assert "extensionSavePushConfiguration" in js
+    assert "extensionCopySavedPushConfiguration" in js
+    assert 'id="extCredentialGenboxPushKey"' in html
+    assert "genbox_push_key" in js
     assert "localStorage" not in js
+
+
+def test_push_copy_keeps_the_key_visible_and_vault_save_is_explicit():
+    root = Path(__file__).parents[1]
+    js = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+
+    copy_block = js.split("window.extensionCopyPushConfiguration", 1)[1].split(
+        "window.extensionRotatePushSource", 1
+    )[0]
+    assert "key.value=''" not in copy_block
+    assert "extensionSavePushConfiguration" in js
