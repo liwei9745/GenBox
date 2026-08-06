@@ -444,6 +444,7 @@
     "extensions.push_source_ready":{"zh-CN":"Push 凭据已启用。密钥不会再次显示；需要更换时请轮换。","en":"Push credentials are enabled. The key will not be shown again; rotate it when replacement is needed."},
     "extensions.push_source_created":{"zh-CN":"Push 凭据已创建。请立即复制配置到 chatgpt2api。","en":"Push credentials were created. Copy the configuration to chatgpt2api now."},
     "extensions.push_source_rotated":{"zh-CN":"Push 密钥已轮换，旧密钥已失效。请立即复制新配置。","en":"The Push key was rotated and the old key is invalid. Copy the new configuration now."},
+    "extensions.push_rotated_save_pending":{"zh-CN":"Push 密钥已轮换，旧密钥已失效；本机加密保存尚未完成。请解锁凭证库后点击“保存到本机凭证库”重试。","en":"The Push key was rotated and the old key is invalid, but local vault saving is pending. Unlock the vault, then choose Save to local vault to retry."},
     "extensions.push_source_revoked":{"zh-CN":"Push 来源已撤销，chatgpt2api 将无法继续推送。","en":"The Push source was revoked and chatgpt2api can no longer push."},
     "extensions.push_source_handle_missing":{"zh-CN":"当前没有可配置的受管 chatgpt2api 实例。","en":"There is no managed chatgpt2api instance available to configure."},
     "extensions.push_copy_required":{"zh-CN":"请先创建或轮换 Push 密钥。","en":"Create or rotate the Push key first."},

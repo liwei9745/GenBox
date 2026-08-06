@@ -291,3 +291,36 @@ def authenticate_source(source_id: str, key: str) -> bool | None:
         return False
     digest = _key_digest(key or "", bytes.fromhex(record["salt"]))
     return hmac.compare_digest(digest, record["key_hash"])
+
+
+def source_key_belongs_to_instance(
+    source_id: str, target_id: str, instance_id: str, key: str,
+) -> bool:
+    """Verify a displayed one-time key still belongs to this managed instance."""
+    if (
+        SOURCE_ID_PATTERN.fullmatch(source_id or "") is None
+        or not target_id
+        or not instance_id
+        or not key
+    ):
+        return False
+    try:
+        with _LOCK, _config_lock():
+            config = _load_config()
+            record = next(
+                (
+                    item
+                    for item in config["sources"]
+                    if item["source_id"] == source_id
+                    and item["target_id"] == target_id
+                    and item["instance_id"] == instance_id
+                    and item["active"]
+                ),
+                None,
+            )
+    except ValueError:
+        return False
+    if record is None:
+        return False
+    digest = _key_digest(key, bytes.fromhex(record["salt"]))
+    return hmac.compare_digest(digest, record["key_hash"])

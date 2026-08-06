@@ -194,3 +194,17 @@ def test_locked_vault_blocks_push_key_read_and_local_copy_can_be_deleted(tmp_pat
     vault.unlock("vault-password")
     assert vault.delete("managed-one") is True
     assert vault.list_metadata() == []
+
+
+def test_generic_push_credential_editor_requires_the_same_opt_in_confirmation():
+    root = Path(__file__).parents[1]
+    js = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    html = (root / "static" / "index.html").read_text(encoding="utf-8")
+    save_block = js.split("window.extensionSaveCredential", 1)[1].split(
+        "window.extensionDeleteCredential", 1
+    )[0]
+
+    assert "push_key_save_confirmed" in save_block
+    assert "push_save_opt_in_required" in save_block
+    assert "push_save_confirm" in save_block
+    assert "extCredentialGenboxPushKey" in html

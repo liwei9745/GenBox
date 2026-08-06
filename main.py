@@ -124,6 +124,7 @@ from sync.push_sources import list_sources as list_push_sources
 from sync.push_sources import revoke_source as revoke_push_source
 from sync.push_sources import revoke_target_sources as revoke_target_push_sources
 from sync.push_sources import rotate_source as rotate_push_source
+from sync.push_sources import source_key_belongs_to_instance
 
 
 # ──────────────────────────────────────────────────────────────
@@ -4348,19 +4349,35 @@ async def extension_push_source_rotate(instance_handle: str, source_id: str, bod
     if rotated is None:
         raise HTTPException(status_code=404, detail="Push 来源不存在")
     source, push_key = rotated
-    try:
-        _clear_managed_push_configuration(instance)
-        if body.save_push_key_locally:
+    local_save = {
+        "requested": body.save_push_key_locally,
+        "saved": False,
+        "pending": False,
+        "recovery_action": "",
+        "error": "",
+    }
+    if body.save_push_key_locally:
+        try:
             credential_vault._require_unlocked()
             _save_managed_push_configuration(instance, destination_url, source["source_id"], push_key)
-    except Exception as exc:
-        _push_source_error(exc)
+        except Exception as exc:
+            # The remote rotation is already durable. Preserve the newly issued
+            # key in this response so the user can unlock the vault and retry.
+            local_save.update({
+                "pending": True,
+                "recovery_action": "save_push_key_locally",
+                "error": _local_push_save_error(exc),
+            })
+        else:
+            local_save["saved"] = True
     return {
         "instance_handle": instance_handle,
         "destination_url": destination_url,
         "source": source,
         "push_key": push_key,
         "shown_once": True,
+        "remote_rotated": True,
+        "local_save": local_save,
     }
 
 
@@ -4400,6 +4417,15 @@ def _clear_managed_push_configuration(instance) -> None:
         credential_vault.upsert(instance.id, ManagedCredential(**values))
 
 
+def _local_push_save_error(exc: Exception) -> str:
+    """Expose only a recovery category after a completed remote rotation."""
+    if isinstance(exc, PermissionError):
+        return "vault_locked"
+    if isinstance(exc, RuntimeError):
+        return "vault_unavailable"
+    return "vault_save_failed"
+
+
 @app.put("/api/extensions/vault/credentials/{instance_id}/push-key")
 async def extension_vault_save_push_key(instance_id: str, body: PushKeyLocalSaveRequest):
     """Save the displayed key only after an explicit, confirmed local-save intent."""
@@ -4411,6 +4437,8 @@ async def extension_vault_save_push_key(instance_id: str, body: PushKeyLocalSave
         sources = list_push_sources(instance.target_id, instance.id)
         if not any(item.get("source_id") == body.source_id for item in sources):
             raise ValueError("Push source is no longer active; create or rotate again")
+        if not source_key_belongs_to_instance(body.source_id, instance.target_id, instance.id, body.push_key):
+            raise ValueError("Push key does not match the current managed source; create or rotate again")
         credential_vault._require_unlocked()
         _save_managed_push_configuration(instance, destination_url, body.source_id, body.push_key)
         return {"saved_locally": True, "remote_unchanged": True}
@@ -4732,9 +4760,21 @@ async def extension_vault_upsert(instance_id: str, body: ManagedCredentialUpsert
         except KeyError:
             existing = None
         values = body.credential.model_dump()
-        if existing:
+        push_fields = ("genbox_push_key", "genbox_push_source_id", "genbox_push_url")
+        submitted_push = any(values[name] for name in push_fields)
+        if submitted_push:
+            if not all(values[name] for name in push_fields):
+                raise ValueError("Complete GenBox Push configuration is required")
+            _instance, destination_url = _managed_push_source_access(instance_id)
+            if destination_url != values["genbox_push_url"]:
+                raise ValueError("Push destination changed; create or rotate again")
+            if not source_key_belongs_to_instance(
+                values["genbox_push_source_id"], instance.target_id, instance.id, values["genbox_push_key"],
+            ):
+                raise ValueError("Push key does not match the current managed source; create or rotate again")
+        elif existing:
             old = existing.model_dump()
-            values.update({name: old[name] for name in ("genbox_push_key", "genbox_push_source_id", "genbox_push_url")})
+            values.update({name: old[name] for name in push_fields})
         saved = credential_vault.upsert(instance.id, ManagedCredential(**values))
         return {"credential": {
             "instance_handle": public_instance_handle(instance.target_id, instance.id),
@@ -4742,6 +4782,8 @@ async def extension_vault_upsert(instance_id: str, body: ManagedCredentialUpsert
             "fields": list(saved.get("fields", [])),
         }}
     except Exception as exc:
+        if isinstance(exc, ValueError) and str(exc).startswith(("Push ", "Complete GenBox")):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         _vault_error(exc)
 
 
