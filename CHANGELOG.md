@@ -4,6 +4,18 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.0-rc.4] - 2026-08-06
+
+- Final testing candidate replacing the blocked rc.3 candidate; no stable
+  release is implied.
+- Push Keys are not saved locally by default. Local encrypted-vault saving
+  requires explicit user confirmation and a short-lived, single-use server
+  confirmation credential bound to the managed instance, source, and current
+  Push Key hash; browser requests cannot bypass that server validation.
+- Push receipts now fail closed: while cleanup is not explicitly enabled, they
+  always return `safe_to_delete_source=false` and do not grant source deletion
+  permission.
+
 ## [2.6.0-rc.3] - 2026-08-06
 
 - Final testing candidate replacing the unsuitable rc.1 and original rc.2
