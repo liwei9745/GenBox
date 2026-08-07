@@ -4,6 +4,18 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.0-rc.6] - 2026-08-07
+
+- Final testing candidate replacing rc.5 after its manual acceptance click
+  path did not pass; no stable release is implied.
+- Fixed the deployed-service `Manage Push configuration` entry. It now opens a
+  visible GenBox Push configuration modal bound to the selected instance rather
+  than closing the service drawer and navigating to a hidden deployment step.
+- Push Keys remain unsaved by default. Local encrypted-vault saving requires
+  the user's explicit confirmation after the vault is unlocked.
+- Cleanup remains disabled unless explicitly enabled. Without that opt-in,
+  receipts grant no source-file deletion permission.
+
 ## [2.6.0-rc.5] - 2026-08-07
 
 - Final testing candidate replacing rc.4; no stable release is implied.
