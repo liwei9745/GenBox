@@ -4,6 +4,18 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.0-rc.5] - 2026-08-07
+
+- Final testing candidate replacing rc.4; no stable release is implied.
+- Clarified the Chinese Push Key guidance and fixed stale browser cache/state
+  handling, so an older asynchronous response cannot erase a newly created or
+  rotated key state.
+- A new Push Key is available only immediately after creation or rotation.
+  Local encrypted-vault saving remains off by default and requires the user's
+  explicit confirmation before the current key is saved.
+- Cleanup remains disabled and Push receipts grant no source-deletion
+  permission.
+
 ## [2.6.0-rc.4] - 2026-08-06
 
 - Final testing candidate replacing the blocked rc.3 candidate; no stable
