@@ -4,6 +4,18 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.0-rc.7] - 2026-08-07
+
+- Final testing candidate replacing rc.6; no stable release is implied.
+- Fixed independent show/hide controls for every sensitive field in the local
+  credential window. SSH private keys are safely masked by default.
+- Fixed the responsive, long-credential window so its content scrolls within
+  the viewport and Cancel, Delete, and Save remain reachable on small screens.
+- Push Keys remain unsaved by default. Local encrypted-vault saving still
+  requires explicit user confirmation after the vault is unlocked.
+- Cleanup remains disabled unless explicitly enabled. Without that opt-in,
+  receipts grant no source-file deletion permission.
+
 ## [2.6.0-rc.6] - 2026-08-07
 
 - Final testing candidate replacing rc.5 after its manual acceptance click
