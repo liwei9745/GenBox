@@ -1748,6 +1748,9 @@
   MESSAGES['extensions.update_image_success'] = {"zh-CN":"镜像更新完成，健康检查已通过。","en":"Image updated and health check passed."};
   MESSAGES['extensions.update_image_failed'] = {"zh-CN":"镜像更新未完成，原实例配置已保留或回滚。","en":"Image update did not complete; the original configuration was preserved or rolled back."};
   MESSAGES['extensions.update_image_unavailable'] = {"zh-CN":"请先解锁本机凭证库并保存该实例的 SSH 凭证。","en":"Unlock the local credential vault and save SSH credentials for this instance first."};
+  MESSAGES['extensions.push_save_to_vault'] = {"zh-CN":"保存到本机凭证库","en":"Save to local credential vault"};
+  MESSAGES['extensions.push_key_not_available'] = {"zh-CN":"当前没有可保存的新 Push 密钥。请先创建或轮换密钥；如需保留现有密钥，请从 chatgpt2api 重新配置。","en":"There is no new Push key available to save. Create or rotate a key first; to keep the existing key, retrieve it from chatgpt2api."};
+  MESSAGES['extensions.push_key_ready_to_save'] = {"zh-CN":"新 Push 密钥仅在本次创建或轮换后可见。请先复制配置，再勾选本地保存并确认。","en":"A new Push key is available from this create or rotation. Copy the configuration, then opt in and confirm local saving."};
   global.GenBoxI18n = { messages: MESSAGES, language: language, t: t, apply: apply, setLanguage: setLanguage };
   global.t = t;
   global.i18nText = t;

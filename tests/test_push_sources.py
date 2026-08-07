@@ -1,5 +1,6 @@
 import asyncio
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -164,7 +165,7 @@ def _push_key_confirmation(client, instance_handle, source_id, push_key):
     assert response.status_code == 200
     body = response.json()
     assert set(body) == {"confirmation_token", "expires_in_seconds"}
-    assert body["expires_in_seconds"] > 0
+    assert body["expires_in_seconds"] == 120
     return body["confirmation_token"]
 
 
@@ -357,6 +358,85 @@ def test_push_key_save_ui_requires_a_current_key_confirmation_and_unlocked_vault
     assert "/push-key/confirmation" in save_block
     assert "confirmation_token:confirmation.confirmation_token" in save_block
     assert "save_push_key_locally:true" in save_block
+    assert "key=el('extPushKey')" in save_block
+    assert "key=el('extPushKey').value" not in save_block
+
+
+def test_push_key_browser_runtime_ignores_stale_prepare_and_records_only_redacted_request_shapes():
+    """Exercise the browser state machine without retaining a key or token in test output."""
+    source = Path(__file__).parents[1] / "static" / "js" / "extensions.js"
+    node = r'''
+const fs=require('fs');const source=fs.readFileSync(process.argv[1],'utf8');
+global.window=global;
+const elements=new Map();
+function element(id){
+  if(!elements.has(id)){
+    const classes=new Set();
+    elements.set(id,{value:'',textContent:'',innerHTML:'',disabled:false,checked:false,type:'text',className:'',dataset:{},
+      classList:{add:n=>classes.add(n),remove:n=>classes.delete(n),toggle:(n,on)=>on?classes.add(n):classes.delete(n),contains:n=>classes.has(n)},
+      focus(){},select(){},setAttribute(){},removeAttribute(){},querySelector(){return null},querySelectorAll(){return []},appendChild(){},insertBefore(){},remove(){}});
+  }
+  return elements.get(id);
+}
+global.document={
+  getElementById:element,
+  querySelector(){return null},querySelectorAll(){return []},addEventListener(){},removeEventListener(){},
+  createElement(){return element('created-'+elements.size)},body:{appendChild(){}},execCommand(){return true},
+};
+const zh={
+  'extensions.push_source_not_configured':'尚未创建 Push 凭据。创建后，将把地址、来源 ID 和一次性密钥填入 chatgpt2api。',
+  'extensions.push_key_ready_to_save':'新 Push 密钥仅在本次创建或轮换后可见。请先复制配置，再勾选本地保存并确认。',
+};
+global.i18nText=key=>zh[key]||key;
+global.escHtml=value=>String(value||'');global.confirm=()=>true;
+const handle='managed-runtime';const sourceId='source-'+Math.random().toString(36).slice(2);
+const freshKey='key-'+Math.random().toString(36).slice(2);const confirmation='token-'+Math.random().toString(36).slice(2);
+const shapes=[];let holdStatus=false;let releaseStatus;
+function response(body){return {ok:true,status:200,text:async()=>JSON.stringify(body)}}
+global._authFetch=async(url,options={})=>{
+  const method=options.method||'GET';const body=options.body?JSON.parse(options.body):{};
+  shapes.push({method,url,fields:Object.keys(body).sort()});
+  if(url==='/api/extensions/push-sources/'+encodeURIComponent(handle)){
+    if(holdStatus)return new Promise(resolve=>{releaseStatus=()=>resolve(response({configured:false,destination_url:'https://local.invalid/api/sync/push'}))});
+    return response({configured:false,destination_url:'https://local.invalid/api/sync/push'});
+  }
+  if(url==='/api/extensions/push-sources')return response({instance_handle:handle,configured:true,destination_url:'https://local.invalid/api/sync/push',source:{source_id:sourceId},push_key:freshKey});
+  if(url==='/api/extensions/vault/status')return response({configured:true,unlocked:true,entry_count:0});
+  if(url==='/api/extensions/vault/credentials')return response({credentials:[]});
+  if(url==='/api/extensions/vault/credentials/'+encodeURIComponent(handle)+'/push-key/confirmation'){
+    if(body.source_id!==sourceId||body.push_key!==freshKey)throw new Error('confirmation did not receive current browser state');
+    return response({confirmation_token:confirmation,expires_in_seconds:120});
+  }
+  if(url==='/api/extensions/vault/credentials/'+encodeURIComponent(handle)+'/push-key'){
+    if(body.source_id!==sourceId||body.push_key!==freshKey||body.confirmation_token!==confirmation||body.save_push_key_locally!==true)throw new Error('save request lost its explicit confirmation chain');
+    return response({saved_locally:true,remote_unchanged:true});
+  }
+  throw new Error('unexpected request shape');
+};
+eval(source);
+(async()=>{
+  await window.extensionOpenExistingPushSource(handle);
+  if(element('extPushSourceStatus').textContent!==zh['extensions.push_source_not_configured'])throw new Error('unconfigured state exposed a translation key or wrong guidance');
+  if(!element('extPushSaveBtn').classList.contains('hidden')||!element('extPushSaveOptIn').disabled)throw new Error('unconfigured state allowed local save');
+  holdStatus=true;
+  const stale=window.extensionPreparePushSource();
+  await Promise.resolve();
+  await window.extensionCreatePushSource();
+  releaseStatus();await stale;
+  if(!element('extPushKey').value||element('extPushSaveBtn').classList.contains('hidden'))throw new Error('stale prepare cleared the newly created key');
+  if(element('extPushSourceStatus').textContent!==zh['extensions.push_key_ready_to_save'])throw new Error('new key did not render save guidance');
+  element('extPushSaveOptIn').checked=true;
+  await window.extensionSavePushConfiguration();
+  if(element('extPushKey').value||!element('extPushSaveBtn').classList.contains('hidden'))throw new Error('saved key was not cleared from browser memory');
+  const saved=shapes.filter(item=>item.url.endsWith('/push-key'));
+  const confirmed=shapes.filter(item=>item.url.endsWith('/push-key/confirmation'));
+  if(saved.length!==1||confirmed.length!==1)throw new Error('confirmation-to-save request chain was not exactly once');
+  if(JSON.stringify(shapes).includes(freshKey)||JSON.stringify(shapes).includes(confirmation))throw new Error('redacted network trace retained a secret value');
+  if(shapes.some(item=>item.url.includes(freshKey)||item.url.includes(confirmation)))throw new Error('a secret reached a request URL');
+})().catch(error=>{console.error(error);process.exitCode=1});
+'''
+    result = subprocess.run(["node", "-e", node, str(source)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
 
 
 def test_generic_credential_route_cannot_bypass_push_key_confirmation(source_registry, tmp_path, monkeypatch):
