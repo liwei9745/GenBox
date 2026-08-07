@@ -98,3 +98,68 @@ def test_each_saved_secret_has_independent_show_hide_control():
         private_toggle.click()
         assert private_key.input_value() == "synthetic replacement private key"
         browser.close()
+
+
+def test_open_close_reopen_rehides_secrets_and_preserves_unedited_private_key():
+    credential = {
+        "admin_key": "synthetic-admin-key",
+        "ssh_password": "synthetic-ssh-password",
+        "ssh_private_key": "synthetic private key",
+        "ssh_passphrase": "synthetic-passphrase",
+        "sudo_password": "synthetic-sudo-password",
+        "password": "synthetic-password",
+        "api_key": "synthetic-api-key",
+        "genbox_push_key": "",
+    }
+    saved_bodies = []
+
+    def fulfill_api(route):
+        path = route.request.url.split("/api/", 1)[-1].split("?", 1)[0]
+        if path == "extensions/vault/status":
+            route.fulfill(json={"configured": True, "unlocked": True, "entry_count": 1})
+        elif path == "extensions/vault/credentials":
+            route.fulfill(json={"credentials": [{"instance_handle": "credential-test"}]})
+        elif path == "extensions/vault/credentials/credential-test":
+            if route.request.method == "PUT":
+                saved_bodies.append(route.request.post_data_json)
+            route.fulfill(json={"credential": credential})
+        elif path == "extensions/instances":
+            route.fulfill(json={"instances": []})
+        else:
+            route.fulfill(json={"targets": [], "categories": [], "items": [], "target_ids": []})
+
+    with _static_site() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.route("**/api/**", fulfill_api)
+        page.goto(f"{base_url}/static/index.html", wait_until="domcontentloaded")
+        page.evaluate("() => window.extensionLoadServices()")
+
+        page.evaluate("() => window.extensionOpenCredential('credential-test')")
+        page.locator("#extCredentialModal:not(.hidden)").wait_for()
+        private_key = page.locator("#extCredentialSshPrivateKey")
+        private_toggle = page.locator("button[onclick*=extCredentialSshPrivateKey]")
+        assert private_key.input_value() != credential["ssh_private_key"]
+        assert private_key.is_editable() is False
+        private_toggle.click()
+        assert private_key.input_value() == credential["ssh_private_key"]
+        private_toggle.click()
+        page.evaluate("() => window.extensionSaveCredential()")
+        assert "hidden" in (page.locator("#extCredentialModal").get_attribute("class") or "")
+        assert saved_bodies[-1]["credential"]["ssh_private_key"] == credential["ssh_private_key"]
+
+        page.evaluate("() => window.extensionOpenCredential('credential-test')")
+        page.locator("#extCredentialModal:not(.hidden)").wait_for()
+        for field_id in (
+            "extCredentialAdminKey",
+            "extCredentialSshPassword",
+            "extCredentialSshPassphrase",
+            "extCredentialSudoPassword",
+            "extCredentialPassword",
+            "extCredentialApiKey",
+            "extCredentialGenboxPushKey",
+        ):
+            assert page.locator(f"#{field_id}").get_attribute("type") == "password"
+        assert "is-masked" in (private_key.get_attribute("class") or "")
+        assert private_key.is_editable() is False
+        browser.close()
