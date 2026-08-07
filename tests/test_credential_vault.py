@@ -141,6 +141,7 @@ def test_vault_routes_and_frontend_are_wired():
         assert route in main
     assert 'name="extCredentialDelivery"' in html
     assert 'id="extCredentialModal"' in html
+    assert 'ext-credential-box' in html
     assert 'class="ext-modal-close"' in html
     assert "extensionSaveDeliveredCredential" in js
     assert "extensionSaveResetCredential" in js
@@ -208,3 +209,45 @@ def test_generic_push_credential_editor_requires_the_same_opt_in_confirmation():
     assert "push_save_opt_in_required" in save_block
     assert "push_save_confirm" in save_block
     assert "extCredentialGenboxPushKey" in html
+
+
+def test_saved_credential_modal_has_a_per_field_secret_visibility_control():
+    root = Path(__file__).parents[1]
+    html = (root / "static" / "index.html").read_text(encoding="utf-8")
+    js = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+
+    for field in (
+        "extCredentialAdminKey",
+        "extCredentialSshPassword",
+        "extCredentialSshPrivateKey",
+        "extCredentialSshPassphrase",
+        "extCredentialSudoPassword",
+        "extCredentialPassword",
+        "extCredentialApiKey",
+        "extCredentialGenboxPushKey",
+    ):
+        assert f"extensionToggleCredentialSecret('{field}',this)" in html
+
+    assert 'class="ext-secret-textarea is-masked"' in html
+    assert "window.extensionToggleCredentialSecret=function" in js
+    assert "field.classList.remove('is-masked')" in js
+    assert "field.classList.add('is-masked')" in js
+    assert "extensionRevealCredentialFields" not in html
+
+
+def test_saved_credential_modal_resets_secret_visibility_when_opening():
+    root = Path(__file__).parents[1]
+    js = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    open_block = js.split("window.extensionOpenCredential", 1)[1].split(
+        "window.extensionCloseCredentialModal", 1
+    )[0]
+    assert ".type='password'" in open_block
+    assert "el('extCredentialSshPrivateKey').classList.add('is-masked')" in open_block
+
+
+def test_saved_credential_modal_bounds_content_and_keeps_actions_reachable():
+    root = Path(__file__).parents[1]
+    css = (root / "static" / "css" / "extensions.css").read_text(encoding="utf-8")
+    assert "max-height:calc(100vh - 40px)" in css
+    assert "box-sizing:border-box" in css
+    assert ".ext-credential-box .ext-reset-actions{position:sticky" in css
