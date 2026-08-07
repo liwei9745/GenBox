@@ -430,6 +430,8 @@
     "extensions.start_new_isolated":{"zh-CN":"新建隔离实例","en":"Create new isolated instance"},
     "extensions.new_isolated_started":{"zh-CN":"已开始新的隔离部署准备；现有受管实例不会被修改。","en":"A new isolated deployment is ready to plan. The existing managed instance will not be changed."},
     "extensions.push_source_kicker":{"zh-CN":"图片 Push 配置","en":"Image Push setup"},
+    "extensions.push_config_title":{"zh-CN":"GenBox Push 配置","en":"GenBox Push configuration"},
+    "extensions.push_config_instance":{"zh-CN":"当前实例：","en":"Current instance:"},
     "extensions.push_source_title":{"zh-CN":"连接 chatgpt2api 与 GenBox","en":"Connect chatgpt2api to GenBox"},
     "extensions.push_source_help":{"zh-CN":"为这个隔离实例创建独立的 GenBox Push 凭据。密钥只会在创建或轮换后显示一次。","en":"Create an independent GenBox Push credential for this isolated instance. The key is shown only after creation or rotation."},
     "extensions.push_destination_url":{"zh-CN":"GenBox Push 地址","en":"GenBox Push URL"},

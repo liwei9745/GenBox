@@ -72,6 +72,7 @@
 .ext-reset-box textarea{resize:vertical;min-height:80px}
 .ext-reset-result{margin-bottom:12px}
 .ext-reset-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+.ext-push-config-box{width:min(720px,100%);max-height:min(90vh,760px);overflow-y:auto}.ext-push-config-box #extPushSource{margin:0;max-width:none;border:0;padding:0;background:transparent}.ext-push-config-box #extPushSource>div:first-child{display:none}
 @media(max-width:1000px){.ext-bento-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:640px){.ext-bento-grid{grid-template-columns:1fr}.ext-deployed-toolbar{flex-direction:column}}
 @media(max-width:1000px){.extension-layout{grid-template-columns:150px minmax(0,1fr)}.extension-summary{grid-column:2;border-left:0;border-top:1px solid var(--border)}}

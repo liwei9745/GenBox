@@ -1098,6 +1098,17 @@
         </div>
       </aside>
 
+      <!-- Push configuration opened from a deployed service card -->
+      <div id="extPushConfigModal" class="ext-reset-modal hidden" role="dialog" aria-modal="true" aria-labelledby="extPushConfigTitle">
+        <div class="ext-reset-box glass-panel ext-push-config-box">
+          <button type="button" class="ext-modal-close" aria-label="Close" title="Close" onclick="extensionClosePushConfiguration()">&#215;</button>
+          <h3 id="extPushConfigTitle" data-i18n="extensions.push_config_title">GenBox Push 配置</h3>
+          <div id="extPushConfigInstance" class="ext-reset-instance"></div>
+          <p class="ext-reset-hint" data-i18n="extensions.push_source_help">为这个隔离实例创建独立的 GenBox Push 凭据。密钥只会在创建或轮换后显示一次。</p>
+          <div id="extPushConfigBody"></div>
+        </div>
+      </div>
+
       <!-- Controlled update for an already registered isolated service -->
       <div id="extImageUpdateModal" class="ext-reset-modal hidden" role="dialog" aria-modal="true" aria-labelledby="extImageUpdateTitle">
         <div class="ext-reset-box glass-panel">
