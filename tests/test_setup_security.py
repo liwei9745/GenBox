@@ -1044,6 +1044,8 @@ def test_frontend_never_persists_admin_key_in_browser_storage():
             "'igs_video_workbench'",
             "'igs_workspace_custom'",
             "'igs_workspace_mode'",
+            # Non-sensitive UI preference for the Dock lock control.
+            "'igs_dock_pinned'",
         }
         allowed_session_keys = {"'igs_reopen_onboarding'"}
         allowed_dynamic_local_keys = {

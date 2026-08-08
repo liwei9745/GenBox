@@ -174,6 +174,12 @@ document.addEventListener('DOMContentLoaded', function() {
 // ═══════════════════════════════════════════════════════════════════
 var dockHideTimer=null;
 var dockPinned=false;
+function readDockPinned(){
+  try{return localStorage.getItem('igs_dock_pinned')==='1';}catch(error){return false;}
+}
+function persistDockPinned(){
+  try{localStorage.setItem('igs_dock_pinned',dockPinned?'1':'0');}catch(error){}
+}
 function updateDockHandle(){
   var handle=document.getElementById('dockRevealHandle');
   if(!handle)return;
@@ -181,6 +187,16 @@ function updateDockHandle(){
   handle.setAttribute('aria-expanded',visible?'true':'false');
   handle.setAttribute('aria-label',visible?i18nText('dock.collapse'):i18nText('dock.expand'));
   handle.title=visible?i18nText('dock.collapse'):i18nText('dock.expand');
+  var pin=document.getElementById('dockPinButton');
+  if(pin){
+    var locked=document.body.classList.contains('dock-pinned');
+    pin.setAttribute('aria-pressed',locked?'true':'false');
+    pin.setAttribute('aria-label',locked?i18nText('dock.unpin'):i18nText('dock.pin'));
+    pin.title=locked?i18nText('dock.unpin'):i18nText('dock.pin');
+    pin.innerHTML=locked
+      ? '<div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="10" width="10" height="10" rx="2"/><path d="M9 10V7a3 3 0 0 1 6 0"/></svg></div><div class="dock-dot"></div>'
+      : '<div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="10" width="10" height="10" rx="2"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/></svg></div><div class="dock-dot"></div>';
+  }
 }
 function revealDock(){
   clearTimeout(dockHideTimer);
@@ -198,19 +214,26 @@ function scheduleDockHide(delay){
   clearTimeout(dockHideTimer);
   dockHideTimer=setTimeout(hideDockNow,typeof delay==='number'?delay:650);
 }
+function toggleDockReveal(){
+  if(!document.body.classList.contains('dock-auto-hide'))return;
+  if(document.body.classList.contains('dock-revealed'))scheduleDockHide(120);
+  else revealDock();
+}
 function toggleDockPinned(){
   if(!document.body.classList.contains('dock-auto-hide'))return;
   dockPinned=!dockPinned;
   document.body.classList.toggle('dock-pinned',dockPinned);
+  persistDockPinned();
   if(dockPinned)revealDock();
   else scheduleDockHide(120);
   updateDockHandle();
 }
 function setDockPageMode(name){
   document.body.classList.add('dock-auto-hide');
-  dockPinned=false;
-  document.body.classList.remove('dock-pinned');
-  scheduleDockHide(180);
+  dockPinned=readDockPinned();
+  document.body.classList.toggle('dock-pinned',dockPinned);
+  if(dockPinned)revealDock();
+  else scheduleDockHide(180);
   updateDockHandle();
 }
 function initializeDockAutoHide(){
@@ -219,6 +242,7 @@ function initializeDockAutoHide(){
   var handle=document.getElementById('dockRevealHandle');
   if(!dock||dock.dataset.autoHideReady==='yes')return;
   dock.dataset.autoHideReady='yes';
+  dockPinned=readDockPinned();
   [zone,handle].forEach(function(target){if(target){target.addEventListener('mouseenter',revealDock);target.addEventListener('focus',revealDock);target.addEventListener('mouseleave',function(){scheduleDockHide(850);});target.addEventListener('blur',function(){scheduleDockHide(450);});}});
   dock.addEventListener('mouseenter',revealDock);
   dock.addEventListener('focusin',revealDock);

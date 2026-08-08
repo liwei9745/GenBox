@@ -646,6 +646,27 @@ textarea {
   background: rgba(255,255,255,0.8);
 }
 
+.dock-pin-control {
+  appearance: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  background: transparent;
+}
+
+.dock-pin-control[aria-pressed="true"] .dock-icon {
+  color: var(--accent);
+  background: rgba(0,122,255,0.12);
+  border-color: rgba(0,122,255,0.25);
+}
+
+.dock-pin-control:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+
 /* ── 10. Generate Layout (2-panel: sidebar + main content) ── */
 .generate-layout {
   flex: 1;
@@ -3843,5 +3864,42 @@ body.dock-auto-hide.dock-pinned .dock-reveal-handle span {
   body.dock-auto-hide .dock-reveal-handle,
   body.dock-auto-hide .dock-reveal-handle span {
     transition-duration: .01ms !important;
+  }
+}
+
+/* Keep the full Dock, including the lock control, usable on narrow screens. */
+@media (max-width: 600px) {
+  body.nav-style-c .dock {
+    gap: 1px;
+    max-width: calc(100vw - 8px);
+    padding: 6px 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  body.nav-style-c .dock::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.nav-style-c .dock-item {
+    width: 28px;
+    height: 42px;
+    flex: 0 0 28px;
+  }
+
+  body.nav-style-c .dock-icon,
+  body.nav-style-c .dock-item.dock-action .dock-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  body.nav-style-c .dock-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  body.nav-style-c .dock-sep {
+    flex: 0 0 1px;
+    margin: 0;
   }
 }

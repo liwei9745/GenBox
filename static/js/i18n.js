@@ -543,6 +543,8 @@
     "runtime.offline_detail":{"zh-CN":"当前只是浏览器保留的旧页面，连接和部署操作已暂停。","en":"This is only a browser-retained page. Connection and deployment actions are paused."},
     "runtime.recheck":{"zh-CN":"重新检测","en":"Check again"},
     "dock.expand":{"zh-CN":"展开底部导航","en":"Expand bottom navigation"},
+    "dock.pin":{"zh-CN":"锁定底部导航","en":"Keep bottom navigation visible"},
+    "dock.unpin":{"zh-CN":"恢复自动隐藏","en":"Resume auto-hide"},
     "sync.title":{"zh-CN":"☁ 从远程 chatgpt2api 同步图片","en":"☁ Sync images from remote chatgpt2api"},
     "sync.close_label":{"zh-CN":"关闭远程同步窗口","en":"Close remote sync"},
     "sync.step_1":{"zh-CN":"填写并保存远程部署","en":"Enter and save a remote deployment"},
