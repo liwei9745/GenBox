@@ -9,5 +9,5 @@
 - [x] Run relevant complete suites and syntax/compile/diff checks.
 - [x] Independently reconcile claims against evidence and scan pilot diffs.
 - [x] Write the GenBox-specific unattended-workflow design.
-- [ ] Create atomic documentation-only commits where applicable; inspect remotes and attempt one non-force push only when a writable fork is verified.
+- [x] Create the atomic GenBox documentation commit `8938145`; verify the writable owner remote with a dry-run and push `codex/agent-skills-pilot` non-force.
 - [ ] Confirm both pilot worktrees are clean and record final state.
