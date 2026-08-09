@@ -1,9 +1,50 @@
 # Current Project Status
 
 **Last updated:** 2026-08-09
-**Current branch:** `codex/phase6-ci-convergence-20260809`
+**Current branch:** `codex/v2.6.0-rc.8-unified-uat-fix`
 **Current phase:** Phase 6 Verified Source Cleanup - **In Progress / Destructive Execution Blocked**
 **Previous phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
+
+## v2.6.0-rc.8 unified manual-UAT candidate (2026-08-09)
+
+- **CANDIDATE / VERIFIED:** fixed baseline
+  `dade69332b218aa9f2dfa62c04ee0c3d3bae2dbd`; functional commits `71ba0cc`
+  and `acea249`; final candidate code commit `acea249`.
+  The candidate consolidates the Dock visibility lock, centered auto-reveal
+  zone, Push save opt-in placement, multiline configuration copy, GenBox-owned
+  save confirmation, truthful source/local/remote status, and generic-vault
+  Push-field restrictions into one manual-UAT build.
+- **LOCAL TESTS / VERIFIED:** browser/Push/vault focused suite `44 passed`;
+  full suite at the exact candidate code commit `615 passed`. JavaScript
+  syntax checks, `git diff --check`, and the
+  production-diff secret scan passed.
+- **WINDOWS PACKAGE / VERIFIED:** `dist/GenBox.exe` built successfully, is
+  `38,086,271` bytes, and has SHA-256
+  `27C7CED85BB2933B8B4F1E8F0245FED495D88BCFBEABF501D25F2F97206553E3`.
+  Packaged loopback smoke passed on an OS-assigned local port.
+- **UAT LAB / READY:** the rebuilt EXE was copied to the owned synthetic lab,
+  configured with `APP_MODE=dev`, and is listening only on
+  `127.0.0.1:30641`. The lab retains one synthetic managed instance and no
+  Push key or vault data. Browser-level regression covers the final Dock
+  recovery and Push-copy deletion paths; one user-operated manual pass is
+  still required for the native interaction and vault behavior.
+- **INTERACTIVE PREFLIGHT / VERIFIED:** the final local browser opened the
+  synthetic deployed-service drawer and its instance-bound `GenBox Push`
+  panel. It showed the Chinese no-Key guidance, disabled local-save choice,
+  and explicit `unverified` remote-auth state. The Dock completed
+  auto-hide -> locked-visible -> locked-hidden -> visible-handle recovery to
+  auto-hide. No Push key, vault, cleanup, or remote action was created during
+  this preflight.
+- **MANUAL UAT / PENDING:** the user must perform one consolidated pass that
+  creates or rotates a synthetic Push key, personally accepts the GenBox save
+  confirmation, unlocks the vault, verifies lock/unlock visibility, deletes
+  the local copy, and confirms refresh/restart never exposes plaintext. Source
+  configuration and revocation state may be checked locally; remote sender
+  authentication remains `UNVERIFIED` without separate sender evidence.
+- **BOUNDARY:** this is a release candidate only. No tag or formal Release was
+  created. No VPS, SSH, `33010`, `33018`, real credential/media, cleanup,
+  unlink, execute marker, Phase 6 destructive exercise, or Phase 7 execution
+  was used or authorized.
 
 ## Phase 6 final-gate worktree baseline (2026-08-09)
 
