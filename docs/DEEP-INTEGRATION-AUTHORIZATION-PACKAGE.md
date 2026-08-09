@@ -22,6 +22,12 @@ code changed in this gate. Exact-SHA hosted CI/macOS remains `UNVERIFIED`;
 VPS, cleanup execution, production mutation, human UAT, Phase 7, and Release
 remain external or blocked.
 
+The exact pushed GenBox CI run `31300431651` failed during browser-test
+collection because Playwright was absent. The local infrastructure fix is
+`05c7f3b`, but two non-force push attempts failed with TLS/HTTP2 EOF errors.
+Sender workflow dispatch was unavailable because the cleanup workflow is not
+on the repository default branch. Neither failure is relabeled as a pass.
+
 ## Required Human Decisions
 
 1. Identify and authorize one isolated development target by canonical host, port, host-key algorithm, and SHA-256 fingerprint.

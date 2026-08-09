@@ -262,6 +262,13 @@ adversarial approval and destructive execution remain blocked)
 non-destructive evidence pass. This does not change the Phase 6 status or
 authorize cleanup.
 
+**Exact-SHA CI note (2026-08-09):** Local Docker, build, smoke, focused, and
+full evidence converged. Hosted GenBox CI reached pushed commit `79038f2` but
+failed honestly because Playwright was absent during collection; the local
+infrastructure fix `05c7f3b` could not be pushed after two TLS/HTTP2 EOF
+failures. Sender exact workflow dispatch was unavailable from the default
+branch. CI/macOS therefore remain `UNVERIFIED`, and Phase 6 remains In Progress.
+
 **Evidence note (2026-08-09):** Phase 6 remains **In Progress** and destructive
 execution remains **blocked**. The sender's 2026-08-08 local record reports
 synthetic coverage for A1, A2, A3, A5, A6, A10, and A11 (`116 passed, 18

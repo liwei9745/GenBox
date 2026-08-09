@@ -1,7 +1,7 @@
 # Current Project Status
 
 **Last updated:** 2026-08-09
-**Current branch:** `codex/phase6-final-gate-20260809`
+**Current branch:** `codex/phase6-ci-convergence-20260809`
 **Current phase:** Phase 6 Verified Source Cleanup - **In Progress / Destructive Execution Blocked**
 **Previous phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
 
@@ -10,6 +10,13 @@
 - **GENBOX WORKTREE / VERIFIED:** `E:\AI\GenBox-worktrees\p4planux\GenBox-od-phase6-final-gate-20260809`, branch `codex/phase6-final-gate-20260809`, baseline `1c2f870bb6ee616c333a717239349bceb2182a20`, clean at gate start.
 - **SENDER WORKTREE / VERIFIED:** `E:\AI\chatgpt2api-worktrees\phase6-final-gate-20260809`, branch `codex/phase6-final-gate-20260809`, baseline `19c2fdbb23a97c713b53955942d325fb725708d1`, clean at gate start.
 - This gate is non-destructive and uses only synthetic data, temporary directories, local Docker, and local/hosted evidence that is explicitly labeled. VPS, SSH, `33010`, `33018`, real cleanup, execute markers, production changes, human UAT, Release, and Phase 7 implementation remain outside this worktree's authority.
+
+## Phase 6 exact-SHA CI convergence (2026-08-09)
+
+- **GENBOX LOCAL / VERIFIED:** fixed-baseline focused suite `65 passed`; full suite `611 passed`; browser collection suite `8 passed`; Windows build and packaged loopback smoke passed on an OS-assigned port. Local Docker build/runtime passed with a synthetic administrator key and random loopback port.
+- **GENBOX CI / PARTIAL:** workflow run `31300431651` reached the exact pushed commit `79038f2` but failed during collection because hosted test dependencies omitted Playwright. The minimal infrastructure fix is local commit `05c7f3b` (adds Playwright dependency and Chromium install); its push failed twice with TLS/HTTP2 EOF, so exact-SHA post-fix CI is `UNVERIFIED`.
+- **SENDER LOCAL / VERIFIED:** full suite `168 passed, 18 skipped, 249 subtests passed`; focused single/batch/schedule/cleanup suite `127 passed, 7 skipped, 20 subtests`; Docker image and `/health` smoke passed with a synthetic auth key on a random loopback port. Sender CI dispatch was unavailable because `cleanup-security.yml` is absent from the repository default branch; this remains `UNVERIFIED`.
+- **BOUNDARY:** no product code changed in this convergence pass. Cleanup, unlink, execute markers, VPS/SSH, `33010`, `33018`, production changes, Release/tag/RC, and Phase 7/G-Store implementation remain prohibited.
 
 ## Phase 6 local and CI convergence (2026-08-09)
 
@@ -215,14 +222,11 @@
   built or applied. Isolated sender `33010` remains on the previously reviewed
   `f0d5beb` image. This is development evidence, not authorization for source
   deletion, a stable GenBox release, or upstream delivery.
-- **NEXT ACTION:** obtain a fresh independent A4/A7/A9/A12 final review of
-  sender commit `c8a4b01` and a macOS CI result. If and only if it
-  returns `PASS`,
-  define a narrowly bounded isolated `33010`
-  execution marker and request explicit authorization for one synthetic cleanup
-  plus restart/recovery controls. Do not enable cleanup while the environment
-  class remains `unknown`. `33018` remains out of scope and must not be
-  connected or mutated.
+- **FINAL-GATE HANDOFF:** local code, Docker, build, smoke, receipt, retention,
+  and fail-closed cleanup evidence is recorded. Exact-SHA hosted CI/macOS,
+  isolated-VPS authority, destructive cleanup, human UAT, clean redeployment,
+  Phase 7, G-Store execution, and Release remain external or blocked. Do not
+  connect to `33018` or enable cleanup without a new explicit authorization.
 
 ## Current evidence
 

@@ -11,6 +11,18 @@ candidate has not been deployed.
 
 ## Evidence Convergence Update (2026-08-09)
 
+### Exact-SHA convergence qualification (2026-08-09)
+
+The fresh local gate passed the receiver/sender focused and full suites,
+synthetic Docker runtime checks, packaged-client smoke, and leak scans. The
+exact pushed GenBox CI run `31300431651` failed honestly during browser-test
+collection because Playwright was absent; local commit `05c7f3b` adds the
+dependency and browser installation, but its push failed on repeated TLS/HTTP2
+EOF errors. Sender workflow dispatch was unavailable because its cleanup
+workflow is not present on the repository default branch. These platform
+results remain `UNVERIFIED`, not passes. The destructive review verdict stays
+`BLOCK`.
+
 ### Fresh final-gate review (2026-08-09)
 
 The fixed-baseline clean worktree was reviewed without product-code changes.
