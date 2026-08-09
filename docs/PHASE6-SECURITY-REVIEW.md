@@ -9,6 +9,30 @@ implementation but remains `UNVERIFIED` pending a fresh independent review and
 an actual macOS CI result. No destructive cleanup was attempted and the
 candidate has not been deployed.
 
+## Evidence Convergence Update (2026-08-09)
+
+This update records newer sender evidence without changing the `BLOCK` verdict
+or authorizing cleanup. The sender's dated local evidence record
+(`docs/PHASE6-LOCAL-GATES-EVIDENCE.md`, 2026-08-08) reports synthetic coverage
+for A1, A2, A3, A5, A6, A10, and A11: `116 passed, 18 skipped` in its focused
+matrix and `185 passed, 18 skipped` in full discovery. Its stated hosted run
+`31256853882` passes Windows and Ubuntu service/cleanup/storage suites, an
+eight-case macOS core matrix, and an immutable-anchor image contract. These are
+recorded sender facts, not a substitute for an independent acceptance verdict.
+
+The same sender record explicitly leaves macOS A6 multi-process and A10
+mixed-result behavior `EXTERNAL`; opt-in Docker integration, isolated-VPS
+acceptance, real host authority, runtime-log evidence, and human authorization
+remain external. Platform skips are not passes. The table below preserves its
+original review findings and should be read with this dated qualification
+rather than as a declaration that destructive gates are closed.
+
+GenBox's receiver was additionally exercised locally on 2026-08-09 through an
+actual HTTP server bound only to a random `127.0.0.1` port, with a temporary
+gallery, generated synthetic source ID/key, and a synthetic PNG. The receipt
+returned `safe_to_delete_source=false` and the synthetic sender-shaped source
+remained present; no cleanup implementation or delete operation was reached.
+
 ## Latest Re-review Result
 
 `96d57de` includes the previously reviewed transport, state, policy, and audit

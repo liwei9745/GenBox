@@ -257,27 +257,26 @@ Transfer existing and future images reliably without manual per-image work.
 **Status:** In Progress (implementation candidate complete locally;
 adversarial approval and destructive execution remain blocked)
 
-**Acceptance note (2026-08-02):** the controlled isolated-image update now
-returns a task ID immediately, exposes refresh-recoverable progress, and was
-completed once for the isolated sender on port `33010` using the reviewed
-immutable digest. After replacing a stale owned local private-entry route, one
-isolated Push produced matching source/receiver SHA-256 evidence, an idempotent
-`already imported` retry, and verified source retention. A cleanup dry-run on
-`33010` then failed closed with cleanup disabled, environment class `unknown`,
-execute unavailable, and its sole candidate retained.
-Sender commit `5d1b9cd` includes the A7 recovery-audit fix and closes the A4
-Windows hard-link race: it re-hashes the opened content and rechecks handle,
-path, and link-count identity immediately before deletion. The clean Windows
-suite passes `141` tests with `17` skips. Its new host-only launcher issues a
-short-lived signed attestation and capability; the application can only verify
-the three external mounted artifacts. A clean no-network/read-only Linux
-container passes `55` cleanup-security tests. macOS CI is configured but has
-not returned a result. A9 remains blocked until independent re-review passes;
-the Windows evidence uses a real concurrent hard-link operation after the
-earlier identity check and retains both names.
-Production `33018` was not selected or sent any control-plane operation. Phase
-6 remains In Progress because A9 identity proof is blocked; no destructive
-cleanup test is approved.
+**Evidence note (2026-08-09):** Phase 6 remains **In Progress** and destructive
+execution remains **blocked**. The sender's 2026-08-08 local record reports
+synthetic coverage for A1, A2, A3, A5, A6, A10, and A11 (`116 passed, 18
+skipped` focused; `185 passed, 18 skipped` full), with platform skips excluded
+from pass counts. Its recorded hosted run `31256853882` passed Windows and
+Ubuntu service/cleanup/storage suites, an eight-case macOS core matrix, and the
+immutable-anchor image contract. macOS A6/A10, opt-in Docker integration,
+isolated-VPS acceptance, host authority, and human authorization are still
+external evidence, not passes.
+
+The GenBox receiver is separately verified in a disposable actual-HTTP
+loopback harness: it binds only `127.0.0.1` on an OS-assigned port and transfers
+a synthetic PNG using temporary directories and generated synthetic Push
+identity material. The receiver returns `safe_to_delete_source=false`, so this
+is retention/receiver-contract evidence only. The 2026-08-09 focused receiver
+suite passed `28` tests. This convergence run did not operate `33010` or
+`33018`, use real credentials or media, call cleanup, or authorize deployment,
+Phase 6 completion, Phase 7, or release work. Independent security review and
+explicit external authorization gates remain required before any destructive
+exercise.
 
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`

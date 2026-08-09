@@ -1,9 +1,37 @@
 # Current Project Status
 
-**Last updated:** 2026-08-06
-**Current branch:** `codex/p4-deploy-plan-ux-eai`
+**Last updated:** 2026-08-09
+**Current branch:** `codex/phase6-convergence-20260809`
 **Current phase:** Phase 6 Verified Source Cleanup - **In Progress / Destructive Execution Blocked**
 **Previous phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
+
+## Phase 6 local and CI convergence (2026-08-09)
+
+- **SENDER LOCAL / RECORDED VERIFIED (2026-08-08):** the sender evidence record
+  at `docs/PHASE6-LOCAL-GATES-EVIDENCE.md` reports synthetic coverage for A1,
+  A2, A3, A5, A6, A10, and A11. Its focused commands report `116 passed, 18
+  skipped`; full discovery reports `185 passed, 18 skipped`; compilation and
+  diff checks pass. Platform skips are explicitly not counted as passes.
+- **SENDER CI / RECORDED VERIFIED (2026-08-08):** hosted run `31256853882`
+  reports passing Windows and Ubuntu sender service/cleanup/storage suites, an
+  eight-case macOS core matrix, and the immutable-anchor image contract. macOS
+  A6 multi-process claims and A10 mixed-result cleanup remain `EXTERNAL`; the
+  opt-in Docker integration cases, isolated-VPS acceptance, host authority, and
+  human authorization also remain external.
+- **GENBOX LOCAL / VERIFIED (2026-08-09):**
+  `python -m pytest -q tests/test_phase6_loopback_receiver.py
+  tests/test_sync_push_routes.py` -> `28 passed`. The new disposable harness
+  starts the actual receiver on an OS-assigned `127.0.0.1` port, uses a
+  temporary gallery plus generated synthetic source ID, Push key, and PNG, and
+  confirms the sender-shaped source remains unchanged. The receipt always has
+  `safe_to_delete_source=false`; no cleanup path is exercised or enabled.
+- **GENBOX REGRESSION / VERIFIED (2026-08-09):** `python -m pytest -q` ->
+  `611 passed`.
+- **BLOCKERS / NON-CLAIMS:** this evidence does not authorize cleanup, an
+  execute marker, a VPS operation, a deployment, Phase 6 completion, Phase 7,
+  or release work. No `33010` or `33018` operation was performed for this
+  convergence run. Independent review and the separately authorized external
+  gates remain required.
 
 ## Client candidate verification (2026-08-06)
 
