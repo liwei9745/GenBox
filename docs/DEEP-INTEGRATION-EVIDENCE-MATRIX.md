@@ -42,7 +42,7 @@
 | chatgpt2api Python syntax and diff checks | passed |
 | Windows GenBox build and executable loopback smoke | passed; client smoke used an OS-assigned local port |
 | Docker image build | passed |
-| Docker runtime health smoke | UNVERIFIED: the first fixed port was occupied; one random-port retry exited before `/api/setup/status` returned `200`. No remote resource was contacted. |
+| Docker runtime health smoke | VERIFIED: image started with synthetic `ADMIN_KEY`, random mapped loopback port `32769`, and `/api/setup/status` returned `200`; disposable container removed afterward. Earlier failures were missing-key/port harness conditions. |
 | High-signal working-tree secret scan | no credential hit; the only sender match was the intentional `ghp_x...` placeholder in `.env.example` |
 
 ## External / Manual Gates
