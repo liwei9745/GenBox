@@ -70,7 +70,13 @@ def test_each_saved_secret_has_independent_show_hide_control():
         for field_id in secret_input_ids:
             field = page.locator(f"#{field_id}")
             toggle = page.locator(f"button[onclick*={field_id}]")
-            field.fill(f"synthetic-{field_id}")
+            synthetic_value = f"synthetic-{field_id}"
+            if field.is_editable():
+                field.fill(synthetic_value)
+            else:
+                # Saved Push fields are deliberately view/copy-only in the
+                # generic credential editor; populate them as the API would.
+                field.evaluate("(node, value) => { node.value = value }", synthetic_value)
             assert field.get_attribute("type") == "password"
             toggle.click()
             assert field.get_attribute("type") == "text"

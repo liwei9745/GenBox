@@ -29,8 +29,8 @@ def _static_site():
         server.server_close()
 
 
-def test_dock_lock_survives_navigation_reload_and_unlock_restores_auto_hide():
-    """The visible lock is persistent; the bottom handle remains temporary."""
+def test_dock_modes_survive_reload_and_hidden_lock_blocks_reveal_zone():
+    """Auto, locked-visible, and locked-hidden are distinct persistent modes."""
     with _static_site() as base_url, sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page(viewport={"width": 360, "height": 500})
@@ -43,7 +43,14 @@ def test_dock_lock_survives_navigation_reload_and_unlock_restores_auto_hide():
         dock = page.locator("#macDock")
         pin = page.locator("#dockPinButton")
         handle = page.locator("#dockRevealHandle")
-        page.evaluate("() => { localStorage.removeItem('igs_dock_pinned'); revealDock(); }")
+        page.evaluate(
+            """() => {
+                localStorage.removeItem('igs_dock_pinned');
+                localStorage.removeItem('igs_dock_mode');
+                setDockMode('auto');
+                revealDock();
+            }"""
+        )
 
         assert page.locator("body").evaluate("node => node.classList.contains('dock-auto-hide')")
         assert page.locator("body").evaluate("node => node.classList.contains('dock-revealed')")
@@ -51,41 +58,61 @@ def test_dock_lock_survives_navigation_reload_and_unlock_restores_auto_hide():
         assert pin.is_visible()
         page.wait_for_timeout(400)
 
-        # A user click enables the persistent lock and keeps the dock visible.
+        # First click locks the dock visible.
         pin.dispatch_event("click")
         assert pin.get_attribute("aria-pressed") == "true"
+        assert page.locator("body").evaluate("node => node.classList.contains('dock-locked-visible')")
         assert page.locator("body").evaluate("node => node.classList.contains('dock-pinned')")
-        assert page.evaluate("() => localStorage.getItem('igs_dock_pinned')") == "1"
+        assert page.evaluate("() => localStorage.getItem('igs_dock_mode')") == "visible"
         page.wait_for_timeout(250)
         assert page.locator("body").evaluate("node => node.classList.contains('dock-revealed')")
 
         # Page navigation must not reset the user's lock preference.
         page.evaluate("() => switchNav('gallery', document.getElementById('navGallery'))")
-        assert page.locator("body").evaluate("node => node.classList.contains('dock-pinned')")
+        assert page.locator("body").evaluate("node => node.classList.contains('dock-locked-visible')")
         assert pin.get_attribute("aria-pressed") == "true"
 
-        # Reload restores the preference without any secret-bearing storage.
+        # Reload restores locked-visible without any secret-bearing storage.
         page.reload(wait_until="domcontentloaded")
-        page.evaluate("() => revealDock()")
-        assert page.locator("body").evaluate("node => node.classList.contains('dock-pinned')")
+        assert page.locator("body").evaluate("node => node.classList.contains('dock-locked-visible')")
         assert pin.get_attribute("aria-pressed") == "true"
         assert page.evaluate("() => Object.keys(localStorage).filter(key => key.includes('key') || key.includes('token')).length") == 0
 
-        # Unlocking returns to auto-hide; the handle can reveal temporarily.
+        # Second click locks the dock hidden. Neither the broad page bottom nor
+        # the real center reveal zone may reveal it in this mode.
         pin.dispatch_event("click")
-        assert pin.get_attribute("aria-pressed") == "false"
-        assert not page.locator("body").evaluate("node => node.classList.contains('dock-pinned')")
-        page.evaluate("() => revealDock()")
-        assert page.locator("body").evaluate("node => node.classList.contains('dock-revealed')")
-        handle.click()
+        assert pin.get_attribute("aria-pressed") == "true"
+        assert page.locator("body").evaluate("node => node.classList.contains('dock-locked-hidden')")
+        assert page.evaluate("() => localStorage.getItem('igs_dock_mode')") == "hidden"
+        assert not page.locator("body").evaluate("node => node.classList.contains('dock-revealed')")
+        handle.dispatch_event("click")
+        page.locator("body").hover(position={"x": 180, "y": 499})
         page.wait_for_timeout(250)
         assert not page.locator("body").evaluate("node => node.classList.contains('dock-revealed')")
 
-        # Keyboard activation is equivalent to a pointer click.
-        page.evaluate("() => revealDock()")
+        page.reload(wait_until="domcontentloaded")
+        assert page.locator("body").evaluate("node => node.classList.contains('dock-locked-hidden')")
+        assert not page.locator("body").evaluate("node => node.classList.contains('dock-revealed')")
+
+        # Third activation returns to auto-hide. Only the center 40% reveal
+        # zone is interactive, so edge hover cannot disturb normal controls.
         pin.focus()
         page.keyboard.press("Enter")
-        assert pin.get_attribute("aria-pressed") == "true"
+        assert pin.get_attribute("aria-pressed") == "false"
+        assert page.evaluate("() => localStorage.getItem('igs_dock_mode')") == "auto"
+        page.mouse.move(8, 20)
+        page.evaluate("() => { if (document.activeElement) document.activeElement.blur(); hideDockNow(); }")
+        zone_box = page.locator("#dockRevealZone").bounding_box()
+        assert zone_box is not None
+        assert abs(zone_box["x"] - 108) <= 1
+        assert abs(zone_box["width"] - 144) <= 2
+        page.mouse.move(8, 499)
+        page.wait_for_timeout(150)
+        assert not page.locator("body").evaluate("node => node.classList.contains('dock-revealed')")
+        page.mouse.move(180, 20)
+        page.mouse.move(180, 499)
+        page.wait_for_timeout(150)
+        assert page.locator("body").evaluate("node => node.classList.contains('dock-revealed')")
 
         # The additional control must fit in a narrow viewport without overflow.
         dock_box = dock.bounding_box()

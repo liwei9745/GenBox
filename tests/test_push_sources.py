@@ -330,6 +330,7 @@ def test_push_key_local_copy_full_synthetic_lifecycle_preserves_remote_source(
 
 def test_push_key_save_ui_requires_a_current_key_confirmation_and_unlocked_vault():
     root = Path(__file__).parents[1]
+    html = (root / "static" / "index.html").read_text(encoding="utf-8")
     js = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
 
     state_block = js.split("function setPushSourceAccess", 1)[1].split(
@@ -349,10 +350,18 @@ def test_push_key_save_ui_requires_a_current_key_confirmation_and_unlocked_vault
     assert "pushKeySaveEligible" in save_block
     assert "||!key.value)" in save_block
 
-    # The UI obtains a server-side confirmation only after explicit opt-in and vault unlock.
+    # A visible GenBox-owned dialog gates the server-side confirmation. Merely
+    # opening or canceling it must not request or consume the one-time token.
     assert "extensions.push_save_opt_in_required" in save_block
-    assert "extensions.push_save_confirm" in save_block
-    assert "confirm(i18nText('extensions.push_save_confirm'))" in save_block
+    assert 'id="extPushSaveConfirmModal"' in html
+    assert 'role="dialog"' in html.split('id="extPushSaveConfirmModal"', 1)[1].split("</div>", 1)[0]
+    assert 'id="extPushSaveConfirmBtn"' in html
+    assert 'id="extPushSaveConfirmCancelBtn"' in html
+    assert "openPushSaveConfirmation('push-source'" in save_block
+    assert "if(!fromConfirmation)" in save_block
+    assert "confirm(i18nText('extensions.push_save_confirm'))" not in save_block
+    assert "window.extensionConfirmPushSave" in js
+    assert "window.extensionCancelPushSaveConfirmation" in js
     assert "await extLoadVaultState()" in save_block
     assert "!extVaultStatus.configured||!extVaultStatus.unlocked" in save_block
     assert "/push-key/confirmation" in save_block
@@ -381,7 +390,7 @@ function element(id){
 global.document={
   getElementById:element,
   querySelector(){return null},querySelectorAll(){return []},addEventListener(){},removeEventListener(){},
-  createElement(){return element('created-'+elements.size)},body:{appendChild(){}},execCommand(){return true},
+  createElement(){return element('created-'+elements.size)},body:element('document-body'),execCommand(){return true},
 };
 const zh={
   'extensions.push_source_not_configured':'尚未创建 Push 凭据。创建后，将把地址、来源 ID 和一次性密钥填入 chatgpt2api。',
@@ -427,6 +436,8 @@ eval(source);
   if(element('extPushSourceStatus').textContent!==zh['extensions.push_key_ready_to_save'])throw new Error('new key did not render save guidance');
   element('extPushSaveOptIn').checked=true;
   await window.extensionSavePushConfiguration();
+  if(shapes.some(item=>item.url.endsWith('/push-key')||item.url.endsWith('/push-key/confirmation')))throw new Error('opening confirmation requested or consumed a save credential');
+  await window.extensionConfirmPushSave();
   if(element('extPushKey').value||!element('extPushSaveBtn').classList.contains('hidden'))throw new Error('saved key was not cleared from browser memory');
   const saved=shapes.filter(item=>item.url.endsWith('/push-key'));
   const confirmed=shapes.filter(item=>item.url.endsWith('/push-key/confirmation'));

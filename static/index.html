@@ -1067,11 +1067,17 @@
             </section>
             <section id="extPushSource" class="extension-console-login hidden" aria-labelledby="extPushSourceTitle">
               <div><span data-i18n="extensions.push_source_kicker">图片 Push 配置</span><h3 id="extPushSourceTitle"><span data-i18n="extensions.push_source_title">连接 chatgpt2api 与 GenBox</span></h3><p data-i18n="extensions.push_source_help">为这个隔离实例创建独立的 GenBox Push 凭据。密钥只会在创建或轮换后显示一次。</p></div>
-              <div id="extPushSourceStatus" class="extension-push-source-status" role="status"></div>
+              <div id="extPushSourceStatus" class="extension-push-source-status" role="status" aria-live="polite"></div>
+              <div class="extension-push-state-grid" role="status" aria-live="polite" aria-label="Push 配置状态" data-i18n-aria-label="extensions.push_state_summary">
+                <div><span data-i18n="extensions.push_state_configuration">来源配置</span><strong id="extPushConfiguredState"></strong></div>
+                <div><span data-i18n="extensions.push_state_validity">来源有效性</span><strong id="extPushValidityState"></strong></div>
+                <div><span data-i18n="extensions.push_state_local_copy">本地副本</span><strong id="extPushLocalState"></strong></div>
+                <div><span data-i18n="extensions.push_state_remote_auth">远端认证</span><strong id="extPushRemoteAuthState"></strong></div>
+              </div>
               <label><span data-i18n="extensions.push_destination_url">GenBox Push 地址</span><div class="extension-copy-row"><input id="extPushDestinationUrl" readonly><button type="button" class="btn-secondary" onclick="extensionCopy('extPushDestinationUrl')"><span data-i18n="common.copy">复制</span></button></div></label>
               <label><span data-i18n="extensions.push_source_id">来源 ID</span><div class="extension-copy-row"><input id="extPushSourceId" readonly><button type="button" class="btn-secondary" onclick="extensionCopy('extPushSourceId')"><span data-i18n="common.copy">复制</span></button></div></label>
               <label><span data-i18n="extensions.push_key">Push 密钥</span><div class="extension-copy-row"><input id="extPushKey" type="password" readonly autocomplete="off" spellcheck="false" data-i18n-placeholder="extensions.push_key_hidden" placeholder="仅创建或轮换后显示"><button type="button" class="btn-secondary" aria-label="显示 Push 密钥" aria-pressed="false" title="显示 Push 密钥" onclick="extensionTogglePassword('extPushKey',this)">👁</button></div></label>
-              <label class="extension-checkbox"><input id="extPushSaveOptIn" type="checkbox" onchange="extensionPushSaveChoiceChanged()"><span data-i18n="extensions.push_save_locally">加密保存这个新 Push 密钥到本机凭证库</span></label>
+              <label class="extension-checkbox extension-push-save-choice"><input id="extPushSaveOptIn" type="checkbox" onchange="extensionPushSaveChoiceChanged()"><span><b data-i18n="extensions.push_save_choice_title">保存本机副本</b><small data-i18n="extensions.push_save_locally">加密保存这个新 Push 密钥到本机凭证库</small></span></label>
               <p id="extPushSaveWarning" class="ext-reset-hint hidden" data-i18n="extensions.push_save_warning">仅在本机凭证库已解锁时保存。取消或未勾选时，密钥只显示一次。</p>
               <div class="extension-console-login-actions"><button type="button" class="btn-secondary" id="extPushCreateBtn" onclick="extensionCreatePushSource()"><span data-i18n="extensions.push_create">创建 Push 凭据</span></button><button type="button" class="btn-primary hidden" id="extPushCopyBtn" onclick="extensionCopyPushConfiguration()"><span data-i18n="extensions.push_copy_configuration">复制配置</span></button><button type="button" class="btn-secondary hidden" id="extPushSaveBtn" onclick="extensionSavePushConfiguration()"><span data-i18n="extensions.push_save_to_vault">保存到本机凭证库</span></button><button type="button" class="btn-secondary hidden" id="extPushRotateBtn" onclick="extensionRotatePushSource()"><span data-i18n="extensions.push_rotate">轮换密钥</span></button><button type="button" class="btn-ghost hidden" id="extPushRevokeBtn" onclick="extensionRevokePushSource()"><span data-i18n="extensions.push_revoke">撤销来源</span></button></div>
             </section>
@@ -1106,6 +1112,19 @@
           <div id="extPushConfigInstance" class="ext-reset-instance"></div>
           <p class="ext-reset-hint" data-i18n="extensions.push_source_help">为这个隔离实例创建独立的 GenBox Push 凭据。密钥只会在创建或轮换后显示一次。</p>
           <div id="extPushConfigBody"></div>
+        </div>
+      </div>
+
+      <!-- Explicit in-app confirmation. No Push key or confirmation token is rendered here. -->
+      <div id="extPushSaveConfirmModal" class="ext-reset-modal ext-push-save-confirm-modal hidden" role="dialog" aria-modal="true" aria-labelledby="extPushSaveConfirmTitle" aria-describedby="extPushSaveConfirmText">
+        <div class="ext-reset-box glass-panel ext-push-save-confirm-box">
+          <h3 id="extPushSaveConfirmTitle" data-i18n="extensions.push_save_confirm_title">确认保存 Push 密钥</h3>
+          <p id="extPushSaveConfirmText" class="ext-reset-hint" data-i18n="extensions.push_save_confirm">确认将这个新 Push 密钥加密保存到本机凭证库？之后仍需凭证库解锁密码才能读取。</p>
+          <p class="extension-push-confirm-safety" data-i18n="extensions.push_save_confirm_safety">确认后才会向本机服务申请一次性保存凭据；取消不会保存，也不会申请或消费确认凭据。</p>
+          <div class="ext-reset-actions">
+            <button type="button" class="btn-ghost" id="extPushSaveConfirmCancelBtn" onclick="extensionCancelPushSaveConfirmation()"><span data-i18n="common.cancel">取消</span></button>
+            <button type="button" class="btn-primary" id="extPushSaveConfirmBtn" onclick="extensionConfirmPushSave()"><span data-i18n="extensions.push_save_confirm_action">确认保存</span></button>
+          </div>
         </div>
       </div>
 
@@ -1161,11 +1180,10 @@
            <label><span data-i18n="extensions.username">用户名</span><input id="extCredentialUsername" autocomplete="off"></label>
           <label><span data-i18n="extensions.password">密码</span><div class="extension-copy-row"><input id="extCredentialPassword" type="password" autocomplete="off"><button type="button" class="btn-secondary ext-secret-toggle" aria-label="显示密码" aria-pressed="false" title="显示密码" onclick="extensionToggleCredentialSecret('extCredentialPassword',this)">👁</button></div></label>
           <label>API Key<div class="extension-copy-row"><input id="extCredentialApiKey" type="password" autocomplete="off"><button type="button" class="btn-secondary ext-secret-toggle" aria-label="显示 API Key" aria-pressed="false" title="显示 API Key" onclick="extensionToggleCredentialSecret('extCredentialApiKey',this)">👁</button></div></label>
-          <label>GenBox Push Key<div class="extension-copy-row"><input id="extCredentialGenboxPushKey" type="password" autocomplete="off"><button type="button" class="btn-secondary ext-secret-toggle" aria-label="显示 GenBox Push Key" aria-pressed="false" title="显示 GenBox Push Key" onclick="extensionToggleCredentialSecret('extCredentialGenboxPushKey',this)">👁</button></div></label>
-          <label>GenBox Push Source ID<input id="extCredentialGenboxPushSourceId" autocomplete="off"></label>
-          <label>GenBox Push URL<input id="extCredentialGenboxPushUrl" autocomplete="off"></label>
-          <label class="extension-checkbox"><input id="extCredentialPushSaveOptIn" type="checkbox"><span data-i18n="extensions.push_save_locally">加密保存这个新 Push 密钥到本机凭证库</span></label>
-          <p class="ext-reset-hint" data-i18n="extensions.push_save_warning">仅在本机凭证库已解锁时保存。取消或未勾选时，密钥只显示一次。</p>
+          <label>GenBox Push Key<div class="extension-copy-row"><input id="extCredentialGenboxPushKey" type="password" autocomplete="off" readonly><button type="button" class="btn-secondary ext-secret-toggle" aria-label="显示 GenBox Push Key" aria-pressed="false" title="显示 GenBox Push Key" onclick="extensionToggleCredentialSecret('extCredentialGenboxPushKey',this)">👁</button></div></label>
+          <label>GenBox Push Source ID<input id="extCredentialGenboxPushSourceId" autocomplete="off" readonly></label>
+          <label>GenBox Push URL<input id="extCredentialGenboxPushUrl" autocomplete="off" readonly></label>
+          <p class="ext-reset-hint" data-i18n="extensions.push_saved_fields_readonly">Push 配置在这里仅供查看和复制。创建、轮换或保存新密钥请使用“GenBox Push 配置”。</p>
           <label><span data-i18n="extensions.note">备注</span><textarea id="extCredentialNote" rows="3"></textarea></label>
           <div class="ext-credential-tools"><button class="btn-secondary" onclick="extensionCopyCredential()"><span data-i18n="extensions.copy_admin_key">复制管理密钥</span></button><button class="btn-secondary" onclick="extensionCopySavedPushConfiguration()"><span data-i18n="extensions.push_copy_configuration">复制 GenBox Push 配置</span></button></div>
           <div class="ext-reset-actions"><button class="btn-ghost" onclick="extensionCloseCredentialModal()"><span data-i18n="common.cancel">取消</span></button><button class="btn-ghost ext-danger" onclick="extensionDeleteCredential()"><span data-i18n="extensions.delete_local">删除本地副本</span></button><button class="btn-primary" onclick="extensionSaveCredential()"><span data-i18n="extensions.save_changes">保存修改</span></button></div>
@@ -1321,7 +1339,7 @@
 </div>
 
 <link rel="stylesheet" href="/static/css/sync.css?v=8">
-<link rel="stylesheet" href="/static/css/extensions.css?v=8">
+<link rel="stylesheet" href="/static/css/extensions.css?v=9">
   <script>
     (function () {
       var next = 'zh-CN';
@@ -1346,9 +1364,28 @@
       } catch (error3) {}
     })();
   </script>
-  <script src="/static/js/i18n.js?v=21"></script>
+  <script>
+    (function () {
+      window.readDockMode = function () {
+        try {
+          var mode = window.localStorage.getItem('igs_dock_mode');
+          if (mode === 'auto' || mode === 'visible' || mode === 'hidden') return mode;
+          return window.localStorage.getItem('igs_dock_pinned') === '1' ? 'visible' : 'auto';
+        } catch (error) {
+          return 'auto';
+        }
+      };
+      window.persistDockMode = function (mode) {
+        try {
+          window.localStorage.setItem('igs_dock_mode', mode);
+          window.localStorage.setItem('igs_dock_pinned', mode === 'visible' ? '1' : '0');
+        } catch (error) {}
+      };
+    })();
+  </script>
+  <script src="/static/js/i18n.js?v=22"></script>
 <script src="/static/js/app-all.js?v=37"></script>
 <script src="/static/js/sync.js?v=7"></script>
-  <script src="/static/js/extensions.js?v=35"></script>
+  <script src="/static/js/extensions.js?v=36"></script>
 </body>
 </html>

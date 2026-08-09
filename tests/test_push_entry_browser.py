@@ -50,6 +50,13 @@ def test_deployed_card_push_entry_has_visible_instance_bound_modal_contract():
     assert "GenBox Push 配置</h3>" in html
     assert 'id="extPushConfigInstance"' in html
     assert 'id="extPushConfigBody"' in html
+    for state_id in (
+        "extPushConfiguredState",
+        "extPushValidityState",
+        "extPushLocalState",
+        "extPushRemoteAuthState",
+    ):
+        assert f'id="{state_id}"' in html
 
     card_block = js.split("extRenderServiceGroups=function", 1)[1]
     assert "data-instance-handle" in card_block
@@ -81,6 +88,16 @@ def test_deployed_card_push_entry_has_visible_instance_bound_modal_contract():
         "cleanup",
     ):
         assert forbidden not in open_body + existing_entry
+
+    status_body = _function_body(
+        js,
+        "function setPushSourceAccess",
+        "async function resolvePushSourceHandle",
+    )
+    assert "data&&data.revoked" in status_body
+    assert "extensions.push_state_revoked" in status_body
+    assert "extensions.push_state_auth_unverified" in status_body
+    assert "push_state_active" not in status_body
 
 
 def test_push_modal_close_returns_to_deployed_services_drawer():
@@ -144,7 +161,7 @@ function element(id){
 }
 const page=element('wizard-parent'),body=element('extPushConfigBody'),sourcePanel=element('extPushSource');
 page.appendChild(sourcePanel);
-global.document={getElementById:element,querySelector(){return null},querySelectorAll(){return []},addEventListener(){},removeEventListener(){},createElement(){return element('created-'+elements.size)},body:{appendChild(){}},execCommand(){return true}};
+global.document={getElementById:element,querySelector(){return null},querySelectorAll(){return []},addEventListener(){},removeEventListener(){},createElement(){return element('created-'+elements.size)},body:element('document-body'),execCommand(){return true}};
 global.i18nText=key=>key;global.escHtml=value=>String(value||'');global.confirm=()=>true;global.getUiLanguage=()=> 'zh-CN';
 global._authFetch=async()=>{throw new Error('opening the existing card must not call an unrelated endpoint')};
 eval(source);
@@ -258,3 +275,205 @@ def test_playwright_click_on_deployed_card_opens_push_modal_and_returns_to_drawe
             assert not any("push_key=" in url or "confirmation_token=" in url for url in observed_api_urls)
         finally:
             browser.close()
+
+
+def test_both_push_configuration_copy_actions_use_real_line_breaks():
+    with _static_site() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.route("**/api/**", lambda route: route.fulfill(status=404, json={"detail": "copy test"}))
+        page.goto(f"{base_url}/static/index.html", wait_until="domcontentloaded")
+        copied = page.evaluate(
+            """async () => {
+                const writes = [];
+                Object.defineProperty(navigator, 'clipboard', {
+                    configurable: true,
+                    value: {writeText: async value => writes.push(value)},
+                });
+                document.getElementById('extPushDestinationUrl').value = 'https://loopback.invalid/api/sync/push';
+                document.getElementById('extPushSourceId').value = 'synthetic-source';
+                document.getElementById('extPushKey').value = 'synthetic-push-key';
+                await window.extensionCopyPushConfiguration();
+                document.getElementById('extCredentialGenboxPushUrl').value = 'https://loopback.invalid/api/sync/push';
+                document.getElementById('extCredentialGenboxPushSourceId').value = 'synthetic-source';
+                document.getElementById('extCredentialGenboxPushKey').value = 'synthetic-push-key';
+                await window.extensionCopySavedPushConfiguration();
+                return writes;
+            }"""
+        )
+
+        assert len(copied) == 2
+        for value in copied:
+            assert value.splitlines() == [
+                "GenBox Push URL: https://loopback.invalid/api/sync/push",
+                "Source ID: synthetic-source",
+                "Push Key: synthetic-push-key",
+            ]
+            assert "\\n" not in value
+            assert value.count("\n") == 2
+        browser.close()
+
+
+def test_push_save_uses_in_app_confirmation_and_renders_honest_status_on_narrow_screen():
+    instance_handle = "synthetic-managed-instance"
+    source_id = "synthetic-source-id"
+    push_key = "synthetic-browser-only-key"
+    confirmation_token = "synthetic-one-time-confirmation"
+    mutating_requests = []
+    saved_locally = False
+
+    def fulfill_api(route):
+        nonlocal saved_locally
+        request = route.request
+        path = request.url.split("/api/", 1)[-1].split("?", 1)[0]
+        method = request.method
+        if path == "setup/status":
+            route.fulfill(json={"app_mode": "prod", "auth_required": False, "needs_provider_setup": False})
+        elif path == "runtime/status":
+            route.fulfill(json={
+                "service": "genbox",
+                "version": "test",
+                "mode": "dev",
+                "port": 0,
+                "runtime_id": "loopback-browser-test",
+            })
+        elif path == "extensions/instances":
+            route.fulfill(json={"instances": [{
+                "handle": instance_handle,
+                "project": "chatgpt2api",
+                "managed": True,
+                "running": True,
+            }]})
+        elif path == f"extensions/push-sources/{instance_handle}" and method == "GET":
+            route.fulfill(json={
+                "configured": False,
+                "source": None,
+                "saved_locally": False,
+                "destination_url": "https://loopback.invalid/api/sync/push",
+            })
+        elif path == "extensions/push-sources" and method == "POST":
+            mutating_requests.append((method, path))
+            route.fulfill(json={
+                "configured": True,
+                "source": {"source_id": source_id},
+                "saved_locally": False,
+                "destination_url": "https://loopback.invalid/api/sync/push",
+                "push_key": push_key,
+            })
+        elif path == "extensions/vault/status":
+            route.fulfill(json={"configured": True, "unlocked": True, "entry_count": int(saved_locally)})
+        elif path == "extensions/vault/credentials":
+            route.fulfill(json={"credentials": []})
+        elif path == f"extensions/vault/credentials/{instance_handle}" and method == "GET":
+            route.fulfill(json={"credential": {}})
+        elif path == f"extensions/vault/credentials/{instance_handle}/push-key/confirmation":
+            mutating_requests.append((method, path))
+            body = request.post_data_json
+            assert body == {"source_id": source_id, "push_key": push_key}
+            route.fulfill(json={"confirmation_token": confirmation_token, "expires_in_seconds": 120})
+        elif path == f"extensions/vault/credentials/{instance_handle}/push-key":
+            mutating_requests.append((method, path))
+            body = request.post_data_json
+            assert body == {
+                "source_id": source_id,
+                "destination_url": "https://loopback.invalid/api/sync/push",
+                "push_key": push_key,
+                "confirmation_token": confirmation_token,
+                "save_push_key_locally": True,
+            }
+            saved_locally = True
+            route.fulfill(json={"saved_locally": True, "remote_unchanged": True})
+        else:
+            route.fulfill(status=404, json={"detail": "local browser mock only"})
+
+    with _static_site() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 360, "height": 500})
+        native_dialogs = []
+
+        def reject_native_dialog(dialog):
+            native_dialogs.append(dialog.type)
+            dialog.dismiss()
+
+        page.on("dialog", reject_native_dialog)
+        page.route("**/api/**", fulfill_api)
+        page.goto(f"{base_url}/static/index.html", wait_until="domcontentloaded")
+        page.evaluate(f"() => window.extensionOpenExistingPushSource('{instance_handle}')")
+
+        modal = page.locator("#extPushConfigModal")
+        modal.wait_for(state="visible")
+        box = modal.locator(".ext-push-config-box")
+        assert box.evaluate("node => ['auto', 'scroll'].includes(getComputedStyle(node).overflowY)")
+        assert box.bounding_box()["height"] <= 500
+        assert "extensions." not in modal.inner_text()
+
+        checkbox = page.locator("#extPushSaveOptIn")
+        choice = page.locator("label.extension-push-save-choice", has=checkbox)
+        assert checkbox.is_checked() is False
+        assert checkbox.is_disabled() is True
+        assert choice.is_visible()
+        checkbox_box = checkbox.bounding_box()
+        assert checkbox_box is not None
+        assert checkbox_box["width"] >= 18
+        assert checkbox_box["height"] >= 18
+
+        assert "未配置" in page.locator("#extPushConfiguredState").inner_text()
+        empty_validity = page.locator("#extPushValidityState").inner_text()
+        assert any(label in empty_validity for label in ("暂无来源", "来源不存在", "不存在"))
+        assert "未保存" in page.locator("#extPushLocalState").inner_text()
+        assert "未验证" in page.locator("#extPushRemoteAuthState").inner_text()
+        assert "active" not in modal.inner_text().lower()
+
+        page.locator("#extPushCreateBtn").click()
+        page.wait_for_function("() => !document.getElementById('extPushSaveOptIn').disabled")
+        assert checkbox.is_disabled() is False
+        assert checkbox.is_checked() is False
+        assert "已配置" in page.locator("#extPushConfiguredState").inner_text()
+        assert "未撤销" in page.locator("#extPushValidityState").inner_text()
+        assert "未保存" in page.locator("#extPushLocalState").inner_text()
+        assert "未验证" in page.locator("#extPushRemoteAuthState").inner_text()
+        choice.click()
+        assert checkbox.is_checked() is True
+
+        save_button = page.locator("#extPushSaveBtn")
+        save_button.scroll_into_view_if_needed()
+        button_box = save_button.bounding_box()
+        assert button_box is not None
+        assert 0 <= button_box["y"] < 500
+        save_button.click()
+
+        confirm_modal = page.locator("#extPushSaveConfirmModal")
+        assert confirm_modal.is_visible()
+        assert native_dialogs == []
+        assert not any(path.endswith("/confirmation") or path.endswith("/push-key") for _, path in mutating_requests)
+        page.locator("#extPushSaveConfirmCancelBtn").click()
+        assert not confirm_modal.is_visible()
+        assert page.locator("#extPushKey").input_value() == push_key
+        assert not any(path.endswith("/confirmation") or path.endswith("/push-key") for _, path in mutating_requests)
+
+        save_button.click()
+        assert confirm_modal.is_visible()
+        page.locator("#extPushSaveConfirmBtn").click()
+        page.wait_for_function("() => document.getElementById('extPushKey').value === ''")
+        assert native_dialogs == []
+        confirmation_calls = [item for item in mutating_requests if item[1].endswith("/confirmation")]
+        save_calls = [item for item in mutating_requests if item[1].endswith("/push-key")]
+        assert confirmation_calls == [("POST", f"extensions/vault/credentials/{instance_handle}/push-key/confirmation")]
+        assert save_calls == [("PUT", f"extensions/vault/credentials/{instance_handle}/push-key")]
+        page.wait_for_function(
+            "() => !document.getElementById('extPushLocalState').textContent.includes('未保存')"
+        )
+        saved_state = page.locator("#extPushLocalState").inner_text()
+        assert "保存" in saved_state and "未保存" not in saved_state
+        assert "未验证" in page.locator("#extPushRemoteAuthState").inner_text()
+
+        page.evaluate("() => window.extensionClosePushConfiguration()")
+        assert not modal.is_visible()
+        page.evaluate(f"() => window.extensionOpenExistingPushSource('{instance_handle}')")
+        modal.wait_for(state="visible")
+        assert checkbox.is_checked() is False
+        assert page.locator("#extPushKey").input_value() == ""
+        assert page.locator("#extPushKey").get_attribute("type") == "password"
+        assert not confirm_modal.is_visible()
+        assert "extensions." not in modal.inner_text()
+        browser.close()
