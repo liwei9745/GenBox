@@ -10,7 +10,7 @@
 | Receiver/sender contract, idempotency, retention, vault projection | PASS (local) | current focused and full test suites pass; see `DEEP-INTEGRATION-EVIDENCE-MATRIX.md` |
 | Cleanup default-off and browser authority rejection | PASS (local fail-closed behavior) | sender cleanup suites and protocol contract |
 | G-Store readiness material | PASS (scope) | design-only package; no catalog or adapter implementation was added |
-| Docker runtime health smoke | UNVERIFIED | image build passes; local smoke did not obtain an HTTP 200 before the disposable container exited |
+| Docker runtime health smoke | PASS (local synthetic) | image `genbox-deep-integration-local:20260809` ran with a one-time synthetic `/app/.env`, Docker-assigned loopback port, and `/api/setup/status` returned `200`; container exited cleanly after removal. No remote resource was contacted. |
 | Hosted CI/macOS/Docker integration cases | UNVERIFIED | recorded CI evidence is partial; this run did not create a new hosted result |
 | Isolated VPS cleanup execution/recovery | BLOCKED PENDING AUTHORIZATION | requires exact isolated host identity and a bounded synthetic cleanup authorization |
 | Production source access or mutation | BLOCKED | no authorization exists; `33018` is explicitly out of scope |
