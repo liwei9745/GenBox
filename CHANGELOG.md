@@ -4,6 +4,29 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.0-rc.8] - 2026-08-09
+
+- Unified manual-UAT candidate replacing rc.7; no stable release is implied.
+- Added persistent Dock modes for automatic hiding, locked visible, and locked
+  hidden. Only the bottom-center 40% reveal zone responds in automatic mode.
+- Fixed the Push Key local-save choice so it is a clear, standard checkbox next
+  to its explanatory text, remains off by default, and is unavailable without
+  a newly created or rotated key.
+- Fixed both Push configuration copy actions to use real line breaks.
+- Replaced the Push Key save path's native browser confirmation with a visible
+  GenBox confirmation dialog. Canceling requests no server confirmation token;
+  confirming retains the existing unlocked-vault and 120-second single-use
+  server confirmation requirements.
+- Split Push status into configured, source revocation state, local-copy state, and
+  remote authentication. The UI reports remote authentication as unverified
+  unless real evidence exists, and never equates a local source record with an
+  active remote sender.
+- Saved Push fields in the general credential window are view-and-copy only;
+  creating, rotating, or saving a Push Key remains restricted to the dedicated
+  confirmation flow.
+- Cleanup remains disabled unless separately enabled. Without that opt-in,
+  receipts grant no source-file deletion permission.
+
 ## [2.6.0-rc.7] - 2026-08-07
 
 - Final testing candidate replacing rc.6; no stable release is implied.
