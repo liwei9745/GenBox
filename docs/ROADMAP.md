@@ -257,6 +257,11 @@ Transfer existing and future images reliably without manual per-image work.
 **Status:** In Progress (implementation candidate complete locally;
 adversarial approval and destructive execution remain blocked)
 
+**Final-gate note (2026-08-09):** A fresh clean worktree at baseline
+`1c2f870bb6ee616c333a717239349bceb2182a20` is being used for the final
+non-destructive evidence pass. This does not change the Phase 6 status or
+authorize cleanup.
+
 **Evidence note (2026-08-09):** Phase 6 remains **In Progress** and destructive
 execution remains **blocked**. The sender's 2026-08-08 local record reports
 synthetic coverage for A1, A2, A3, A5, A6, A10, and A11 (`116 passed, 18

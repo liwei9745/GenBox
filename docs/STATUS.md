@@ -1,9 +1,15 @@
 # Current Project Status
 
 **Last updated:** 2026-08-09
-**Current branch:** `codex/phase6-phase7-preflight-20260809`
+**Current branch:** `codex/phase6-final-gate-20260809`
 **Current phase:** Phase 6 Verified Source Cleanup - **In Progress / Destructive Execution Blocked**
 **Previous phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
+
+## Phase 6 final-gate worktree baseline (2026-08-09)
+
+- **GENBOX WORKTREE / VERIFIED:** `E:\AI\GenBox-worktrees\p4planux\GenBox-od-phase6-final-gate-20260809`, branch `codex/phase6-final-gate-20260809`, baseline `1c2f870bb6ee616c333a717239349bceb2182a20`, clean at gate start.
+- **SENDER WORKTREE / VERIFIED:** `E:\AI\chatgpt2api-worktrees\phase6-final-gate-20260809`, branch `codex/phase6-final-gate-20260809`, baseline `19c2fdbb23a97c713b53955942d325fb725708d1`, clean at gate start.
+- This gate is non-destructive and uses only synthetic data, temporary directories, local Docker, and local/hosted evidence that is explicitly labeled. VPS, SSH, `33010`, `33018`, real cleanup, execute markers, production changes, human UAT, Release, and Phase 7 implementation remain outside this worktree's authority.
 
 ## Phase 6 local and CI convergence (2026-08-09)
 

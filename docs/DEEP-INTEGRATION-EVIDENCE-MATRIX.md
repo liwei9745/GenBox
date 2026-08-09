@@ -45,6 +45,17 @@
 | Docker runtime health smoke | VERIFIED: image started with synthetic `ADMIN_KEY`, random mapped loopback port `32769`, and `/api/setup/status` returned `200`; disposable container removed afterward. Earlier failures were missing-key/port harness conditions. |
 | High-signal working-tree secret scan | no credential hit; the only sender match was the intentional `ghp_x...` placeholder in `.env.example` |
 
+## Phase 6 Final-Gate Verification
+
+| Gate | Result | Boundary |
+| --- | --- | --- |
+| Fresh GenBox focused receiver/route/source/vault/entry suite | `65 passed` | local synthetic evidence |
+| Fresh GenBox full regression | `611 passed` | local only |
+| Fresh sender full regression | `168 passed, 18 skipped, 249 subtests passed` | platform skips remain explicit |
+| Fresh GenBox Docker build and runtime health | PASS | synthetic `ADMIN_KEY`, random Docker-mapped loopback port `32770`, `/api/setup/status=200`, disposable container |
+| Exact-SHA GitHub/macOS CI | UNVERIFIED | no new run was available for the fixed baseline SHAs; historical runs are not relabeled |
+| A4/A7/A9/A12 security review | PASS with external conditions | local fail-closed controls and tests pass; isolated execute and independent external authority remain blocked |
+
 ## External / Manual Gates
 
 The following are intentionally **not** claimed complete: human UAT; exact host/port/host-key authorization; isolated cleanup execute marker; real cleanup approval; clean deployment from sanitized GitHub sources; upstream release/PR approval; and any production mutation. These remain the unified authorization package for a later human-controlled gate.

@@ -11,6 +11,18 @@ candidate has not been deployed.
 
 ## Evidence Convergence Update (2026-08-09)
 
+### Fresh final-gate review (2026-08-09)
+
+The fixed-baseline clean worktree was reviewed without product-code changes.
+GenBox focused and full suites passed (`65` and `611`); sender full discovery
+passed (`168 passed, 18 skipped, 249 subtests`). Synthetic Docker build/runtime
+smoke passed on a random local loopback port with a generated administrator key.
+The working-tree and history scans found no actual secret; the sender's only
+high-signal match remains an explicit `.env.example` placeholder. Exact-SHA
+hosted CI/macOS evidence was unavailable, so it remains `UNVERIFIED`.
+The review still returns `BLOCK` for destructive cleanup, VPS access,
+production mutation, and release publication.
+
 This update records newer sender evidence without changing the `BLOCK` verdict
 or authorizing cleanup. The sender's dated local evidence record
 (`docs/PHASE6-LOCAL-GATES-EVIDENCE.md`, 2026-08-08) reports synthetic coverage

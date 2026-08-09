@@ -16,6 +16,12 @@
 | Production source access or mutation | BLOCKED | no authorization exists; `33018` is explicitly out of scope |
 | Clean GitHub deployment and upstream/release work | UNVERIFIED | requires sanitized published commit and a separately provisioned clean environment |
 
+**Final-gate record (2026-08-09):** The fresh fixed-baseline worktrees passed
+the local focused/full suites and synthetic Docker runtime smoke. No product
+code changed in this gate. Exact-SHA hosted CI/macOS remains `UNVERIFIED`;
+VPS, cleanup execution, production mutation, human UAT, Phase 7, and Release
+remain external or blocked.
+
 ## Required Human Decisions
 
 1. Identify and authorize one isolated development target by canonical host, port, host-key algorithm, and SHA-256 fingerprint.
