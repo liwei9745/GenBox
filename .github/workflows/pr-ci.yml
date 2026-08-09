@@ -36,6 +36,9 @@ jobs:
       - name: Install test dependencies
         run: python -m pip install -r requirements-dev.txt
 
+      - name: Install Playwright browser
+        run: python -m playwright install --with-deps chromium
+
       - name: Validate JavaScript
         run: |
           node --check static/js/i18n.js
