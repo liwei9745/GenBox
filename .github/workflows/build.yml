@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - 'codex/phase6-ci-convergence-20260809'
   workflow_dispatch:
     inputs:
       build_all:

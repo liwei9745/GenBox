@@ -3,6 +3,9 @@ name: Master PR Quality Gate
 on:
   pull_request:
     branches: ["master"]
+  push:
+    branches: ["codex/phase6-ci-convergence-20260809"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -43,8 +46,26 @@ jobs:
       - name: Build README laboratory
         run: python scripts/build_readme_lab.py
 
-      - name: Run tests
-        run: python -m pytest -q
+      - name: Run tests with JUnit evidence
+        run: python -m pytest -q --junitxml=genbox-quality.xml
+
+      - name: Reject empty or all-skipped test evidence
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("genbox-quality.xml").getroot()
+          cases = root.findall(".//testcase")
+          skipped = root.findall(".//skipped")
+          if not cases or len(skipped) >= len(cases):
+              raise SystemExit(f"invalid test evidence: cases={len(cases)} skipped={len(skipped)}")
+          print(f"test evidence: cases={len(cases)} skipped={len(skipped)}")
+
+      - name: Upload JUnit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: GenBox-quality-junit
+          path: genbox-quality.xml
+          retention-days: 7
 
       - name: Check whitespace errors
         run: git diff --check
