@@ -1,6 +1,6 @@
 # Phase 6 Isolated Drill Authorization Package
 
-**Prepared:** 2026-08-09  
+**Prepared:** 2026-08-09
 **Status:** review-only; no execution authority granted
 
 This package is a one-time human review checklist for a future isolated Phase
