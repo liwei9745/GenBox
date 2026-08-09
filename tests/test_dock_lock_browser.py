@@ -85,7 +85,6 @@ def test_dock_modes_survive_reload_and_hidden_lock_blocks_reveal_zone():
         assert page.locator("body").evaluate("node => node.classList.contains('dock-locked-hidden')")
         assert page.evaluate("() => localStorage.getItem('igs_dock_mode')") == "hidden"
         assert not page.locator("body").evaluate("node => node.classList.contains('dock-revealed')")
-        handle.dispatch_event("click")
         page.locator("body").hover(position={"x": 180, "y": 499})
         page.wait_for_timeout(250)
         assert not page.locator("body").evaluate("node => node.classList.contains('dock-revealed')")
@@ -94,12 +93,15 @@ def test_dock_modes_survive_reload_and_hidden_lock_blocks_reveal_zone():
         assert page.locator("body").evaluate("node => node.classList.contains('dock-locked-hidden')")
         assert not page.locator("body").evaluate("node => node.classList.contains('dock-revealed')")
 
-        # Third activation returns to auto-hide. Only the center 40% reveal
-        # zone is interactive, so edge hover cannot disturb normal controls.
-        pin.focus()
-        page.keyboard.press("Enter")
+        # The visible recovery handle must be a real clickable escape from the
+        # hidden lock. Tests must not activate the now-hidden Dock pin instead.
+        assert handle.is_visible()
+        handle.click()
         assert pin.get_attribute("aria-pressed") == "false"
         assert page.evaluate("() => localStorage.getItem('igs_dock_mode')") == "auto"
+
+        # Only the center 40% reveal zone is interactive, so edge hover cannot
+        # disturb normal controls after returning to auto-hide.
         page.mouse.move(8, 20)
         page.evaluate("() => { if (document.activeElement) document.activeElement.blur(); hideDockNow(); }")
         zone_box = page.locator("#dockRevealZone").bounding_box()

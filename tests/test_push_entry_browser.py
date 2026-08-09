@@ -412,6 +412,7 @@ def test_push_save_uses_in_app_confirmation_and_renders_honest_status_on_narrow_
         assert checkbox.is_checked() is False
         assert checkbox.is_disabled() is True
         assert choice.is_visible()
+        assert page.locator("#extPushDeleteLocalBtn").is_hidden()
         checkbox_box = checkbox.bounding_box()
         assert checkbox_box is not None
         assert checkbox_box["width"] >= 18
@@ -465,6 +466,7 @@ def test_push_save_uses_in_app_confirmation_and_renders_honest_status_on_narrow_
         )
         saved_state = page.locator("#extPushLocalState").inner_text()
         assert "保存" in saved_state and "未保存" not in saved_state
+        assert page.locator("#extPushDeleteLocalBtn").is_visible()
         assert "未验证" in page.locator("#extPushRemoteAuthState").inner_text()
 
         page.evaluate("() => window.extensionClosePushConfiguration()")
@@ -475,5 +477,120 @@ def test_push_save_uses_in_app_confirmation_and_renders_honest_status_on_narrow_
         assert page.locator("#extPushKey").input_value() == ""
         assert page.locator("#extPushKey").get_attribute("type") == "password"
         assert not confirm_modal.is_visible()
+        assert "extensions." not in modal.inner_text()
+        browser.close()
+
+
+def test_delete_local_push_copy_uses_dedicated_route_and_keeps_source_configured():
+    instance_handle = "synthetic-managed-delete-instance"
+    source_id = "synthetic-source-to-keep"
+    saved_locally = True
+    mutating_requests = []
+    other_credential = {
+        "admin_key": "synthetic-admin-key-to-keep",
+        "note": "synthetic note to keep",
+    }
+
+    def fulfill_api(route):
+        nonlocal saved_locally
+        request = route.request
+        path = request.url.split("/api/", 1)[-1].split("?", 1)[0]
+        method = request.method
+        if path == "setup/status":
+            route.fulfill(json={"app_mode": "prod", "auth_required": False, "needs_provider_setup": False})
+        elif path == "runtime/status":
+            route.fulfill(json={
+                "service": "genbox",
+                "version": "test",
+                "mode": "dev",
+                "port": 0,
+                "runtime_id": "loopback-delete-test",
+            })
+        elif path == "extensions/instances":
+            route.fulfill(json={"instances": [{
+                "handle": instance_handle,
+                "project": "chatgpt2api",
+                "managed": True,
+                "running": True,
+            }]})
+        elif path == f"extensions/push-sources/{instance_handle}" and method == "GET":
+            route.fulfill(json={
+                "configured": True,
+                "revoked": False,
+                "source": {"source_id": source_id},
+                "saved_locally": saved_locally,
+                "destination_url": "https://loopback.invalid/api/sync/push",
+            })
+        elif path == "extensions/vault/status":
+            route.fulfill(json={"configured": True, "unlocked": True, "entry_count": 1})
+        elif path == "extensions/vault/credentials":
+            route.fulfill(json={"credentials": [{
+                "instance_handle": instance_handle,
+                "fields": ["admin_key", "note"] + ([
+                    "genbox_push_key", "genbox_push_source_id", "genbox_push_url"
+                ] if saved_locally else []),
+            }]})
+        elif path == f"extensions/vault/credentials/{instance_handle}" and method == "GET":
+            credential = dict(other_credential)
+            if saved_locally:
+                credential.update({
+                    "genbox_push_key": "synthetic-local-copy",
+                    "genbox_push_source_id": source_id,
+                    "genbox_push_url": "https://loopback.invalid/api/sync/push",
+                })
+            route.fulfill(json={"credential": credential})
+        elif path == f"extensions/vault/credentials/{instance_handle}/push-key" and method == "DELETE":
+            mutating_requests.append((method, path))
+            assert request.post_data is None
+            saved_locally = False
+            route.fulfill(json={"deleted": True, "remote_unchanged": True})
+        elif path == f"extensions/vault/credentials/{instance_handle}" and method == "DELETE":
+            mutating_requests.append((method, path))
+            route.fulfill(status=500, json={"detail": "generic credential delete must not be called"})
+        else:
+            route.fulfill(status=404, json={"detail": "local browser mock only"})
+
+    with _static_site() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 360, "height": 500})
+        confirmation_text = []
+
+        def accept_delete_confirmation(dialog):
+            confirmation_text.append(dialog.message)
+            dialog.accept()
+
+        page.on("dialog", accept_delete_confirmation)
+        page.route("**/api/**", fulfill_api)
+        page.goto(f"{base_url}/static/index.html", wait_until="domcontentloaded")
+        page.evaluate(f"() => window.extensionOpenExistingPushSource('{instance_handle}')")
+
+        modal = page.locator("#extPushConfigModal")
+        modal.wait_for(state="visible")
+        delete_button = page.locator("#extPushDeleteLocalBtn")
+        delete_button.wait_for(state="visible")
+        assert delete_button.is_enabled()
+        assert page.locator("#extPushConfiguredState").get_attribute("class") == "ready"
+        assert page.locator("#extPushValidityState").get_attribute("class") == "ready"
+        assert page.locator("#extPushLocalState").get_attribute("class") == "ready"
+
+        delete_button.scroll_into_view_if_needed()
+        delete_button.click()
+        page.wait_for_function("() => document.getElementById('extPushDeleteLocalBtn').classList.contains('hidden')")
+
+        assert len(confirmation_text) == 1
+        assert "Push Key" in confirmation_text[0]
+        assert "远端" in confirmation_text[0]
+        assert mutating_requests == [(
+            "DELETE",
+            f"extensions/vault/credentials/{instance_handle}/push-key",
+        )]
+        assert other_credential == {
+            "admin_key": "synthetic-admin-key-to-keep",
+            "note": "synthetic note to keep",
+        }
+        assert page.locator("#extPushConfiguredState").get_attribute("class") == "ready"
+        assert page.locator("#extPushValidityState").get_attribute("class") == "ready"
+        assert page.locator("#extPushLocalState").get_attribute("class") == "neutral"
+        assert page.locator("#extPushRemoteAuthState").get_attribute("class") == "pending"
         assert "extensions." not in modal.inner_text()
         browser.close()

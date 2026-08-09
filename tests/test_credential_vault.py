@@ -1,5 +1,7 @@
+import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -195,6 +197,40 @@ def test_locked_vault_blocks_push_key_read_and_local_copy_can_be_deleted(tmp_pat
     vault.unlock("vault-password")
     assert vault.delete("managed-one") is True
     assert vault.list_metadata() == []
+
+
+def test_push_key_only_delete_route_preserves_other_credentials_contract(tmp_path, monkeypatch):
+    import main
+
+    vault = CredentialVault(tmp_path / "credentials.vault.json")
+    vault.setup("synthetic-vault-password")
+    vault.upsert("managed-one", ManagedCredential(
+        admin_key="synthetic-admin-key-to-keep",
+        ssh_password="synthetic-ssh-password-to-keep",
+        api_key="synthetic-api-key-to-keep",
+        note="synthetic note to keep",
+        genbox_push_key="synthetic-push-key-to-delete",
+        genbox_push_source_id="synthetic-source-to-delete",
+        genbox_push_url="https://loopback.invalid/api/sync/push",
+    ))
+    monkeypatch.setattr(main, "credential_vault", vault)
+    monkeypatch.setattr(
+        main,
+        "_managed_vault_instance",
+        lambda instance_id: SimpleNamespace(id=instance_id),
+    )
+
+    result = asyncio.run(main.extension_vault_delete_push_key("managed-one"))
+    saved = vault.get("managed-one")
+
+    assert result == {"deleted": True, "remote_unchanged": True}
+    assert saved.admin_key == "synthetic-admin-key-to-keep"
+    assert saved.ssh_password == "synthetic-ssh-password-to-keep"
+    assert saved.api_key == "synthetic-api-key-to-keep"
+    assert saved.note == "synthetic note to keep"
+    assert saved.genbox_push_key == ""
+    assert saved.genbox_push_source_id == ""
+    assert saved.genbox_push_url == ""
 
 
 def test_generic_credential_editor_cannot_replace_or_resave_push_configuration():
