@@ -562,12 +562,15 @@ def test_delete_local_push_copy_uses_dedicated_route_and_keeps_source_configured
         page.on("dialog", accept_delete_confirmation)
         page.route("**/api/**", fulfill_api)
         page.goto(f"{base_url}/static/index.html", wait_until="domcontentloaded")
+        page.evaluate("() => window.setExtensionsBackendOnline(true)")
+        page.evaluate("() => window.extensionLoadServices()")
         page.evaluate(f"() => window.extensionOpenExistingPushSource('{instance_handle}')")
 
         modal = page.locator("#extPushConfigModal")
         modal.wait_for(state="visible")
         delete_button = page.locator("#extPushDeleteLocalBtn")
         delete_button.wait_for(state="visible")
+        page.wait_for_function("() => !document.getElementById('extPushDeleteLocalBtn').disabled")
         assert delete_button.is_enabled()
         assert page.locator("#extPushConfiguredState").get_attribute("class") == "ready"
         assert page.locator("#extPushValidityState").get_attribute("class") == "ready"
@@ -593,4 +596,69 @@ def test_delete_local_push_copy_uses_dedicated_route_and_keeps_source_configured
         assert page.locator("#extPushLocalState").get_attribute("class") == "neutral"
         assert page.locator("#extPushRemoteAuthState").get_attribute("class") == "pending"
         assert "extensions." not in modal.inner_text()
+        browser.close()
+
+
+def test_locked_vault_disables_local_push_key_deletion_with_visible_guidance():
+    instance_handle = "synthetic-locked-delete-instance"
+    source_id = "synthetic-locked-source"
+    mutating_requests = []
+
+    def fulfill_api(route):
+        request = route.request
+        path = request.url.split("/api/", 1)[-1].split("?", 1)[0]
+        if path == "setup/status":
+            route.fulfill(json={"app_mode": "prod", "auth_required": False, "needs_provider_setup": False})
+        elif path == "runtime/status":
+            route.fulfill(json={
+                "service": "genbox", "version": "test", "mode": "dev", "port": 0,
+                "runtime_id": "loopback-locked-delete-test",
+            })
+        elif path == "extensions/instances":
+            route.fulfill(json={"instances": [{
+                "handle": instance_handle, "project": "chatgpt2api", "managed": True,
+                "running": True,
+            }]})
+        elif path == f"extensions/push-sources/{instance_handle}":
+            route.fulfill(json={
+                "configured": True,
+                "revoked": False,
+                "source": {"source_id": source_id},
+                "saved_locally": True,
+                "destination_url": "https://loopback.invalid/api/sync/push",
+            })
+        elif path == "extensions/vault/status":
+            route.fulfill(json={"configured": True, "unlocked": False, "entry_count": 1})
+        elif path == "extensions/vault/credentials":
+            route.fulfill(json={"credentials": [{
+                "instance_handle": instance_handle,
+                "fields": ["genbox_push_key", "genbox_push_source_id", "genbox_push_url"],
+            }]})
+        elif path.endswith("/push-key") and request.method == "DELETE":
+            mutating_requests.append((request.method, path))
+            route.fulfill(status=500, json={"detail": "locked vault must not delete"})
+        else:
+            route.fulfill(status=404, json={"detail": "local browser mock only"})
+
+    with _static_site() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 360, "height": 500})
+        page.route("**/api/**", fulfill_api)
+        page.goto(f"{base_url}/static/index.html", wait_until="domcontentloaded")
+        page.evaluate("() => window.setExtensionsBackendOnline(true)")
+        page.evaluate("() => window.extensionLoadServices()")
+        page.evaluate(f"() => window.extensionOpenExistingPushSource('{instance_handle}')")
+
+        modal = page.locator("#extPushConfigModal")
+        modal.wait_for(state="visible")
+        delete_button = page.locator("#extPushDeleteLocalBtn")
+        delete_button.wait_for(state="visible")
+        assert delete_button.is_enabled() is False
+        assert "解锁" in (delete_button.get_attribute("title") or "")
+        hint = page.locator("#extPushDeleteLocalHint")
+        assert hint.is_visible()
+        assert "解锁" in hint.inner_text()
+
+        page.evaluate("() => window.extensionDeleteLocalPushKey()")
+        assert mutating_requests == []
         browser.close()

@@ -463,6 +463,7 @@
     "extensions.push_save_opt_in_required":{"zh-CN":"请先勾选本地保存并确认风险。","en":"Check local save and confirm the warning first."},
     "extensions.push_saved_locally":{"zh-CN":"Push 密钥已加密保存到本机；远端来源未改变。","en":"The Push key was encrypted and saved locally; the remote source was unchanged."},
     "extensions.push_delete_local":{"zh-CN":"删除本机 Push Key 副本","en":"Delete local Push key copy"},
+    "extensions.push_delete_local_locked":{"zh-CN":"请先解锁凭证库，再删除本机 Push Key 副本。","en":"Unlock the credential vault before deleting the local Push key copy."},
     "extensions.push_delete_local_confirm":{"zh-CN":"只删除这个 Push Key 在本机凭证库中的副本吗？远端 Push 来源不会撤销或改变，其他本机凭证也会保留。","en":"Delete only this Push key's local vault copy? The remote Push source will not be revoked or changed, and other local credentials will be kept."},
     "extensions.push_delete_local_unconfirmed":{"zh-CN":"本机未确认 Push Key 副本已安全删除。","en":"The local service did not confirm that the Push key copy was safely deleted."},
     "extensions.push_deleted_locally":{"zh-CN":"本机 Push Key 副本已删除；远端来源和其他本机凭证未改变。","en":"The local Push key copy was deleted; the remote source and other local credentials were unchanged."},

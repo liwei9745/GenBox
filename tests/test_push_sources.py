@@ -349,6 +349,8 @@ def test_push_key_save_ui_requires_a_current_key_confirmation_and_unlocked_vault
     assert "extensions.push_key_not_available" in save_block
     assert "pushKeySaveEligible" in save_block
     assert "||!key.value)" in save_block
+    assert "function updatePushDeleteLocalControl()" in js
+    assert "extensions.push_delete_local_locked" in js
 
     # A visible GenBox-owned dialog gates the server-side confirmation. Merely
     # opening or canceling it must not request or consume the one-time token.
