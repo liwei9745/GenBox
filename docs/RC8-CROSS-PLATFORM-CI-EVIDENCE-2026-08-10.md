@@ -65,5 +65,9 @@ tested code/workflow snapshot.
 - VPS/SSH, sender-side E2E, source cleanup/unlink/execute markers,
   `33010`/`33018`, real credentials, real media, tags, and formal Releases were
   not used and remain outside this evidence branch.
+- The independent release-gate pass also observed pre-existing orphaned
+  SSH/WSL processes with remote-host command lines. They were not started or
+  used by this run, no established session was part of the evidence, and owner
+  attribution is required before any release approval.
 - No release tag, GitHub Release, deployment, or production endpoint was
   touched.
