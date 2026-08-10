@@ -3,7 +3,7 @@
 **Date:** 2026-08-10
 **Scope:** candidate-only workflow trigger wiring and hosted packaging evidence
 **Evidence branch:** `codex/rc8-cross-platform-ci-20260810`
-**Hosted source commit:** `e0daf610e1934d78032123b4b4a6c0c62cfdb339`
+**Hosted source commit:** `9b5ac7ca7153479ad969e70bfe3c1bc42b71b320`
 **Source candidate commit:** `9b5ac7ca7153479ad969e70bfe3c1bc42b71b320`
 **Candidate code baseline:** `07b89abc4bd0297cf665516c037a95152c78f8fa`
 
@@ -38,24 +38,23 @@
 
 ## Hosted Run
 
-- **Run:** `31358450150` (`workflow_dispatch`, ref
-  `codex/rc8-cross-platform-ci-20260810`, head SHA
-  `e0daf610e1934d78032123b4b4a6c0c62cfdb339`).
-- **Quality:** `Test release source` job `93362426783` — `success` (`617 passed`).
-- **Windows:** job `93362617749` — `success`; artifact
+- **Run:** `31358814412` (`workflow_dispatch`, ref
+  `codex/v2.6.0-rc.8-final-candidate`, head SHA
+  `9b5ac7ca7153479ad969e70bfe3c1bc42b71b320`).
+- **Quality:** `Test release source` job `93363442086` — `success` (`617 passed`).
+- **Windows:** job `93363724112` — `success`; artifact
   `GenBox-Windows-x64`, digest
-  `sha256:ff3a0a0320fe22fac6fa639fc4e1441bc8f4ebc6ccb646096f70eb504b7fbb6c`.
-- **macOS:** job `93362617735` — `success`; artifact `GenBox-macOS`, digest
-  `sha256:6610e957d918d617d298f7ef25b1ef70ac435de046a3514fec675125a0997a2f`.
-- **Linux:** job `93362617747` — `success`; artifact `GenBox-Linux-x64`, digest
-  `sha256:454ba2a12fcddc88d44d8b12d86f1cca830e93d9126d43a6522fc2187083ce6e`.
-- **Release job:** `Create Release` job `93362921400` — `skipped`; no tag or
+  `sha256:cdf3998e9d93fd385386d89f5f79dc622b5be719ccf44e91f9f05cd8c1b138a4`.
+- **macOS:** job `93363724106` — `success`; artifact `GenBox-macOS`, digest
+  `sha256:6d8755760085d3bc6f6c368587855a65b6bf78d6df7c93ed44719e4673c6debb`.
+- **Linux:** job `93363724098` — `success`; artifact `GenBox-Linux-x64`, digest
+  `sha256:dd9ccc6feada8b1c30b5e3bfe821fd07afd3138665f786d453b66f4218e8afdc`.
+- **Release job:** `Create Release` job `93363969869` — `skipped`; no tag or
   GitHub Release was created.
 
-The hosted jobs checked out `e0daf61`, whose only changes from the source
-candidate are workflow wiring and evidence documentation. This document may
-receive a later docs-only commit; the hosted source SHA above remains the
-tested code/workflow snapshot.
+This run checked out the original candidate commit itself. The evidence branch
+contains only workflow wiring and dated documentation; its hosted run is kept
+separate from this exact-candidate result.
 
 ## Unverified / External Boundaries
 
