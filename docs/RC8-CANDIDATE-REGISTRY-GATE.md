@@ -17,11 +17,12 @@ changing the container source that can be published.
 
 ## Publish Controls
 
-`.github/workflows/docker.yml` has no push or tag trigger. It can run only
-through `workflow_dispatch`, with `candidate_publish` defaulting to `false`.
-The publish job is skipped unless the caller selects the named workflow branch,
-sets the boolean to `true`, and supplies the exact SHA and immutable candidate
-tag above.
+`.github/workflows/docker.yml` preserves its existing `master`, `dev`, and
+`v*` push triggers. The candidate publish job can run only through
+`workflow_dispatch`, with `candidate_publish` defaulting to `false`; the
+ordinary build job is skipped for that manual dispatch. The publish job is
+skipped unless the caller selects the named workflow branch, sets the boolean
+to `true`, and supplies the exact SHA and immutable candidate tag above.
 
 The job then requires the existing Actions `GITHUB_TOKEN` to authenticate to
 GHCR and performs a read-only GitHub Packages lookup for `genbox` before

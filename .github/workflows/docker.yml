@@ -1,6 +1,9 @@
-name: Publish rc.8 Candidate Container
+name: Build Docker Image
 
 on:
+  push:
+    branches: [ "master", "dev" ]
+    tags: [ "v*" ]
   workflow_dispatch:
     inputs:
       candidate_publish:
@@ -25,15 +28,57 @@ env:
   CANDIDATE_TAG: candidate-9b5ac7c
   PUBLISH_REPOSITORY: liwei9745/GenBox
   REGISTRY: ghcr.io
-  IMAGE_NAME: liwei9745/genbox
+  IMAGE_NAME: ${{ github.repository }}
+  CANDIDATE_IMAGE_NAME: liwei9745/genbox
   PACKAGE_OWNER: liwei9745
   PACKAGE_NAME: genbox
 
-concurrency:
-  group: ghcr-rc8-candidate
-  cancel-in-progress: false
-
 jobs:
+  # Preserve the established master/dev/tag publishing contract. It is never
+  # reachable from the manual candidate dispatch path.
+  build:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=branch
+            type=sha,prefix=
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   publish-candidate:
     # The workflow configuration may advance, but the checked out image source cannot.
     if: >-
@@ -44,6 +89,9 @@ jobs:
       inputs.candidate_tag == 'candidate-9b5ac7c'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency:
+      group: ghcr-rc8-candidate
+      cancel-in-progress: false
 
     permissions:
       contents: read
@@ -135,7 +183,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.CANDIDATE_TAG }}
+          tags: ${{ env.REGISTRY }}/${{ env.CANDIDATE_IMAGE_NAME }}:${{ env.CANDIDATE_TAG }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ env.CANDIDATE_SHA }}
@@ -149,7 +197,7 @@ jobs:
           {
             echo '## Published rc.8 candidate image'
             echo
-            echo "- Image: \`${REGISTRY}/${IMAGE_NAME}:${CANDIDATE_TAG}\`"
+            echo "- Image: \`${REGISTRY}/${CANDIDATE_IMAGE_NAME}:${CANDIDATE_TAG}\`"
             echo "- Digest: \`${{ steps.build.outputs.digest }}\`"
             echo "- Source: \`${CANDIDATE_SHA}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
@@ -160,7 +208,7 @@ jobs:
           CANDIDATE_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
-          image="${REGISTRY}/${IMAGE_NAME}@${CANDIDATE_DIGEST}"
+          image="${REGISTRY}/${CANDIDATE_IMAGE_NAME}@${CANDIDATE_DIGEST}"
           docker buildx imagetools inspect "${image}" > /dev/null
           container="$(docker run --detach --rm \
             --publish 127.0.0.1::8891 \
