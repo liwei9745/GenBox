@@ -1,53 +1,182 @@
-name: Build Docker Image
+name: Publish rc.8 Candidate Container
 
 on:
-  push:
-    branches: [ "master", "dev" ]
-    tags: [ "v*" ]
+  workflow_dispatch:
+    inputs:
+      candidate_publish:
+        description: 'Explicitly authorize the single rc.8 candidate image publish'
+        required: true
+        default: false
+        type: boolean
+      candidate_sha:
+        description: 'Frozen source SHA for the rc.8 candidate'
+        required: true
+        default: '9b5ac7ca7153479ad969e70bfe3c1bc42b71b320'
+        type: string
+      candidate_tag:
+        description: 'Frozen container tag for the rc.8 candidate'
+        required: true
+        default: 'candidate-9b5ac7c'
+        type: string
 
 env:
+  CANDIDATE_BRANCH: codex/phase6-release-gates-20260810
+  CANDIDATE_SHA: 9b5ac7ca7153479ad969e70bfe3c1bc42b71b320
+  CANDIDATE_TAG: candidate-9b5ac7c
+  PUBLISH_REPOSITORY: liwei9745/GenBox
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: liwei9745/genbox
+  PACKAGE_OWNER: liwei9745
+  PACKAGE_NAME: genbox
+
+concurrency:
+  group: ghcr-rc8-candidate
+  cancel-in-progress: false
 
 jobs:
-  build:
+  publish-candidate:
+    # The workflow configuration may advance, but the checked out image source cannot.
+    if: >-
+      github.repository == 'liwei9745/GenBox' &&
+      github.ref == 'refs/heads/codex/phase6-release-gates-20260810' &&
+      inputs.candidate_publish == true &&
+      inputs.candidate_sha == '9b5ac7ca7153479ad969e70bfe3c1bc42b71b320' &&
+      inputs.candidate_tag == 'candidate-9b5ac7c'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     permissions:
       contents: read
       packages: write
 
     steps:
-      - name: Checkout code
+      - name: Check out frozen candidate source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
 
-      - name: Log in to Container Registry
+      - name: Verify candidate identity
+        shell: bash
+        run: |
+          test "${GITHUB_REPOSITORY}" = "${PUBLISH_REPOSITORY}"
+          test "${GITHUB_REF}" = "refs/heads/${CANDIDATE_BRANCH}"
+          test "${{ inputs.candidate_sha }}" = "${CANDIDATE_SHA}"
+          test "${{ inputs.candidate_tag }}" = "${CANDIDATE_TAG}"
+          test "$(git rev-parse HEAD)" = "${CANDIDATE_SHA}"
+
+      - name: Set up Python for registry guard
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Authenticate to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify existing registry target
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          test -n "${GITHUB_TOKEN}"
+          status="$(curl --silent --show-error --retry 2 --output /dev/null --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${GITHUB_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            "https://api.github.com/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}")"
+          case "${status}" in
+            200|404) ;;
+            *) echo "Registry package target check returned HTTP ${status}" >&2; exit 1 ;;
+          esac
+
+      - name: Refuse to overwrite an existing candidate tag
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          page=1
+          response_file="$(mktemp)"
+          trap 'rm -f "${response_file}"' EXIT
+          while :; do
+            status="$(curl --silent --show-error --retry 2 --output "${response_file}" --write-out '%{http_code}' \
+              --header "Authorization: Bearer ${GITHUB_TOKEN}" \
+              --header "Accept: application/vnd.github+json" \
+              "https://api.github.com/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions?per_page=100&page=${page}")"
+            case "${status}" in
+              404) break ;;
+              200) ;;
+              *) echo "Registry package versions check returned HTTP ${status}" >&2; exit 1 ;;
+            esac
+            versions="$(< "${response_file}")"
+            if printf '%s' "${versions}" | python -c 'import json, os, sys; tag = os.environ["CANDIDATE_TAG"]; versions = json.load(sys.stdin); sys.exit(1 if any(tag in version.get("metadata", {}).get("container", {}).get("tags", []) for version in versions) else 0)'; then
+              :
+            else
+              echo "Refusing to overwrite existing candidate tag: ${CANDIDATE_TAG}" >&2
+              exit 1
+            fi
+            count="$(printf '%s' "${versions}" | python -c 'import json, sys; print(len(json.load(sys.stdin)))')"
+            if [ "${count}" -lt 100 ]; then
+              break
+            fi
+            page=$((page + 1))
+          done
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=branch
-            type=sha,prefix=
-
-      - name: Build and push Docker image
+      - name: Build and push frozen candidate image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.CANDIDATE_TAG }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ env.CANDIDATE_SHA }}
+            org.opencontainers.image.version=${{ env.CANDIDATE_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Record candidate digest
+        shell: bash
+        run: |
+          {
+            echo '## Published rc.8 candidate image'
+            echo
+            echo "- Image: \`${REGISTRY}/${IMAGE_NAME}:${CANDIDATE_TAG}\`"
+            echo "- Digest: \`${{ steps.build.outputs.digest }}\`"
+            echo "- Source: \`${CANDIDATE_SHA}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Verify pushed digest and runtime health
+        shell: bash
+        env:
+          CANDIDATE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          image="${REGISTRY}/${IMAGE_NAME}@${CANDIDATE_DIGEST}"
+          docker buildx imagetools inspect "${image}" > /dev/null
+          container="$(docker run --detach --rm \
+            --publish 127.0.0.1::8891 \
+            --env ADMIN_KEY=ci-rc8-candidate-health \
+            --env GENBOX_NO_BROWSER=1 \
+            "${image}")"
+          cleanup() { docker rm --force "${container}" > /dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          port="$(docker inspect --format '{{(index (index .NetworkSettings.Ports "8891/tcp") 0).HostPort}}' "${container}")"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent "http://127.0.0.1:${port}/api/setup/status" > /dev/null; then
+              echo "Candidate digest ${CANDIDATE_DIGEST} passed runtime health on attempt ${attempt}."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Candidate digest ${CANDIDATE_DIGEST} did not reach runtime health." >&2
+          docker logs "${container}" >&2 || true
+          exit 1
