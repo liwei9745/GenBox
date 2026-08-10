@@ -106,6 +106,62 @@ def test_each_saved_secret_has_independent_show_hide_control():
         browser.close()
 
 
+def test_vault_toolbar_button_matches_configured_lock_state():
+    vault_state = {"configured": False, "unlocked": False, "entry_count": 0}
+
+    def fulfill_api(route):
+        path = route.request.url.split("/api/", 1)[-1].split("?", 1)[0]
+        if path == "extensions/vault/status":
+            route.fulfill(json=vault_state)
+        elif path == "extensions/vault/credentials":
+            route.fulfill(json={"credentials": []})
+        elif path == "extensions/instances":
+            route.fulfill(json={"instances": []})
+        elif path == "extensions/vault/setup":
+            vault_state.update(configured=True, unlocked=True)
+            route.fulfill(json={"configured": True, "unlocked": True, "entry_count": 0})
+        elif path == "extensions/vault/unlock":
+            vault_state.update(configured=True, unlocked=True)
+            route.fulfill(json={"configured": True, "unlocked": True, "entry_count": 0})
+        elif path == "extensions/vault/lock":
+            vault_state.update(configured=True, unlocked=False)
+            route.fulfill(json={"configured": True, "unlocked": False, "entry_count": 0})
+        else:
+            route.fulfill(json={"targets": [], "categories": [], "items": [], "target_ids": []})
+
+    with _static_site() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.route("**/api/**", fulfill_api)
+        page.goto(f"{base_url}/static/index.html", wait_until="domcontentloaded")
+        page.evaluate("() => window.setExtensionsBackendOnline(true)")
+        page.evaluate("() => window.extensionOpenDrawer()")
+        page.evaluate("() => window.extensionLoadServices()")
+
+        unlock = page.locator("#extVaultUnlockBtn")
+        action = page.locator("#extVaultLockBtn")
+        assert unlock.is_visible()
+        assert action.is_hidden()
+
+        vault_state.update(configured=True, unlocked=False)
+        page.evaluate("() => window.extensionLoadServices()")
+        assert unlock.is_hidden()
+        assert action.is_visible()
+        assert action.inner_text() == "解锁"
+
+        page.locator("#extVaultPassword").fill("synthetic-vault-password")
+        action.click()
+        page.wait_for_function("() => document.querySelector('#extVaultLockBtn').textContent.trim() === '锁定'")
+        assert action.is_visible()
+        assert action.inner_text() == "锁定"
+
+        action.click()
+        page.wait_for_function("() => document.querySelector('#extVaultLockBtn').textContent.trim() === '解锁'")
+        assert action.is_visible()
+        assert action.inner_text() == "解锁"
+        browser.close()
+
+
 def test_open_close_reopen_rehides_secrets_and_preserves_unedited_private_key():
     credential = {
         "admin_key": "synthetic-admin-key",

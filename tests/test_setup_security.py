@@ -165,7 +165,8 @@ assert(installButton.disabled === false && loginButton.disabled && serveButton.d
     result = subprocess.run(["node", "-e", harness], cwd=ROOT, capture_output=True, text=True, timeout=20)
 
     assert result.returncode == 0, result.stderr
-    assert "extVaultLockBtn').disabled=!backendOnline||" in source
+    assert "function updateVaultControls()" in source
+    assert "window.extensionVaultToggle=function" in source
     assert "if(!backendOnline){message(i18nText('runtime.offline_detail'),true);return}" in source
 
 

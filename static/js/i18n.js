@@ -541,6 +541,7 @@
     "extensions.vault_password":{"zh-CN":"解锁密码（至少 8 位）","en":"Unlock password (at least 8 characters)"},
     "extensions.setup_unlock":{"zh-CN":"设置 / 解锁","en":"Set up / Unlock"},
     "extensions.lock":{"zh-CN":"锁定","en":"Lock"},
+    "extensions.unlock":{"zh-CN":"解锁","en":"Unlock"},
     "extensions.reset_key_label":{"zh-CN":"重置管理密钥","en":"Reset management key"},
     "extensions.reset_warning":{"zh-CN":"为安全起见，重置需要重新验证该实例所属 VPS 的所有权。密钥仅在本机显示一次；旧密钥立即失效。","en":"For security, resetting requires ownership verification of the instance's VPS. The new key is shown locally once and the old key is invalidated immediately."},
     "extensions.or_private_key":{"zh-CN":"或 SSH 私钥","en":"or SSH private key"},
