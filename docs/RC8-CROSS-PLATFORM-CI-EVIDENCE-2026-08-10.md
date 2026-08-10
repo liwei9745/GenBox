@@ -1,9 +1,11 @@
 # RC8 Cross-Platform CI Evidence
 
 **Date:** 2026-08-10
-**Scope:** candidate-only workflow trigger wiring
-**Candidate branch:** `codex/v2.6.0-rc.8-final-candidate`
-**Candidate commit:** `9b5ac7ca7153479ad969e70bfe3c1bc42b71b320`
+**Scope:** candidate-only workflow trigger wiring and hosted packaging evidence
+**Evidence branch:** `codex/rc8-cross-platform-ci-20260810`
+**Evidence commit:** `08abac5309855533d2930f7b2e06f7e660048602`
+**Source candidate commit:** `9b5ac7ca7153479ad969e70bfe3c1bc42b71b320`
+**Candidate code baseline:** `07b89abc4bd0297cf665516c037a95152c78f8fa`
 
 ## Changes
 
@@ -34,14 +36,33 @@
 - `git diff --check` completed successfully. Git reported only its normal
   working-copy LF/CRLF conversion warning for these workflow files.
 
-## Unverified / Pending Hosted Evidence
+## Hosted Run
 
-- No GitHub Actions run was started from this local validation pass, so there
-  is no hosted run ID or cross-platform artifact result to claim here.
-- Windows, macOS, and Linux packaging remain `UNVERIFIED` until the candidate
-  branch is dispatched or pushed in GitHub Actions. Docker candidate
-  verification and registry publication also remain `UNVERIFIED` because no
-  hosted run was started; the local workflow contract prevents candidate
-  publication.
+- **Run:** `31357670110` (`workflow_dispatch`, ref
+  `codex/rc8-cross-platform-ci-20260810`, head SHA
+  `08abac5309855533d2930f7b2e06f7e660048602`).
+- **Quality:** `Test release source` job `93360309578` — `success`.
+- **Windows:** job `93360494585` — `success`; artifact
+  `GenBox-Windows-x64`, digest
+  `sha256:a24853c3f37bca33a4f1e2c3b3855afa615e413b2a234eba710e5bf939e0650b`.
+- **macOS:** job `93360494560` — `success`; artifact `GenBox-macOS`, digest
+  `sha256:9b8fae965c24dfdb5a1eac2282feb298abf22f6d0843c9374aa5f7351b7b4258`.
+- **Linux:** job `93360494573` — `success`; artifact `GenBox-Linux-x64`, digest
+  `sha256:125a0d7e1912950e86738674d6cedb0c5974de693e4445d23c38f0b5428ee9dd`.
+- **Release job:** `Create Release` job `93360687538` — `skipped`; no tag or
+  GitHub Release was created.
+
+The hosted jobs checked out the evidence commit above. Product source and
+packaging behavior are unchanged from the source candidate; only workflow and
+evidence documentation are added on this branch.
+
+## Unverified / External Boundaries
+
+- Docker registry publication was not attempted. The Docker workflow's manual
+  dispatch path skips registry login and forces `push: false`; local Compose
+  evidence is recorded separately.
+- VPS/SSH, sender-side E2E, source cleanup/unlink/execute markers,
+  `33010`/`33018`, real credentials, real media, tags, and formal Releases were
+  not used and remain outside this evidence branch.
 - No release tag, GitHub Release, deployment, or production endpoint was
   touched.
