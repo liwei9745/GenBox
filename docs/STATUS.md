@@ -1,6 +1,6 @@
 # Current Project Status
 
-**Last updated:** 2026-08-09
+**Last updated:** 2026-08-10
 **Current branch:** `codex/phase6-ci-convergence-20260809`
 **Current phase:** Phase 6 Verified Source Cleanup - **In Progress / Destructive Execution Blocked**
 **Previous phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
@@ -13,8 +13,19 @@
 
 ## Phase 6 exact-SHA CI convergence (2026-08-09)
 
+- **GENBOX CI / VERIFIED (2026-08-10):** after the Playwright dependency and
+  Chromium-install fix at `05c7f3b`, the exact pushed head `dade693` passed
+  Master PR Quality Gate run `31354154109` and Build Desktop Clients run
+  `31354154069`. The quality gate installed Playwright, validated JavaScript,
+  ran non-empty JUnit-backed tests, checked whitespace, and checked generated
+  artifact freshness. The desktop build workflow completed successfully.
+  GitHub's Node.js 20 deprecation annotation is an infrastructure notice, not
+  a test failure.
+
 - **GENBOX LOCAL / VERIFIED:** fixed-baseline focused suite `65 passed`; full suite `611 passed`; browser collection suite `8 passed`; Windows build and packaged loopback smoke passed on an OS-assigned port. Local Docker build/runtime passed with a synthetic administrator key and random loopback port.
-- **GENBOX CI / PARTIAL:** workflow run `31300431651` reached the exact pushed commit `79038f2` but failed during collection because hosted test dependencies omitted Playwright. The minimal infrastructure fix is local commit `05c7f3b` (adds Playwright dependency and Chromium install); its push failed twice with TLS/HTTP2 EOF, so exact-SHA post-fix CI is `UNVERIFIED`.
+- **GENBOX CI / HISTORICAL FAILURE:** workflow run `31300431651` reached the
+  earlier commit `79038f2` but failed during collection because hosted test
+  dependencies omitted Playwright. The fix is now pushed and verified above.
 - **SENDER LOCAL / VERIFIED:** full suite `168 passed, 18 skipped, 249 subtests passed`; focused single/batch/schedule/cleanup suite `127 passed, 7 skipped, 20 subtests`; Docker image and `/health` smoke passed with a synthetic auth key on a random loopback port. Sender CI dispatch was unavailable because `cleanup-security.yml` is absent from the repository default branch; this remains `UNVERIFIED`.
 - **BOUNDARY:** no product code changed in this convergence pass. Cleanup, unlink, execute markers, VPS/SSH, `33010`, `33018`, production changes, Release/tag/RC, and Phase 7/G-Store implementation remain prohibited.
 
