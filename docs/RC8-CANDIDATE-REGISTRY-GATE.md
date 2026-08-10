@@ -1,7 +1,7 @@
 # rc.8 Candidate Registry Gate
 
 **Date:** 2026-08-10
-**Status:** CONFIGURED / NOT PUBLISHED
+**Status:** PUBLISHED / VERIFIED (non-release candidate only)
 
 ## Fixed Candidate Identity
 
@@ -45,16 +45,19 @@ package promotion.
   inspectable as `linux/amd64`. It is not rc.8 evidence and is not promoted by
   this change.
 - **Candidate tag availability:** a read-only package-version inspection found
-  97 existing versions and no `candidate-9b5ac7c` tag. The workflow repeats
-  this check with its own Actions token and fails closed if that tag appears.
+  97 existing versions and no `candidate-9b5ac7c` tag before dispatch. The
+  workflow repeated that check with its Actions token and then created the one
+  permitted candidate version; subsequent candidate-tag reuse is refused.
 - **Candidate CI authentication, package write authorization, candidate image
-  digest, and candidate runtime health:** **BLOCKED / UNVERIFIED**. The
-  workflow will inspect the pushed digest and run a synthetic-admin-key
-  loopback health check, but those results can be recorded only after an
-  authorized manual dispatch completes.
+  digest, and candidate runtime health:** **VERIFIED** by Actions run
+  `31367080617`. The run checked out the frozen SHA, pushed only
+  `candidate-9b5ac7c`, resolved immutable digest
+  `sha256:f6dea5c48a56ca0f823ed229c07f20586f80906cf6c4029cdcbe989fdd7f171b`,
+  inspected it by digest, and passed the temporary loopback health check.
 - **Cross-platform evidence:** `docs/STATUS.md` records a local Windows package
   smoke for the rc.8 code candidate. Exact-candidate hosted CI and macOS
   evidence remain **UNVERIFIED**; no prior result is being relabeled.
 
-No image build, push, tag, release, remote deployment, or VPS operation was
-performed while configuring this gate.
+One candidate image build and push was performed by the verified Actions run
+above. No Git tag, GitHub Release, formal-version image tag, remote deployment,
+or VPS operation was performed.
