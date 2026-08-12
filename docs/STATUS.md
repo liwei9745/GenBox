@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-08-12
 **Candidate source:** `c7c514b4bcfbd3c06eca6414605e85b619319dc9`
-**Candidate tag:** `v2.5.1-candidate.20260812.2` (candidate-only; publication pending)
+**Candidate tag:** `v2.5.1-candidate.20260812.2` (candidate-only Pre-release)
 **Published release:** v2.5.1 at `ae2b174` remains historical and unchanged
 **Current roadmap state:** Phase 2 and Phase 3 remain In Progress; Phase 4-9
 remain Planned unless their documented external gates are separately verified.
@@ -57,9 +57,34 @@ and superseded; `.2` is rebuilt from the source commit above.
   sentinels or source-code strings; no real credential or personal-data payload
   was identified. Two ignored legacy screenshots remain excluded from Git and
   the image context.
-- `PENDING 2026-08-12`: candidate branch push, annotated tag push, GHCR remote
-  digest, GitHub Actions URL, and Pre-release URL will be recorded after
-  publication. Only the unique `.2` candidate image tag is permitted.
+- `VERIFIED 2026-08-12`: candidate branch
+  `codex/v251-candidate-20260812-2` was non-force pushed at post-build record
+  commit `ddf3f7384f5137d668b291ed3c35b4980a7aadb3`. Annotated tag
+  `v2.5.1-candidate.20260812.2` resolves to the frozen runtime commit
+  `c7c514b4bcfbd3c06eca6414605e85b619319dc9`.
+- `VERIFIED 2026-08-12`: GitHub Pre-release
+  `v2.5.1-candidate.20260812.2` is published with `GenBox.exe`, the
+  candidate-pinned Compose ZIP, and SHA-256 file. Its asset digests match the
+  local Windows and Compose hashes above; the release is explicitly a
+  non-draft Pre-release, not a stable release.
+- `VERIFIED 2026-08-12`: only
+  `ghcr.io/liwei9745/genbox:v2.5.1-candidate.20260812.2` was published for
+  this candidate. Remote manifest digest:
+  `sha256:b1cd55e40dd772dca739aca44280f78b3568f23e6ab244c1d2a92dd60a7f6405`.
+  No `latest` or `stable` tag was published by this task.
+- `VERIFIED 2026-08-12`: GitHub Actions Desktop Clients run
+  `31570745302` succeeded on the exact tagged runtime commit, including source
+  tests plus Windows/macOS/Linux build and packaged-client smoke jobs. The
+  Docker workflow run `31570745304` was intentionally skipped for the candidate
+  tag so it could not publish a competing tag; the verified local candidate
+  image above is the sole publisher of the candidate GHCR reference.
+- `VERIFIED 2026-08-12`: final publication scan found zero pattern matches in
+  the candidate Compose ZIP. The one image-context match and tracked/history
+  matches are known public source/test sentinel strings; no real credential or
+  personal-data payload was identified.
+- `UNVERIFIED 2026-08-12`: a separate seven-gate task may provide only a
+  sanitized handoff before its facts are incorporated here. This candidate
+  record does not claim any Design Gate result or Phase 6 completion.
 
 ## Phase 6-9 Audit
 
@@ -81,10 +106,8 @@ and superseded; `.2` is rebuilt from the source commit above.
 
 ## Resume
 
-1. Push only the candidate branch/tag and candidate GHCR tag after checking the
-   recorded commit and hashes.
-2. Create the GitHub Pre-release with the rebuilt client and candidate Compose
-   bundle; retain the Actions run URL and remote digest.
-3. Resume Phase 3 only through its private-network contract; do not treat this
+1. Await the separate seven-gate task's sanitized handoff before recording its
+   exact commit or results.
+2. Resume Phase 3 only through its private-network contract; do not treat this
    candidate audit as sender Push, cleanup, redeployment, upstream, or adapter
    completion.
