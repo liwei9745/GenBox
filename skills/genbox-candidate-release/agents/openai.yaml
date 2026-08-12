@@ -1,0 +1,7 @@
+interface:
+  display_name: "GenBox Candidate Release"
+  short_description: "Run a bounded local candidate-release audit."
+  default_prompt: "Use $genbox-candidate-release to audit a local experimental GenBox candidate."
+
+policy:
+  allow_implicit_invocation: true
