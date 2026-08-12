@@ -7,6 +7,9 @@ release and must not be used to infer completion of the chatgpt2api sender,
 private-network deployment, cleanup, clean redeployment, upstream delivery, or
 additional adapter phases.
 
+Source cleanup is unavailable in this candidate. Source retention is the tested
+behavior; do not enable or infer sender-side cleanup from a receiver receipt.
+
 The annotated candidate tag is the authoritative source identity for this
 pre-release. Its commit, artifact hashes, and image digest are recorded in the
 post-build evidence ledger.
@@ -30,5 +33,6 @@ Candidate source commit: `c7c514b4bcfbd3c06eca6414605e85b619319dc9`.
 - Only the unique `candidate.20260812.2` GHCR tag is eligible for publication;
   no `latest` or `stable` tag is used.
 - Phase 6-9 remain gated by their documented external acceptance criteria.
+- Phase 6 cleanup and Phase 7 clean redeployment are not complete.
 
 See `docs/STATUS.md` for the dated evidence ledger and known limitations.
