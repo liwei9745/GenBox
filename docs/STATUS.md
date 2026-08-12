@@ -1,7 +1,8 @@
 # Current Project Status
 
 **Last updated:** 2026-08-12
-**Candidate source:** `37f6191bfccc0c890e4c747b5ba6d930a88e5e3b`
+**Candidate source:** to be frozen by the annotated
+`v2.5.1-candidate.20260812.2` tag after final local rebuild
 **Candidate tag:** `v2.5.1-candidate.20260812.2` (candidate-only; publication pending)
 **Published release:** v2.5.1 at `ae2b174` remains historical and unchanged
 **Current roadmap state:** Phase 2 and Phase 3 remain In Progress; Phase 4-9
@@ -19,10 +20,9 @@ and superseded; `.2` is rebuilt from the source commit above.
   permissions. The focused package suite passed (`11 passed`), and two local
   bundles matched SHA-256
   `C7AD6CA9B0003ECE1A39C678A7B2F2BCA68378CD2380F30E2CEDB082879C952B`.
-- `VERIFIED 2026-08-12`: candidate source is frozen at
-  `37f6191bfccc0c890e4c747b5ba6d930a88e5e3b`, including candidate packaging,
-  smoke assertions, and candidate-safe CI tag rules. All publication assets
-  below must be rebuilt from this commit.
+- `PENDING 2026-08-12`: the annotated candidate tag will freeze the source
+  after the final local rebuild. All publication assets must be rebuilt from
+  that tagged commit before a Pre-release is created.
 - `VERIFIED 2026-08-12`: full local suite passed (`113 passed` with a
   disposable candidate pytest directory). The four JavaScript syntax checks,
   README Lab generation, package rebuild comparison, and `git diff --check`

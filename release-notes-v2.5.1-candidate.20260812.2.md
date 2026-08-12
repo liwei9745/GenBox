@@ -7,7 +7,9 @@ release and must not be used to infer completion of the chatgpt2api sender,
 private-network deployment, cleanup, clean redeployment, upstream delivery, or
 additional adapter phases.
 
-Source commit: `37f6191bfccc0c890e4c747b5ba6d930a88e5e3b`.
+The annotated candidate tag is the authoritative source identity for this
+pre-release. Its commit, artifact hashes, and image digest are recorded in the
+post-build evidence ledger.
 
 ## Included Candidate Checks
 
