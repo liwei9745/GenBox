@@ -71,6 +71,12 @@ def test_release_workflow_smoke_tests_clients_and_packages_compose():
     assert workflow.count("cp THIRD_PARTY_NOTICES.md") == 3
 
 
+def test_candidate_and_rc_tags_create_github_prereleases():
+    workflow = (ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
+
+    assert "--prerelease=${{ contains(github.ref_name, 'candidate') || contains(github.ref_name, 'rc') }}" in workflow
+
+
 def test_packaged_console_output_avoids_ansi_and_emoji_status_markers():
     main_source = (ROOT / "main.py").read_text(encoding="utf-8")
 

@@ -249,7 +249,7 @@ jobs:
             --title "${{ env.APP_NAME }} ${{ github.ref_name }}" \
             --notes-file "${{ steps.rn.outputs.notes }}" \
             --draft=false \
-            --prerelease=false
+            --prerelease=${{ contains(github.ref_name, 'candidate') || contains(github.ref_name, 'rc') }}
           
           # Upload standalone executables first. Legacy updaters select the first
           # platform match, so ordering keeps them away from ZIP payloads.
