@@ -11,6 +11,9 @@ __pycache__
 .release
 .candidate-audit
 .pytest_cache
+build/
+dist/
+*.spec
 venv
 env
 

@@ -86,6 +86,14 @@ def test_candidate_and_rc_docker_tags_do_not_expand_to_semver_aliases():
     assert "type=sha,prefix=,enable=${{ !startsWith(github.ref, 'refs/tags/') }}" in workflow
 
 
+def test_docker_context_excludes_local_release_artifacts():
+    dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+
+    assert "build/" in dockerignore
+    assert "dist/" in dockerignore
+    assert "*.spec" in dockerignore
+
+
 def test_packaged_console_output_avoids_ansi_and_emoji_status_markers():
     main_source = (ROOT / "main.py").read_text(encoding="utf-8")
 
