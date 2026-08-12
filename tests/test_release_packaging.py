@@ -171,6 +171,18 @@ def test_docker_bundle_contains_only_public_deployment_files(tmp_path):
         assert "replace-with" not in env_text
 
 
+def test_docker_bundle_is_reproducible_for_the_same_source(tmp_path):
+    first_output = tmp_path / "first"
+    second_output = tmp_path / "second"
+    command = [sys.executable, "scripts/package_release.py", "--docker-only"]
+
+    subprocess.run([*command, "--output", str(first_output)], cwd=ROOT, check=True)
+    subprocess.run([*command, "--output", str(second_output)], cwd=ROOT, check=True)
+
+    bundle_name = f"GenBox-Docker-Compose-v{__version__}.zip"
+    assert (first_output / bundle_name).read_bytes() == (second_output / bundle_name).read_bytes()
+
+
 def test_gpl_only_license_and_public_notices_are_present():
     license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
     notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")

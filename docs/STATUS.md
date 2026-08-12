@@ -14,6 +14,12 @@
   `99E105A1A753879481E8133DD3146CA00DD15B70D93C5DAD1DA700CE04953A67`.
 - `VERIFIED 2026-07-16`: official v2.4.1 size `25,229,487` bytes; SHA-256
   `E6E45E81221E628C9AB14BE7EEB36608CF46EF62DFC98FAED0AC71FE964AA0D4`.
+- `VERIFIED 2026-08-12`: local candidate packaging audit passed the focused
+  release suite (`11 passed`, using a disposable writable pytest base directory)
+  and `python -m compileall -q scripts/package_release.py`. The Docker Compose
+  bundle now has stable entry ordering, timestamps, and file metadata, so two
+  local builds from the same source have identical bytes. No Windows executable
+  or Docker image build was run during this audit.
 
 ## Verified Candidate State
 

@@ -15,10 +15,17 @@ sys.path.insert(0, str(ROOT))
 from genbox_version import APP_NAME, __version__  # noqa: E402
 
 
+ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
+
+
 def write_zip(destination: Path, entries: list[tuple[Path, str]]) -> None:
     with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-        for source, name in entries:
-            archive.write(source, name)
+        for source, name in sorted(entries, key=lambda entry: entry[1]):
+            info = zipfile.ZipInfo(name, date_time=ZIP_TIMESTAMP)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.create_system = 3
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, source.read_bytes(), compress_type=zipfile.ZIP_DEFLATED)
 
 
 def sha256(path: Path) -> str:
