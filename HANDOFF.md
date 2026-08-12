@@ -14,6 +14,11 @@
   project-local Skill.
 - `5e1ebba`: dated local candidate evidence and remaining external gates are
   recorded in `docs/STATUS.md` and this handoff.
+- `ca2ec1b`: finalized the candidate Compose smoke fixture. The candidate
+  source is bound to local image ID
+  `sha256:09d1dd1ae1c95475e52965a1caa357c87dcbd085a40119c23b838028d60c9798`
+  and GHCR manifest digest
+  `sha256:56399f235f401f808846052875a070e450836dd432de1a460ec68ef0aed4a040`.
 
 ## Local Evidence
 
@@ -30,10 +35,9 @@
 
 ## Remaining Gates
 
-- Docker daemon access is unavailable in this session, so Docker image digest
-  binding and Compose runtime smoke are `UNVERIFIED`.
-- No candidate GitHub Actions run was queried or triggered; GitHub evidence is
-  `UNVERIFIED`.
+- Docker image digest binding and isolated Compose runtime smoke are verified.
+- Candidate GitHub Actions evidence is pending a manually dispatched run on the
+  candidate branch.
 - No VPS, SSH, production source, sender Push, cleanup, deployment/restart,
   true credential, or prohibited port activity occurred.
 - Phase 6-9 remain Planned and externally gated. See

@@ -1,7 +1,7 @@
 # Current Project Status
 
 **Last updated:** 2026-08-12
-**Candidate evidence commit:** `5e1ebba1335a`
+**Candidate release source:** `ca2ec1b9b1d8921a9df8b811946521f9e056baa0`
 **Published release:** v2.5.1 at `ae2b174` remains historical and unchanged
 **Current roadmap state:** Phase 2 and Phase 3 remain In Progress; Phase 4-9
 remain Planned unless their documented external gates are separately verified.
@@ -34,13 +34,26 @@ or use of ports `33010`, `33018`, or `33019` occurred.
   token, or AWS access-key patterns. Git-history scanning for those token
   patterns also returned no matches. This screening does not replace a review
   for all personal data, known test sentinels, or future artifacts.
-- `UNVERIFIED 2026-08-12`: Docker CLI is installed, but this session cannot
-  access its daemon (named-pipe permission denied and Docker configuration
-  unreadable). No local candidate image was built, so no image digest-to-commit
-  binding, container/Compose loopback smoke, or candidate registry tag exists.
-- `UNVERIFIED 2026-08-12`: no authenticated GitHub Actions query or candidate
-  workflow run was performed for this detached local commit. Historical v2.5.1
-  workflow evidence does not verify this candidate.
+- `VERIFIED 2026-08-12`: Docker Engine `29.6.1` and Docker Compose `v5.3.0`
+  were available in this worktree. Local image
+  `genbox:v2.5.1-candidate.20260812.1` was built from the candidate release
+  source above, with OCI revision and version labels. Its local image ID is
+  `sha256:09d1dd1ae1c95475e52965a1caa357c87dcbd085a40119c23b838028d60c9798`.
+- `VERIFIED 2026-08-12`: an isolated Docker Compose run used a dynamically
+  allocated loopback port, fresh temporary storage, and throwaway credentials.
+  It passed setup health, authenticated Push, rejected invalid Push credentials,
+  idempotent retry, retained source bytes, and no source-cleanup action. The
+  candidate container ran as non-root user `genbox` and only its container,
+  network, volume, and temporary directory were removed.
+- `VERIFIED 2026-08-12`: candidate-only GHCR reference
+  `ghcr.io/liwei9745/genbox:v2.5.1-candidate.20260812.1` was pushed and its
+  remote manifest digest was verified as
+  `sha256:56399f235f401f808846052875a070e450836dd432de1a460ec68ef0aed4a040`.
+  No `latest` or `stable` tag was published by this task.
+- `VERIFIED 2026-08-12`: GitHub CLI authenticated as the project owner with
+  repository, workflow, and package-write scopes. Candidate CI evidence is
+  pending a workflow run on the pushed candidate branch; historical v2.5.1 CI
+  does not substitute for it.
 
 ## Phase 6-9 Audit
 
