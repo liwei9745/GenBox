@@ -83,6 +83,7 @@ def test_candidate_and_rc_docker_tags_do_not_expand_to_semver_aliases():
 
     assert "type=raw,value=${{ github.ref_name }},enable=${{ startsWith(github.ref, 'refs/tags/') && (contains(github.ref_name, 'candidate') || contains(github.ref_name, 'rc')) }}" in workflow
     assert workflow.count("enable=${{ !contains(github.ref_name, 'candidate') && !contains(github.ref_name, 'rc') }}") == 2
+    assert "type=sha,prefix=,enable=${{ !startsWith(github.ref, 'refs/tags/') }}" in workflow
 
 
 def test_packaged_console_output_avoids_ansi_and_emoji_status_markers():

@@ -41,7 +41,7 @@ jobs:
             type=semver,pattern={{version}},enable=${{ !contains(github.ref_name, 'candidate') && !contains(github.ref_name, 'rc') }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref_name, 'candidate') && !contains(github.ref_name, 'rc') }}
             type=ref,event=branch
-            type=sha,prefix=
+            type=sha,prefix=,enable=${{ !startsWith(github.ref, 'refs/tags/') }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
