@@ -11,6 +11,8 @@ The annotated candidate tag is the authoritative source identity for this
 pre-release. Its commit, artifact hashes, and image digest are recorded in the
 post-build evidence ledger.
 
+Candidate source commit: `c7c514b4bcfbd3c06eca6414605e85b619319dc9`.
+
 ## Included Candidate Checks
 
 - Windows packaged-client startup smoke on a dynamically selected loopback port.
