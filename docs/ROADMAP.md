@@ -164,7 +164,8 @@ GenBox and import it with metadata.
 **Status:** Planned
 
 **Topic contracts:** `docs/INTEGRATION.md`,
-`docs/chatgpt2api-push-integration.md`
+`docs/chatgpt2api-push-integration.md`,
+`docs/PHASE6-9-DELIVERY-GATES.md`
 
 ### Goal
 
@@ -215,7 +216,8 @@ Allow users to reclaim VPS space without risking unconfirmed media loss.
 
 **Status:** Planned
 
-**Topic contract:** `docs/DEVELOPMENT-LIFECYCLE.md`
+**Topic contracts:** `docs/DEVELOPMENT-LIFECYCLE.md`,
+`docs/PHASE6-9-DELIVERY-GATES.md`
 
 ### Goal
 
@@ -242,7 +244,8 @@ not depend on uncommitted container changes or sensitive data.
 **Status:** Planned
 
 **Topic contracts:** `docs/DEVELOPMENT-LIFECYCLE.md`,
-`docs/UPSTREAM-VIBE-CODING-GUIDE.md`
+`docs/UPSTREAM-VIBE-CODING-GUIDE.md`,
+`docs/PHASE6-9-DELIVERY-GATES.md`
 
 ### Goal
 
@@ -266,7 +269,8 @@ Offer the chatgpt2api changes to the original author in a reviewable form.
 
 **Status:** Planned
 
-**Topic contract:** `docs/extensions-deployment-contract.md`
+**Topic contracts:** `docs/extensions-deployment-contract.md`,
+`docs/PHASE6-9-DELIVERY-GATES.md`
 
 ### Goal
 

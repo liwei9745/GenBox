@@ -1,0 +1,4 @@
+interface:
+  display_name: "Phase Delivery Gates"
+  short_description: "Run evidence-based Phase 6-9 delivery gates safely."
+  default_prompt: "Use $phase-delivery-gates to audit the current GenBox Phase 6-9 delivery status."

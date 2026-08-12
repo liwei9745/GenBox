@@ -59,6 +59,11 @@ Topic contracts such as `docs/ONBOARDING-UI-CONTRACT.md`,
 Keep them while the area is active; archive or mark them historical when a
 newer contract supersedes them.
 
+`docs/PHASE6-9-DELIVERY-GATES.md` is the shared evidence and handoff contract
+for destructive cleanup, sanitization, clean redeployment, upstream delivery,
+and new service adapters. It does not replace the phase-specific contracts or
+authorize a remote operation.
+
 ## Historical And Generated Material
 
 - `.planning/` is historical project input and does not override `docs/`.
