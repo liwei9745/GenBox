@@ -1,7 +1,7 @@
 # Current Project Status
 
 **Last updated:** 2026-08-12
-**Current checkout:** detached candidate-audit chain at `5e1ebba1335a`
+**Candidate evidence commit:** `5e1ebba1335a`
 **Published release:** v2.5.1 at `ae2b174` remains historical and unchanged
 **Current roadmap state:** Phase 2 and Phase 3 remain In Progress; Phase 4-9
 remain Planned unless their documented external gates are separately verified.

@@ -1,7 +1,7 @@
 # GenBox Development Handoff
 
 **Updated:** 2026-08-12
-**Checkout:** detached candidate-audit chain at `5e1ebba`
+**Candidate evidence commit:** `5e1ebba`
 **Primary roadmap objective:** Phase 3 Private Network Automation
 
 ## What Changed
