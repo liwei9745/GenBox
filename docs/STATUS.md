@@ -81,21 +81,11 @@ and superseded; `.2` is rebuilt from the source commit above.
   the candidate Compose ZIP. The one image-context match and tracked/history
   matches are known public source/test sentinel strings; no real credential or
   personal-data payload was identified.
-- `VERIFIED 2026-08-12`: sanitized sender-side Phase 6 handoff identifies
-  branch `codex/phase6-security-gates-20260812`, final handoff commit
-  `24b625b`, and code/test evidence commit `0dce8ee` (later commits are
-  documentation-only binding). Windows and selected/full Python suites passed;
-  a sealed Linux Docker matrix ran with no network, read-only repository and
-  dependencies, and only `/tmp` writable. It covered sender cleanup design
-  contracts including POSIX exchange/tombstone, ABA/move, descriptor rewrite,
-  staging, hard-link, cross-process claim/writer, and crash recovery.
-- `VERIFIED 2026-08-12`: the sender handoff reports A1-A12 design/contract
-  matrix PASS within its evidence boundary, `Design Gate PASS` for the sender
-  local design/contract boundary, and `Merge Gate PASS` for local plus exact
-  hosted evidence. GitHub Actions Cleanup Security Tests run `31576063590`
-  passed all four jobs on exact SHA `2d571102`; its sanitizer checks reported
-  zero high-confidence incremental diff/history, JUnit/log, and generated
-  evidence hits. These are sanitized handoff facts only.
+- `USER-CONFIRMED 2026-08-12`: the published sanitized sender Phase 6 handoff
+  `docs/PHASE6-SECURITY-GATES-HANDOFF-2026-08-12.md` identifies branch
+  `codex/phase6-security-gates-20260812` at final tip
+  `d0ce0568b2255a4b1a1ef5c3aff4da226daf623d`; Cleanup Security Tests run
+  `31577106421` passed its Windows, Ubuntu, macOS, and anchor-image jobs.
 - `NOT EXECUTED / NOT AUTHORIZED 2026-08-12`: the sender `Isolated Execute
   Gate` was not run. This candidate record does not claim a deployment, real
   cleanup, production non-mutation, Phase 6 completion, or a project-wide
