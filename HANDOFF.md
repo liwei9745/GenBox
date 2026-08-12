@@ -1,7 +1,7 @@
 # GenBox Development Handoff
 
 **Updated:** 2026-08-12
-**Checkout:** detached candidate-audit chain at `9b6d8d9`
+**Checkout:** detached candidate-audit chain at `5e1ebba`
 **Primary roadmap objective:** Phase 3 Private Network Automation
 
 ## What Changed
@@ -12,6 +12,8 @@
   project-local Skill.
 - `9b6d8d9`: the candidate-release audit workflow is captured as a
   project-local Skill.
+- `5e1ebba`: dated local candidate evidence and remaining external gates are
+  recorded in `docs/STATUS.md` and this handoff.
 
 ## Local Evidence
 

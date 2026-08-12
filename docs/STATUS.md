@@ -1,7 +1,7 @@
 # Current Project Status
 
 **Last updated:** 2026-08-12
-**Current checkout:** detached candidate-audit chain at `9b6d8d98a6d6`
+**Current checkout:** detached candidate-audit chain at `5e1ebba1335a`
 **Published release:** v2.5.1 at `ae2b174` remains historical and unchanged
 **Current roadmap state:** Phase 2 and Phase 3 remain In Progress; Phase 4-9
 remain Planned unless their documented external gates are separately verified.
@@ -18,8 +18,9 @@ or use of ports `33010`, `33018`, or `33019` occurred.
   bundles matched SHA-256
   `C7AD6CA9B0003ECE1A39C678A7B2F2BCA68378CD2380F30E2CEDB082879C952B`.
 - `VERIFIED 2026-08-12`: the candidate source chain includes `3ae088c` (Phase
-  6-9 gate contract) and `9b6d8d9` (candidate audit skill). The candidate
-  Windows binary was built from `3ae088c30f79fc789f32d70ba99a7dc9fbecbaa1`:
+  6-9 gate contract), `9b6d8d9` (candidate audit skill), and this evidence
+  record at `5e1ebba`. The candidate Windows binary was built from
+  `3ae088c30f79fc789f32d70ba99a7dc9fbecbaa1`:
   `dist/GenBox.exe`, `37,851,028` bytes, SHA-256
   `0F1BA180E0B1246DDC9526BCD8C7DD476BB0DA3771A93DA31A180A0D2383EBBC`.
   `python scripts/smoke_client.py --executable dist/GenBox.exe --timeout 60`
