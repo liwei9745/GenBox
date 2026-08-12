@@ -40,7 +40,6 @@ and superseded; `.2` is rebuilt from the source commit above.
 - `VERIFIED 2026-08-12`: Docker Engine `29.6.1`, Docker Compose `v5.3.0`, and
   GitHub CLI authentication with `repo`, `workflow`, and `write:packages`
   scopes were revalidated in the desktop session. Secrets were not recorded.
-- `PENDING 2026-08-12`: Windows artifact SHA-256, candidate Compose bundle
 - `VERIFIED 2026-08-12`: final candidate Compose bundle
   `GenBox-Docker-Compose-v2.5.1-candidate.20260812.2.zip` was built twice with
   matching SHA-256
