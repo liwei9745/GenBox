@@ -1,30 +1,28 @@
 # Current Project Status
 
 **Last updated:** 2026-08-12
-**Candidate release tag:** `v2.5.1-candidate.20260812.1` (candidate-only)
+**Candidate source:** `37f6191bfccc0c890e4c747b5ba6d930a88e5e3b`
+**Candidate tag:** `v2.5.1-candidate.20260812.2` (candidate-only; publication pending)
 **Published release:** v2.5.1 at `ae2b174` remains historical and unchanged
 **Current roadmap state:** Phase 2 and Phase 3 remain In Progress; Phase 4-9
 remain Planned unless their documented external gates are separately verified.
 
 ## Candidate Audit
 
-**Scope:** local experimental/candidate evidence only. No tag, GitHub Release,
-registry push, VPS/SSH action, real credential, deployment, restart, cleanup,
-or use of ports `33010`, `33018`, or `33019` occurred.
+**Scope:** candidate-only local evidence and explicitly authorized publication.
+No VPS/SSH action, real credential, deployment, restart, cleanup, or use of
+ports `33010`, `33018`, or `33019` occurred. The prior `.1` image is historical
+and superseded; `.2` is rebuilt from the source commit above.
 
 - `VERIFIED 2026-08-12`: commit `d0cb2b5` makes the Docker Compose release ZIP
   reproducible by fixing entry order, timestamps, host system metadata, and
   permissions. The focused package suite passed (`11 passed`), and two local
   bundles matched SHA-256
   `C7AD6CA9B0003ECE1A39C678A7B2F2BCA68378CD2380F30E2CEDB082879C952B`.
-- `VERIFIED 2026-08-12`: the candidate source chain includes `3ae088c` (Phase
-  6-9 gate contract), `9b6d8d9` (candidate audit skill), and this evidence
-  record at `5e1ebba`. The candidate Windows binary was built from
-  `3ae088c30f79fc789f32d70ba99a7dc9fbecbaa1`:
-  `dist/GenBox.exe`, `37,851,028` bytes, SHA-256
-  `0F1BA180E0B1246DDC9526BCD8C7DD476BB0DA3771A93DA31A180A0D2383EBBC`.
-  `python scripts/smoke_client.py --executable dist/GenBox.exe --timeout 60`
-  passed on a dynamically allocated loopback port.
+- `VERIFIED 2026-08-12`: candidate source is frozen at
+  `37f6191bfccc0c890e4c747b5ba6d930a88e5e3b`, including candidate packaging,
+  smoke assertions, and candidate-safe CI tag rules. All publication assets
+  below must be rebuilt from this commit.
 - `VERIFIED 2026-08-12`: full local suite passed (`113 passed` with a
   disposable candidate pytest directory). The four JavaScript syntax checks,
   README Lab generation, package rebuild comparison, and `git diff --check`
@@ -34,26 +32,14 @@ or use of ports `33010`, `33018`, or `33019` occurred.
   token, or AWS access-key patterns. Git-history scanning for those token
   patterns also returned no matches. This screening does not replace a review
   for all personal data, known test sentinels, or future artifacts.
-- `VERIFIED 2026-08-12`: Docker Engine `29.6.1` and Docker Compose `v5.3.0`
-  were available in this worktree. Local image
-  `genbox:v2.5.1-candidate.20260812.1` was built from the frozen candidate
-  release source, with OCI revision and version labels. Its local image ID is
-  `sha256:09d1dd1ae1c95475e52965a1caa357c87dcbd085a40119c23b838028d60c9798`.
-- `VERIFIED 2026-08-12`: an isolated Docker Compose run used a dynamically
-  allocated loopback port, fresh temporary storage, and throwaway credentials.
-  It passed setup health, authenticated Push, rejected invalid Push credentials,
-  idempotent retry, retained source bytes, and no source-cleanup action. The
-  candidate container ran as non-root user `genbox` and only its container,
-  network, volume, and temporary directory were removed.
-- `VERIFIED 2026-08-12`: candidate-only GHCR reference
-  `ghcr.io/liwei9745/genbox:v2.5.1-candidate.20260812.1` was pushed and its
-  remote manifest digest was verified as
-  `sha256:56399f235f401f808846052875a070e450836dd432de1a460ec68ef0aed4a040`.
-  No `latest` or `stable` tag was published by this task.
-- `VERIFIED 2026-08-12`: GitHub CLI authenticated as the project owner with
-  repository, workflow, and package-write scopes. Candidate CI evidence is
-  pending a workflow run on the pushed candidate branch; historical v2.5.1 CI
-  does not substitute for it.
+- `VERIFIED 2026-08-12`: Docker Engine `29.6.1`, Docker Compose `v5.3.0`, and
+  GitHub CLI authentication with `repo`, `workflow`, and `write:packages`
+  scopes were revalidated in the desktop session. Secrets were not recorded.
+- `PENDING 2026-08-12`: Windows artifact SHA-256, candidate Compose bundle
+  SHA-256, local image ID, remote GHCR digest, candidate branch/tag push, and
+  GitHub Actions run URL will be recorded after rebuilding from the frozen
+  source commit. The only permitted image reference is the unique `.2`
+  candidate tag.
 
 ## Phase 6-9 Audit
 
@@ -75,11 +61,10 @@ or use of ports `33010`, `33018`, or `33019` occurred.
 
 ## Resume
 
-1. Restore Docker daemon access in a separately approved local session, then
-   build a uniquely tagged candidate image from a frozen commit, record its
-   immutable image digest, and run an isolated loopback Compose smoke.
-2. Obtain separately authorized GitHub Actions evidence for the frozen
-   candidate commit without creating a stable release or `latest` tag.
+1. Rebuild and verify all `.2` candidate assets from the frozen commit, then
+   push only the candidate branch/tag and candidate GHCR tag.
+2. Create the GitHub Pre-release with the rebuilt client and candidate Compose
+   bundle; retain the Actions run URL and remote digest.
 3. Resume Phase 3 only through its private-network contract; do not treat this
    candidate audit as sender Push, cleanup, redeployment, upstream, or adapter
    completion.
