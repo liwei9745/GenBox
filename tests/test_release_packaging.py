@@ -81,6 +81,7 @@ def test_candidate_and_rc_tags_create_github_prereleases():
 def test_candidate_and_rc_docker_tags_do_not_expand_to_semver_aliases():
     workflow = (ROOT / ".github" / "workflows" / "docker.yml").read_text(encoding="utf-8")
 
+    assert "if: ${{ !contains(github.ref_name, 'candidate') && !contains(github.ref_name, 'rc') }}" in workflow
     assert "type=raw,value=${{ github.ref_name }},enable=${{ startsWith(github.ref, 'refs/tags/') && (contains(github.ref_name, 'candidate') || contains(github.ref_name, 'rc')) }}" in workflow
     assert workflow.count("enable=${{ !contains(github.ref_name, 'candidate') && !contains(github.ref_name, 'rc') }}") == 2
     assert "type=sha,prefix=,enable=${{ !startsWith(github.ref, 'refs/tags/') }}" in workflow
