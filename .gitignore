@@ -52,6 +52,7 @@ logs/
 *.temp
 artifacts/
 .release/
+.candidate-audit/
 .snapshots/
 # 实验分支配置
 config/

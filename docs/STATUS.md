@@ -1,114 +1,71 @@
 # Current Project Status
 
-**Last updated:** 2026-07-16
-**Current branch:** `codex/v251-release-record`
-**Release commit:** `ae2b174`
-**Release status:** v2.5.1 published under GPL-3.0-only — **VERIFIED**
-**Current phase:** Phase 3 Private Network Automation — ready to resume
+**Last updated:** 2026-08-12
+**Current checkout:** detached candidate-audit chain at `9b6d8d98a6d6`
+**Published release:** v2.5.1 at `ae2b174` remains historical and unchanged
+**Current roadmap state:** Phase 2 and Phase 3 remain In Progress; Phase 4-9
+remain Planned unless their documented external gates are separately verified.
 
-## Candidate Identity
+## Candidate Audit
 
-- `VERIFIED 2026-07-16`: source commit `b411aa0`; packaged runtime version
-  `2.5.1`.
-- `VERIFIED 2026-07-16`: Windows candidate size `30,328,866` bytes; SHA-256
-  `99E105A1A753879481E8133DD3146CA00DD15B70D93C5DAD1DA700CE04953A67`.
-- `VERIFIED 2026-07-16`: official v2.4.1 size `25,229,487` bytes; SHA-256
-  `E6E45E81221E628C9AB14BE7EEB36608CF46EF62DFC98FAED0AC71FE964AA0D4`.
-- `VERIFIED 2026-08-12`: local candidate packaging audit passed the focused
-  release suite (`11 passed`, using a disposable writable pytest base directory)
-  and `python -m compileall -q scripts/package_release.py`. The Docker Compose
-  bundle now has stable entry ordering, timestamps, and file metadata, so two
-  local builds from the same source have identical bytes. No Windows executable
-  or Docker image build was run during this audit.
+**Scope:** local experimental/candidate evidence only. No tag, GitHub Release,
+registry push, VPS/SSH action, real credential, deployment, restart, cleanup,
+or use of ports `33010`, `33018`, or `33019` occurred.
 
-## Verified Candidate State
+- `VERIFIED 2026-08-12`: commit `d0cb2b5` makes the Docker Compose release ZIP
+  reproducible by fixing entry order, timestamps, host system metadata, and
+  permissions. The focused package suite passed (`11 passed`), and two local
+  bundles matched SHA-256
+  `C7AD6CA9B0003ECE1A39C678A7B2F2BCA68378CD2380F30E2CEDB082879C952B`.
+- `VERIFIED 2026-08-12`: the candidate source chain includes `3ae088c` (Phase
+  6-9 gate contract) and `9b6d8d9` (candidate audit skill). The candidate
+  Windows binary was built from `3ae088c30f79fc789f32d70ba99a7dc9fbecbaa1`:
+  `dist/GenBox.exe`, `37,851,028` bytes, SHA-256
+  `0F1BA180E0B1246DDC9526BCD8C7DD476BB0DA3771A93DA31A180A0D2383EBBC`.
+  `python scripts/smoke_client.py --executable dist/GenBox.exe --timeout 60`
+  passed on a dynamically allocated loopback port.
+- `VERIFIED 2026-08-12`: full local suite passed (`113 passed` with a
+  disposable candidate pytest directory). The four JavaScript syntax checks,
+  README Lab generation, package rebuild comparison, and `git diff --check`
+  also passed.
+- `VERIFIED 2026-08-12`: current tracked-tree and generated candidate artifact
+  scans found no matches for the checked private-key, OpenAI-style key, GitHub
+  token, or AWS access-key patterns. Git-history scanning for those token
+  patterns also returned no matches. This screening does not replace a review
+  for all personal data, known test sentinels, or future artifacts.
+- `UNVERIFIED 2026-08-12`: Docker CLI is installed, but this session cannot
+  access its daemon (named-pipe permission denied and Docker configuration
+  unreadable). No local candidate image was built, so no image digest-to-commit
+  binding, container/Compose loopback smoke, or candidate registry tag exists.
+- `UNVERIFIED 2026-08-12`: no authenticated GitHub Actions query or candidate
+  workflow run was performed for this detached local commit. Historical v2.5.1
+  workflow evidence does not verify this candidate.
 
-- `VERIFIED 2026-07-16`: automated gates passed with `111 passed`, JavaScript
-  syntax checks, README Lab generation, and `git diff --check`.
-- Windows W0-W4 passed their candidate criteria using combined evidence. For
-  W2, `USER-CONFIRMED 2026-07-16` the operator saw the exact prompt and entered
-  `1` once. `VERIFIED 2026-07-16` there was no `8892` listener before input;
-  PyInstaller used its expected two-level process structure; listener creation
-  preceded the `.env` write; and the same listener PID and creation time handled
-  two HTTP checks. The process used `dev`, bound only to
-  `127.0.0.1:8892`, created no `ADMIN_KEY`, returned the canonical six-field
-  setup schema, and allowed unauthenticated provider access.
-- `VERIFIED 2026-07-16`: local image `genbox-v251-candidate:b411aa0` was built
-  from exact commit `b411aa0` in about 8m27s. Its truncated image ID is
-  `sha256:335d4437…e69746a`; size `656,575,011` bytes. The separate ffmpeg
-  diagnostic took about 9m45s. Isolated checks passed for
-  non-root execution, health/schema, `401`/`401`/`200` authentication,
-  persistence, logs without the key, and candidate resource cleanup. The image
-  remains local and was not pushed.
-- `VERIFIED 2026-07-16`: U1 official v2.4.1 upgrade fixture passed. Windows
-  safely rejected in-use EXE
-  replacement; replacement after shutdown preserved configuration, providers,
-  and marker hashes/mtimes, and v2.5.1 started normally.
+## Phase 6-9 Audit
 
-## v2.4.1 Baseline Finding
+- `VERIFIED 2026-08-12`: `docs/PHASE6-9-DELIVERY-GATES.md` and the
+  project-local `skills/phase-delivery-gates/` make the Phase 6 cleanup, Phase
+  7 clean-redeployment, Phase 8 upstream, and Phase 9 adapter gates explicit.
+  They link from the roadmap without changing any phase status.
+- `UNVERIFIED`: Phase 6 needs sender-side cleanup implementation, isolated
+  synthetic-data authorization, independent destructive-action review, receipt
+  and SHA-256 evidence, dry run, and production non-mutation proof.
+- `UNVERIFIED`: Phase 7 needs a frozen sanitized candidate pushed to the
+  owner's repository, a clean environment created only from that commit, repeat
+  single and batch acceptance, and production non-mutation proof.
+- `UNVERIFIED`: Phase 8 remains blocked on Phase 7. No upstream contact or PR
+  was prepared.
+- `UNVERIFIED`: Phase 9 requires an adapter dossier and an implemented,
+  capability-enforced backend for every service before a catalog entry can
+  execute.
 
-U2 uses combined evidence. `USER-CONFIRMED 2026-07-16` a real Windows 10
-console showed readable GBK Chinese, visible raw ANSI escape sequences, the
-interactive prompt and choice `1`, and a browser opening. `VERIFIED 2026-07-16`
-v2.4.1 wrote `APP_MODE=dev` but did not reload it in the existing process; that
-process continued as production on `0.0.0.0:8891` and generated an
-administrator secret. The secret value is intentionally omitted from repository
-documentation. The exact process was stopped, all key-bearing temporary
-artifacts were deleted, and the ports were released.
+## Resume
 
-This is a confirmed old-version baseline defect. It is not a candidate
-regression: the independent v2.5.1 W2 acceptance proves immediate same-process
-dev mode, loopback binding, and no administrator key. ANSI behavior has not been
-separately accepted on v2.5.1, and the Windows evidence is limited to one
-Windows 10 machine.
-
-## Release Preparation
-
-- `VERIFIED 2026-07-16`: prepared Chinese and English v2.5.1 release notes,
-  changelog entry, README links, and README Lab content. The notes accurately
-  retain the sender Push, network-adapter, and Windows-coverage limitations.
-- `VERIFIED 2026-07-16`: release-preparation working tree passed `111` tests,
-  four JavaScript syntax checks, README Lab generation, and `git diff --check`.
-  Pytest's default system temporary directory was inaccessible in this session;
-  the same suite passed with a disposable repository-local `--basetemp`, which
-  was removed after the run.
-- `VERIFIED 2026-07-16`: a high-confidence scan of tracked content found no
-  private-key block, OpenAI-style key, GitHub token, or AWS access-key match.
-  This is a screening result, not a substitute for final human review of the
-  release diff and generated artifacts.
-- `VERIFIED 2026-07-16`: GPL-3.0-only PR #7 merged to `master` as `ad802f6`.
-  The v2.5.1 branch was then rebased onto that GPL baseline so its source and
-  release packages carry the selected license.
-
-## Published v2.5.1 Release
-
-- `VERIFIED 2026-07-16`: PR #6 merged to `master` as `ae2b174`; tag `v2.5.1`
-  points to that merged GPL-3.0-only release commit.
-- `VERIFIED 2026-07-16`: GitHub Release `GenBox v2.5.1` was published with eight
-  assets: three standalone clients, three client ZIPs, the Docker Compose ZIP,
-  and `SHA256SUMS.txt`.
-- `VERIFIED 2026-07-16`: Docker tag workflow run `29510804581` and desktop/
-  Release workflow run `29510804145` both completed successfully.
-- `VERIFIED 2026-07-16`: downloaded Docker Compose bundle SHA-256 matched
-  `SHA256SUMS.txt` and its contents include `LICENSE`, `COPYRIGHT`, and
-  `THIRD_PARTY_NOTICES.md` alongside the public deployment files.
-
-## Safety And Scope
-
-- `VERIFIED 2026-07-16`: production-like chatgpt2api remained read-only and
-  unchanged.
-- `VERIFIED 2026-07-16`: no VPS operation or sender Push operation occurred.
-- `VERIFIED 2026-07-16`: ports `8891` and `8892` are free; acceptance processes
-  and secret-bearing temporary directories were removed.
-- `VERIFIED 2026-07-16`: the repository `.env` remained unchanged. Do not
-  modify, stage, or commit the owner's `.planning/STATE.md` change.
-
-## Closeout
-
-The v2.5.1 release closeout is complete. Next:
-
-1. Resume the current roadmap Phase 3: Private Network Automation.
-2. Begin with the topic contracts `docs/extensions-deployment-contract.md` and
-   `docs/INTEGRATION.md`; retain the production chatgpt2api read-only boundary.
-3. Keep GPL provenance review current whenever copied code, assets, or bundled
-   service artifacts are introduced.
+1. Restore Docker daemon access in a separately approved local session, then
+   build a uniquely tagged candidate image from a frozen commit, record its
+   immutable image digest, and run an isolated loopback Compose smoke.
+2. Obtain separately authorized GitHub Actions evidence for the frozen
+   candidate commit without creating a stable release or `latest` tag.
+3. Resume Phase 3 only through its private-network contract; do not treat this
+   candidate audit as sender Push, cleanup, redeployment, upstream, or adapter
+   completion.
