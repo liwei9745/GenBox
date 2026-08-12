@@ -1,7 +1,7 @@
 # Current Project Status
 
 **Last updated:** 2026-08-12
-**Candidate release source:** `ca2ec1b9b1d8921a9df8b811946521f9e056baa0`
+**Candidate release tag:** `v2.5.1-candidate.20260812.1` (candidate-only)
 **Published release:** v2.5.1 at `ae2b174` remains historical and unchanged
 **Current roadmap state:** Phase 2 and Phase 3 remain In Progress; Phase 4-9
 remain Planned unless their documented external gates are separately verified.
@@ -36,8 +36,8 @@ or use of ports `33010`, `33018`, or `33019` occurred.
   for all personal data, known test sentinels, or future artifacts.
 - `VERIFIED 2026-08-12`: Docker Engine `29.6.1` and Docker Compose `v5.3.0`
   were available in this worktree. Local image
-  `genbox:v2.5.1-candidate.20260812.1` was built from the candidate release
-  source above, with OCI revision and version labels. Its local image ID is
+  `genbox:v2.5.1-candidate.20260812.1` was built from the frozen candidate
+  release source, with OCI revision and version labels. Its local image ID is
   `sha256:09d1dd1ae1c95475e52965a1caa357c87dcbd085a40119c23b838028d60c9798`.
 - `VERIFIED 2026-08-12`: an isolated Docker Compose run used a dynamically
   allocated loopback port, fresh temporary storage, and throwaway credentials.
