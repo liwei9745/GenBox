@@ -81,9 +81,25 @@ and superseded; `.2` is rebuilt from the source commit above.
   the candidate Compose ZIP. The one image-context match and tracked/history
   matches are known public source/test sentinel strings; no real credential or
   personal-data payload was identified.
-- `UNVERIFIED 2026-08-12`: a separate seven-gate task may provide only a
-  sanitized handoff before its facts are incorporated here. This candidate
-  record does not claim any Design Gate result or Phase 6 completion.
+- `VERIFIED 2026-08-12`: sanitized sender-side Phase 6 handoff identifies
+  branch `codex/phase6-security-gates-20260812`, final handoff commit
+  `24b625b`, and code/test evidence commit `0dce8ee` (later commits are
+  documentation-only binding). Windows and selected/full Python suites passed;
+  a sealed Linux Docker matrix ran with no network, read-only repository and
+  dependencies, and only `/tmp` writable. It covered sender cleanup design
+  contracts including POSIX exchange/tombstone, ABA/move, descriptor rewrite,
+  staging, hard-link, cross-process claim/writer, and crash recovery.
+- `VERIFIED 2026-08-12`: the sender handoff reports A1-A12 design/contract
+  matrix PASS within its evidence boundary, `Design Gate PASS` for the sender
+  local design/contract boundary, and `Merge Gate PASS` for local plus exact
+  hosted evidence. GitHub Actions Cleanup Security Tests run `31576063590`
+  passed all four jobs on exact SHA `2d571102`; its sanitizer checks reported
+  zero high-confidence incremental diff/history, JUnit/log, and generated
+  evidence hits. These are sanitized handoff facts only.
+- `NOT EXECUTED / NOT AUTHORIZED 2026-08-12`: the sender `Isolated Execute
+  Gate` was not run. This candidate record does not claim a deployment, real
+  cleanup, production non-mutation, Phase 6 completion, or a project-wide
+  Design Gate result.
 
 ## Phase 6-9 Audit
 
@@ -91,9 +107,10 @@ and superseded; `.2` is rebuilt from the source commit above.
   project-local `skills/phase-delivery-gates/` make the Phase 6 cleanup, Phase
   7 clean-redeployment, Phase 8 upstream, and Phase 9 adapter gates explicit.
   They link from the roadmap without changing any phase status.
-- `UNVERIFIED`: Phase 6 needs sender-side cleanup implementation, isolated
-  synthetic-data authorization, independent destructive-action review, receipt
-  and SHA-256 evidence, dry run, and production non-mutation proof.
+- `UNVERIFIED`: Phase 6 still needs authorized isolated execution with synthetic
+  data, independent destructive-action review, receipt and SHA-256 evidence,
+  dry run, and production non-mutation proof. Sender local design/contract and
+  merge evidence do not satisfy this execution gate.
 - `UNVERIFIED`: Phase 7 needs a frozen sanitized candidate pushed to the
   owner's repository, a clean environment created only from that commit, repeat
   single and batch acceptance, and production non-mutation proof.
@@ -105,8 +122,8 @@ and superseded; `.2` is rebuilt from the source commit above.
 
 ## Resume
 
-1. Await the separate seven-gate task's sanitized handoff before recording its
-   exact commit or results.
+1. Keep Phase 6 at its isolated-execution gate until it is separately authorized
+   and independently evidenced.
 2. Resume Phase 3 only through its private-network contract; do not treat this
    candidate audit as sender Push, cleanup, redeployment, upstream, or adapter
    completion.

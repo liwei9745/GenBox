@@ -16,9 +16,14 @@ The released candidate is a GitHub Pre-release. Its GHCR-only reference is
 `sha256:b1cd55e40dd772dca739aca44280f78b3568f23e6ab244c1d2a92dd60a7f6405`.
 The Desktop Clients Actions run `31570745302` passed on the tagged source;
 candidate Docker workflow run `31570745304` was intentionally skipped. Do not
-use `latest`, `stable`, VPS/SSH, or restricted ports. Await only a sanitized
-handoff from the separate seven-gate task; do not claim its Design Gate or
-Phase 6 as complete.
+use `latest`, `stable`, VPS/SSH, or restricted ports.
+
+**Sender Phase 6 handoff boundary:** `codex/phase6-security-gates-20260812`
+provides sanitized sender local-design/contract evidence at `0dce8ee` and final
+handoff `24b625b`; hosted Cleanup Security Tests run `31576063590` passed on
+SHA `2d571102`. Its local Design Gate and Merge Gate passed, but its Isolated
+Execute Gate is `NOT EXECUTED / NOT AUTHORIZED`. This is not a claim that
+Phase 6, deployment, or real cleanup is complete.
 
 Phase 6-9 remain Planned or In Progress according to `docs/STATUS.md`; local
 receiver smoke is not sender, private-network, cleanup, clean-redeployment,
