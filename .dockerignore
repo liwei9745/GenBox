@@ -9,6 +9,8 @@ __pycache__
 *.pyo
 .venv
 .release
+.candidate-audit
+.pytest_cache
 venv
 env
 
