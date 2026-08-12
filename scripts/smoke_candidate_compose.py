@@ -65,6 +65,7 @@ def main() -> int:
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--source-id", required=True)
     parser.add_argument("--push-key", required=True)
+    parser.add_argument("--admin-key", required=True)
     parser.add_argument("--source-file", required=True, type=Path)
     parser.add_argument("--timeout", type=float, default=60)
     args = parser.parse_args()
@@ -75,6 +76,14 @@ def main() -> int:
     source_file.write_bytes(image_bytes)
     source_hash = hashlib.sha256(image_bytes).hexdigest()
     wait_for_health(base_url, args.timeout)
+
+    status, _ = request(f"{base_url}/api/status")
+    assert status == 401, f"unauthenticated administrator endpoint returned {status}"
+    status, _ = request(
+        f"{base_url}/api/status",
+        headers={"X-Admin-Key": args.admin_key},
+    )
+    assert status == 200, f"authenticated administrator endpoint returned {status}"
 
     push_headers = {
         "X-GenBox-Source": args.source_id,
@@ -110,7 +119,7 @@ def main() -> int:
 
     # The receiver has no source cleanup operation; retain the local sender fixture.
     assert source_file.read_bytes() == image_bytes
-    print("candidate Compose smoke passed: health, Push auth, idempotency, source retention, cleanup disabled")
+    print("candidate Compose smoke passed: health, admin auth, Push auth, idempotency, source retention, cleanup disabled")
     return 0
 
 

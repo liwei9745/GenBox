@@ -36,21 +36,56 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def candidate_image_reference(tag: str) -> str:
+    if not tag or any(character.isspace() for character in tag):
+        raise ValueError("candidate image tag must be a non-empty single token")
+    return f"ghcr.io/liwei9745/genbox:{tag}"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=ROOT / "artifacts")
     parser.add_argument("--docker-only", action="store_true")
+    parser.add_argument(
+        "--candidate-tag",
+        help="create a candidate-only Compose bundle pinned to this GHCR image tag",
+    )
     args = parser.parse_args()
 
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
 
-    docker_zip = output / f"{APP_NAME}-Docker-Compose-v{__version__}.zip"
+    candidate_tag = args.candidate_tag
+    compose_source = ROOT / "docker-compose.yml"
+    env_source = ROOT / ".env.docker.example"
+    if candidate_tag:
+        image = candidate_image_reference(candidate_tag)
+        candidate_dir = output / ".candidate-compose"
+        candidate_dir.mkdir(parents=True, exist_ok=True)
+        compose_source = candidate_dir / "docker-compose.yml"
+        env_source = candidate_dir / ".env.example"
+        compose_source.write_text(
+            (ROOT / "docker-compose.yml").read_text(encoding="utf-8").replace(
+                f"ghcr.io/liwei9745/genbox:{__version__}", image
+            ),
+            encoding="utf-8",
+        )
+        env_source.write_text(
+            (ROOT / ".env.docker.example").read_text(encoding="utf-8").replace(
+                f"ghcr.io/liwei9745/genbox:{__version__}", image
+            ),
+            encoding="utf-8",
+        )
+        docker_name = f"{APP_NAME}-Docker-Compose-{candidate_tag}.zip"
+    else:
+        docker_name = f"{APP_NAME}-Docker-Compose-v{__version__}.zip"
+
+    docker_zip = output / docker_name
     write_zip(
         docker_zip,
         [
-            (ROOT / "docker-compose.yml", "docker-compose.yml"),
-            (ROOT / ".env.docker.example", ".env.example"),
+            (compose_source, "docker-compose.yml"),
+            (env_source, ".env.example"),
             (ROOT / "docs" / "DOCKER-QUICKSTART.md", "README.md"),
             (ROOT / "LICENSE", "LICENSE"),
             (ROOT / "COPYRIGHT", "COPYRIGHT"),

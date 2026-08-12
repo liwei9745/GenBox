@@ -75,6 +75,14 @@ def test_candidate_and_rc_tags_create_github_prereleases():
     workflow = (ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
 
     assert "--prerelease=${{ contains(github.ref_name, 'candidate') || contains(github.ref_name, 'rc') }}" in workflow
+    assert "if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, 'candidate') && !contains(github.ref_name, 'rc')" in workflow
+
+
+def test_candidate_and_rc_docker_tags_do_not_expand_to_semver_aliases():
+    workflow = (ROOT / ".github" / "workflows" / "docker.yml").read_text(encoding="utf-8")
+
+    assert "type=raw,value=${{ github.ref_name }},enable=${{ startsWith(github.ref, 'refs/tags/') && (contains(github.ref_name, 'candidate') || contains(github.ref_name, 'rc')) }}" in workflow
+    assert workflow.count("enable=${{ !contains(github.ref_name, 'candidate') && !contains(github.ref_name, 'rc') }}") == 2
 
 
 def test_packaged_console_output_avoids_ansi_and_emoji_status_markers():
@@ -187,6 +195,28 @@ def test_docker_bundle_is_reproducible_for_the_same_source(tmp_path):
 
     bundle_name = f"GenBox-Docker-Compose-v{__version__}.zip"
     assert (first_output / bundle_name).read_bytes() == (second_output / bundle_name).read_bytes()
+
+
+def test_candidate_docker_bundle_is_pinned_to_its_candidate_image(tmp_path):
+    candidate_tag = "v2.5.1-candidate.20260812.2"
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/package_release.py",
+            "--docker-only",
+            "--candidate-tag",
+            candidate_tag,
+            "--output",
+            str(tmp_path),
+        ],
+        cwd=ROOT,
+        check=True,
+    )
+    bundle = tmp_path / f"GenBox-Docker-Compose-{candidate_tag}.zip"
+    with zipfile.ZipFile(bundle) as archive:
+        expected_image = f"ghcr.io/liwei9745/genbox:{candidate_tag}"
+        assert expected_image in archive.read("docker-compose.yml").decode("utf-8")
+        assert expected_image in archive.read(".env.example").decode("utf-8")
 
 
 def test_gpl_only_license_and_public_notices_are_present():
