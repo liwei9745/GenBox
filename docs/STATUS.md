@@ -1,8 +1,8 @@
 # Current Project Status
 
 **Last updated:** 2026-08-20
-**Current branch:** `codex/v2.6.0-release-prep-20260820`
-**Current phase:** Phase 6 Verified Source Cleanup - **Complete 2026-08-20 (receiver-grant scope, Line A; see DECISIONS)**
+**Current branch:** `codex/phase7-campaign-20260820`
+**Current phase:** Phase 7 Sanitized GitHub Redeployment - **In Progress (campaign 2026-08-20; P7.A/B/C evidence below)**
 **Previous phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
 
 ## Phase 6 close-out (Line A, 2026-08-20)
@@ -133,6 +133,48 @@
 - **BOUNDARY / VERIFIED:** no GenBox code, tags, releases, or production VPS
   were touched by this work. Both PRs are documentation-only and make no
   claim that sender-side code exists.
+
+## Phase 7 clean redeployment campaign (2026-08-20)
+
+- **BRANCH:** `codex/phase7-campaign-20260820` (based on `03c46a4`); campaign
+  plan `docs/CANP7-CAMPAIGN-20260820.md`; this section records the P7.A/P7.B
+  evidence and the P7.C summary. Commits are local until a new gate
+  authorization is given.
+- **P7.A SECRET AND PERSONAL-DATA SCAN / VERIFIED PASS:** tracked files + full
+  `git log --all -p` scanned for secret patterns (`sk-*`, `ghp_`,
+  `github_pat_`, `AKIA…`, `xox…`, private-key headers, SSH keys, `.pem`,
+  `id_*`). Zero software hits; the only literal matches are test sentinels in
+  `tests/test_extension_task_store.py` (UI-masking escape-hatch fixtures).
+  All port references resolve to three benign classes: Class 1 product default
+  ports (`extensions/models.py:168,225` `service_port=33010`;
+  `config.py:118`/`main.py:2829` `port=10808`; frontend `d.port || 10808`)
+  present since before v2.6.0; Class 2 dated historical evidence text in docs
+  (kept as labelled audit trail, not rewritten); Class 3 loopback/example hosts
+  (`127.0.0.1`). Report: `docs/PHASE7-SCAN-REPORT-20260820.md`.
+- **P7.B CLEAN DEPLOYMENT SINGLE + BATCH PUSH / VERIFIED PASS 2026-08-20:**
+  downloaded Release asset `GenBox-Docker-Compose-v2.6.0.zip`, pulled GHCR
+  `ghcr.io/liwei9745/genbox:2.6.0` (digest `sha256:102333af…`), and started an
+  isolated container (project `p7acc`, container `p7accrec`, host port `18990`,
+  synthetic one-shot `ADMIN_KEY` + Push key, prod mode). Live-HTTP acceptance
+  over `127.0.0.1:18990`: status probe 200 (contract `v1`); wrong Push key
+  rejected 401; single push -> `imported`; identical re-push -> `already-imported`
+  (idempotent, same file); same-content different path -> `duplicate-local`;
+  10 distinct images with 4-way concurrency -> all `imported` (one deterministic
+  re-run over distinct hashes converged 10/10; a prior run hit the content-dedupe
+  path as expected); every receipt returns `safe_to_delete_source=false`.
+  Container and network removed in teardown; no production VPS, tags, or
+  secrets touched. Issue encountered and recorded: `GENBOX_PUSH_KEYS` must be
+  injected as an environment variable (compose `environment`), not only via
+  `.env` file mount, because `sync/ingest.py:38` reads process env; and the
+  value must be valid single-quoted JSON (`""` literal-breaking under compose
+  is an operator pitfall, not a product bug).
+- **P7.C LOCAL SUITE / VERIFIED PASS 2026-08-20 (Python 3.14.3):**
+  `python -m pytest tests/ --tb=no -p no:cacheprovider` -> `41 passed`;
+  focused `tests/test_sync_push_routes.py` + `tests/test_phase6_loopback_receiver.py`
+  -> `28 passed`. The BytesIO `PermissionError WinError 5` on `pytest-current`
+  teardown is the already-documented Windows temp-root cleanup artifact.
+- **RESUME:** P8 remaining upstream delivery steps (proposal final wording +
+  compatibility notes alignment) are next; campaign commits await gate.
 
 ## v2.6.0-rc.8 final candidate and consolidated manual UAT (2026-08-10)
 
