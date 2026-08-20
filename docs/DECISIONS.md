@@ -669,3 +669,28 @@ closed.
 Task recovery and managed Push-source actions keep referring to the same
 opaque instance after a local GenBox restart, while raw target and instance IDs
 remain absent from browser requests.
+
+## ADR-024: v2.6.0 Stable Release Scope And Base
+
+**Status:** Accepted
+**Date:** 2026-08-20
+
+### Context
+
+The first stable release after the rc.1..rc.8 candidate series needed an
+agreed version, base lineage, and claim boundary.
+
+### Decision
+
+Publish stable **v2.6.0** from the rc.8 candidate lineage. Its scope is
+"client + extension center + image Push receiving". The release materials do
+not claim sender-side source-file cleanup, Phase 6 completion, or upstream
+delivery; those remain pending and are described only as such. The receiver
+returns `safe_to_delete_source=false`, and source-image deletion stays
+disabled.
+
+### Consequences
+
+Release notes, changelog, READMEs, and the integration contract describe only
+verified receiver work. Harmless cleanup claim is prevented even if a later
+phase completes sender-side work in another repository.

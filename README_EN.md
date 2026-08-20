@@ -20,7 +20,7 @@ The project began as a multi-model image comparison workspace and grew with real
 GenBox is built for visual AI enthusiasts, model evaluators, self-hosting hobbyists, and anyone who wants one interface for OpenAI-compatible services, Gemini, Qwen, Agnes, and other configurable model endpoints.
 
 > [!IMPORTANT]
-> **v2.5.1 is a focused security and reliability update.** It hardens startup authentication, makes browser sign-in fail closed when status is unclear, and pins the Docker Compose image to the release version. [Read the release notes](release-notes-v2.5.1.md)
+> **v2.6.0 is the stable release for the Extension Center and authenticated image Push.** It adds guided chatgpt2api deployment, managed Push-source provisioning with an optional encrypted local vault, and single, batch, and scheduled image Push receiving into the GenBox media library. Source-file cleanup remains disabled and out of scope. [Read the release notes](release-notes-v2.6.0.md)
 
 ## Main Interface Screenshots
 
@@ -126,7 +126,7 @@ The README stays focused on the first successful run. Advanced usage, operations
 
 | I want to learn about | Start here |
 |---|---|
-| Installation, upgrades, and known issues | [v2.5.1 release notes](release-notes-v2.5.1.md) · [Changelog](CHANGELOG.md) |
+| Installation, upgrades, and known issues | [v2.6.0 release notes](release-notes-v2.6.0.md) · [Changelog](CHANGELOG.md) |
 | Product direction and current boundaries | [Product definition](docs/PRODUCT.md) · [Current status](docs/STATUS.md) |
 | NAS, VPS, Docker, and safe releases | [Development and release lifecycle](docs/DEVELOPMENT-LIFECYCLE.md) |
 | How GenBox connects to chatgpt2api | [Integration contract](docs/INTEGRATION.md) |

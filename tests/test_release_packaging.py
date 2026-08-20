@@ -19,14 +19,14 @@ def test_release_version_is_consistent():
     assert main.app.version == __version__
     assert updater.CURRENT_VERSION == __version__
     assert __version__ in (ROOT / "genbox_version.py").read_text(encoding="utf-8")
-    assert __version__ == "2.6.0-rc.8"
+    assert __version__ == "2.6.0"
 
 
 def test_compose_release_uses_ghcr_and_safe_internal_port():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     env_template = (ROOT / ".env.docker.example").read_text(encoding="utf-8")
 
-    stable_image = "ghcr.io/liwei9745/genbox:2.5.1"
+    stable_image = "ghcr.io/liwei9745/genbox:2.6.0"
     assert f"GENBOX_IMAGE:-{stable_image}" in compose
     assert f"GENBOX_IMAGE={stable_image}" in env_template
     assert "ghcr.io/liwei9745/genbox:latest" not in compose
@@ -136,11 +136,11 @@ def test_readme_lab_content_matches_source_documents():
 
     sources = {
         "readme": {"zh": "README.md", "en": "README_EN.md"},
-        "release": {"zh": "release-notes-v2.5.1-zh.md", "en": "release-notes-v2.5.1.md"},
+        "release": {"zh": "release-notes-v2.6.0-zh.md", "en": "release-notes-v2.6.0.md"},
     }
     assert 'id="document"' in lab
     assert "state.payload[state.document][state.language]" in lab
-    assert "Release v2.5.1" in lab
+    assert "Release v2.6.0" in lab
     for document, languages in sources.items():
         for language, filename in languages.items():
             source = (ROOT / filename).read_text(encoding="utf-8")

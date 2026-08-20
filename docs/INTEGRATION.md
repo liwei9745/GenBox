@@ -103,8 +103,9 @@ A successful receipt includes enough information for the sender to verify:
 - GenBox-computed SHA-256 matches the sender's bytes.
 - The local file was committed.
 - `safe_to_delete_source` confirms receiver-side commit eligibility. The current
-  v1 receiver returns `true` after a successful or idempotent committed import;
-  it does not by itself activate sender-side deletion.
+  v1 receiver returns `false` after a successful or idempotent committed
+  import, so the receipt never grants source-deletion permission. Sender-side
+  cleanup remains disabled and out of scope for this release.
 
 The sender persists the source path, content hash, result, receipt, attempts,
 last error, and timestamps. HTTP success alone does not authorize deletion.

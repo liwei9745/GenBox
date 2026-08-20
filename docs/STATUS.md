@@ -1,9 +1,59 @@
 # Current Project Status
 
-**Last updated:** 2026-08-10
-**Current branch:** `codex/v2.6.0-rc.8-final-candidate`
+**Last updated:** 2026-08-20
+**Current branch:** `codex/v2.6.0-release-prep-20260820`
 **Current phase:** Phase 6 Verified Source Cleanup - **In Progress / Destructive Execution Blocked**
 **Previous phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
+
+## v2.6.0 stable release prep (2026-08-20)
+
+- **SCOPE-A / FIXED BY COORDINATOR:** stable v2.6.0 scope is "client +
+  extension center + image Push receiving". Source-file cleanup is NOT claimed
+  anywhere in the release materials and remains disabled / out of scope.
+- **BASE / VERIFIED:** prep is based on the rc.8 candidate lineage (branch
+  `codex/v2.6.0-rc.8-final-candidate`, consolidated UAT recorded 2026-08-10).
+  No tag or GitHub Release was created.
+- **CHANGES APPLIED / VERIFIED LOCALLY:** `genbox_version.py` -> `2.6.0`;
+  stable notes `release-notes-v2.6.0{,-zh}.md` created and `RELEASE_NOTES.md`
+  repointed to them; `CHANGELOG.md` gained the `[2.6.0]` section and the dense
+  Phase 6 `[Unreleased]` detail was folded into a short In Progress note;
+  Compose image pinned to `ghcr.io/liwei9745/genbox:2.6.0`; packaging tests
+  updated to the stable version; current-version README prose updated;
+  `docs/INTEGRATION.md` now states the v1 receiver returns
+  `safe_to_delete_source=false` in this release with sender cleanup disabled.
+- **LOCAL TESTS / VERIFIED 2026-08-20 (Python 3.14.3, not CI 3.12):**
+  `python -m pytest -q tests/test_release_packaging.py` -> `11 passed`;
+  `python -m pytest -q tests/test_sync_push_routes.py` -> `27 passed`;
+  `python -m pytest -q tests/test_push_sources.py tests/test_credential_vault.py
+  tests/test_extensions.py` -> `237 passed`. `node --check` on
+  `static/js/app-all.js`, `extensions.js`, `i18n.js`, and `sync.js` -> pass.
+  `python scripts/build_readme_lab.py` regenerated
+  `static/readme-lab-content.json` deterministically (identical SHA-256 on a
+  second run); `python -m py_compile main.py updater.py` -> pass;
+  `git diff --check` -> pass.
+- **ENVIRONMENT NOTE:** pytest's default temp-root cleanup (removing the
+  `pytest-current` directory) hit a Windows `PermissionError` at session
+  teardown on 3.14.3; reruns with `--basetemp=<local temp>` complete cleanly.
+  No assertion was relaxed; this is an environment-only teardown artifact.
+- **FINAL VERIFICATION / VERIFIED 2026-08-20:** full suite
+  `python -m pytest -q` -> `617 passed` (run twice, before and after the lab
+  release-doc follow-up); semantic and mechanical release reviewers both
+  returned PASS; added-lines secret/port scan -> zero hits; the Lab
+  `release` sub-document now points to the v2.6.0 notes
+  (`scripts/build_readme_lab.py` + `static/readme-lab.html` label + packaging
+  test updated, JSON regenerated deterministically). ADR-024 records the
+  scope-A/base decision.
+- **WINDOWS PACKAGE / VERIFIED 2026-08-20:** `python build.py` succeeded;
+  `dist/GenBox.exe` is `38,085,414` bytes with SHA-256
+  `94F5D3D8793FD73508EE72288FF17D4836A3E76139A55FD21AE9703CAFCCD713`;
+  packaged random-loopback smoke passed. `dist/`, `build/`, and `GenBox.spec`
+  are git-ignored and not part of the diff.
+- **CURRENT STATE:** working tree is UNCOMMITTED (13 modified + 2 untracked
+  files), nothing staged, nothing pushed, no tag created.
+- **RESUME INSTRUCTIONS:** do NOT commit, push, create a tag or GitHub
+  Release, or touch the remote until the release coordinator approves.
+  Present the drafted v2.6.0 release body and get explicit user authorization;
+  only then commit on this branch, create annotated tag `v2.6.0`, and push.
 
 ## v2.6.0-rc.8 final candidate and consolidated manual UAT (2026-08-10)
 

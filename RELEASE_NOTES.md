@@ -1,11 +1,9 @@
-# GenBox v2.6.0-rc.8 (Unified UAT Candidate)
+# GenBox v2.6.0 (Stable)
 
-This rolling file points to the prepared experimental-candidate notes:
+This rolling file points to the prepared stable v2.6.0 notes:
 
-- [中文 rc.8 统一验收候选说明](release-notes-v2.6.0-rc.8-zh.md)
-- [English rc.8 unified UAT candidate notes](release-notes-v2.6.0-rc.8.md)
+- [中文 v2.6.0 稳定版说明](release-notes-v2.6.0-zh.md)
+- [English v2.6.0 stable release notes](release-notes-v2.6.0.md)
 
-This candidate replaces rc.7. It is not a stable release.
-
-The versioned notes become frozen only when a separately approved release is
-published. Ongoing implementation details belong in `docs/STATUS.md`.
+The rc.1 through rc.8 candidate notes remain historical and do not describe a
+stable release. Ongoing implementation details belong in `docs/STATUS.md`.

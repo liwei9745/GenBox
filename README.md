@@ -20,7 +20,7 @@
 GenBox 适合多媒体生成爱好者、模型评测玩家、自托管极客，以及想用一个界面管理 OpenAI 兼容服务、Gemini、Qwen、Agnes 等模型入口的用户。
 
 > [!IMPORTANT]
-> **v2.5.1 是一次聚焦安全与稳定性的更新。** 它收紧启动认证，浏览器在状态不明确时默认要求登录，并让 Docker Compose 固定使用发布版本镜像。[查看本次更新](release-notes-v2.5.1-zh.md)
+> **v2.6.0 是扩展中心与认证图片 Push 的稳定版本。** 它提供 chatgpt2api 引导式部署、带可选加密本地凭证库的受管 Push 来源配置，以及单张、批量与定时增量图片 Push 接收进入 GenBox 媒体库。源文件清理仍禁用且不在本版本范围内。[查看本次更新](release-notes-v2.6.0-zh.md)
 
 ## 主要界面截图
 
@@ -126,7 +126,7 @@ README 只保留普通用户最常用的信息。高级使用、部署、安全�
 
 | 我想了解 | 从这里开始 |
 |---|---|
-| 安装、升级与常见问题 | [v2.5.1 发布说明](release-notes-v2.5.1-zh.md) · [更新记录](CHANGELOG.md) |
+| 安装、升级与常见问题 | [v2.6.0 发布说明](release-notes-v2.6.0-zh.md) · [更新记录](CHANGELOG.md) |
 | 产品方向和当前能力边界 | [产品定义](docs/PRODUCT.md) · [当前状态](docs/STATUS.md) |
 | NAS、VPS、Docker 和安全发布 | [开发与发布生命周期](docs/DEVELOPMENT-LIFECYCLE.md) |
 | GenBox 与 chatgpt2api 如何连接 | [集成协议](docs/INTEGRATION.md) |
