@@ -1,9 +1,22 @@
 # Phase 7/8 Campaign Orchestration (GenBox)
 
-**Status:** Active
+**Status:** Closed 2026-08-20 — checkpoint 1 satisfied; see `docs/STATUS.md`.
 **Date:** 2026-08-20
-**Branch:** `codex/phase7-campaign-20260820`
+**Branch:** `codex/phase7-campaign-20260820` (pushed, commits `0ed01c9` `f91a248` `b0e81c8` `acb2783`)
 **Base:** `03c46a4` (post v2.6.0 publish)
+
+## Checkpoint-1 Outcome
+
+- P7.A secret/personal-data scan report — DONE (clean, zero secret hits; report
+  `docs/PHASE7-SCAN-REPORT-20260820.md`).
+- P7.B clean-deployment single + batch Push acceptance — DONE (v2.6.0 Release
+  bundle + GHCR 2.6.0, isolated container, all checks pass, teardown clean).
+- P7.C consolidated evidence in `docs/STATUS.md` — DONE; ROADMAP Phase 7 →
+  Complete, Phase 8 → In Progress (awaiting upstream response).
+- P8.A/B/C — DONE: proposal payloads final; both PRs (#387 basketikun, #25
+  yukkcat) OPEN and their head branches verified on the forks.
+- Next: decide GenBox-Store / sender-cleanup workstream injection at the next
+  user gate (this campaign makes no self-promotion beyond this line).
 
 ## Objective
 
@@ -18,17 +31,17 @@ without rework.
 ```text
 v2.6.0 published (done)
    |
-   +-- P7.A Full-history secret/personal-data scan report  [need]
-   +-- P7.B Clean-deploy repeated single+batch Push acceptance [need]
+   +-- P7.A Full-history secret/personal-data scan report  [done]
+   +-- P7.B Clean-deploy repeated single+batch Push acceptance [done]
    |        (compose from Release asset + GHCR 2.6.0, then async sync-push tests)
-   +-- P7.C Consolidated scan + deploy evidence in STATUS   [need]
+   +-- P7.C Consolidated scan + deploy evidence in STATUS   [done]
    |
-   +-- P8.A Align proposal PRs #387/#25 payloads w/ final guide [parallel]
-   +-- P8.B Vibe Coding guide finalization (from Draft)        [parallel]
-   +-- P8.C Compatibility/migration note in guide + INTEGRATION [need]
+   +-- P8.A Align proposal PRs #387/#25 payloads w/ final guide [done]
+   +-- P8.B Vibe Coding guide finalization (from Draft)        [done]
+   +-- P8.C Compatibility/migration note in guide + INTEGRATION [done]
    |
    v
-Campaign close: ROADMAP Phase 7/8 acceptance sweep + STATUS resume block
+Campaign close: ROADMAP Phase 7/8 acceptance sweep + STATUS resume block (done)
 ```
 
 ## Sizing Decisions (risk-based, not per-package)
