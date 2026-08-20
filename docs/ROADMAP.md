@@ -327,13 +327,13 @@ Allow users to reclaim VPS space without risking unconfirmed media loss.
 
 ## Phase 7: Sanitized GitHub Redeployment
 
-**Status:** In Progress (partial evidence exists via v2.6.0 publish; remaining
-items tracked in `docs/STATUS.md`)
+**Status:** Complete 2026-08-20 (see `docs/PHASE7-SCAN-REPORT-20260820.md` and
+the Phase 7 section in `docs/STATUS.md`)
 
-**Phase-7 note (2026-08-20):** Secret scan of files and Git history is clean;
-the clean deployment from the published Release and GHCR image was verified at
-Gate 6. Remaining: repeated single-plus-batch transfer acceptance in the clean
-deployment and a consolidated scan report entry.
+**Phase-7 note (2026-08-20):** Secret/personal-data scan of files and Git
+history clean; clean deployment from the published v2.6.0 Release asset +
+GHCR image verified; repeated single-plus-batch Push acceptance passed over the
+clean deployment; evidence pushed on `codex/phase7-campaign-20260820`.
 
 **Topic contract:** `docs/DEVELOPMENT-LIFECYCLE.md`
 
@@ -359,7 +359,8 @@ not depend on uncommitted container changes or sensitive data.
 
 ## Phase 8: Upstream Delivery
 
-**Status:** Planned
+**Status:** In Progress (proposal PRs OPEN 2026-08-20; awaiting maintainer
+response)
 
 **Topic contracts:** `docs/DEVELOPMENT-LIFECYCLE.md`,
 `docs/UPSTREAM-VIBE-CODING-GUIDE.md`
