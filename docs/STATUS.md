@@ -12,7 +12,8 @@
   anywhere in the release materials and remains disabled / out of scope.
 - **BASE / VERIFIED:** prep is based on the rc.8 candidate lineage (branch
   `codex/v2.6.0-rc.8-final-candidate`, consolidated UAT recorded 2026-08-10).
-  No tag or GitHub Release was created.
+  At prep time no tag or GitHub Release existed; both were created later under
+  the published section below.
 - **CHANGES APPLIED / VERIFIED LOCALLY:** `genbox_version.py` -> `2.6.0`;
   stable notes `release-notes-v2.6.0{,-zh}.md` created and `RELEASE_NOTES.md`
   repointed to them; `CHANGELOG.md` gained the `[2.6.0]` section and the dense
@@ -48,12 +49,37 @@
   `94F5D3D8793FD73508EE72288FF17D4836A3E76139A55FD21AE9703CAFCCD713`;
   packaged random-loopback smoke passed. `dist/`, `build/`, and `GenBox.spec`
   are git-ignored and not part of the diff.
-- **CURRENT STATE:** working tree is UNCOMMITTED (13 modified + 2 untracked
-  files), nothing staged, nothing pushed, no tag created.
-- **RESUME INSTRUCTIONS:** do NOT commit, push, create a tag or GitHub
-  Release, or touch the remote until the release coordinator approves.
-  Present the drafted v2.6.0 release body and get explicit user authorization;
-  only then commit on this branch, create annotated tag `v2.6.0`, and push.
+- **CURRENT STATE:** v2.6.0 is published; see the published section below.
+  This change set records the publish evidence and hardens the CI flaky vault
+  test, is committed locally, and is pushed only with a new explicit
+  authorization.
+- **RESUME INSTRUCTIONS:** verify the local commit (tests green) and decide the
+  next roadmap step. Pushing this follow-up commit is a separate
+  authorization.
+
+## v2.6.0 stable release published (2026-08-20)
+
+- **PUBLISHED / VERIFIED:** after explicit coordinator approval, commit
+  `bd8e435` was created on `codex/v2.6.0-release-prep-20260820`, pushed to
+  origin, and annotated tag `v2.6.0` (tag object `d68115a` -> `bd8e435`) was
+  pushed, triggering `build.yml` and `docker.yml` on the tag.
+- **CI / VERIFIED:** `docker.yml` -> success; GHCR
+  `ghcr.io/liwei9745/genbox:2.6.0`, `:2.6`, and `:latest` all resolve.
+  `build.yml` first run failed once on the Playwright UI test
+  `test_vault_toolbar_button_matches_configured_lock_state` (click timeout on
+  `#extVaultLockBtn`, button stayed disabled). The test file is not touched by
+  the release prep and the identical job passed at the rc.8 candidate CI run
+  (run `31358814412`), so it was judged an environment flake, not a
+  regression. The full run was re-run and completed success: test job,
+  Windows/macOS/Linux builds, and Create Release all green.
+- **RELEASE / VERIFIED:** GitHub Release `GenBox v2.6.0` published
+  2026-08-20T06:07:40Z (not draft/prerelease); body consumed
+  `release-notes-v2.6.0-zh.md`; assets include Windows/macOS/Linux zips,
+  `GenBox.exe`, the Docker compose bundle, and `SHA256SUMS.txt`.
+- **POST-PUBLISH HARDENING / 2026-08-20:** the CI flake above is addressed in
+  `tests/test_credential_visibility_browser.py` with explicit enabled-state
+  `wait_for_function` preconditions before the button clicks (3/3 consecutive
+  local passes). No application code changed.
 
 ## v2.6.0-rc.8 final candidate and consolidated manual UAT (2026-08-10)
 

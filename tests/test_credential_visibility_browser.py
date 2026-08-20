@@ -144,19 +144,24 @@ def test_vault_toolbar_button_matches_configured_lock_state():
         assert action.is_hidden()
 
         vault_state.update(configured=True, unlocked=False)
+        page.evaluate("() => window.setExtensionsBackendOnline(true)")
         page.evaluate("() => window.extensionLoadServices()")
+        page.wait_for_function(
+            "() => { const b = document.querySelector('#extVaultLockBtn');"
+            " return b && !b.classList.contains('hidden') && !b.disabled; }"
+        )
         assert unlock.is_hidden()
         assert action.is_visible()
         assert action.inner_text() == "解锁"
 
         page.locator("#extVaultPassword").fill("synthetic-vault-password")
         action.click()
-        page.wait_for_function("() => document.querySelector('#extVaultLockBtn').textContent.trim() === '锁定'")
+        page.wait_for_function("() => { const b = document.querySelector('#extVaultLockBtn'); return b && b.textContent.trim() === '锁定' && !b.disabled; }")
         assert action.is_visible()
         assert action.inner_text() == "锁定"
 
         action.click()
-        page.wait_for_function("() => document.querySelector('#extVaultLockBtn').textContent.trim() === '解锁'")
+        page.wait_for_function("() => { const b = document.querySelector('#extVaultLockBtn'); return b && b.textContent.trim() === '解锁' && !b.disabled; }")
         assert action.is_visible()
         assert action.inner_text() == "解锁"
         browser.close()
