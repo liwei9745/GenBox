@@ -138,8 +138,9 @@
 
 - **BRANCH:** `codex/phase7-campaign-20260820` (based on `03c46a4`); campaign
   plan `docs/CANP7-CAMPAIGN-20260820.md`; this section records the P7.A/P7.B
-  evidence and the P7.C summary. Commits are local until a new gate
-  authorization is given.
+  evidence and the P7.C summary. Commits `0ed01c9` + `f91a248` were pushed to
+  origin 2026-08-20 after explicit gate authorization (docs-only; no tags,
+  releases, or VPS touched).
 - **P7.A SECRET AND PERSONAL-DATA SCAN / VERIFIED PASS:** tracked files + full
   `git log --all -p` scanned for secret patterns (`sk-*`, `ghp_`,
   `github_pat_`, `AKIA…`, `xox…`, private-key headers, SSH keys, `.pem`,
