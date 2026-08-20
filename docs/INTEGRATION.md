@@ -102,10 +102,16 @@ A successful receipt includes enough information for the sender to verify:
 - GenBox accepted or had already imported the same content.
 - GenBox-computed SHA-256 matches the sender's bytes.
 - The local file was committed.
-- `safe_to_delete_source` confirms receiver-side commit eligibility. The current
-  v1 receiver returns `false` after a successful or idempotent committed
-  import, so the receipt never grants source-deletion permission. Sender-side
-  cleanup remains disabled and out of scope for this release.
+- `safe_to_delete_source` confirms receiver-side commit eligibility. The
+  receiver returns `false` by default so a plain successful or idempotent
+  committed import never grants source-deletion permission by itself
+  (ADR-024/026). A managed Push source may be explicitly granted by its owner
+  to receive deletion eligibility; when granted, the receipt returns `true`
+  **only** for a committed import of this exact source path and content
+  (`imported` or `already-imported`), never for a duplicate-local import from
+  another path and never when the request bytes do not match the requested
+  source SHA-256. Sender-side cleanup remains disabled and out of scope for the
+  current release.
 
 The sender persists the source path, content hash, result, receipt, attempts,
 last error, and timestamps. HTTP success alone does not authorize deletion.
@@ -174,13 +180,17 @@ chatgpt2api media. Tag naming and filtering behavior require UI acceptance tests
 
 ## Source Cleanup
 
-Cleanup is a separate, explicit user option. It runs after transfer state is
-durably committed. Before deletion, the sender rechecks source content identity,
-receipt authentication, matching SHA-256, and `safe_to_delete_source=true`.
+Cleanup is a separate, explicit user option. For both manual one-shot forwarding
+and scheduled forwarding the user selects per action whether to delete the
+source after a successful push; there is no forced fixed choice (ADR-026). The
+sender deletes only after transfer state is durably committed and it rechecks
+source content identity, receipt authentication, matching SHA-256, and
+`safe_to_delete_source=true`.
 
 Development environments do not automatically delete sources. Production
-cleanup requires dry-run output, audit records, and clear reclaimed-space
-reporting.
+cleanup requires the per-run user selection, dry-run output, audit records, and
+clear reclaimed-space reporting. A receipt without an explicit grant never
+authorizes deletion.
 
 ## Compatibility And Versioning
 

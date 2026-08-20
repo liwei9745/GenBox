@@ -471,3 +471,111 @@ def test_generic_credential_route_cannot_bypass_push_key_confirmation(source_reg
     })
     assert response.status_code == 409
     assert vault.list_metadata() == []
+
+
+def test_receipt_grants_deletion_only_after_explicit_source_grant(source_registry, tmp_path, monkeypatch):
+    """Phase 9 receiver grant path: per managed source, default off, fail closed."""
+    import hashlib
+    import io
+
+    from PIL import Image
+    import sync.manifest as manifest_mod
+    from sync.ingest import PUSH_CONTRACT_VERSION
+    import main as main_mod
+
+    def _png_bytes(color="red"):
+        output = io.BytesIO()
+        Image.new("RGB", (4, 3), color).save(output, format="PNG")
+        return output.getvalue()
+
+    def _post(client, payload, remote_path, gift, source_id, key):
+        data = {
+            "remote_path": remote_path,
+            "created_at": "2026-08-20T10:00:00+08:00",
+            "prompt": "phase9 grant test",
+            "model": "gpt-image-2",
+        }
+        return client.post(
+            "/api/sync/push",
+            files={"image": ("img.png", payload, "image/png")},
+            data=data,
+            headers={"X-GenBox-Source": source_id, "X-GenBox-Key": key},
+        )
+
+    gallery = tmp_path / "gallery"
+    gallery.mkdir()
+    monkeypatch.setattr(main_mod, "STORAGE_DIR", tmp_path)
+    monkeypatch.setattr(main_mod, "GALLERY_DIR", gallery)
+    monkeypatch.setattr(manifest_mod, "GALLERY_DIR", gallery)
+    monkeypatch.setattr(manifest_mod, "MANIFEST_FILE", tmp_path / "sync_manifest.json")
+    monkeypatch.setattr(manifest_mod, "LOCAL_INDEX_FILE", gallery / ".hash_index.json")
+    monkeypatch.setattr(manifest_mod, "LOCAL_MD5_INDEX_FILE", gallery / ".md5_index.json")
+
+    # Managed source with the raw key we still hold locally (create returns it).
+    managed, key = push_sources.create_source("target-grant", "instance-grant")
+    source_id = managed["source_id"]
+
+    # Default: no grant -> receipt never says true.
+    client = TestClient(main.app)
+    payload = _png_bytes()
+    default = _post(client, payload, "2026/08/20/grant-default.png", None, source_id, key).json()
+    assert default["contract_version"] == PUSH_CONTRACT_VERSION
+    assert default["status"] == "imported"
+    assert default["safe_to_delete_source"] is False
+
+    # Rotate keeps grant setting; commence with grant enabled.
+    assert push_sources.set_source_grant_delete(source_id, "target-grant", "instance-grant", True) is True
+    assert push_sources.deletion_granted(source_id) is True
+
+    # Same path + same content replayed after enabling the grant -> committed
+    # via this source -> authorized.
+    granted = _post(client, payload, "2026/08/20/grant-default.png", None, source_id, key).json()
+    assert granted["status"] == "already-imported"
+    assert granted["safe_to_delete_source"] is True
+
+    # A different path with same content (duplicate-local) is not authorized.
+    dup = _post(client, payload, "2026/08/20/other.png", None, source_id, key).json()
+    assert dup["status"] == "duplicate-local"
+    assert dup["safe_to_delete_source"] is False
+
+    # A new unique image via the granted source -> imported -> true.
+    fresh = _post(client, _png_bytes("green"), "2026/08/20/grant-fresh.png", None, source_id, key).json()
+    assert fresh["status"] == "imported"
+    assert fresh["safe_to_delete_source"] is True
+
+    # Disabling grant makes the same import false again.
+    assert push_sources.set_source_grant_delete(source_id, "target-grant", "instance-grant", False) is True
+    assert push_sources.deletion_granted(source_id) is False
+    back_off = _post(client, _png_bytes("blue"), "2026/08/20/grant-off.png", None, source_id, key).json()
+    assert back_off["status"] == "imported"
+    assert back_off["safe_to_delete_source"] is False
+
+    # A revoked source never grants, even if enabled flag was set.
+    assert push_sources.set_source_grant_delete(source_id, "target-grant", "instance-grant", True) is True
+    assert push_sources.revoke_source(source_id, "target-grant", "instance-grant") is True
+    assert push_sources.deletion_granted(source_id) is False
+
+
+def test_grant_delete_api_toggles_managed_source(source_registry, tmp_path, monkeypatch):
+    _target, _instance, handle = _managed_instance(tmp_path, monkeypatch)
+    client = TestClient(main.app)
+    created = client.post("/api/extensions/push-sources", json={"instance_handle": handle}).json()
+    source_id = created["source"]["source_id"]
+
+    status = client.get(f"/api/extensions/push-sources/{handle}").json()
+    assert status["source"]["grant_delete"] is False
+
+    toggled = client.patch(
+        f"/api/extensions/push-sources/{handle}/{source_id}/grant-delete",
+        json={"enabled": True},
+    )
+    assert toggled.status_code == 200
+    assert toggled.json()["grant_delete"] is True
+    assert client.get(f"/api/extensions/push-sources/{handle}").json()["source"]["grant_delete"] is True
+
+    toggled_off = client.patch(
+        f"/api/extensions/push-sources/{handle}/{source_id}/grant-delete",
+        json={"enabled": False},
+    )
+    assert toggled_off.status_code == 200
+    assert toggled_off.json()["grant_delete"] is False

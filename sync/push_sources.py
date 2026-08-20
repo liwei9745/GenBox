@@ -111,6 +111,7 @@ def _load_config() -> dict[str, Any]:
             or not isinstance(updated_at, str)
             or not created_at
             or not updated_at
+            or (item.get("grant_delete") is not None and not isinstance(item.get("grant_delete"), bool))
         ):
             raise ValueError("managed Push source configuration is invalid")
         try:
@@ -139,11 +140,12 @@ def _save_config(config: dict[str, Any]) -> None:
             temporary.unlink(missing_ok=True)
 
 
-def _public(record: dict[str, Any]) -> dict[str, str]:
+def _public(record: dict[str, Any]) -> dict[str, str | bool]:
     return {
         "source_id": str(record["source_id"]),
         "created_at": str(record["created_at"]),
         "updated_at": str(record["updated_at"]),
+        "grant_delete": bool(record.get("grant_delete") is True),
     }
 
 
@@ -168,6 +170,7 @@ def _new_key_record(
         "active": True,
         "salt": salt.hex(),
         "key_hash": _key_digest(raw_key, salt),
+        "grant_delete": False,
         "created_at": now,
         "updated_at": now,
     }, raw_key
@@ -226,6 +229,7 @@ def rotate_source(source_id: str, target_id: str, instance_id: str) -> tuple[dic
         now = _now()
         replacement, raw_key = _new_key_record(source_id, target_id, instance_id, now)
         replacement["created_at"] = record["created_at"]
+        replacement["grant_delete"] = bool(record.get("grant_delete") is True)
         config["sources"] = [replacement if item is record else item for item in config["sources"]]
         _save_config(config)
     return _public(replacement), raw_key
@@ -273,6 +277,53 @@ def revoke_target_sources(target_id: str) -> int:
         return changed
 
 
+def set_source_grant_delete(source_id: str, target_id: str, instance_id: str, enabled: bool) -> bool:
+    """Enable or disable deletion grant for one managed Push source.
+
+    This is the receiver-side authority the sender's per-action user selection
+    depends on: a receipt only contains ``safe_to_delete_source=true`` after the
+    source owner explicitly granted deletion for this managed source. It is
+    disabled by default and never inferred.
+    """
+    if SOURCE_ID_PATTERN.fullmatch(source_id or "") is None:
+        return False
+    with _LOCK, _config_lock():
+        config = _load_config()
+        record = next(
+            (
+                item
+                for item in config["sources"]
+                if item["source_id"] == source_id
+                and item["target_id"] == target_id
+                and item["instance_id"] == instance_id
+                and item["active"]
+            ),
+            None,
+        )
+        if record is None:
+            return False
+        record["grant_delete"] = bool(enabled)
+        record["updated_at"] = _now()
+        _save_config(config)
+        return True
+
+
+def deletion_granted(source_id: str) -> bool:
+    """Read-only: does this managed Push source have explicit deletion grant?"""
+    if SOURCE_ID_PATTERN.fullmatch(source_id or "") is None:
+        return False
+    try:
+        with _LOCK, _config_lock():
+            config = _load_config()
+            record = next((item for item in config["sources"] if item["source_id"] == source_id), None)
+    except ValueError:
+        # A damaged registry is never permission to grant deletion.
+        return False
+    if record is None or not record["active"]:
+        return False
+    return bool(record.get("grant_delete") is True)
+
+
 def authenticate_source(source_id: str, key: str) -> bool | None:
     """Check one managed source without ever loading a raw key from disk."""
     if SOURCE_ID_PATTERN.fullmatch(source_id or "") is None:
@@ -287,6 +338,10 @@ def authenticate_source(source_id: str, key: str) -> bool | None:
         return False
     if record is None:
         return None
+    if not record["active"]:
+        return False
+    digest = _key_digest(key or "", bytes.fromhex(record["salt"]))
+    return hmac.compare_digest(digest, record["key_hash"])
     if not record["active"]:
         return False
     digest = _key_digest(key or "", bytes.fromhex(record["salt"]))

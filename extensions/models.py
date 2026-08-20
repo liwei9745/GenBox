@@ -190,6 +190,12 @@ class PushSourceRotateRequest(BaseModel):
     save_push_key_locally: bool = False
 
 
+class PushSourceGrantDeleteRequest(BaseModel):
+    """Enable or disable deletion grant for one managed Push source."""
+
+    enabled: bool
+
+
 class PushKeyLocalSaveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

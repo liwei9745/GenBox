@@ -87,7 +87,7 @@ from extensions.models import (
     ExtensionHostKeyResetRequest,
     ExtensionTaskResumeRequest,
     ExtensionPlanRequest, ExtensionTestRequest, PushKeyLocalSaveConfirmationRequest, PushKeyLocalSaveRequest,
-    PushSourceProvisionRequest, PushSourceRotateRequest,
+    PushSourceProvisionRequest, PushSourceRotateRequest, PushSourceGrantDeleteRequest,
     ImageIntegrationCheckRequest,
     ManagedCredential, ManagedCredentialUpsertRequest, VaultPasswordRequest,
     ManagedImageUpdatePlanRequest, ManagedImageUpdateApplyRequest, SSHCredential,
@@ -121,10 +121,12 @@ from extensions.models import NetworkConnectRequest
 from extensions.network_adapters import network_tasks
 from extensions.local_tailscale import begin_login, enable_genbox_serve, local_install_tasks, local_status
 from sync.push_sources import create_source as create_push_source
+from sync.push_sources import deletion_granted as push_source_deletion_granted
 from sync.push_sources import list_sources as list_push_sources
 from sync.push_sources import revoke_source as revoke_push_source
 from sync.push_sources import revoke_target_sources as revoke_target_push_sources
 from sync.push_sources import rotate_source as rotate_push_source
+from sync.push_sources import set_source_grant_delete as set_push_source_grant_delete
 from sync.push_sources import source_key_belongs_to_instance
 
 
@@ -3606,6 +3608,18 @@ async def sync_push_image(
                 metadata["size"], created_at,
             )
 
+        # Source-deletion authority is granted only for this managed source
+        # when (a) the sender provisioned it under an explicit receiver-side
+        # grant, and (b) this request commits the same bytes this path now
+        # holds. A duplicate-local import from another path or the default
+        # (ungranted) state never grants deletion (ADR-024/026).
+        grant_delete = False
+        try:
+            grant_delete = _push_source_deletion_granted(x_genbox_source)
+        except Exception:  # noqa: BLE001 - a broken grant registry must fail closed
+            grant_delete = False
+        authorized_status = status in ("imported", "already-imported")
+
         return {
             "ok": True,
             "contract_version": PUSH_CONTRACT_VERSION,
@@ -3616,9 +3630,9 @@ async def sync_push_image(
             "local_file": filename,
             "width": metadata["width"],
             "height": metadata["height"],
-            # No cleanup authority is enabled in this receiver, so a committed
-            # Push receipt never grants source-deletion permission by itself.
-            "safe_to_delete_source": False,
+            # Deletion authority is granted only when the push committed this
+            # exact content for a source whose owner explicitly enabled it.
+            "safe_to_delete_source": bool(grant_delete and authorized_status),
         }
 
 
@@ -4296,6 +4310,22 @@ def _push_source_error(exc: Exception):
     raise HTTPException(status_code=503, detail="Push 凭据注册表暂不可用") from exc
 
 
+def _push_source_deletion_granted(source_id: str) -> bool:
+    """True only when this managed Push source has explicit deletion grant.
+
+    Reads the durable registry read-only through the public query of the
+    receiving-side record; a damaged registry fails closed (False) rather than
+    ever granting deletion.
+    """
+    if not source_id:
+        return False
+    try:
+        granted = push_source_deletion_granted(source_id)
+    except Exception:  # noqa: BLE001 - fail closed on registry errors
+        return False
+    return granted
+
+
 _PUSH_KEY_SAVE_CONFIRMATION_TTL_SECONDS = 120
 
 
@@ -4422,6 +4452,24 @@ async def extension_push_source_delete(instance_handle: str, source_id: str):
     if not revoked:
         raise HTTPException(status_code=404, detail="Push 来源不存在")
     return {"instance_handle": instance_handle, "revoked": True}
+
+
+@app.patch("/api/extensions/push-sources/{instance_handle}/{source_id}/grant-delete")
+async def extension_push_source_grant_delete(instance_handle: str, source_id: str, body: PushSourceGrantDeleteRequest):
+    instance, _destination_url = _managed_push_source_access(instance_handle)
+    try:
+        updated = set_push_source_grant_delete(
+            source_id, instance.target_id, instance.id, body.enabled
+        )
+    except Exception as exc:
+        _push_source_error(exc)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Push 来源不存在")
+    return {
+        "instance_handle": instance_handle,
+        "source_id": source_id,
+        "grant_delete": bool(body.enabled),
+    }
 
 
 def _save_managed_push_configuration(instance, destination_url: str, source_id: str, push_key: str) -> None:

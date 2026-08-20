@@ -22,6 +22,22 @@
   reusable cleanup code without touching production, (2) draft the receiver
   grant-path design, then (3) plan Phase 9 as scoped acceptance-criteria work
   after the checklist in `docs/CANP7-CAMPAIGN-20260820.md` checkpoint 2.
+- **STEP 1 RECEIVER GRANT PATH / DONE 2026-08-20:** implemented a per-source
+  deletion grant (default off) in `sync/push_sources.py`
+  (`grant_delete` field + `set_source_grant_delete()` + `deletion_granted()`),
+  a PATCH endpoint
+  `/api/extensions/push-sources/{handle}/{source_id}/grant-delete`, and the
+  receipt grants `safe_to_delete_source=true` only when the managed source was
+  explicitly granted AND the request committed this exact path+content
+  (`imported`/`already-imported`); `duplicate-local` import from another path is
+  never granted and any registry error fails closed. v2.6.0 default
+  (`false` at `main.py:3621`) is unchanged until a receiver release carries the
+  grant path. Added tests in `tests/test_push_sources.py`
+  (`test_receipt_grants_deletion_only_after_explicit_source_grant`,
+  `test_grant_delete_api_toggles_managed_source`); full suite
+  `619 passed` (previously 617 + 2 new), targeted `45 passed`.
+  `docs/INTEGRATION.md` now documents the grant semantics and the per-action
+  user selection.
 
 ## Phase 6 close-out (Line A, 2026-08-20)
 
