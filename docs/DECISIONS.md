@@ -694,3 +694,36 @@ disabled.
 Release notes, changelog, READMEs, and the integration contract describe only
 verified receiver work. Harmless cleanup claim is prevented even if a later
 phase completes sender-side work in another repository.
+
+## ADR-025: Phase 6 Closed As Receiver-Grant-Verification Scope (Line A)
+
+**Status:** Accepted
+**Date:** 2026-08-20
+
+### Context
+
+Phase 6 "Verified Source Cleanup" required destructive execution, adversarial
+approval, isolated-VPS acceptance, host authority, and human authorization
+that remain external evidence. Meanwhile the scoped v2.6.0 release pins the
+receiver's `safe_to_delete_source` field to `false` (`main.py:3621`), so the
+receiver never grants deletion permission. Treating Phase 6 as
+incomplete-and-blanked would block Phase 7/8 on evidence that a scoped release
+cannot produce by design.
+
+### Decision
+
+Close Phase 6 under **Line A** as receiver-grant-verification scope: the
+acceptance criterion "only a matching authenticated receipt with
+`safe_to_delete_source=true` authorizes deletion" is satisfied structurally
+because the returned value never permits deletion. No destructive execution,
+no adversarial approval, no sender cleanup release, and no CI/macOS or
+isolated-VPS claim. Sender destructive cleanup is deferred to an explicit
+future milestone that must pass clean-deployment evidence (Phase 7) and
+independent review before any sender release can enable deletion.
+
+### Consequences
+
+Phase 7 (Sanitized GitHub Redeployment) and Phase 8 (Upstream Delivery,
+proposal PRs) can proceed without fabricating Phase 6 completeness. The
+deferred sender-cleanup milestone keeps the "no destructive remote command
+without verification" rule intact and requires fresh authorization when queued.

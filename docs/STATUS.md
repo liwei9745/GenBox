@@ -2,8 +2,29 @@
 
 **Last updated:** 2026-08-20
 **Current branch:** `codex/v2.6.0-release-prep-20260820`
-**Current phase:** Phase 6 Verified Source Cleanup - **In Progress / Destructive Execution Blocked**
+**Current phase:** Phase 6 Verified Source Cleanup - **Complete 2026-08-20 (receiver-grant scope, Line A; see DECISIONS)**
 **Previous phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
+
+## Phase 6 close-out (Line A, 2026-08-20)
+
+- **CLOSE-OUT / USER-APPROVED:** Phase 6 closed as receiver-grant-verification
+  scope. ROADMAP Phase 6 status updated to Complete; destructive execution,
+  adversarial approval, isolated-VPS acceptance, host authority, and human
+  authorization are explicitly NOT claimed and carried to a future milestone.
+- **STRUCTURAL BASIS / VERIFIED:** `main.py:3621` hard-codes
+  `safe_to_delete_source=false` in the scoped release (ADR-024 scope-A), so the
+  receiver never grants deletion permission and the Acceptance Criterion
+  "only a matching authenticated receipt with `safe_to_delete_source=true`
+  authorizes deletion" holds vacuously by design.
+- **EVIDENCE RETAINED:** all prior local non-destructive records (sender
+  isolated-clone A1-A12 matrix `116/185 passed`; receiver loopback harness 28
+  tests; hosted `31256853882`) remain valid as receiving-side attestation only.
+- **NON-CLAIMS:** no sender cleanup release, no CI/macOS or isolated-VPS claim,
+  no real-media or destructive exercise. Sender cleanup code lives only in
+  worktree `E:\AI\chatgpt2api-worktrees\phase6-final-gate-20260809` (never
+  pushed, 480 commits ahead of upstream, `cleanup-security.yml` absent from any
+  pushed default branch).
+- **RESUME:** Phase 7 (Sanitized GitHub Redeployment) is the current phase.
 
 ## v2.6.0 stable release prep (2026-08-20)
 
@@ -80,6 +101,38 @@
   `tests/test_credential_visibility_browser.py` with explicit enabled-state
   `wait_for_function` preconditions before the button clicks (3/3 consecutive
   local passes). No application code changed.
+
+## Upstream extension proposal PRs (2026-08-20)
+
+- **PRECONDITION / USER-CONFIRMED:** the Phase 7/8 campaign only starts after
+  (a) completed development achievements, (b) the new version is pushed to
+  GitHub, and (c) a PR is submitted to the chatgpt2api author. Conditions (a)
+  and (b) hold via the v2.6.0 publish above. Condition (c) completed below.
+- **PROPOSAL / CREATED:** an integration extension proposal was drafted based on
+  the verified GenBox Push contract v1 and the existing
+  `docs/UPSTREAM-VIBE-CODING-GUIDE.md`. It contains no sender code, no
+  credentials, no ports, no IPs, and no environment-specific values.
+- **FORK / VERIFIED:** local sender worktree branch has never been pushed and
+  differs from its fork by 443 files; the full sender code PR was therefore
+  rejected (Phase 8 requires Phase 7 evidence and narrow PRs first). Proposal
+  form confirmed by user.
+- **basketikun PR / VERIFIED OPEN:**
+  `https://github.com/basketikun/chatgpt2api/pull/387` - created
+  2026-08-20T13:09:25Z on branch `proposal/genbox-push-extension`
+  (commit `fa50ea6`, based on basketikun main `dc105e5`). Files:
+  `docs/genbox-push-extension-proposal.md` + one README link line under the
+  Experimental section. Basketikun is the fork network parent of
+  `liwei9745/chatgpt2api`.
+- **yukkcat PR / VERIFIED OPEN:**
+  `https://github.com/yukkcat/chatgpt2api/pull/25` - created
+  2026-08-20T13:11:35Z on branch `proposal-yukkcat` (commit `6d38a87`, based
+  on yukkcat main `9d3e6fc`). Files:
+  `docs/references/genbox-push-extension-proposal.md` + `docs/README.md`
+  navigation entry. yukkcat is a separate root repository; a dedicated fork
+  `liwei9745/chatgpt2api-yukkcat` was created for it.
+- **BOUNDARY / VERIFIED:** no GenBox code, tags, releases, or production VPS
+  were touched by this work. Both PRs are documentation-only and make no
+  claim that sender-side code exists.
 
 ## v2.6.0-rc.8 final candidate and consolidated manual UAT (2026-08-10)
 

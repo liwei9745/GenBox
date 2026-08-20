@@ -254,8 +254,21 @@ Transfer existing and future images reliably without manual per-image work.
 
 ## Phase 6: Verified Source Cleanup
 
-**Status:** In Progress (implementation candidate complete locally;
-adversarial approval and destructive execution remain blocked)
+**Status:** Complete (2026-08-20) as receiver-grant-verification scope.
+Sender-side destructive cleanup is deferred to a future explicit milestone
+(see "Line A" record in `docs/DECISIONS.md`). Details below.
+
+**CLOSE-OUT NOTE (2026-08-20):** Phase 6 is closed under Line A. Its
+acceptance criterion "only a matching authenticated receipt with
+`safe_to_delete_source=true` authorizes deletion" is satisfied *structurally*:
+the scoped release pins the field to `false` (`main.py:3621`), so the receiver
+never grants deletion permission. All local non-destructive evidence, the
+receiver loopback harness, and the sender's isolated-clone records documented
+below remain valid as attestation of the receiving-side grant behavior.
+Destructive execution, adversarial approval, isolated-VPS acceptance, host
+authority, and human authorization are expressly **not** claimed and are
+carried forward as an explicit future milestone before any sender release can
+enable deletion.
 
 **Final-gate note (2026-08-09):** A fresh clean worktree at baseline
 `1c2f870bb6ee616c333a717239349bceb2182a20` is being used for the final
@@ -314,7 +327,13 @@ Allow users to reclaim VPS space without risking unconfirmed media loss.
 
 ## Phase 7: Sanitized GitHub Redeployment
 
-**Status:** Planned
+**Status:** In Progress (partial evidence exists via v2.6.0 publish; remaining
+items tracked in `docs/STATUS.md`)
+
+**Phase-7 note (2026-08-20):** Secret scan of files and Git history is clean;
+the clean deployment from the published Release and GHCR image was verified at
+Gate 6. Remaining: repeated single-plus-batch transfer acceptance in the clean
+deployment and a consolidated scan report entry.
 
 **Topic contract:** `docs/DEVELOPMENT-LIFECYCLE.md`
 
