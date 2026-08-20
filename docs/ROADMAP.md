@@ -383,7 +383,64 @@ Offer the chatgpt2api changes to the original author in a reviewable form.
 - Each PR has a narrow purpose and independent tests.
 - Proposal examples contain no environment-specific or sensitive values.
 
-## Phase 9: GenBox Store Foundation
+## Phase 9: Sender Push Source Cleanup (User-Selected)
+
+**Status:** In Progress (queued 2026-08-20 by explicit user decision; sender
+side lives in the chatgpt2api fork, receiver grant change in this repository)
+
+**Topic contracts:** `docs/INTEGRATION.md`, `docs/DEVELOPMENT-LIFECYCLE.md`,
+`docs/chatgpt2api-push-integration.md`
+
+### Goal
+
+Let the chatgpt2api sender remove a source image only when a GenBox push
+receipt confirms the transfer, and let the **user decide per action** (manual
+one-shot and scheduled forwarding) whether to delete the source image. Deletion
+is not a hard-coded or forced choice: it is an explicit per-run user selection.
+
+### Background
+
+ADR-025 closed Phase 6 under Line A with the receiver returning
+`safe_to_delete_source=false` never granting deletion. That structural proof
+remains the boundary for v2.6.0. This phase is the explicitly deferred
+sender-cleanup milestone: it requires (a) a receiver-side grant path that is
+capable of returning `safe_to_delete_source=true` under controlled conditions,
+and (b) sender-side code in the chatgpt2api fork implementing per-action user
+selection.
+
+### Deliverables
+
+- Receiver grant path with matching-authenticated-receipt precondition,
+  SHA-256 identity check of source bytes, and deletion only after
+  `safe_to_delete_source=true`.
+- Sender-side implementation in the chatgpt2api fork:
+  - Manual one-shot forwarding with a per-action "delete source after push"
+    user checkbox (opt-in, default off).
+  - Scheduled incremental forwarding with the same per-run user selection;
+    no forced deletion policy.
+  - Durable per-item transfer state and confirmed-receipt-only deletion.
+- Tests: manual-selection variant, scheduled-selection variant, receipt
+  mismatch keeps source, `safe_to_delete_source=false` never deletes, deletion
+  disabled in development.
+- Sanitized sender code delivered as narrow PRs per Phase 8 practice.
+
+### Acceptance Criteria
+
+- Deletion occurs only when the user explicitly selected it for that manual
+  or scheduled run AND a matching authenticated receipt with
+  `safe_to_delete_source=true` was received AND the source bytes match the
+  receipt SHA-256.
+- Without a user selection, or with `safe_to_delete_source=false`, or on any
+  receipt/hash mismatch, the source image is always retained.
+- Source-image deletion is disabled in development and requires explicit,
+  per-run, per-source-user selection in production.
+- The receiver default and `main.py:3621` boundary are updated under the
+  scoped release process with regression tests; historical evidence documents
+  keep their `false` records as audit trail.
+- No real media, credentials, or VPS identities appear in tests, fixtures, or
+  PR descriptions.
+
+## Phase 10: GenBox Store Foundation
 
 **Status:** Planned
 
@@ -409,7 +466,7 @@ Turn the catalog into a trustworthy Store without making planned apps executable
 - External instances remain advisory/read-only without a verified adoption flow.
 - Store metadata identifies source, license, permissions, exposure, and risk.
 
-## Phase 10: Advisory Repair Copilot
+## Phase 11: Advisory Repair Copilot
 
 **Status:** Planned
 
@@ -434,7 +491,7 @@ Explain failures safely before any AI-assisted mutation is permitted.
 - AI cannot submit shell, obtain root, or directly mutate a target.
 - Advice clearly distinguishes observed facts from inference.
 
-## Phase 11: Additional Service Adapters
+## Phase 12: Additional Service Adapters
 
 **Status:** Planned
 
@@ -451,7 +508,7 @@ Each service must independently define source repository identity, license,
 configuration, secrets, ports, persistence, health check, delivery information,
 upgrade, backup, rollback, uninstall, and tests before becoming deployable.
 
-## Phase 12: Verified Repair Experience Flywheel And Allowlisted Assisted Repair
+## Phase 13: Verified Repair Experience Flywheel And Allowlisted Assisted Repair
 
 **Status:** Planned
 
@@ -478,7 +535,7 @@ AI advice into general remote administration.
   rollback-aware, and followed by a deterministic health check.
 - Failed verification stops the workflow and presents a safe recovery state.
 
-## Phase 13: Multi-Channel Notifications And Bot Interaction
+## Phase 14: Multi-Channel Notifications And Bot Interaction
 
 **Status:** Planned
 

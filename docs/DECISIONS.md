@@ -727,3 +727,42 @@ Phase 7 (Sanitized GitHub Redeployment) and Phase 8 (Upstream Delivery,
 proposal PRs) can proceed without fabricating Phase 6 completeness. The
 deferred sender-cleanup milestone keeps the "no destructive remote command
 without verification" rule intact and requires fresh authorization when queued.
+
+## ADR-026: Sender Source-Image Cleanup Is A Per-Action User Selection
+
+**Status:** Accepted
+**Date:** 2026-08-20
+
+### Context
+
+ADR-025 deferred sender destructive cleanup to an explicit future milestone.
+With Phase 7 evidence complete and the Phase 8 proposal PRs open, the user
+decided how that cleanup should behave: for both manual one-shot forwarding and
+scheduled forwarding, whether to delete the source image is a **user choice per
+action**, not a forced or hard-coded position. This relaxes nothing about the
+receipt precondition; it refines the sender-side opt-in granularity.
+
+### Decision
+
+- Sender-side manual one-shot Push and scheduled Push each expose a per-run
+  "delete source after successful push" selection, explicitly chosen by the
+  user for that action, defaulting off.
+- There is no forced fixed choice: deletion is never assumed, never hidden in a
+  global config deny/allow without per-run context, and never tied to a
+  per-generation checkbox.
+- Deletion still requires all of: the user's per-run selection, an authenticated
+  matching receipt with `safe_to_delete_source=true`, and source bytes matching
+  the receipt SHA-256.
+- The mechanism follows and threads the ADR-024/025 receiver boundary: the
+  v2.6.0 receiver returns `false`; a future receiver grant path must reproduce
+  the same digest/identity gating before it can return `true`.
+
+### Consequences
+
+- Sender deletes a source only when the user selected deletion for that exact
+  manual or scheduled run and the grant conditions hold; otherwise the source is
+  always retained.
+- Phase 9 (Sender Push Source Cleanup) is the next roadmap phase after Phase 8.
+- Historical evidence documents keep their `false` records as audit trail; a
+  future receiver change re-proves the grant path under the scoped release
+  process.

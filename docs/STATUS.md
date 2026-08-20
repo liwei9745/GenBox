@@ -2,8 +2,26 @@
 
 **Last updated:** 2026-08-20
 **Current branch:** `codex/phase7-campaign-20260820`
-**Current phase:** Phase 7 Sanitized GitHub Redeployment - **In Progress (campaign 2026-08-20; P7.A/B/C evidence below)**
-**Previous phase:** Phase 5 Batch And Scheduled Incremental Push - **Complete**
+**Current phase:** Phase 9 Sender Push Source Cleanup (User-Selected) - **In Progress (queued 2026-08-20, ADR-026)**
+**Previous phase:** Phase 8 Upstream Delivery - **In Progress (proposal PRs open, awaiting upstream response)**
+
+## Phase 9 Sender Push Source Cleanup (User-Selected) queued (2026-08-20)
+
+- **USER DECISION / VERIFIED:** per explicit user direction, sender-side source
+  cleanup is now a **per-action user selection** for both manual one-shot Push
+  and scheduled Push: whether to delete the source image is the user's choice
+  for that run, not a forced fixed selection. Recorded in ADR-026.
+- **SCOPE:** receiver grant path capable of returning `safe_to_delete_source=true`
+  only under authenticated matching receipt + source-bytes SHA-256 match, plus
+  sender-side per-run user selection in the chatgpt2api fork. v2.6.0 receiver
+  behavior (`false` at `main.py:3621`) is unchanged by this queueing; historical
+  evidence keeps `false` as audit trail.
+- **ROADMAP:** Phase 9 inserted after Phase 8; original Store/Copilot/Adapters/
+  Notifications phases renumbered 10-14. ADR-024/025 boundaries retained.
+- **RESUME:** next actions are (1) inspect the existing sender worktree for
+  reusable cleanup code without touching production, (2) draft the receiver
+  grant-path design, then (3) plan Phase 9 as scoped acceptance-criteria work
+  after the checklist in `docs/CANP7-CAMPAIGN-20260820.md` checkpoint 2.
 
 ## Phase 6 close-out (Line A, 2026-08-20)
 
