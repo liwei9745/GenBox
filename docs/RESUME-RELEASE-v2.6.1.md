@@ -63,12 +63,14 @@ browser-contract test. Receiver only; sender/upstream delivery is NOT in scope
   filters are stripped by the shell wrapper (jq must avoid `"` literals, e.g.
   via `tojson`).
 
-## Next step
+## Remaining steps
 
 Wait for PR #26 maintainer review. If it is rejected, create a revision branch
 from the latest yukkcat `main`, apply only the requested changes, rerun
 validation, and open a replacement PR; do not overwrite the original
 repository.
+
+- Phase 10 Store first slice is now in progress; do not call Phase 10 complete.
 
 ## Hard limits
 

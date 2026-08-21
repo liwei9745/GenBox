@@ -5,6 +5,15 @@
 **Current phase:** Phase 9 Sender Push Source Cleanup (User-Selected) - **In Progress (receiver-grant shipped in v2.6.1 2026-08-21; sender PR #26 open; clean E2E gates passed for receiver)**
 **Previous phase:** Phase 8 Upstream Delivery - **In Progress (proposal PRs open, awaiting upstream response)**
 
+## Phase 10 Store Foundation first slice (2026-08-22)
+
+The first Store projection slice is recorded in commit `933c09d` and exposes
+`GET /api/extensions/store` with Installed, Recommended, and All views plus
+capability-derived actions. Planned, external, and unknown states fail closed.
+Recommended is currently empty because no verified environment facts are
+available. The Store slice verification recorded `625 passed`; Phase 10 as a
+whole remains incomplete.
+
 ## Phase 9 Sender Push Source Cleanup (User-Selected) queued (2026-08-20)
 
 - **USER DECISION / VERIFIED:** per explicit user direction, sender-side source
