@@ -1336,6 +1336,22 @@ def test_pairing_ui_has_expiry_cleanup_and_recovery_state():
     assert "@media(max-width:700px)" in styles
 
 
+def test_push_source_deletion_grant_ui_is_explicit_and_fail_closed():
+    root = Path(__file__).parents[1]
+    source = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    markup = (root / "static" / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="extPushGrantDelete" type="checkbox"' in markup
+    assert "syncPushGrantDelete(data)" in source
+    assert "grant.checked=!!(data&&data.source&&data.source.grant_delete===true)" in source
+    assert "window.extensionPushGrantDeleteChanged=async function()" in source
+    assert "/grant-delete" in source
+    assert "JSON.stringify({enabled:!!grant.checked})" in source
+    assert "grant.checked=!grant.checked" in source
+    assert "grant.disabled=!backendOnline" in source
+    assert "默认关闭" in markup
+
+
 def test_identity_reconfirmation_hides_and_clears_session_credentials():
     root = Path(__file__).parents[1]
     source = (root / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
