@@ -63,6 +63,11 @@
   state and offline controls remain locked. `node --check static/js/extensions.js`
   passed; full GenBox suite passed `619 tests` after this change. Commit:
   `76a5e53`.
+- **RECEIVER UI CONTRACT TEST / VERIFIED 2026-08-21:** added a static browser
+  contract test for the grant checkbox, state synchronization, PATCH endpoint,
+  failed-update rollback, offline lock, and default-off copy. Full GenBox suite
+  now passes `620 tests`; extension contract tests pass `205`. Commit:
+  `577f559`.
 
 ## Phase 6 close-out (Line A, 2026-08-20)
 

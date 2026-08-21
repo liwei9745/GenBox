@@ -109,6 +109,8 @@ Implementation is complete in isolated worktrees. The remaining gates are:
 - GenBox receiver UI: the per-source grant checkbox is now wired to the
   managed-source PATCH endpoint, defaults off, and passes the full `619-test`
   receiver suite.
+- A static browser contract test now protects the grant checkbox, PATCH wiring,
+  rollback, and offline lock; the full GenBox suite is `620 passed`.
 - Rejection recovery: preserve the fork and rejected commit, create a new branch
   from the latest upstream `main`, apply only requested review changes, rerun
   build/validation, and submit a replacement PR. Never overwrite upstream main.
