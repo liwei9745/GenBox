@@ -110,8 +110,9 @@ A successful receipt includes enough information for the sender to verify:
   **only** for a committed import of this exact source path and content
   (`imported` or `already-imported`), never for a duplicate-local import from
   another path and never when the request bytes do not match the requested
-  source SHA-256. Sender-side cleanup remains disabled and out of scope for the
-  current release.
+  source SHA-256. The sender in the current receiver release does not delete by
+  default and only deletes after a per-action user selection plus the granted
+  receipt and a live SHA-256 match.
 
 The sender persists the source path, content hash, result, receipt, attempts,
 last error, and timestamps. HTTP success alone does not authorize deletion.

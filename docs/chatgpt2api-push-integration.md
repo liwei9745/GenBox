@@ -35,12 +35,21 @@ a matching legacy environment value. This path does not accept or require
 GenBox administrator key.
 
 当前成功响应包含 `contract_version="v1"`、`sha256`、`local_file` 和
-`safe_to_delete_source=true`。该字段只表示 GenBox 已安全提交本次内容，不表示发送端
-应默认删除源文件；发送端仍必须检查用户独立 opt-in、回执哈希和源文件当前哈希。相同
-`source_id + remote_path + sha256` 重试会返回 `already-imported`，不会重复落库。
-发送端可先调用带同样认证 Header 的 `GET /api/sync/push/status`，获得 v1 协议版本和
-当前运行进程的图片字节上限；预检或推送失败时必须保留源文件。若提供的
-`source_sha256` 格式错误或与图片不匹配，GenBox 会在写入任何接收端状态前返回 422。
+`safe_to_delete_source`。该字段表示 GenBox 是否在本回执授予源文件删除资格，默认
+为 `false`：普通成功或幂等重放都不会自行授予删除权限。只有满足以下全部条件时才
+为 `true`：
+
+- 该 `X-GenBox-Source` 是在 GenBox 扩展中心创建的受管 Push 来源，且其所有者已在
+  Push 来源设置中显式开启「允许授权删除源图」（默认关闭）；
+- 本次请求提交的正是该来源这条路径与内容（`imported` 或 `already-imported`）；
+- 从其它路径撞库的 `duplicate-local`、任何回执/哈希不匹配都不会授予删除。
+
+发送端仍必须检查用户独立 opt-in、回执哈希和源文件当前哈希；`true` 不等于默认删除
+源文件。相同 `source_id + remote_path + sha256` 重试会返回 `already-imported`，
+不会重复落库。发送端可先调用带同样认证 Header 的 `GET /api/sync/push/status`，
+获得 v1 协议版本和当前运行进程的图片字节上限；预检或推送失败时必须保留源文件。
+若提供的 `source_sha256` 格式错误或与图片不匹配，GenBox 会在写入任何接收端状态
+前返回 422。
 
 ## chatgpt2api 侧设计
 
