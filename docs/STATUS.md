@@ -1,8 +1,8 @@
 # Current Project Status
 
-**Last updated:** 2026-08-21
+**Last updated:** 2026-08-22
 **Current branch:** `codex/phase7-campaign-20260820`
-**Current phase:** Phase 9 Sender Push Source Cleanup (User-Selected) - **In Progress (queued 2026-08-20, ADR-026)**
+**Current phase:** Phase 9 Sender Push Source Cleanup (User-Selected) - **In Progress (receiver-grant shipped in v2.6.1 2026-08-21; sender PR #26 open; clean E2E gates passed for receiver)**
 **Previous phase:** Phase 8 Upstream Delivery - **In Progress (proposal PRs open, awaiting upstream response)**
 
 ## Phase 9 Sender Push Source Cleanup (User-Selected) queued (2026-08-20)
@@ -77,6 +77,30 @@
   integration and its tests were re-applied cleanly with the `edit` tool, and
   that byte corruption is out of scope for this commit (historical commits are
   preserved as record).
+- **V2.6.1 SCOPED RELEASE / PUBLISHED 2026-08-21:** receiver-side deletion
+  grant shipped as patch release `v2.6.1` (annotated tag object `51273543…` ->
+  commit `2bbd459`). CI runs (push-triggered, head `2bbd459`, both completed
+  success): Docker Image `32498587828`; Desktop Clients `32498587781`. GitHub
+  Release `GenBox v2.6.1` published 2026-08-21T15:40:22Z (non-draft,
+  non-prerelease) with Windows/macOS/Linux zips + exe, Docker Compose bundle
+  `GenBox-Docker-Compose-v2.6.1.zip`, and `SHA256SUMS.txt`. GHCR
+  `ghcr.io/liwei9745/genbox:2.6.1` and `:2.6` both resolve to digest
+  `sha256:7ade2a482ce646bd21c9f6229ad508ef6567263b844128506418a42b23213b66`.
+  Build smoke: `python build.py` produced `dist\GenBox.exe` 38,089,061 B,
+  SHA-256 `B065FC7688540DC7AF426537E185A0454ADFA51F36DDE9C45500B9497ED863FD`.
+- **V2.6.1 CLEAN DEPLOYMENT ACCEPTANCE / PASSED 2026-08-22:** isolated temp
+  container `v261acct` (project `v261acc`, host port 18991) from the Release
+  compose bundle + GHCR 2.6.1. Receipt matrix over HTTP: status probe
+  `contract_version=v1`; default (grant off) push -> `imported` with
+  `safe_to_delete_source=false`; replay -> `already-imported` still `false`;
+  wrong key -> 401; mismatched `source_sha256` -> 422 with nothing committed;
+  managed-instance PATCH endpoint verified bound to enrolled instances (404 on
+  synthetic handle). Grant-on behavior covered by repository tests
+  `test_receipt_grants_deletion_only_after_explicit_source_grant` and
+  `test_grant_delete_api_toggles_managed_source` (push_sources suite passed,
+  packaging 11 passed). Container/network/teardown clean; no existing VPS,
+  container, or compile environment touched. Resume/heartbeat checkpoint:
+  `docs/RESUME-RELEASE-v2.6.1.md` (STATUS: OK).
 
 ## Phase 6 close-out (Line A, 2026-08-20)
 

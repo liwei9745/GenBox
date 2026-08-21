@@ -385,8 +385,8 @@ Offer the chatgpt2api changes to the original author in a reviewable form.
 
 ## Phase 9: Sender Push Source Cleanup (User-Selected)
 
-**Status:** In Progress (implementation complete; scoped release and clean
-end-to-end verification remain)
+**Status:** In Progress (receiver v2.6.1 shipped; receiver clean deployment
+verified; sender PR #26 awaiting maintainer review)
 
 **Topic contracts:** `docs/INTEGRATION.md`, `docs/DEVELOPMENT-LIFECYCLE.md`,
 `docs/chatgpt2api-push-integration.md`
