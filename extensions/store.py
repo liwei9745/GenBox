@@ -9,10 +9,12 @@ import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from config import STORAGE_DIR
 from extensions.models import (
     ExtensionConfig,
+    EnvironmentProjection,
     ExtensionInstance,
     ExtensionTarget,
     is_canonical_host_key_trust,
@@ -72,7 +74,17 @@ def _config_lock():
 
 def target_identity_digest(target: ExtensionTarget) -> str:
     """Return a digest that changes when a target identity generation changes."""
-    value = "\x1f".join((target.id, target.host, str(target.port), target.username, str(target.identity_version)))
+    value = "\x1f".join((
+        target.id,
+        target.host,
+        str(target.port),
+        target.username,
+        str(target.identity_version),
+        target.host_key_algorithm,
+        target.host_key,
+        target.primary_network,
+        target.network_url,
+    ))
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
@@ -220,6 +232,15 @@ def load_config() -> ExtensionConfig:
             "[Extensions] 已隔离无效配置记录: "
             f"targets={invalid_targets}, instances={invalid_instances}"
         )
+    projections = []
+    raw_projections = raw.get("environment_projections", [])
+    if not isinstance(raw_projections, list):
+        raw_projections = []
+    for item in raw_projections:
+        try:
+            projections.append(EnvironmentProjection(**item))
+        except Exception:
+            continue
     batch_target_ids = raw.get("batch_target_ids", [])
     if not isinstance(batch_target_ids, list):
         batch_target_ids = []
@@ -235,6 +256,7 @@ def load_config() -> ExtensionConfig:
     return ExtensionConfig(
         targets=targets,
         instances=instances,
+        environment_projections=projections,
         batch_target_ids=[str(item) for item in batch_target_ids],
         target_generations=target_generations,
     )
@@ -348,6 +370,63 @@ def save_target_metadata(data: dict) -> ExtensionTarget:
         config.target_generations[target_id] = generation
         save_config(config)
         return target
+
+
+def save_environment_projection(
+    target: ExtensionTarget,
+    *,
+    docker_available: bool,
+    compose_available: bool,
+    evidence_complete: bool,
+    observed_at: str | None = None,
+) -> EnvironmentProjection:
+    """Persist only sanitized, target-bound discovery facts from the server."""
+    projection = EnvironmentProjection(
+        target_id=target.id,
+        target_identity_digest=target_identity_digest(target),
+        observed_at=observed_at or datetime.now(timezone.utc).isoformat(),
+        docker_available=bool(docker_available),
+        compose_available=bool(compose_available),
+        evidence_complete=bool(evidence_complete),
+        confidence=("high" if docker_available and compose_available and evidence_complete else "unknown"),
+    )
+    with _config_lock():
+        config = load_config()
+        config.environment_projections = [
+            item for item in config.environment_projections
+            if item.target_id != target.id
+        ] + [projection]
+        save_config(config)
+    return projection
+
+
+def invalidate_environment_projection(target_id: str) -> None:
+    with _config_lock():
+        config = load_config()
+        config.environment_projections = [
+            item for item in config.environment_projections if item.target_id != target_id
+        ]
+        save_config(config)
+
+
+def get_environment_projection(target: ExtensionTarget) -> EnvironmentProjection | None:
+    projection = next(
+        (item for item in load_config().environment_projections if item.target_id == target.id),
+        None,
+    )
+    if not projection or not hmac.compare_digest(
+        projection.target_identity_digest, target_identity_digest(target)
+    ):
+        return None
+    try:
+        observed_at = datetime.fromisoformat(projection.observed_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if observed_at.tzinfo is None:
+        observed_at = observed_at.replace(tzinfo=timezone.utc)
+    if (datetime.now(timezone.utc) - observed_at).total_seconds() > 3600:
+        return None
+    return projection
 
 
 def confirm_target_host_key(
@@ -496,7 +575,8 @@ def _store_item(item: dict) -> dict:
 
 
 def store_projection(
-    catalog: list[dict], instances: list[ExtensionInstance], *, environment_verified: bool = False,
+    catalog: list[dict], instances: list[ExtensionInstance], *,
+    environment_projection: EnvironmentProjection | None = None,
 ) -> dict:
     """Build the read-only Installed/Recommended/All Store projection."""
     catalog_by_id = {str(item.get("id")): item for item in catalog}
@@ -513,9 +593,25 @@ def store_projection(
             "ownership": "managed" if instance.managed is True else "external",
             "actions": project_store_actions(item) if instance.managed is True else [],
         })
+    environment_verified = bool(
+        environment_projection
+        and environment_projection.confidence == "high"
+        and environment_projection.evidence_complete
+        and environment_projection.docker_available
+        and environment_projection.compose_available
+    )
+    recommended = []
+    if environment_verified:
+        for item in all_items:
+            if item["id"] == "chatgpt2api":
+                recommended.append({
+                    **item,
+                    "confidence": environment_projection.confidence,
+                    "reasons": ["已验证 Docker 与 Docker Compose 环境，且 discovery 证据完整"],
+                })
     return {
         "installed": installed,
-        "recommended": all_items if environment_verified else [],
+        "recommended": recommended,
         "all": all_items,
     }
 
@@ -524,4 +620,6 @@ def public_store_projection() -> dict:
     """Build Store views without exposing instance credentials or identities."""
     from extensions.catalog import CATALOG
 
-    return store_projection(CATALOG, list_instances(), environment_verified=False)
+    target = next((item for item in list_targets() if item.target_role == "isolated-development"), None)
+    projection = get_environment_projection(target) if target else None
+    return store_projection(CATALOG, list_instances(), environment_projection=projection)

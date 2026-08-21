@@ -91,9 +91,22 @@ class ExtensionInstance(BaseModel):
     updated_at: str = ""
 
 
+class EnvironmentProjection(BaseModel):
+    """Minimal server-derived environment evidence used by Store recommendations."""
+
+    target_id: str
+    target_identity_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    observed_at: str
+    docker_available: bool = False
+    compose_available: bool = False
+    evidence_complete: bool = False
+    confidence: Literal["high", "medium", "unknown"] = "unknown"
+
+
 class ExtensionConfig(BaseModel):
     targets: list[ExtensionTarget] = Field(default_factory=list)
     instances: list[ExtensionInstance] = Field(default_factory=list)
+    environment_projections: list[EnvironmentProjection] = Field(default_factory=list)
     batch_target_ids: list[str] = Field(default_factory=list)
     target_generations: dict[str, int] = Field(default_factory=dict)
 
