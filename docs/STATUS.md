@@ -68,6 +68,15 @@
   failed-update rollback, offline lock, and default-off copy. Full GenBox suite
   now passes `620 tests`; extension contract tests pass `205`. Commit:
   `577f559`.
+- **RECEIVER GRANT I18N / VERIFIED 2026-08-21:** the grant checkbox label,
+  hint, and toggle success messages now use `i18n.js` keys (zh-CN + en) instead
+  of hard-coded Chinese; the static contract test asserts the keys and English
+  copy. Full GenBox suite passes `620 tests`; extension tests pass `205`.
+  Commit: `fd0a284`. NOTE: earlier PowerShell-assisted edits corrupted motif
+  bytes of some zh-CN strings inside already-committed static files; the i18n
+  integration and its tests were re-applied cleanly with the `edit` tool, and
+  that byte corruption is out of scope for this commit (historical commits are
+  preserved as record).
 
 ## Phase 6 close-out (Line A, 2026-08-20)
 
