@@ -106,6 +106,9 @@ Implementation is complete in isolated worktrees. The remaining gates are:
 - yukkcat: PR #26 is open from the independent fork
   `liwei9745/chatgpt2api-yukkcat`, based on `9d3e6fc`, with one focused commit
   `739eef6`.
+- GenBox receiver UI: the per-source grant checkbox is now wired to the
+  managed-source PATCH endpoint, defaults off, and passes the full `619-test`
+  receiver suite.
 - Rejection recovery: preserve the fork and rejected commit, create a new branch
   from the latest upstream `main`, apply only requested review changes, rerun
   build/validation, and submit a replacement PR. Never overwrite upstream main.

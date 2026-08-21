@@ -57,6 +57,12 @@
   yukkcat `main`, apply only the requested changes, rerun validation, and open a
   replacement PR. A rejection is a review outcome, not permission to force-push
   or replace the original repository.
+- **RECEIVER UI / VERIFIED 2026-08-21:** the Extension Center Push-source
+  setup now exposes `允许授权删除源图`, default off, backed by the managed
+  source PATCH grant endpoint. Failed updates restore the previous checkbox
+  state and offline controls remain locked. `node --check static/js/extensions.js`
+  passed; full GenBox suite passed `619 tests` after this change. Commit:
+  `76a5e53`.
 
 ## Phase 6 close-out (Line A, 2026-08-20)
 
