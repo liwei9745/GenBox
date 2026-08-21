@@ -99,6 +99,13 @@ class HostKeyPairing:
     expires_at: float
 
 
+@dataclass(frozen=True)
+class _VerifiedEnvironmentProjection:
+    """Store write token issued only after server-side discovery validation."""
+
+    projection: EnvironmentProjection
+
+
 class HostKeyPairingManager:
     """Short-lived, single-use pairing state; deliberately never persisted."""
 
@@ -372,29 +379,46 @@ def save_target_metadata(data: dict) -> ExtensionTarget:
         return target
 
 
-def save_environment_projection(
+def verified_environment_projection(
     target: ExtensionTarget,
-    *,
-    docker_available: bool,
-    compose_available: bool,
-    evidence_complete: bool,
-    observed_at: str | None = None,
-) -> EnvironmentProjection:
-    """Persist only sanitized, target-bound discovery facts from the server."""
+    discovery: dict,
+    public: dict,
+) -> _VerifiedEnvironmentProjection | None:
+    """Create a Store write token from complete, successful server evidence."""
+    if discovery.get("ok") is not True:
+        return None
+    evidence_manifest = public.get("evidence_manifest")
+    if not isinstance(evidence_manifest, dict) or evidence_manifest.get("complete") is not True:
+        return None
+    capabilities = public.get("capabilities")
+    if not isinstance(capabilities, dict):
+        return None
+    docker_available = capabilities.get("docker_available")
+    compose_available = capabilities.get("compose_available")
+    if not isinstance(docker_available, bool) or not isinstance(compose_available, bool):
+        return None
     projection = EnvironmentProjection(
         target_id=target.id,
         target_identity_digest=target_identity_digest(target),
-        observed_at=observed_at or datetime.now(timezone.utc).isoformat(),
-        docker_available=bool(docker_available),
-        compose_available=bool(compose_available),
-        evidence_complete=bool(evidence_complete),
-        confidence=("high" if docker_available and compose_available and evidence_complete else "unknown"),
+        observed_at=datetime.now(timezone.utc).isoformat(),
+        docker_available=docker_available,
+        compose_available=compose_available,
+        evidence_complete=True,
+        confidence=("high" if docker_available and compose_available else "unknown"),
     )
+    return _VerifiedEnvironmentProjection(projection)
+
+
+def save_environment_projection(verified: _VerifiedEnvironmentProjection) -> EnvironmentProjection:
+    """Persist only a Store projection issued by verified server evidence."""
+    if not isinstance(verified, _VerifiedEnvironmentProjection):
+        raise TypeError("verified_environment_projection_required")
+    projection = verified.projection
     with _config_lock():
         config = load_config()
         config.environment_projections = [
             item for item in config.environment_projections
-            if item.target_id != target.id
+            if item.target_id != projection.target_id
         ] + [projection]
         save_config(config)
     return projection
@@ -424,7 +448,8 @@ def get_environment_projection(target: ExtensionTarget) -> EnvironmentProjection
         return None
     if observed_at.tzinfo is None:
         observed_at = observed_at.replace(tzinfo=timezone.utc)
-    if (datetime.now(timezone.utc) - observed_at).total_seconds() > 3600:
+    age_seconds = (datetime.now(timezone.utc) - observed_at).total_seconds()
+    if age_seconds < 0 or age_seconds > 3600:
         return None
     return projection
 

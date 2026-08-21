@@ -4138,15 +4138,9 @@ async def extension_discover(body: ExtensionDiscoveryRequest):
 
 def _save_store_environment_projection(target, discovery: dict, public: dict) -> None:
     """Persist only complete, successful discovery evidence for Store use."""
-    if discovery.get("ok") is not True or public.get("evidence_manifest", {}).get("complete") is not True:
-        return
-    capabilities = public.get("capabilities", {})
-    extensions_store.save_environment_projection(
-        target,
-        docker_available=capabilities.get("docker_available") is True,
-        compose_available=capabilities.get("compose_available") is True,
-        evidence_complete=True,
-    )
+    verified = extensions_store.verified_environment_projection(target, discovery, public)
+    if verified is not None:
+        extensions_store.save_environment_projection(verified)
 
 
 @app.post("/api/extensions/deploy/plan")

@@ -48,10 +48,15 @@ def test_complete_matching_projection_recommends_only_registry_action(tmp_path, 
         "id": "store-target", "name": "Store target", "host": "safe.example",
         "username": "deploy-user", "target_role": "isolated-development",
     })
-    save_environment_projection(
-        target, docker_available=True, compose_available=True, evidence_complete=True,
-        observed_at="2099-01-01T00:00:00+00:00",
+    verified = store.verified_environment_projection(
+        target,
+        {"ok": True},
+        {"evidence_manifest": {"complete": True}, "capabilities": {
+            "docker_available": True, "compose_available": True,
+        }},
     )
+    assert verified is not None
+    save_environment_projection(verified)
 
     projection = store.public_store_projection()
     assert [item["id"] for item in projection["recommended"]] == ["chatgpt2api"]
@@ -72,13 +77,16 @@ def test_projection_missing_or_incomplete_capabilities_never_recommend_high(tmp_
     for docker_available, compose_available, evidence_complete in (
         (False, True, True), (True, False, True), (True, True, False),
     ):
-        save_environment_projection(
+        verified = store.verified_environment_projection(
             target,
-            docker_available=docker_available,
-            compose_available=compose_available,
-            evidence_complete=evidence_complete,
-            observed_at="2099-01-01T00:00:00+00:00",
-        )
+            {"ok": True},
+            {"evidence_manifest": {"complete": True}, "capabilities": {
+                "docker_available": docker_available,
+                "compose_available": compose_available,
+            }},
+        ) if evidence_complete else None
+        if verified is not None:
+            save_environment_projection(verified)
         assert store.public_store_projection()["recommended"] == []
 
 
@@ -90,19 +98,67 @@ def test_projection_identity_and_freshness_fail_closed(tmp_path, monkeypatch):
         "id": "store-target", "name": "Store target", "host": "safe.example",
         "username": "deploy-user", "target_role": "isolated-development",
     })
-    save_environment_projection(
-        target, docker_available=True, compose_available=True, evidence_complete=True,
+    old_projection = EnvironmentProjection(
+        target_id=target.id,
+        target_identity_digest=store.target_identity_digest(target),
         observed_at="2020-01-01T00:00:00+00:00",
+        docker_available=True, compose_available=True, evidence_complete=True,
+        confidence="high",
     )
+    store.save_config(store.load_config().model_copy(update={"environment_projections": [old_projection]}))
     assert get_environment_projection(target) is None
 
-    save_environment_projection(
-        target, docker_available=True, compose_available=True, evidence_complete=True,
-        observed_at="2099-01-01T00:00:00+00:00",
-    )
+    future_projection = old_projection.model_copy(update={"observed_at": "2099-01-01T00:00:00+00:00"})
+    store.save_config(store.load_config().model_copy(update={"environment_projections": [future_projection]}))
+    assert get_environment_projection(target) is None
     changed = store.upsert_target({**target.model_dump(), "network_url": "https://changed.invalid"})
     assert get_environment_projection(changed) is None
     assert store.public_store_projection()["recommended"] == []
+
+
+def test_store_projection_write_requires_complete_server_evidence(tmp_path, monkeypatch):
+    from extensions import store
+
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    target = save_target_metadata({
+        "id": "store-target", "name": "Store target", "host": "safe.example",
+        "username": "deploy-user", "target_role": "isolated-development",
+    })
+    for discovery, public in (
+        ({"ok": False}, {"evidence_manifest": {"complete": True}, "capabilities": {
+            "docker_available": True, "compose_available": True,
+        }}),
+        ({"ok": True}, {"evidence_manifest": {"complete": False}, "capabilities": {
+            "docker_available": True, "compose_available": True,
+        }}),
+        ({"ok": True}, {"evidence_manifest": {"complete": True}, "capabilities": {
+            "docker_available": "yes", "compose_available": True,
+        }}),
+    ):
+        assert store.verified_environment_projection(target, discovery, public) is None
+    assert store.load_config().environment_projections == []
+
+
+def test_complete_discovery_projection_is_fresh_and_high(tmp_path, monkeypatch):
+    from extensions import store
+
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    target = save_target_metadata({
+        "id": "store-target", "name": "Store target", "host": "safe.example",
+        "username": "deploy-user", "target_role": "isolated-development",
+    })
+    verified = store.verified_environment_projection(
+        target,
+        {"ok": True},
+        {"evidence_manifest": {"complete": True}, "capabilities": {
+            "docker_available": True, "compose_available": True,
+        }},
+    )
+    assert verified is not None
+    save_environment_projection(verified)
+    projection = get_environment_projection(target)
+    assert projection is not None
+    assert projection.confidence == "high"
 
 
 def test_browser_target_metadata_cannot_inject_environment_projection(tmp_path, monkeypatch):
