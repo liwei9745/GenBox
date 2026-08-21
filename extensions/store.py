@@ -17,6 +17,7 @@ from extensions.models import (
     ExtensionTarget,
     is_canonical_host_key_trust,
 )
+from extensions.capabilities import project_store_actions
 
 
 EXTENSIONS_FILE = STORAGE_DIR / "extensions.json"
@@ -484,3 +485,43 @@ def list_instances(target_id: str = "") -> list[ExtensionInstance]:
 
 def get_instance(instance_id: str) -> ExtensionInstance | None:
     return next((item for item in load_config().instances if item.id == instance_id), None)
+
+
+def _store_item(item: dict) -> dict:
+    """Return the public Store item with registry-derived actions."""
+    return {
+        **item,
+        "actions": project_store_actions(item),
+    }
+
+
+def store_projection(
+    catalog: list[dict], instances: list[ExtensionInstance], *, environment_verified: bool = False,
+) -> dict:
+    """Build the read-only Installed/Recommended/All Store projection."""
+    catalog_by_id = {str(item.get("id")): item for item in catalog}
+    all_items = [_store_item(item) for item in catalog]
+    installed = []
+    for instance in instances:
+        item = catalog_by_id.get(instance.project)
+        if not item:
+            continue
+        installed.append({
+            **_store_item(item),
+            "instance_id": instance.id,
+            "instance_status": instance.status,
+            "ownership": "managed" if instance.managed is True else "external",
+            "actions": project_store_actions(item) if instance.managed is True else [],
+        })
+    return {
+        "installed": installed,
+        "recommended": all_items if environment_verified else [],
+        "all": all_items,
+    }
+
+
+def public_store_projection() -> dict:
+    """Build Store views without exposing instance credentials or identities."""
+    from extensions.catalog import CATALOG
+
+    return store_projection(CATALOG, list_instances(), environment_verified=False)

@@ -41,3 +41,18 @@ def catalog_item_is_deployable(project_id: str, repository: str) -> bool:
     """Derive catalog availability from the executable registry."""
     capability = DEPLOYMENT_CAPABILITIES.get(project_id)
     return capability is not None and capability.repository == repository
+
+
+def project_store_actions(item: dict) -> list[str]:
+    """Project executable Store actions from the authoritative registry only."""
+    if not isinstance(item, dict):
+        return []
+    project_id = str(item.get("id") or "")
+    repository = str(item.get("repository") or "")
+    if item.get("status") != "available" or not catalog_item_is_deployable(project_id, repository):
+        return []
+    try:
+        validate_deployment_capability(project_id, "isolated", "compose")
+    except ValueError:
+        return []
+    return ["deploy"]

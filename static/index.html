@@ -796,6 +796,11 @@
         <div><b data-i18n="runtime.offline_title">GenBox 后端未运行</b><span data-i18n="runtime.offline_detail">当前只是浏览器保留的旧页面，连接和部署操作已暂停。</span></div>
         <button type="button" class="btn-secondary" onclick="checkRuntimeStatus(true)" data-i18n="runtime.recheck">重新检测</button>
       </div>
+      <section id="extStore" class="extension-store glass-panel" aria-labelledby="extStoreTitle">
+        <div class="extension-store-heading"><div><span data-i18n="extensions.store_kicker">GENBOX STORE</span><h2 id="extStoreTitle" data-i18n="extensions.store_title">Extension Store</h2><p data-i18n="extensions.store_help">Read-only catalog views with backend-authorized actions.</p></div><button type="button" class="btn-ghost" id="extStoreRefreshBtn" onclick="extensionLoadStore()" data-i18n="common.refresh">Refresh</button></div>
+        <div class="extension-store-tabs" role="tablist" aria-label="Extension Store views" data-i18n-aria-label="extensions.store_views_label"><button type="button" class="active" role="tab" aria-selected="true" data-store-view="installed" onclick="extensionStoreView('installed')" data-i18n="extensions.store_installed">Installed</button><button type="button" role="tab" aria-selected="false" data-store-view="recommended" onclick="extensionStoreView('recommended')" data-i18n="extensions.store_recommended">Recommended</button><button type="button" role="tab" aria-selected="false" data-store-view="all" onclick="extensionStoreView('all')" data-i18n="common.all">All</button></div>
+        <div id="extStoreItems" class="extension-store-items" aria-live="polite"></div>
+      </section>
       <section class="extension-deployed glass-panel">
         <div class="ext-deployed-collapsed">
           <span><span data-i18n="extensions.drawer_hint">服务面板已收纳至右侧，可随时查看运行状态、访问地址与密钥管理</span></span>

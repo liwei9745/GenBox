@@ -3684,6 +3684,11 @@ async def extension_catalog():
     return public_catalog()
 
 
+@app.get("/api/extensions/store")
+async def extension_store():
+    return extensions_store.public_store_projection()
+
+
 @app.post("/api/extensions/images/integration-check")
 async def extension_image_integration_check(body: ImageIntegrationCheckRequest):
     """Classify a pinned image from the local capability catalog only."""

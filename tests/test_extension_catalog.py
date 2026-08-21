@@ -58,3 +58,14 @@ def test_unverified_repository_cannot_be_deployed():
     item = next(item for item in public_catalog()["items"] if item["id"] == "kiro2api")
     assert item["status"] == "repository_unverified"
     assert item["deployable"] is False
+
+
+def test_catalog_items_have_versioned_store_metadata():
+    required = {
+        "manifest_version", "license", "provenance", "permissions",
+        "network_exposure", "data_sensitivity", "operational_risk", "adapter_ref",
+    }
+    for item in public_catalog()["items"]:
+        assert required <= item.keys()
+        assert item["manifest_version"] == "1"
+        assert isinstance(item["permissions"], list)

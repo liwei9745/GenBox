@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
-from extensions.capabilities import DEPLOYMENT_CAPABILITIES, validate_deployment_capability
+from extensions.capabilities import DEPLOYMENT_CAPABILITIES, project_store_actions, validate_deployment_capability
 from extensions.catalog import public_catalog
 from extensions.models import (
     ExtensionDeployRequest,
@@ -288,6 +288,15 @@ def test_catalog_deployability_is_derived_from_capability_registry():
         capability = DEPLOYMENT_CAPABILITIES.get(item["id"])
         assert item["deployable"] is (capability is not None and capability.repository == item["repository"])
     assert DEPLOYMENT_CAPABILITIES["chatgpt2api"].repository == "yukkcat/chatgpt2api"
+
+
+def test_store_actions_require_registry_and_ignore_manifest_claims():
+    item = {"id": "chatgpt2api", "repository": "yukkcat/chatgpt2api", "status": "available", "capabilities": ["deploy"]}
+    assert project_store_actions(item) == ["deploy"]
+    assert project_store_actions({**item, "status": "planned"}) == []
+    assert project_store_actions({**item, "id": "unknown-project"}) == []
+    assert project_store_actions({**item, "repository": "other/repository"}) == []
+    assert project_store_actions({**item, "capabilities": []}) == ["deploy"]
 
 
 @pytest.mark.parametrize("project_id", UNSUPPORTED_PROJECT_IDS)
