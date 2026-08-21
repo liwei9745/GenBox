@@ -70,7 +70,7 @@ from the latest yukkcat `main`, apply only the requested changes, rerun
 validation, and open a replacement PR; do not overwrite the original
 repository.
 
-- Phase 10 Store first slice is now in progress; do not call Phase 10 complete.
+- Phase 10 projection slice is in progress; do not call Phase 10 complete.
 
 ## Hard limits
 

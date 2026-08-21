@@ -5,14 +5,20 @@
 **Current phase:** Phase 9 Sender Push Source Cleanup (User-Selected) - **In Progress (receiver-grant shipped in v2.6.1 2026-08-21; sender PR #26 open; clean E2E gates passed for receiver)**
 **Previous phase:** Phase 8 Upstream Delivery - **In Progress (proposal PRs open, awaiting upstream response)**
 
-## Phase 10 Store Foundation first slice (2026-08-22)
+## Phase 10 Store projection / environment fact slice (2026-08-22)
 
-The first Store projection slice is recorded in commit `933c09d` and exposes
-`GET /api/extensions/store` with Installed, Recommended, and All views plus
-capability-derived actions. Planned, external, and unknown states fail closed.
-Recommended is currently empty because no verified environment facts are
-available. The Store slice verification recorded `625 passed`; Phase 10 as a
-whole remains incomplete.
+- **VERIFIED:** commit `933c09d` adds `GET /api/extensions/store` with Installed,
+  Recommended, and All views, identity-bound projections, and actions derived
+  from backend capability.
+- **VERIFIED:** commit `d2d5eb3` makes future, expired, and forged environment
+  projections fail closed, including TTL and identity-bound checks.
+- **VERIFIED:** targeted verification passed `258`; full verification passed
+  `632`; `node --check` passed for `extensions`/`i18n`; `py_compile` and
+  `git diff --check` passed.
+- **BOUNDARY:** Recommended is high only with complete verified discovery and
+  Docker/Compose evidence. The current slice still requires real environment
+  collection, adapter lifecycle, and full Store acceptance; Phase 10 remains
+  In Progress and is not complete.
 
 ## Phase 9 Sender Push Source Cleanup (User-Selected) queued (2026-08-20)
 

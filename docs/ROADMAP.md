@@ -443,7 +443,7 @@ selection.
 
 ## Phase 10: GenBox Store Foundation
 
-**Status:** In Progress (first Store projection slice complete; environment-aware recommendations, adapters, and full Store acceptance remain)
+**Status:** In Progress (Store projection slice + identity-bound fail-closed environment facts complete; environment collection, adapter lifecycle, and full acceptance remain)
 
 **Topic contract:** `docs/GENBOX-STORE-REPAIR-COPILOT.md`
 
