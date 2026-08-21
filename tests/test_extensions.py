@@ -1350,6 +1350,14 @@ def test_push_source_deletion_grant_ui_is_explicit_and_fail_closed():
     assert "grant.checked=!grant.checked" in source
     assert "grant.disabled=!backendOnline" in source
     assert "默认关闭" in markup
+    assert "extensions.push_grant_delete_title" in markup
+    messages = (root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+    assert "extensions.push_grant_delete_title" in messages
+    assert "extensions.push_grant_delete_hint" in messages
+    assert "extensions.push_grant_delete_enabled" in messages
+    assert "extensions.push_grant_delete_disabled" in messages
+    assert "i18nText('extensions.push_grant_delete_enabled')" in source
+    assert "per-action selection and a matching receipt" in messages
 
 
 def test_identity_reconfirmation_hides_and_clears_session_credentials():
