@@ -4,6 +4,18 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.1] - 2026-08-21
+
+- Added: managed per-source deletion-grant capability in the Extension Center,
+  default off, so a Push receipt can carry `safe_to_delete_source=true` only for
+  an explicitly granted source that committed this exact path and content.
+- Added: bilingual (zh-CN/en) controls and messages for the deletion grant, with
+  a browser-contract test.
+- Changed: current version is 2.6.1; Docker Compose image default pinned to
+  `ghcr.io/liwei9745/genbox:2.6.1`.
+- Security: source-file cleanup remains disabled by default; a receipt never
+  grants deletion unless the managed source owner explicitly enabled the grant.
+
 ## [2.6.0] - 2026-08-20
 
 ### Added
