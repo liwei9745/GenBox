@@ -385,8 +385,8 @@ Offer the chatgpt2api changes to the original author in a reviewable form.
 
 ## Phase 9: Sender Push Source Cleanup (User-Selected)
 
-**Status:** In Progress (queued 2026-08-20 by explicit user decision; sender
-side lives in the chatgpt2api fork, receiver grant change in this repository)
+**Status:** In Progress (implementation complete; scoped release and clean
+end-to-end verification remain)
 
 **Topic contracts:** `docs/INTEGRATION.md`, `docs/DEVELOPMENT-LIFECYCLE.md`,
 `docs/chatgpt2api-push-integration.md`
@@ -422,7 +422,8 @@ selection.
 - Tests: manual-selection variant, scheduled-selection variant, receipt
   mismatch keeps source, `safe_to_delete_source=false` never deletes, deletion
   disabled in development.
-- Sanitized sender code delivered as narrow PRs per Phase 8 practice.
+- Sanitized sender code delivered as a narrow PR per Phase 8 practice; recovery
+  policy preserves the independent fork if the maintainer rejects the first PR.
 
 ### Acceptance Criteria
 

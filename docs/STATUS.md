@@ -1,6 +1,6 @@
 # Current Project Status
 
-**Last updated:** 2026-08-20
+**Last updated:** 2026-08-21
 **Current branch:** `codex/phase7-campaign-20260820`
 **Current phase:** Phase 9 Sender Push Source Cleanup (User-Selected) - **In Progress (queued 2026-08-20, ADR-026)**
 **Previous phase:** Phase 8 Upstream Delivery - **In Progress (proposal PRs open, awaiting upstream response)**
@@ -18,10 +18,11 @@
   evidence keeps `false` as audit trail.
 - **ROADMAP:** Phase 9 inserted after Phase 8; original Store/Copilot/Adapters/
   Notifications phases renumbered 10-14. ADR-024/025 boundaries retained.
-- **RESUME:** next actions are (1) inspect the existing sender worktree for
-  reusable cleanup code without touching production, (2) draft the receiver
-  grant-path design, then (3) plan Phase 9 as scoped acceptance-criteria work
-  after the checklist in `docs/CANP7-CAMPAIGN-20260820.md` checkpoint 2.
+- **RESUME:** receiver implementation and sender implementation are complete in
+  isolated worktrees. Remaining delivery gates are a scoped GenBox release for
+  the receiver grant path, maintainer review of the sender PR, and a clean
+  end-to-end verification after both sides are available. No production VPS,
+  tag, or release is changed by this status update.
 - **STEP 1 RECEIVER GRANT PATH / DONE 2026-08-20:** implemented a per-source
   deletion grant (default off) in `sync/push_sources.py`
   (`grant_delete` field + `set_source_grant_delete()` + `deletion_granted()`),
@@ -36,8 +37,26 @@
   (`test_receipt_grants_deletion_only_after_explicit_source_grant`,
   `test_grant_delete_api_toggles_managed_source`); full suite
   `619 passed` (previously 617 + 2 new), targeted `45 passed`.
-  `docs/INTEGRATION.md` now documents the grant semantics and the per-action
-  user selection.
+   `docs/INTEGRATION.md` now documents the grant semantics and the per-action
+   user selection.
+- **SENDER IMPLEMENTATION / VERIFIED 2026-08-21:** isolated sender branch
+  `codex/phase6-final-gate-20260809` contains the API, cleanup, batch, schedule,
+  outbox, single-image generation flow, and UI selection work. Sender
+  regression suite: `147 passed, 7 skipped`; `web-vue` `npm run build` passed.
+  The branch is preserved on the owner's fork
+  `liwei9745/chatgpt2api` and is not an upstream branch.
+- **YUKKCAT PR / VERIFIED OPEN 2026-08-21:** focused PR
+  `https://github.com/yukkcat/chatgpt2api/pull/26` is based on yukkcat
+  `main=9d3e6fc`, head commit `739eef6`, and comes from the independent fork
+  `liwei9745/chatgpt2api-yukkcat`. It contains only the yukkcat-native
+  receipt-gated cleanup choice (8 files, one commit); the original repository
+  `main` was not overwritten.
+- **PR RECOVERY POLICY / ACCEPTED:** if PR #26 is rejected, do not delete the
+  fork or rewrite the upstream repository. Preserve the fork branch and commit,
+  record the maintainer reason, create a new revision branch from the latest
+  yukkcat `main`, apply only the requested changes, rerun validation, and open a
+  replacement PR. A rejection is a review outcome, not permission to force-push
+  or replace the original repository.
 
 ## Phase 6 close-out (Line A, 2026-08-20)
 

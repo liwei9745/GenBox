@@ -1,9 +1,9 @@
 # Phase 9 Sender Push Source Cleanup (User-Selected) - Implementation Plan
 
-**Status:** Planning (queued 2026-08-20, ADR-026)
-**Date:** 2026-08-20
-**Branch:** `codex/phase7-campaign-20260820` (planning only; sender code lives in
-the chatgpt2api fork worktree)
+**Status:** Implementation complete in isolated worktrees; delivery gates open
+**Date:** 2026-08-21
+**Branch:** `codex/phase7-campaign-20260820`; sender code lives in the isolated
+chatgpt2api fork worktree
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`, `docs/DEVELOPMENT-LIFECYCLE.md`
 
@@ -99,8 +99,17 @@ is reused unchanged.
 
 ## Gates / Next Decision
 
-This plan does not modify any repository. Before implementation the next user
-decision is whether to (a) start receiver grant-path design in this repo under
-the current campaign branch, or (b) first prepare the fork-side sender changes
-in the isolated sender clone. No production container, tag, or VPS is touched
-by either branch until a separate release/gate authorization.
+Implementation is complete in isolated worktrees. The remaining gates are:
+
+- GenBox: scoped release of the receiver grant path, followed by clean-deploy
+  verification; v2.6.0 remains unchanged.
+- yukkcat: PR #26 is open from the independent fork
+  `liwei9745/chatgpt2api-yukkcat`, based on `9d3e6fc`, with one focused commit
+  `739eef6`.
+- Rejection recovery: preserve the fork and rejected commit, create a new branch
+  from the latest upstream `main`, apply only requested review changes, rerun
+  build/validation, and submit a replacement PR. Never overwrite upstream main.
+
+No production container, tag, release, or upstream main branch is changed by
+this plan. The next local development task is receiver release-readiness
+verification and documentation, not another unrelated feature phase.
