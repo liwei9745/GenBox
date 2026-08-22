@@ -591,21 +591,65 @@ def get_instance(instance_id: str) -> ExtensionInstance | None:
     return next((item for item in load_config().instances if item.id == instance_id), None)
 
 
+_PUBLIC_STORE_FIELDS = (
+    "id",
+    "name",
+    "repository",
+    "category",
+    "status",
+    "integrates_proxy",
+    "provides_proxy",
+    "manifest_version",
+    "license",
+    "provenance",
+    "permissions",
+    "network_exposure",
+    "data_sensitivity",
+    "operational_risk",
+    "adapter_ref",
+)
+
+
 def _store_item(item: dict) -> dict:
-    """Return the public Store item with registry-derived actions."""
-    return {
-        **item,
-        "actions": project_store_actions(item),
-    }
+    """Project a Store item through an explicit public-field whitelist.
+
+    Unknown or future catalog fields never reach the browser; actions come only
+    from the executable capability registry.
+    """
+    if not isinstance(item, dict):
+        return {"id": "", "actions": []}
+    public = {field: item[field] for field in _PUBLIC_STORE_FIELDS if field in item}
+    if "id" in public:
+        public["id"] = str(public["id"] or "")
+    public["actions"] = project_store_actions(item)
+    return public
 
 
 def store_projection(
     catalog: list[dict], instances: list[ExtensionInstance], *,
     environment_projection: EnvironmentProjection | None = None,
 ) -> dict:
-    """Build the read-only Installed/Recommended/All Store projection."""
-    catalog_by_id = {str(item.get("id")): item for item in catalog}
-    all_items = [_store_item(item) for item in catalog]
+    """Build the read-only Installed/Recommended/All Store projection.
+
+    Fail-closed: missing or mistyped inputs never raise and never leak, and the
+    recommended view is high only when the environment projection is complete,
+    correctly typed, and bound to a non-empty target identity digest.
+    """
+    if not isinstance(catalog, list):
+        catalog = []
+    if not isinstance(instances, list):
+        instances = []
+    instances = [item for item in instances if isinstance(item, ExtensionInstance)]
+    if environment_projection is not None and not isinstance(
+        environment_projection, EnvironmentProjection
+    ):
+        environment_projection = None
+    catalog_by_id = {}
+    for item in catalog:
+        if not isinstance(item, dict):
+            continue
+        catalog_by_id[str(item.get("id") or "")] = item
+    all_items = [_store_item(item) for item in catalog if isinstance(item, dict)]
     installed = []
     for instance in instances:
         item = catalog_by_id.get(instance.project)
@@ -619,11 +663,14 @@ def store_projection(
             "actions": project_store_actions(item) if instance.managed is True else [],
         })
     environment_verified = bool(
-        environment_projection
+        environment_projection is not None
         and environment_projection.confidence == "high"
-        and environment_projection.evidence_complete
-        and environment_projection.docker_available
-        and environment_projection.compose_available
+        and environment_projection.evidence_complete is True
+        and isinstance(environment_projection.docker_available, bool)
+        and isinstance(environment_projection.compose_available, bool)
+        and environment_projection.docker_available is True
+        and environment_projection.compose_available is True
+        and bool(environment_projection.target_identity_digest)
     )
     recommended = []
     if environment_verified:

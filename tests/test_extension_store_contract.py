@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -10,6 +11,7 @@ from extensions.store import (
     save_environment_projection,
     save_target_metadata,
     store_projection,
+    target_identity_digest,
 )
 
 
@@ -206,3 +208,170 @@ def test_store_ui_consumes_api_actions_without_planned_rows():
     assert "Array.isArray(item.actions)" in source
     store_render = source.split("function renderStoreItem", 1)[1].split("window.extensionStoreView", 1)[0]
     assert "extPlannedRows" not in store_render
+
+
+def _fresh_projection(
+    target,
+    *,
+    confidence="high",
+    docker_available=True,
+    compose_available=True,
+    evidence_complete=True,
+) -> EnvironmentProjection:
+    return EnvironmentProjection(
+        target_id=target.id,
+        target_identity_digest=target_identity_digest(target),
+        observed_at=datetime.now(timezone.utc).isoformat(),
+        docker_available=docker_available,
+        compose_available=compose_available,
+        evidence_complete=evidence_complete,
+        confidence=confidence,
+    )
+
+
+def test_store_contract_response_hierarchy_and_stable_all_items():
+    projection = store_projection(CATALOG, [], environment_projection=None)
+    assert set(projection) == {"installed", "recommended", "all"}
+    assert isinstance(projection["installed"], list)
+    assert isinstance(projection["recommended"], list)
+    assert isinstance(projection["all"], list)
+    assert projection["all"]
+    manifest_keys = {
+        "id", "name", "repository", "category", "status", "manifest_version",
+        "license", "provenance", "permissions", "network_exposure",
+        "data_sensitivity", "operational_risk",
+    }
+    for item in projection["all"]:
+        assert isinstance(item, dict)
+        assert isinstance(item.get("id"), str) and item["id"]
+        assert manifest_keys <= item.keys()
+        assert isinstance(item["actions"], list)
+
+
+def test_store_contract_never_exposes_sensitive_field_keys():
+    projection = store_projection(
+        CATALOG,
+        [store_instance(managed=True), store_instance(managed=False)],
+        environment_projection=None,
+    )
+    sensitive = {
+        "host", "host_key", "container_id", "container_name", "install_dir",
+        "data_dir", "image", "compose_project", "service_port", "api_url",
+        "console_url", "credentials", "password", "private_key", "passphrase",
+        "token", "network_url", "identity_version",
+    }
+    for view in ("installed", "recommended", "all"):
+        for item in projection[view]:
+            assert not (sensitive & item.keys()), (view, item)
+
+
+def test_store_contract_installed_carries_manifest_metadata_and_ownership():
+    projection = store_projection(CATALOG, [store_instance(managed=True)])
+    item = projection["installed"][0]
+    assert item["instance_id"] == "chatgpt2api-dev"
+    assert item["instance_status"] == "running"
+    assert item["ownership"] == "managed"
+    assert item["id"] == "chatgpt2api"
+    assert item["repository"] == "yukkcat/chatgpt2api"
+    assert item["license"] == "unknown"
+    assert item["actions"] == ["deploy"]
+
+
+def test_store_contract_external_instances_are_read_only():
+    projection = store_projection(CATALOG, [store_instance(managed=False)])
+    installed = projection["installed"]
+    assert len(installed) == 1
+    item = installed[0]
+    assert item["ownership"] == "external"
+    assert item["instance_id"] == "external-app"
+    assert isinstance(item["instance_status"], str)
+    assert item["actions"] == []
+
+
+def test_store_contract_recommended_high_medium_unknown_boundaries(tmp_path, monkeypatch):
+    from extensions import store
+
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    target = save_target_metadata({
+        "id": "store-target", "name": "Store target", "host": "safe.example",
+        "username": "deploy-user", "target_role": "isolated-development",
+    })
+
+    high = _fresh_projection(target, confidence="high")
+    recommended = store_projection(CATALOG, [], environment_projection=high)["recommended"]
+    assert [item["id"] for item in recommended] == ["chatgpt2api"]
+    assert recommended[0]["confidence"] == "high"
+    assert recommended[0]["actions"] == ["deploy"]
+
+    for confidence in ("medium", "unknown"):
+        assert store_projection(
+            CATALOG, [], environment_projection=_fresh_projection(target, confidence=confidence)
+        )["recommended"] == []
+
+    assert store_projection(
+        CATALOG, [], environment_projection=_fresh_projection(target, compose_available=False)
+    )["recommended"] == []
+    assert store_projection(
+        CATALOG, [], environment_projection=_fresh_projection(target, evidence_complete=False)
+    )["recommended"] == []
+
+
+def test_store_contract_identity_mismatch_fail_closed(tmp_path, monkeypatch):
+    from extensions import store
+
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    target = save_target_metadata({
+        "id": "store-target", "name": "Store target", "host": "safe.example",
+        "username": "deploy-user", "target_role": "isolated-development",
+    })
+    verified = store.verified_environment_projection(
+        target,
+        {"ok": True},
+        {"evidence_manifest": {"complete": True}, "capabilities": {
+            "docker_available": True, "compose_available": True,
+        }},
+    )
+    assert verified is not None
+    save_environment_projection(verified)
+    assert store.public_store_projection()["recommended"] != []
+
+    drifted = store.upsert_target({
+        **target.model_dump(),
+        "host": "drifted.example",
+        "identity_version": int(target.identity_version) + 1,
+        "host_key": "drifted",
+    })
+    assert store.get_environment_projection(drifted) is None
+    assert store.public_store_projection()["recommended"] == []
+
+
+def test_store_contract_actions_derive_only_from_capability():
+    from extensions.capabilities import project_store_actions
+
+    for item in CATALOG:
+        if item["status"] == "available" and item["repository"] == "yukkcat/chatgpt2api":
+            assert project_store_actions(item) == ["deploy"]
+        else:
+            assert project_store_actions(item) == []
+    assert project_store_actions({"id": "fake", "repository": "unregistered/invalid", "status": "available"}) == []
+    assert project_store_actions({}) == []
+    assert project_store_actions("junk") == []
+    assert project_store_actions(None) == []
+
+
+def test_store_contract_bad_inputs_fail_closed():
+    empty = store_projection(None, None)
+    assert empty == {"installed": [], "recommended": [], "all": []}
+
+    only_catalog = store_projection(CATALOG, None)
+    assert only_catalog["installed"] == []
+    assert only_catalog["recommended"] == []
+    assert only_catalog["all"]
+
+    junk_instances = store_projection(CATALOG, [{"project": "chatgpt2api", "managed": True}])
+    assert junk_instances["installed"] == []
+
+    bad_projection = store_projection(
+        CATALOG, [], environment_projection={"confidence": "high", "evidence_complete": True}
+    )
+    assert bad_projection["recommended"] == []
