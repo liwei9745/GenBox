@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 from html.parser import HTMLParser
 from types import SimpleNamespace
 from pathlib import Path
@@ -15,6 +16,7 @@ from fastapi import HTTPException
 
 from extensions.models import (
     ExtensionDeployRequest,
+    ExtensionDeliveryClaimRequest,
     ExtensionDiscoveryRequest,
     ExtensionHostKeyConfirmRequest,
     ExtensionHostKeyPairingCancelRequest,
@@ -24,6 +26,8 @@ from extensions.models import (
     ExtensionHostKeyResetRequest,
     ExtensionKeyResetRequest,
     ExtensionPlanRequest,
+    ManagedImageUpdateApplyRequest,
+    ManagedImageUpdatePlanRequest,
     ExtensionTarget as ExtensionTargetModel,
     ExtensionTestRequest,
     NetworkConnectRequest,
@@ -3066,6 +3070,197 @@ def test_existing_plan_binds_discovery_and_local_registration_preserves_managed_
     assert registered.ownership == "managed"
 
 
+def test_external_existing_deploy_plan_route_rejects_before_discovery_or_registration(tmp_path, monkeypatch):
+    import main
+
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    target = store.upsert_target({
+        "id": "target-external", "name": "VPS", "host": "host.example",
+        "username": "deploy-user", "target_role": "isolated-development",
+        "host_key_algorithm": TEST_HOST_KEY_ALGORITHM, "host_key": TEST_HOST_KEY,
+    })
+    existing = {
+        "id": "external-app", "container_id": "external-container", "name": "external-app",
+        "image": "example.invalid/app:stable", "status": "Up 1 hour",
+        "published_ports": [33010], "service_port": 33010,
+        "compose_project": "external-project", "working_dir": "/srv/external",
+        "data_dir": "/srv/external/data", "config_file": "/srv/external/config.json",
+        "data_size_mb": 10, "clone_available": True, "managed": False,
+        "ownership": "external",
+    }
+    store.upsert_instance({
+        "id": "external-app", "target_id": target.id, "service_port": 33010,
+        "install_dir": "/srv/external", "data_dir": "/srv/external/data",
+        "image": existing["image"], "status": "running", "managed": False,
+        "ownership": "external",
+    })
+    discovery = deployment_discovery(
+        instances=[existing], listening_ports=[33010],
+        path_conditions=existing_path_conditions(),
+    )
+    plan_manager = DeploymentPlanManager()
+    monkeypatch.setattr(main, "deployment_plans", plan_manager)
+    monkeypatch.setattr(main, "_bind_confirmed_extension_target", lambda body: body)
+
+    discovery_calls = []
+
+    async def fake_discovery(_body, *, path_checks=None):
+        discovery_calls.append(True)
+        return copy.deepcopy(discovery)
+
+    monkeypatch.setattr(main, "discover_environment", fake_discovery)
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(main.extension_deploy_plan(ExtensionPlanRequest(
+            target=target,
+            credential=SSHCredential(password="session-only"),
+            instance_id="external-app",
+            strategy="existing",
+            service_port=33010,
+            approve_plan_discovery=True,
+        )))
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["error"] == "external_instance_adoption_required"
+    assert discovery_calls == []
+    assert plan_manager.plans == {}
+    assert store.get_instance("external-app").managed is False
+
+    task_calls = []
+
+    async def forbidden_task_create(_body):
+        task_calls.append(True)
+        raise AssertionError("external instance reached task creation")
+
+    monkeypatch.setattr(main.extension_tasks, "create", forbidden_task_create)
+    with pytest.raises(HTTPException) as start_error:
+        asyncio.run(main.extension_start_deploy(ExtensionDeployRequest(
+            deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
+            target=target,
+            credential=SSHCredential(password="session-only"),
+            instance_id="external-app",
+            strategy="existing",
+            service_port=33010,
+        )))
+    assert start_error.value.status_code == 403
+    assert task_calls == []
+
+
+def test_external_instance_route_matrix_rejects_mutation_and_sensitive_projections(tmp_path, monkeypatch):
+    import main
+
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    target = store.upsert_target({
+        "id": "target-matrix", "name": "VPS", "host": "host.example",
+        "username": "deploy-user", "target_role": "isolated-development",
+        "host_key_algorithm": TEST_HOST_KEY_ALGORITHM, "host_key": TEST_HOST_KEY,
+    })
+    external = store.upsert_instance({
+        "id": "external-matrix", "target_id": target.id, "service_port": 33010,
+        "install_dir": "/srv/external", "data_dir": "/srv/external/data",
+        "image": TEST_DEPLOYMENT_IMAGE, "status": "running",
+        "managed": False, "ownership": "external",
+    })
+    handle = public_instance_handle(target.id, external.id)
+    before = external.model_dump()
+
+    manager = ExtensionTaskManager(store_path=tmp_path / "tasks.json")
+    manager.tasks["external-delivery"] = {"id": "external-delivery", "status": "completed"}
+    manager.deliveries["external-delivery"] = {
+        "deployment_attempt_id": DEPLOYMENT_ATTEMPT_ID,
+        "admin_key": "must-not-deliver",
+        "instance": public_instance_access(external),
+    }
+    manager.tasks["external-resume"] = {"id": "external-resume", "status": "completed"}
+    manager.resume_bindings["external-resume"] = {
+        "target_handle": orchestrator._resume_target_handle(target.id),
+        "instance_handle": handle,
+        "managed_required": False,
+    }
+
+    class RunningTask:
+        def __init__(self):
+            self.cancelled = False
+
+        def done(self):
+            return False
+
+        def cancel(self):
+            self.cancelled = True
+
+    running = RunningTask()
+    manager.tasks["external-cancel"] = {"id": "external-cancel", "status": "running"}
+    manager.runners["external-cancel"] = running
+    manager.resume_bindings["external-cancel"] = {
+        "target_handle": orchestrator._resume_target_handle(target.id),
+        "instance_handle": handle,
+        "managed_required": False,
+        "existing_instance": True,
+        "instance_id": external.id,
+        "target_id": target.id,
+    }
+    monkeypatch.setattr(main, "extension_tasks", manager)
+
+    with pytest.raises(HTTPException) as delivery_error:
+        asyncio.run(main.extension_task_delivery(
+            "external-delivery",
+            ExtensionDeliveryClaimRequest(deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID),
+        ))
+    assert delivery_error.value.status_code == 404
+    assert "external-delivery" in manager.deliveries
+
+    assert asyncio.run(main.extension_task_resume(
+        "external-resume", SimpleNamespace(target_id=target.id),
+    )) == {"resumable": False}
+
+    with pytest.raises(HTTPException) as cancel_error:
+        asyncio.run(main.extension_cancel_task("external-cancel"))
+    assert cancel_error.value.status_code == 409
+    assert running.cancelled is False
+    assert manager.tasks["external-cancel"]["status"] == "running"
+
+    monkeypatch.setattr(main.credential_vault, "list_metadata", lambda: [{"instance_id": external.id}])
+    assert asyncio.run(main.extension_vault_list()) == {"credentials": []}
+    for call in (
+        lambda: main.extension_vault_get(handle),
+        lambda: main.extension_vault_upsert(handle, SimpleNamespace(credential=None)),
+        lambda: main.extension_vault_delete(handle),
+        lambda: main.extension_vault_delete_push_key(handle),
+        lambda: main.extension_confirm_vault_save_push_key(handle, SimpleNamespace()),
+        lambda: main.extension_vault_save_push_key(handle, SimpleNamespace()),
+):
+        with pytest.raises(HTTPException) as vault_error:
+            asyncio.run(call())
+        assert vault_error.value.status_code == 404
+
+    external_plan_id = "iu-external-matrix-plan-0001"
+    main._managed_image_update_plans[external_plan_id] = {
+        "plan_id": external_plan_id,
+        "instance_id": external.id,
+        "instance_handle": handle,
+        "target_id": target.id,
+        "image": TEST_DEPLOYMENT_IMAGE,
+        "expires_at": time.time() + 300,
+    }
+    with pytest.raises(HTTPException) as apply_error:
+        asyncio.run(main.extension_managed_image_update_apply(
+            ManagedImageUpdateApplyRequest(plan_id=external_plan_id),
+        ))
+    assert apply_error.value.status_code == 404
+    assert external_plan_id in main._managed_image_update_plans
+    with pytest.raises(HTTPException) as task_list_error:
+        asyncio.run(main.extension_managed_image_update_task_list(handle))
+    assert task_list_error.value.status_code == 404
+    monkeypatch.setattr(
+        main.managed_image_update_tasks,
+        "get",
+        lambda _task_id: {"instance_handle": handle},
+    )
+    with pytest.raises(HTTPException) as task_status_error:
+        asyncio.run(main.extension_managed_image_update_task_status("iu-task-external"))
+    assert task_status_error.value.status_code == 404
+    assert store.get_instance(external.id).model_dump() == before
+
+
 @pytest.mark.parametrize(("published_ports", "service_port", "requested_port"), [
     ([], None, 33010),
     ([33010, 33443], None, 33010),
@@ -3099,7 +3294,7 @@ def test_existing_plan_rejects_missing_ambiguous_or_mismatched_structured_port(
         ))
 
 
-def test_external_registration_accepts_only_the_structured_discovery_port(tmp_path, monkeypatch):
+def test_external_existing_plan_rejects_before_local_registration(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
     store.upsert_instance({
         "id": "external-app", "target_id": "target-a", "service_port": 32000,
@@ -3120,21 +3315,16 @@ def test_external_registration_accepts_only_the_structured_discovery_port(tmp_pa
         "config_file": "/srv/external/config.json", "data_size_mb": 10,
         "clone_available": True, "managed": False, "ownership": "compose",
     }
-    plan_manager = DeploymentPlanManager()
-    plan = plan_manager.create(ExtensionPlanRequest(
-        target=target, credential=SSHCredential(password="session-only"),
-        instance_id="external-app", strategy="existing", service_port=33010,
-    ), deployment_discovery(
-        instances=[existing], listening_ports=[33010],
-        path_conditions=existing_path_conditions(),
-    ))
-    internal_plan = plan_manager.plans[plan["id"]]
-    updated = store.upsert_instance({
-        "id": "external-app", "target_id": "target-a", "service_port": internal_plan["service_port"],
-        "install_dir": existing["working_dir"], "data_dir": existing["data_dir"],
-        "image": existing["image"], "managed": False,
-    })
-    assert updated.service_port == 33010
+    before = store.get_instance("external-app").model_dump()
+    with pytest.raises(ValueError, match="external_instance_adoption_required"):
+        DeploymentPlanManager().create(ExtensionPlanRequest(
+            target=target, credential=SSHCredential(password="session-only"),
+            instance_id="external-app", strategy="existing", service_port=33010,
+        ), deployment_discovery(
+            instances=[existing], listening_ports=[33010],
+            path_conditions=existing_path_conditions(),
+        ))
+    assert store.get_instance("external-app").model_dump() == before
 
 
 def test_deployment_without_docker_or_elevation_fails_before_remote_write(tmp_path, monkeypatch):
@@ -3769,21 +3959,8 @@ def test_opaque_instance_handles_round_trip_into_existing_plan_confirmation():
     assert resolved.service_port == existing["service_port"]
     assert resolved.image == existing["image"]
 
-    manager = DeploymentPlanManager()
-    plan = manager.create(resolved, discovery)
-    confirmation = manager.resolve_public_references(ExtensionDeployRequest(
-        deployment_attempt_id=DEPLOYMENT_ATTEMPT_ID,
-        target=target,
-        credential=credential,
-        instance_id=handle,
-        strategy="existing",
-        service_port=1,
-        image="example.invalid/placeholder:tag",
-        confirmed_plan_id=plan["id"],
-    ))
-    assert confirmation.instance_id == existing["id"]
-    assert confirmation.service_port == existing["service_port"]
-    assert confirmation.image == existing["image"]
+    with pytest.raises(ValueError, match="external_instance_adoption_required"):
+        DeploymentPlanManager().create(resolved, discovery)
 
 
 def test_discovered_raw_i_prefixed_ids_remain_compatible_for_existing_and_clone_paths():
@@ -4134,6 +4311,10 @@ def test_existing_and_source_clone_snapshot_contracts_remain_exact(plan_kind, fi
             strategy="isolated", service_port=33011, image=source["image"],
             clone_source_id="source-app", clone_scope="working-copy",
         )
+    if plan_kind == "existing":
+        with pytest.raises(ValueError, match="external_instance_adoption_required"):
+            manager.create(request, initial)
+        return
     plan = manager.create(request, initial)
     fresh = copy.deepcopy(initial)
     if field == "environment.listening_ports":

@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from config import STORAGE_DIR
 from extensions.models import (
     ExtensionConfig,
+    EnvironmentFacts,
     EnvironmentProjection,
     ExtensionInstance,
     ExtensionTarget,
@@ -27,6 +28,10 @@ EXTENSIONS_FILE = STORAGE_DIR / "extensions.json"
 
 PAIRING_PROTOCOL_VERSION = "GENBOX-PAIR/1"
 PAIRING_TTL_SECONDS = 300
+ENVIRONMENT_FACTS_TTL_SECONDS = 3600
+ENVIRONMENT_FACT_PROBES = (
+    "os", "arch", "cpu", "memory_mb", "disk_mb", "docker", "compose", "python", "uv",
+)
 _PAIRING_ID_BYTES = 18
 _PAIRING_CHALLENGE_BYTES = 24
 
@@ -104,6 +109,13 @@ class _VerifiedEnvironmentProjection:
     """Store write token issued only after server-side discovery validation."""
 
     projection: EnvironmentProjection
+
+
+@dataclass(frozen=True)
+class _VerifiedEnvironmentFacts:
+    """Store write token issued only after server-side discovery validation."""
+
+    facts: EnvironmentFacts
 
 
 class HostKeyPairingManager:
@@ -248,6 +260,15 @@ def load_config() -> ExtensionConfig:
             projections.append(EnvironmentProjection(**item))
         except Exception:
             continue
+    environment_facts = []
+    raw_environment_facts = raw.get("environment_facts", [])
+    if not isinstance(raw_environment_facts, list):
+        raw_environment_facts = []
+    for item in raw_environment_facts:
+        try:
+            environment_facts.append(EnvironmentFacts(**item))
+        except Exception:
+            continue
     batch_target_ids = raw.get("batch_target_ids", [])
     if not isinstance(batch_target_ids, list):
         batch_target_ids = []
@@ -264,6 +285,7 @@ def load_config() -> ExtensionConfig:
         targets=targets,
         instances=instances,
         environment_projections=projections,
+        environment_facts=environment_facts,
         batch_target_ids=[str(item) for item in batch_target_ids],
         target_generations=target_generations,
     )
@@ -422,6 +444,180 @@ def save_environment_projection(verified: _VerifiedEnvironmentProjection) -> Env
         ] + [projection]
         save_config(config)
     return projection
+
+
+def _normalized_fact_value(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value or any(ord(char) < 32 or ord(char) == 127 for char in value):
+        return None
+    if value.casefold() in {"unknown", "unavailable", "none", "null"}:
+        return None
+    return value if len(value) <= 256 else None
+
+
+def _normalized_version_value(value: object) -> str | None:
+    value = _normalized_fact_value(value)
+    return value if value and re.search(r"\d", value) else None
+
+
+def _normalized_positive_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not re.fullmatch(r"[1-9]\d*", value):
+        return None
+    return int(value)
+
+
+def verified_environment_facts(
+    target: ExtensionTarget,
+    discovery: dict,
+    public: dict,
+) -> _VerifiedEnvironmentFacts | None:
+    """Create a facts write token from complete, successful server evidence."""
+    if not isinstance(discovery, dict) or discovery.get("ok") is not True:
+        return None
+    evidence_manifest = public.get("evidence_manifest") if isinstance(public, dict) else None
+    if not isinstance(evidence_manifest, dict) or evidence_manifest.get("complete") is not True:
+        return None
+    if evidence_manifest.get("fact_probe_complete") is not True:
+        return None
+    statuses = evidence_manifest.get("fact_probe_statuses")
+    if not isinstance(statuses, dict) or any(
+        not isinstance(statuses.get(probe), int)
+        or isinstance(statuses.get(probe), bool)
+        or statuses.get(probe) != 0
+        for probe in ENVIRONMENT_FACT_PROBES
+    ):
+        return None
+    output_validity = evidence_manifest.get("fact_probe_output_validity")
+    if not isinstance(output_validity, dict) or any(
+        output_validity.get(probe) is not True for probe in ENVIRONMENT_FACT_PROBES
+    ):
+        return None
+    environment = discovery.get("environment")
+    if not isinstance(environment, dict):
+        return None
+    normalized_values = {
+        "os": _normalized_fact_value(environment.get("os")),
+        "arch": _normalized_fact_value(environment.get("arch")),
+        "cpu": _normalized_positive_int(environment.get("cpu")),
+        "memory_mb": _normalized_positive_int(environment.get("memory_mb")),
+        "disk_mb": _normalized_positive_int(environment.get("disk_free_mb")),
+        "docker": _normalized_version_value(environment.get("docker_version")),
+        "compose": _normalized_version_value(environment.get("compose_version")),
+        "python": _normalized_version_value(environment.get("python_version")),
+        "uv": _normalized_version_value(environment.get("uv_version")),
+    }
+    if any(value is None for value in normalized_values.values()):
+        return None
+    current = get_target(target.id)
+    if current is None or not hmac.compare_digest(
+        target_identity_digest(current), target_identity_digest(target)
+    ):
+        return None
+    facts = EnvironmentFacts(
+        target_id=target.id,
+        target_identity_digest=target_identity_digest(target),
+        observed_at=datetime.now(timezone.utc).isoformat(),
+        os=normalized_values["os"],
+        arch=normalized_values["arch"],
+        cpu_cores=normalized_values["cpu"],
+        memory_mb=normalized_values["memory_mb"],
+        disk_mb=normalized_values["disk_mb"],
+        docker_version=normalized_values["docker"],
+        compose_version=normalized_values["compose"],
+        python_version=normalized_values["python"],
+        uv_version=normalized_values["uv"],
+    )
+    return _VerifiedEnvironmentFacts(facts)
+
+
+def save_environment_facts(verified: _VerifiedEnvironmentFacts) -> EnvironmentFacts:
+    """Persist only facts issued by verified server evidence."""
+    if not isinstance(verified, _VerifiedEnvironmentFacts):
+        raise TypeError("verified_environment_facts_required")
+    facts = verified.facts
+    with _config_lock():
+        config = load_config()
+        current = next((item for item in config.targets if item.id == facts.target_id), None)
+        if current is None or not hmac.compare_digest(
+            facts.target_identity_digest, target_identity_digest(current)
+        ):
+            raise ValueError("saved_target_identity_required")
+        config.environment_facts = [
+            item for item in config.environment_facts if item.target_id != facts.target_id
+        ] + [facts]
+        save_config(config)
+    return facts
+
+
+def save_environment_observation(
+    projection_token: _VerifiedEnvironmentProjection,
+    facts_token: _VerifiedEnvironmentFacts,
+) -> tuple[EnvironmentProjection, EnvironmentFacts]:
+    """Persist one complete projection/facts observation in one config transaction."""
+    if not isinstance(projection_token, _VerifiedEnvironmentProjection):
+        raise TypeError("verified_environment_projection_required")
+    if not isinstance(facts_token, _VerifiedEnvironmentFacts):
+        raise TypeError("verified_environment_facts_required")
+    projection = projection_token.projection
+    facts = facts_token.facts
+    if projection.target_id != facts.target_id or not hmac.compare_digest(
+        projection.target_identity_digest, facts.target_identity_digest
+    ):
+        raise ValueError("environment_observation_identity_mismatch")
+    with _config_lock():
+        config = load_config()
+        current = next((item for item in config.targets if item.id == facts.target_id), None)
+        if current is None or not hmac.compare_digest(
+            facts.target_identity_digest, target_identity_digest(current)
+        ):
+            raise ValueError("saved_target_identity_required")
+        config.environment_projections = [
+            item for item in config.environment_projections if item.target_id != projection.target_id
+        ] + [projection]
+        config.environment_facts = [
+            item for item in config.environment_facts if item.target_id != facts.target_id
+        ] + [facts]
+        save_config(config)
+    return projection, facts
+
+
+def invalidate_environment_facts(target_id: str) -> None:
+    with _config_lock():
+        config = load_config()
+        config.environment_facts = [
+            item for item in config.environment_facts if item.target_id != target_id
+        ]
+        save_config(config)
+
+
+def get_environment_facts(target: ExtensionTarget) -> EnvironmentFacts | None:
+    facts = next(
+        (item for item in load_config().environment_facts if item.target_id == target.id),
+        None,
+    )
+    if not facts or not hmac.compare_digest(
+        facts.target_identity_digest, target_identity_digest(target)
+    ):
+        return None
+    try:
+        observed_at = datetime.fromisoformat(facts.observed_at.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if observed_at.tzinfo is None or observed_at.utcoffset() != timezone.utc.utcoffset(observed_at):
+        return None
+    age_seconds = (datetime.now(timezone.utc) - observed_at).total_seconds()
+    if age_seconds < 0 or age_seconds > ENVIRONMENT_FACTS_TTL_SECONDS:
+        return None
+    return facts
 
 
 def invalidate_environment_projection(target_id: str) -> None:
@@ -609,6 +805,36 @@ _PUBLIC_STORE_FIELDS = (
     "adapter_ref",
 )
 
+_PUBLIC_STORE_DEFAULTS = {
+    "id": "",
+    "name": "",
+    "repository": "",
+    "category": "",
+    "status": "unknown",
+    "integrates_proxy": False,
+    "provides_proxy": False,
+    "manifest_version": "unknown",
+    "license": "unknown",
+    "provenance": "unavailable",
+    "permissions": [],
+    "network_exposure": "unknown",
+    "data_sensitivity": "unknown",
+    "operational_risk": "unknown",
+    "adapter_ref": "",
+}
+
+_RECOMMENDATION_FACT_FIELDS = (
+    ("os", "os"),
+    ("arch", "arch"),
+    ("cpu_cores", "cpu_cores"),
+    ("memory_mb", "memory_mb"),
+    ("disk_mb", "disk_mb"),
+    ("docker_version", "docker_version"),
+    ("compose_version", "compose_version"),
+    ("python_version", "python_version"),
+    ("uv_version", "uv_version"),
+)
+
 
 def _store_item(item: dict) -> dict:
     """Project a Store item through an explicit public-field whitelist.
@@ -617,17 +843,95 @@ def _store_item(item: dict) -> dict:
     from the executable capability registry.
     """
     if not isinstance(item, dict):
-        return {"id": "", "actions": []}
-    public = {field: item[field] for field in _PUBLIC_STORE_FIELDS if field in item}
-    if "id" in public:
-        public["id"] = str(public["id"] or "")
+        return {**_PUBLIC_STORE_DEFAULTS, "permissions": [], "actions": []}
+    public = {}
+    for field in _PUBLIC_STORE_FIELDS:
+        value = item.get(field, _PUBLIC_STORE_DEFAULTS[field])
+        if field == "permissions":
+            value = value if isinstance(value, list) and all(isinstance(item, str) for item in value) else []
+            value = list(value)
+        elif field in {"integrates_proxy", "provides_proxy"}:
+            value = value if isinstance(value, bool) else _PUBLIC_STORE_DEFAULTS[field]
+        elif not isinstance(value, str):
+            value = _PUBLIC_STORE_DEFAULTS[field]
+        public[field] = value
+    public["id"] = str(public["id"] or "")
     public["actions"] = project_store_actions(item)
     return public
+
+
+def _fresh_environment_facts(
+    facts: EnvironmentFacts | None,
+    *,
+    target_id: str = "",
+    target_identity_digest: str = "",
+) -> EnvironmentFacts | None:
+    """Return only a current facts record bound to the projection identity."""
+    if not isinstance(facts, EnvironmentFacts):
+        return None
+    if target_id and facts.target_id != target_id:
+        return None
+    if target_identity_digest and not hmac.compare_digest(
+        facts.target_identity_digest, target_identity_digest
+    ):
+        return None
+    try:
+        observed_at = datetime.fromisoformat(facts.observed_at.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if observed_at.tzinfo is None or observed_at.utcoffset() != timezone.utc.utcoffset(observed_at):
+        return None
+    age_seconds = (datetime.now(timezone.utc) - observed_at).total_seconds()
+    if age_seconds < 0 or age_seconds > ENVIRONMENT_FACTS_TTL_SECONDS:
+        return None
+    return facts
+
+
+def _environment_fact_reasons(facts: EnvironmentFacts | None) -> tuple[list[str], list[str]]:
+    """Explain only observed facts; an absent field is never given a default value."""
+    reasons = []
+    unknown_facts = []
+    for field, label in _RECOMMENDATION_FACT_FIELDS:
+        value = getattr(facts, field, None) if facts is not None else None
+        if value is None:
+            reasons.append(f"{label}=未观测")
+            unknown_facts.append(label)
+        else:
+            reasons.append(f"{label}={value}")
+    return reasons, unknown_facts
+
+
+def _environment_facts_complete(facts: EnvironmentFacts | None) -> bool:
+    return facts is not None and all(
+        getattr(facts, field, None) is not None
+        for field, _label in _RECOMMENDATION_FACT_FIELDS
+    )
+
+
+def _current_store_target() -> ExtensionTarget | None:
+    return next(
+        (item for item in list_targets() if item.target_role == "isolated-development"),
+        None,
+    )
+
+
+def _same_environment_projection(
+    left: EnvironmentProjection | None,
+    right: EnvironmentProjection | None,
+) -> bool:
+    return (
+        isinstance(left, EnvironmentProjection)
+        and isinstance(right, EnvironmentProjection)
+        and left.target_id == right.target_id
+        and hmac.compare_digest(left.target_identity_digest, right.target_identity_digest)
+        and left.model_dump() == right.model_dump()
+    )
 
 
 def store_projection(
     catalog: list[dict], instances: list[ExtensionInstance], *,
     environment_projection: EnvironmentProjection | None = None,
+    environment_facts: EnvironmentFacts | None = None,
 ) -> dict:
     """Build the read-only Installed/Recommended/All Store projection.
 
@@ -640,10 +944,19 @@ def store_projection(
     if not isinstance(instances, list):
         instances = []
     instances = [item for item in instances if isinstance(item, ExtensionInstance)]
-    if environment_projection is not None and not isinstance(
-        environment_projection, EnvironmentProjection
-    ):
-        environment_projection = None
+    current_target = _current_store_target()
+    authoritative_projection = (
+        get_environment_projection(current_target) if current_target else None
+    )
+    if environment_projection is not None:
+        if not _same_environment_projection(environment_projection, authoritative_projection):
+            environment_projection = None
+        else:
+            environment_projection = authoritative_projection
+    else:
+        environment_projection = authoritative_projection
+    if environment_facts is None and current_target is not None:
+        environment_facts = get_environment_facts(current_target)
     catalog_by_id = {}
     for item in catalog:
         if not isinstance(item, dict):
@@ -672,14 +985,24 @@ def store_projection(
         and environment_projection.compose_available is True
         and bool(environment_projection.target_identity_digest)
     )
+    environment_facts = _fresh_environment_facts(
+        environment_facts,
+        target_id=(current_target.id if current_target else ""),
+        target_identity_digest=(
+            target_identity_digest(current_target) if current_target else ""
+        ),
+    )
+    facts_reasons, unknown_facts = _environment_fact_reasons(environment_facts)
+    facts_complete = _environment_facts_complete(environment_facts)
     recommended = []
-    if environment_verified:
+    if environment_verified and facts_complete:
         for item in all_items:
             if item["id"] == "chatgpt2api":
                 recommended.append({
                     **item,
                     "confidence": environment_projection.confidence,
-                    "reasons": ["已验证 Docker 与 Docker Compose 环境，且 discovery 证据完整"],
+                    "reasons": facts_reasons,
+                    "unknown_facts": unknown_facts,
                 })
     return {
         "installed": installed,

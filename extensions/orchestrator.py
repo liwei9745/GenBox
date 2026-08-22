@@ -84,6 +84,21 @@ def public_instance_handle(target_id: str, instance_id: str) -> str:
     return f"i-{digest}"
 
 
+def _stored_managed_instance(instance_id: str, target_id: str = ""):
+    candidates = extensions_store.list_instances(target_id)
+    matches = [
+        instance for instance in candidates
+        if instance.id == instance_id
+        or hmac.compare_digest(public_instance_handle(instance.target_id, instance.id), instance_id)
+    ]
+    if len(matches) != 1:
+        raise PermissionError("external_instance_adoption_required")
+    instance = matches[0]
+    if instance.managed is not True or str(instance.ownership or "") != "managed":
+        raise PermissionError("external_instance_adoption_required")
+    return instance
+
+
 def _resume_target_handle(target_id: str) -> str:
     payload = b"genbox-resume-target-v1\0" + target_id.encode("utf-8")
     digest = hmac.new(_public_instance_handle_key(), payload, hashlib.sha256).hexdigest()[:32]
@@ -1063,6 +1078,9 @@ class ExtensionTaskManager:
             state = self.tasks.get(task_id)
             if not state or state.get("status") not in {"queued", "running"}:
                 return False
+            binding = self.resume_bindings.get(task_id)
+            if isinstance(binding, dict) and binding.get("managed_required") is not True:
+                return False
             runner = self.runners.get(task_id)
             if not runner or runner.done():
                 return False
@@ -1094,6 +1112,9 @@ class ExtensionTaskManager:
                 or not isinstance(deployment_attempt_id, str)
                 or not hmac.compare_digest(expected_attempt_id, deployment_attempt_id)
             ):
+                return None
+            delivery_instance = delivery.get("instance")
+            if not isinstance(delivery_instance, dict) or delivery_instance.get("managed") is not True:
                 return None
             previous_recovery_action = state.get("recovery_action")
             previous_updated_at = state.get("updated_at")
@@ -1154,7 +1175,7 @@ class ExtensionTaskManager:
             access = public_instance_access(instance)
             if access.get("running") is not True:
                 return None
-            if managed_required and (
+            if (
                 access.get("managed") is not True
                 or str(getattr(instance, "ownership", "") or "") != "managed"
             ):
@@ -1731,8 +1752,32 @@ class DeploymentPlanManager:
         complete = cls._port_bindings_complete(discovery) and cls._listener_probe_complete(
             discovery.get("environment", {})
         )
+        fact_probe_names = ("os", "arch", "cpu", "memory_mb", "disk_mb", "docker", "compose", "python", "uv")
+        raw_fact_statuses = environment.get("fact_probe_statuses")
+        fact_probe_statuses = {
+            name: raw_fact_statuses.get(name)
+            for name in fact_probe_names
+        } if isinstance(raw_fact_statuses, dict) else {}
+        raw_fact_output_validity = environment.get("fact_probe_output_validity")
+        fact_probe_output_validity = {
+            name: raw_fact_output_validity.get(name) is True
+            for name in fact_probe_names
+        } if isinstance(raw_fact_output_validity, dict) else {}
+        fact_probe_complete = bool(
+            environment.get("fact_probe_complete") is True
+            and len(fact_probe_statuses) == len(fact_probe_names)
+            and len(fact_probe_output_validity) == len(fact_probe_names)
+            and all(
+                isinstance(status, int) and not isinstance(status, bool) and status == 0
+                for status in fact_probe_statuses.values()
+            )
+            and all(fact_probe_output_validity.values())
+        )
         manifest["complete"] = complete
         manifest["changed_fields"] = [] if complete else ["discovery.completeness"]
+        manifest["fact_probe_complete"] = fact_probe_complete
+        manifest["fact_probe_statuses"] = fact_probe_statuses
+        manifest["fact_probe_output_validity"] = fact_probe_output_validity
         modes = []
         for mode in discovery.get("deployment_modes", []):
             if not isinstance(mode, dict) or mode.get("id") not in {"compose", "warp", "python"}:
@@ -2039,6 +2084,13 @@ class DeploymentPlanManager:
             if request.service_port != discovered_port:
                 raise ValueError("请求端口与结构化 Docker 发现端口不一致")
             registered = extensions_store.get_instance(request.instance_id)
+            if (
+                not registered
+                or registered.managed is not True
+                or str(registered.ownership or "") != "managed"
+                or registered.target_id != request.target.id
+            ):
+                raise ValueError("external_instance_adoption_required")
             if registered and registered.target_id != request.target.id:
                 raise ValueError("instance_id_conflicts_with_another_target")
             if registered and registered.managed and registered.service_port != discovered_port:
@@ -2322,9 +2374,10 @@ deployment_plans = DeploymentPlanManager()
 
 
 async def reset_managed_admin_key(request: ExtensionKeyResetRequest) -> dict:
-    instance = extensions_store.get_instance(request.instance_id)
-    if not instance or not instance.managed or instance.target_id != request.target.id:
-        raise PermissionError("只能重置由 GenBox 管理且归属当前 VPS 的实例")
+    try:
+        instance = _stored_managed_instance(request.instance_id, request.target.id)
+    except PermissionError as exc:
+        raise PermissionError("只能重置由 GenBox 管理且归属当前 VPS 的实例") from exc
     if instance.deployment_mode != "compose":
         raise ValueError("当前仅支持重置 Compose 实例")
     connection, _ = await _connect(request)
@@ -2420,12 +2473,12 @@ async def update_managed_image(
         raise ValueError("隔离实例更新需要不可变镜像摘要地址")
     if target.target_role != "isolated-development":
         raise PermissionError("仅隔离开发机允许更新托管镜像")
-    instance = extensions_store.get_instance(instance_id)
+    try:
+        instance = _stored_managed_instance(instance_id, target.id)
+    except PermissionError as exc:
+        raise PermissionError("仅 GenBox 托管的隔离 Compose 实例允许更新") from exc
     if (
-        not instance
-        or not instance.managed
-        or instance.target_id != target.id
-        or instance.project != "chatgpt2api"
+        instance.project != "chatgpt2api"
         or instance.deployment_mode != "compose"
         or instance.strategy != "isolated"
     ):

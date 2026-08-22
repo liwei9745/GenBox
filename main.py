@@ -3903,6 +3903,23 @@ def _resolve_stored_instance_handle(instance_handle: str, target_id: str = ""):
     return None
 
 
+def _require_managed_existing_instance(instance_id: str, target_id: str = ""):
+    instance = _resolve_stored_instance_handle(instance_id, target_id)
+    if (
+        not instance
+        or instance.managed is not True
+        or str(instance.ownership or "") != "managed"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "external_instance_adoption_required",
+                "message": "外部实例在完成已验证的 adoption flow 前仅可查看，不能进入部署或托管生命周期。",
+            },
+        )
+    return instance
+
+
 def _public_instance_projection(instance) -> dict:
     return public_instance_access(instance)
 
@@ -4066,6 +4083,8 @@ async def extension_confirm_ssh_host_key(body: ExtensionHostKeyConfirmRequest):
 async def extension_start_deploy(body: ExtensionDeployRequest):
     try:
         validate_deployment_capability(body.project_id, body.strategy, body.deployment_mode)
+        if body.strategy == "existing":
+            _require_managed_existing_instance(body.instance_id, body.target.id)
         body = _bind_confirmed_extension_target(body, plan_confirmation=True)
         task_id = await extension_tasks.create(body)
         return {"task_id": task_id}
@@ -4139,8 +4158,9 @@ async def extension_discover(body: ExtensionDiscoveryRequest):
 def _save_store_environment_projection(target, discovery: dict, public: dict) -> None:
     """Persist only complete, successful discovery evidence for Store use."""
     verified = extensions_store.verified_environment_projection(target, discovery, public)
-    if verified is not None:
-        extensions_store.save_environment_projection(verified)
+    verified_facts = extensions_store.verified_environment_facts(target, discovery, public)
+    if verified is not None and verified_facts is not None:
+        extensions_store.save_environment_observation(verified, verified_facts)
 
 
 @app.post("/api/extensions/deploy/plan")
@@ -4150,6 +4170,8 @@ async def extension_deploy_plan(body: ExtensionPlanRequest):
         validate_deployment_image(body.image, body.strategy, body.clone_scope)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+    if body.strategy == "existing":
+        _require_managed_existing_instance(body.instance_id, body.target.id)
     saved_target = extensions_store.get_target(body.target.id)
     if not saved_target or saved_target.target_role != "isolated-development":
         raise HTTPException(
@@ -4289,7 +4311,8 @@ def _managed_push_source_access(instance_handle: str):
     instance = _resolve_stored_instance_handle(instance_handle)
     if (
         not instance
-        or not instance.managed
+        or instance.managed is not True
+        or str(instance.ownership or "") != "managed"
         or instance.project != "chatgpt2api"
         or not hmac.compare_digest(
             public_instance_handle(instance.target_id, instance.id), instance_handle
@@ -4579,7 +4602,11 @@ async def extension_vault_save_push_key(instance_id: str, body: PushKeyLocalSave
 
 def _managed_vault_instance(instance_id: str):
     instance = _resolve_stored_instance_handle(instance_id)
-    if not instance or not instance.managed:
+    if (
+        not instance
+        or instance.managed is not True
+        or str(instance.ownership or "") != "managed"
+    ):
         raise HTTPException(status_code=404, detail="托管实例不存在")
     return instance
 
@@ -4783,6 +4810,7 @@ def _managed_image_update_instance(instance_handle: str):
     if (
         not instance
         or not instance.managed
+        or str(instance.ownership or "") != "managed"
         or instance.project != "chatgpt2api"
         or instance.strategy != "isolated"
         or instance.deployment_mode != "compose"
@@ -4818,7 +4846,10 @@ def _take_managed_image_update_plan(plan_id: str) -> dict:
                    if float(item.get("expires_at", 0)) <= now]
         for key in expired:
             _managed_image_update_plans.pop(key, None)
-        plan = _managed_image_update_plans.pop(plan_id, None)
+        plan = _managed_image_update_plans.get(plan_id)
+        if plan:
+            _managed_image_update_instance(plan.get("instance_handle", ""))
+            _managed_image_update_plans.pop(plan_id, None)
     if not plan:
         raise HTTPException(status_code=409, detail="managed_image_update_plan_unavailable")
     return plan
@@ -4856,7 +4887,11 @@ async def extension_vault_list():
         credentials = []
         for item in credential_vault.list_metadata():
             instance = extensions_store.get_instance(item.get("instance_id", ""))
-            if not instance:
+            if (
+                not instance
+                or instance.managed is not True
+                or str(instance.ownership or "") != "managed"
+            ):
                 continue
             credentials.append({
                 "instance_handle": public_instance_handle(instance.target_id, instance.id),
@@ -5000,6 +5035,8 @@ async def extension_managed_image_update_apply(body: ManagedImageUpdateApplyRequ
 async def extension_managed_image_update_task_list(instance_handle: str | None = None):
     if instance_handle and re.fullmatch(r"i-[a-f0-9]{32}", instance_handle) is None:
         raise HTTPException(status_code=400, detail="managed_instance_handle_invalid")
+    if instance_handle:
+        _managed_image_update_instance(instance_handle)
     return {"tasks": managed_image_update_tasks.list(instance_handle)}
 
 
@@ -5008,6 +5045,7 @@ async def extension_managed_image_update_task_status(task_id: str):
     state = managed_image_update_tasks.get(task_id)
     if not state:
         raise HTTPException(status_code=404, detail="managed_image_update_task_not_found")
+    _managed_image_update_instance(state["instance_handle"])
     return state
 
 

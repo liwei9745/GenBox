@@ -58,6 +58,30 @@ def _version_number(value: str) -> tuple[int, ...]:
     return tuple(int(part) for part in match.group(1).split(".")) if match else ()
 
 
+def _fact_text_output_valid(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    value = value.strip()
+    return bool(
+        value
+        and len(value) <= 256
+        and value.casefold() not in {"unknown", "unavailable", "none", "null"}
+        and not any(ord(char) < 32 or ord(char) == 127 for char in value)
+    )
+
+
+def _fact_version_output_valid(value: Any) -> bool:
+    return _fact_text_output_valid(value) and re.search(r"\d", value) is not None
+
+
+def _fact_positive_int_output_valid(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value > 0
+    return isinstance(value, str) and re.fullmatch(r"[1-9]\d*", value.strip()) is not None
+
+
 def _parse_published_ports(value: str) -> list[int]:
     try:
         bindings = json.loads(value or "{}")
@@ -606,6 +630,19 @@ async def discover_environment(
         ]
         recommendation = "existing" if any(item["status"].lower().startswith("up") for item in instances) else "isolated"
         disk_free_mb = int(facts["disk_mb"] or 0)
+        fact_probe_names = ("os", "arch", "cpu", "memory_mb", "disk_mb", "docker", "compose", "python", "uv")
+        fact_probe_statuses = {key: fact_statuses[key] for key in fact_probe_names}
+        fact_probe_output_validity = {
+            "os": _fact_text_output_valid(facts["os"]),
+            "arch": _fact_text_output_valid(facts["arch"]),
+            "cpu": _fact_positive_int_output_valid(facts["cpu"]),
+            "memory_mb": _fact_positive_int_output_valid(facts["memory_mb"]),
+            "disk_mb": _fact_positive_int_output_valid(facts["disk_mb"]),
+            "docker": _fact_version_output_valid(facts["docker"]),
+            "compose": _fact_version_output_valid(facts["compose"]),
+            "python": _fact_version_output_valid(facts["python"]),
+            "uv": _fact_version_output_valid(facts["uv"]),
+        }
         path_conditions = await _evaluate_path_conditions(
             connection,
             request.credential,
@@ -628,6 +665,12 @@ async def discover_environment(
                 "docker_version": facts["docker"], "compose_version": facts["compose"],
                 "python_version": facts["python"], "uv_version": facts["uv"], "listening_ports": ports,
                 "tcp_listeners": tcp_listeners,
+                "fact_probe_statuses": fact_probe_statuses,
+                "fact_probe_output_validity": fact_probe_output_validity,
+                "fact_probe_complete": all(
+                    status == 0 and fact_probe_output_validity[key]
+                    for key, status in fact_probe_statuses.items()
+                ),
                 "listening_ports_probe": {
                     "status": fact_statuses["ports"],
                     "complete": ports_complete,

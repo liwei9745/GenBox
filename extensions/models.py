@@ -1,4 +1,5 @@
-﻿from typing import Literal
+﻿from datetime import datetime, timezone
+from typing import Literal
 
 import re
 
@@ -103,10 +104,45 @@ class EnvironmentProjection(BaseModel):
     confidence: Literal["high", "medium", "unknown"] = "unknown"
 
 
+class EnvironmentFacts(BaseModel):
+    """Typed, server-observed environment facts; ``None`` means unknown."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    target_id: str = Field(min_length=1)
+    target_identity_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    observed_at: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$")
+    os: str | None = None
+    arch: str | None = None
+    cpu_cores: int | None = Field(default=None, ge=1)
+    memory_mb: int | None = Field(default=None, ge=1)
+    disk_mb: int | None = Field(default=None, ge=1)
+    docker_version: str | None = None
+    compose_version: str | None = None
+    python_version: str | None = None
+    uv_version: str | None = None
+
+    @field_validator("target_id")
+    @classmethod
+    def target_id_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("target_id cannot be blank")
+        return value
+
+    @field_validator("observed_at")
+    @classmethod
+    def observed_at_must_be_utc(cls, value: str) -> str:
+        timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if timestamp.tzinfo is None or timestamp.utcoffset() != timezone.utc.utcoffset(timestamp):
+            raise ValueError("observed_at must use UTC")
+        return value
+
+
 class ExtensionConfig(BaseModel):
     targets: list[ExtensionTarget] = Field(default_factory=list)
     instances: list[ExtensionInstance] = Field(default_factory=list)
     environment_projections: list[EnvironmentProjection] = Field(default_factory=list)
+    environment_facts: list[EnvironmentFacts] = Field(default_factory=list)
     batch_target_ids: list[str] = Field(default_factory=list)
     target_generations: dict[str, int] = Field(default_factory=dict)
 

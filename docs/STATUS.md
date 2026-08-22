@@ -12,13 +12,31 @@
   from backend capability.
 - **VERIFIED:** commit `d2d5eb3` makes future, expired, and forged environment
   projections fail closed, including TTL and identity-bound checks.
-- **VERIFIED:** targeted verification passed `258`; full verification passed
-  `632`; `node --check` passed for `extensions`/`i18n`; `py_compile` and
-  `git diff --check` passed.
+- **VERIFIED 2026-08-22 (uncommitted working tree, orchestrator-verified):**
+  - `EnvironmentFacts` typed model (`extra=forbid`, unknown values `None`,
+    UTC-only `observed_at`) added in `extensions/models.py`; legacy
+    `extensions.json` without the field loads as empty.
+  - Server-only facts write token (`verified_environment_facts`), atomic
+    projection+facts save, per-target identity/TTL validation, probe
+    exit-code + output-validity completeness gate, and `discovery.py` fact
+    probe summaries without touching any SSH command string.
+  - Store recommendations now require a fresh identity-bound `EnvironmentFacts`
+    with all nine fields observed; reasons explain observed values and mark
+    the rest `未观测`, never defaulting unknown facts.
+  - External/unmanaged `strategy=existing` deploy is rejected (`403
+    external_instance_adoption_required`) at plan and start; external
+    delivery/resume/cancel paths remain read-only fail-closed.
+- **VERIFIED:** weighted review PASS for W1 (model), W2 (wiring), W3 (reasons),
+  W4 (ownership) recorded in `docs/PHASE10-W{1..4}-REVIEW-20260822.md`;
+  full verification 2026-08-22: `python -m pytest -q --basetemp=.phase10-w5b-full-tmp`
+  -> `683 passed`; `node --check` for `extensions.js`/`app-all.js`/`i18n.js`/
+  `sync.js` passed; `py_compile` and `git diff --check` passed.
+  (Independent reviewer subagents returned empty results on later re-runs —
+  tool anomaly; orchestrator performed reproducible static gate verification.)
 - **BOUNDARY:** Recommended is high only with complete verified discovery and
-  Docker/Compose evidence. The current slice still requires real environment
-  collection, adapter lifecycle, and full Store acceptance; Phase 10 remains
-  In Progress and is not complete.
+  Docker/Compose evidence plus all nine environment facts observed. The current
+  slice still requires adapter lifecycle (Phase 12) and full Store acceptance;
+  Phase 10 remains In Progress and is not complete.
 
 ## Phase 9 Sender Push Source Cleanup (User-Selected) queued (2026-08-20)
 
