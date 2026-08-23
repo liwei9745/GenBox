@@ -417,16 +417,23 @@ def verified_environment_projection(
         return None
     docker_available = capabilities.get("docker_available")
     compose_available = capabilities.get("compose_available")
-    if not isinstance(docker_available, bool) or not isinstance(compose_available, bool):
+    if docker_available is not None and not isinstance(docker_available, bool):
         return None
+    if compose_available is not None and not isinstance(compose_available, bool):
+        return None
+    evidence_complete = bool(
+        evidence_manifest.get("complete") is True
+        and isinstance(docker_available, bool)
+        and isinstance(compose_available, bool)
+    )
     projection = EnvironmentProjection(
         target_id=target.id,
         target_identity_digest=target_identity_digest(target),
         observed_at=datetime.now(timezone.utc).isoformat(),
         docker_available=docker_available,
         compose_available=compose_available,
-        evidence_complete=True,
-        confidence=("high" if docker_available and compose_available else "unknown"),
+        evidence_complete=evidence_complete,
+        confidence=("high" if evidence_complete and docker_available and compose_available else "unknown"),
     )
     return _VerifiedEnvironmentProjection(projection)
 
@@ -486,37 +493,51 @@ def verified_environment_facts(
     evidence_manifest = public.get("evidence_manifest") if isinstance(public, dict) else None
     if not isinstance(evidence_manifest, dict) or evidence_manifest.get("complete") is not True:
         return None
-    if evidence_manifest.get("fact_probe_complete") is not True:
-        return None
     statuses = evidence_manifest.get("fact_probe_statuses")
     if not isinstance(statuses, dict) or any(
         not isinstance(statuses.get(probe), int)
         or isinstance(statuses.get(probe), bool)
-        or statuses.get(probe) != 0
         for probe in ENVIRONMENT_FACT_PROBES
     ):
         return None
     output_validity = evidence_manifest.get("fact_probe_output_validity")
     if not isinstance(output_validity, dict) or any(
-        output_validity.get(probe) is not True for probe in ENVIRONMENT_FACT_PROBES
+        not isinstance(output_validity.get(probe), bool) for probe in ENVIRONMENT_FACT_PROBES
     ):
         return None
     environment = discovery.get("environment")
     if not isinstance(environment, dict):
         return None
-    normalized_values = {
-        "os": _normalized_fact_value(environment.get("os")),
-        "arch": _normalized_fact_value(environment.get("arch")),
-        "cpu": _normalized_positive_int(environment.get("cpu")),
-        "memory_mb": _normalized_positive_int(environment.get("memory_mb")),
-        "disk_mb": _normalized_positive_int(environment.get("disk_free_mb")),
-        "docker": _normalized_version_value(environment.get("docker_version")),
-        "compose": _normalized_version_value(environment.get("compose_version")),
-        "python": _normalized_version_value(environment.get("python_version")),
-        "uv": _normalized_version_value(environment.get("uv_version")),
+    raw_values = {
+        "os": environment.get("os"),
+        "arch": environment.get("arch"),
+        "cpu": environment.get("cpu"),
+        "memory_mb": environment.get("memory_mb"),
+        "disk_mb": environment.get("disk_free_mb"),
+        "docker": environment.get("docker_version"),
+        "compose": environment.get("compose_version"),
+        "python": environment.get("python_version"),
+        "uv": environment.get("uv_version"),
     }
-    if any(value is None for value in normalized_values.values()):
-        return None
+    normalizers = {
+        "os": _normalized_fact_value,
+        "arch": _normalized_fact_value,
+        "cpu": _normalized_positive_int,
+        "memory_mb": _normalized_positive_int,
+        "disk_mb": _normalized_positive_int,
+        "docker": _normalized_version_value,
+        "compose": _normalized_version_value,
+        "python": _normalized_version_value,
+        "uv": _normalized_version_value,
+    }
+    normalized_values = {
+        probe: (
+            normalizers[probe](value)
+            if statuses.get(probe) == 0 and output_validity.get(probe) is True
+            else None
+        )
+        for probe, value in raw_values.items()
+    }
     current = get_target(target.id)
     if current is None or not hmac.compare_digest(
         target_identity_digest(current), target_identity_digest(target)
@@ -1003,6 +1024,16 @@ def store_projection(
                     "confidence": environment_projection.confidence,
                     "reasons": facts_reasons,
                     "unknown_facts": unknown_facts,
+                })
+    elif environment_facts is not None and not facts_complete:
+        for item in all_items:
+            if item["id"] == "chatgpt2api":
+                recommended.append({
+                    **item,
+                    "confidence": "unknown",
+                    "reasons": facts_reasons,
+                    "unknown_facts": unknown_facts,
+                    "actions": [],
                 })
     return {
         "installed": installed,

@@ -1749,22 +1749,25 @@ class DeploymentPlanManager:
         manifest = cls._evidence_manifest(snapshot)
         privileges = snapshot.get("privileges", {})
         environment = snapshot.get("environment", {})
+        raw_environment = discovery.get("environment", {})
+        if not isinstance(raw_environment, dict):
+            raw_environment = {}
         complete = cls._port_bindings_complete(discovery) and cls._listener_probe_complete(
             discovery.get("environment", {})
         )
         fact_probe_names = ("os", "arch", "cpu", "memory_mb", "disk_mb", "docker", "compose", "python", "uv")
-        raw_fact_statuses = environment.get("fact_probe_statuses")
+        raw_fact_statuses = raw_environment.get("fact_probe_statuses")
         fact_probe_statuses = {
             name: raw_fact_statuses.get(name)
             for name in fact_probe_names
         } if isinstance(raw_fact_statuses, dict) else {}
-        raw_fact_output_validity = environment.get("fact_probe_output_validity")
+        raw_fact_output_validity = raw_environment.get("fact_probe_output_validity")
         fact_probe_output_validity = {
             name: raw_fact_output_validity.get(name) is True
             for name in fact_probe_names
         } if isinstance(raw_fact_output_validity, dict) else {}
         fact_probe_complete = bool(
-            environment.get("fact_probe_complete") is True
+            raw_environment.get("fact_probe_complete") is True
             and len(fact_probe_statuses) == len(fact_probe_names)
             and len(fact_probe_output_validity) == len(fact_probe_names)
             and all(
@@ -1778,13 +1781,68 @@ class DeploymentPlanManager:
         manifest["fact_probe_complete"] = fact_probe_complete
         manifest["fact_probe_statuses"] = fact_probe_statuses
         manifest["fact_probe_output_validity"] = fact_probe_output_validity
+        def public_text(value: Any) -> str | None:
+            if not isinstance(value, str):
+                return None
+            value = value.strip()
+            if (
+                not value
+                or len(value) > 256
+                or value.casefold() in {"unknown", "unavailable", "none", "null"}
+                or any(ord(char) < 32 or ord(char) == 127 for char in value)
+            ):
+                return None
+            return value
+
+        def public_positive_int(value: Any) -> int | None:
+            if isinstance(value, bool):
+                return None
+            if isinstance(value, int):
+                return value if value > 0 else None
+            if isinstance(value, str) and re.fullmatch(r"[1-9]\d*", value.strip()):
+                return int(value.strip())
+            return None
+
+        def public_version(value: Any) -> str | None:
+            value = public_text(value)
+            return value if value and re.search(r"\d", value) else None
+
+        raw_statuses = raw_fact_statuses if isinstance(raw_fact_statuses, dict) else {}
+
+        def observed(name: str, value: Any, normalizer) -> Any:
+            return normalizer(value) if raw_statuses.get(name) == 0 else None
+
+        public_environment = {
+            "os": observed("os", raw_environment.get("os"), public_text),
+            "arch": observed("arch", raw_environment.get("arch"), public_text),
+            "cpu_cores": observed("cpu", raw_environment.get("cpu"), public_positive_int),
+            "memory_mb": observed("memory_mb", raw_environment.get("memory_mb"), public_positive_int),
+            "disk_mb": observed("disk_mb", raw_environment.get("disk_free_mb"), public_positive_int),
+            "docker_version": observed("docker", raw_environment.get("docker_version"), public_version),
+            "compose_version": observed("compose", raw_environment.get("compose_version"), public_version),
+            "python_version": observed("python", raw_environment.get("python_version"), public_version),
+            "uv_version": observed("uv", raw_environment.get("uv_version"), public_version),
+        }
+        unknown_facts = [
+            name for name, value in public_environment.items() if value is None
+        ]
+        reasons = [
+            f"{name}={'未观测' if value is None else value}"
+            for name, value in public_environment.items()
+        ]
+        manifest["unknown_facts"] = unknown_facts
+        manifest["reasons"] = reasons
         modes = []
         for mode in discovery.get("deployment_modes", []):
             if not isinstance(mode, dict) or mode.get("id") not in {"compose", "warp", "python"}:
                 continue
             modes.append({
                 "id": mode["id"],
-                "available": mode.get("available") is True,
+                "available": (
+                    mode.get("available")
+                    if isinstance(mode.get("available"), bool)
+                    else None
+                ),
                 "recommended": mode.get("recommended") is True,
             })
         instances = []
@@ -1798,16 +1856,21 @@ class DeploymentPlanManager:
                 "running": status.startswith("up") or status in {"running", "healthy"},
                 "clone_available": item.get("clone_available") is True,
             })
+        docker_available = public_environment["docker_version"]
+        compose_available = public_environment["compose_version"]
         capabilities = {
             "can_deploy": privileges.get("can_deploy") is True,
             "can_admin": privileges.get("can_admin") is True,
-            "docker_available": bool(environment.get("docker_version")),
-            "compose_available": bool(environment.get("compose_version")),
+            "docker_available": True if docker_available else None,
+            "compose_available": True if compose_available else None,
         }
         return {
             "ready": capabilities["can_deploy"] and complete,
             "evidence_manifest": manifest,
             "capabilities": capabilities,
+            "environment": public_environment,
+            "unknown_facts": unknown_facts,
+            "reasons": reasons,
             "instances": instances,
             "deployment_modes": modes,
         }

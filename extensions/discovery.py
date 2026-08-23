@@ -82,6 +82,27 @@ def _fact_positive_int_output_valid(value: Any) -> bool:
     return isinstance(value, str) and re.fullmatch(r"[1-9]\d*", value.strip()) is not None
 
 
+def _fact_positive_int(value: Any) -> int | None:
+    if not _fact_positive_int_output_valid(value):
+        return None
+    return value if isinstance(value, int) else int(value.strip())
+
+
+def _fact_text(value: Any) -> str | None:
+    return value.strip() if _fact_text_output_valid(value) else None
+
+
+def _fact_version(value: Any) -> str | None:
+    return value.strip() if _fact_version_output_valid(value) else None
+
+
+def _capability_state(status: Any, value: Any) -> bool | None:
+    """Return true only for an observed version; failed probes stay unknown."""
+    if status == 0 and _fact_version_output_valid(value):
+        return True
+    return None
+
+
 def _parse_published_ports(value: str) -> list[int]:
     try:
         bindings = json.loads(value or "{}")
@@ -357,7 +378,7 @@ async def _evaluate_path_conditions(
     instances: list[dict[str, Any]],
     tcp_listeners: list[dict[str, Any]],
     listeners_complete: bool,
-    disk_free_mb: int,
+    disk_free_mb: int | None,
 ) -> dict[str, bool]:
     conditions: dict[str, bool] = {}
     for name, check in (path_checks or {}).items():
@@ -430,6 +451,7 @@ async def _evaluate_path_conditions(
             conditions[name] = (
                 isinstance(required_mb, int)
                 and not isinstance(required_mb, bool)
+                and disk_free_mb is not None
                 and disk_free_mb >= required_mb
             )
         else:
@@ -602,10 +624,19 @@ async def discover_environment(
                 "ownership": "managed" if managed.lower() == "true" else ("compose" if compose_project else "unmanaged"),
             })
 
-        docker_ok = bool(_version_number(facts["docker"]))
-        compose_ok = bool(_version_number(facts["compose"]))
+        os_value = _fact_text(facts["os"]) if fact_statuses["os"] == 0 else None
+        arch_value = _fact_text(facts["arch"]) if fact_statuses["arch"] == 0 else None
+        cpu_value = _fact_positive_int(facts["cpu"]) if fact_statuses["cpu"] == 0 else None
+        memory_mb = _fact_positive_int(facts["memory_mb"]) if fact_statuses["memory_mb"] == 0 else None
+        disk_free_mb = _fact_positive_int(facts["disk_mb"]) if fact_statuses["disk_mb"] == 0 else None
+        docker_value = _fact_version(facts["docker"]) if fact_statuses["docker"] == 0 else None
+        compose_value = _fact_version(facts["compose"]) if fact_statuses["compose"] == 0 else None
+        python_value = _fact_version(facts["python"]) if fact_statuses["python"] == 0 else None
+        uv_value = _fact_version(facts["uv"]) if fact_statuses["uv"] == 0 else None
+        docker_ok = _capability_state(fact_statuses["docker"], facts["docker"])
+        compose_ok = _capability_state(fact_statuses["compose"], facts["compose"])
         if approved_plan is not None:
-            privileges["docker_access"] = fact_statuses["docker"] == 0
+            privileges["docker_access"] = fact_statuses["docker"] == 0 and docker_value is not None
             privileges["can_deploy"] = bool(
                 privileges["docker_access"]
                 and (privileges["is_root"] or privileges["elevation_contract"] == "none")
@@ -613,14 +644,16 @@ async def discover_environment(
             privileges["diagnostic_code"] = (
                 "read_only_direct_docker" if privileges["can_deploy"] else "read_only_access_unverified"
             )
-        memory_mb = int(facts["memory_mb"] or 0)
         modes = [
             {
                 "id": "compose", "name": "标准 Docker Compose", "available": docker_ok and compose_ok,
                 "recommended": docker_ok and compose_ok, "summary": "隔离清晰、升级和回滚简单，适合绝大多数用户。",
             },
             {
-                "id": "warp", "name": "WARP 稳定出口", "available": docker_ok and compose_ok and memory_mb >= 1800,
+                "id": "warp", "name": "WARP 稳定出口", "available": (
+                    docker_ok is True and compose_ok is True
+                    and memory_mb is not None and memory_mb >= 1800
+                ),
                 "recommended": False, "summary": "附带 WARP、Privoxy 和 FlareSolverr，资源占用更高。",
             },
             {
@@ -629,7 +662,6 @@ async def discover_environment(
             },
         ]
         recommendation = "existing" if any(item["status"].lower().startswith("up") for item in instances) else "isolated"
-        disk_free_mb = int(facts["disk_mb"] or 0)
         fact_probe_names = ("os", "arch", "cpu", "memory_mb", "disk_mb", "docker", "compose", "python", "uv")
         fact_probe_statuses = {key: fact_statuses[key] for key in fact_probe_names}
         fact_probe_output_validity = {
@@ -659,11 +691,11 @@ async def discover_environment(
             "host_key": fingerprint,
             "privileges": privileges,
             "environment": {
-                "os": facts["os"], "arch": facts["arch"], "cpu": int(facts["cpu"] or 0),
+                "os": os_value, "arch": arch_value, "cpu": cpu_value,
                 "memory_mb": memory_mb, "disk_free_mb": disk_free_mb,
                 "home_dir": facts["home"],
-                "docker_version": facts["docker"], "compose_version": facts["compose"],
-                "python_version": facts["python"], "uv_version": facts["uv"], "listening_ports": ports,
+                "docker_version": docker_value, "compose_version": compose_value,
+                "python_version": python_value, "uv_version": uv_value, "listening_ports": ports,
                 "tcp_listeners": tcp_listeners,
                 "fact_probe_statuses": fact_probe_statuses,
                 "fact_probe_output_validity": fact_probe_output_validity,

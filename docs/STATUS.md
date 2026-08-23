@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-08-22
 **Current branch:** `codex/phase7-campaign-20260820`
-**Current phase:** Phase 9 Sender Push Source Cleanup (User-Selected) - **In Progress (receiver-grant shipped in v2.6.1 2026-08-21; sender PR #26 open; clean E2E gates passed for receiver)**
+**Current phase:** Phase 9 Sender Push Source Cleanup (User-Selected) - **In Progress (receiver-grant shipped in v2.6.1 2026-08-21; sender PR #26 OPEN/MERGEABLE/UNSTABLE; no maintainer review; Vercel authorization failure is external state and cannot be handled automatically; clean E2E gates passed for receiver)**
 **Previous phase:** Phase 8 Upstream Delivery - **In Progress (proposal PRs open, awaiting upstream response)**
 
 ## Phase 10 Store projection / environment fact slice (2026-08-22)
@@ -12,7 +12,7 @@
   from backend capability.
 - **VERIFIED:** commit `d2d5eb3` makes future, expired, and forged environment
   projections fail closed, including TTL and identity-bound checks.
-- **VERIFIED 2026-08-22 (uncommitted working tree, orchestrator-verified):**
+- **VERIFIED 2026-08-23 (current worktree uncommitted; pending local commit):**
   - `EnvironmentFacts` typed model (`extra=forbid`, unknown values `None`,
     UTC-only `observed_at`) added in `extensions/models.py`; legacy
     `extensions.json` without the field loads as empty.
@@ -20,23 +20,23 @@
     projection+facts save, per-target identity/TTL validation, probe
     exit-code + output-validity completeness gate, and `discovery.py` fact
     probe summaries without touching any SSH command string.
-  - Store recommendations now require a fresh identity-bound `EnvironmentFacts`
-    with all nine fields observed; reasons explain observed values and mark
-    the rest `未观测`, never defaulting unknown facts.
+  - Store recommendations require fresh identity-bound facts for high confidence;
+    partial facts are now public as `confidence=unknown` with field-level
+    `unknown_facts`/reasons and `actions=[]`, never defaulting unknown facts.
   - External/unmanaged `strategy=existing` deploy is rejected (`403
     external_instance_adoption_required`) at plan and start; external
     delivery/resume/cancel paths remain read-only fail-closed.
-- **VERIFIED:** weighted review PASS for W1 (model), W2 (wiring), W3 (reasons),
-  W4 (ownership) recorded in `docs/PHASE10-W{1..4}-REVIEW-20260822.md`;
-  full verification 2026-08-22: `python -m pytest -q --basetemp=.phase10-w5b-full-tmp`
-  -> `683 passed`; `node --check` for `extensions.js`/`app-all.js`/`i18n.js`/
-  `sync.js` passed; `py_compile` and `git diff --check` passed.
-  (Independent reviewer subagents returned empty results on later re-runs —
-  tool anomaly; orchestrator performed reproducible static gate verification.)
+- **LOCAL ACCEPTANCE-2 CLOSURE / PASS:** W1-W4 local review records plus
+  `docs/PHASE10-FINAL-REVIEW-20260823.md`; final local verification 2026-08-23:
+  `684 passed`; four `node --check` commands, explicit `py_compile`, and
+  `git diff --check` passed. The closure remains in the current uncommitted
+  worktree and is pending local commit. This PASS is local acceptance-2 closure
+  only; it does not claim live or clean-deployment acceptance.
 - **BOUNDARY:** Recommended is high only with complete verified discovery and
   Docker/Compose evidence plus all nine environment facts observed. The current
-  slice still requires adapter lifecycle (Phase 12) and full Store acceptance;
-  Phase 10 remains In Progress and is not complete.
+  slice still requires live/clean-deployment, restart, multi-target, and adapter
+  lifecycle verification plus full Store acceptance; Phase 10 remains In
+  Progress and is not complete.
 
 ## Phase 9 Sender Push Source Cleanup (User-Selected) queued (2026-08-20)
 
@@ -84,6 +84,10 @@
   `liwei9745/chatgpt2api-yukkcat`. It contains only the yukkcat-native
   receipt-gated cleanup choice (8 files, one commit); the original repository
   `main` was not overwritten.
+- **CURRENT PR STATE / VERIFIED 2026-08-23:** PR #26 is `OPEN`,
+  `MERGEABLE`, and `UNSTABLE`; no maintainer review or decision is recorded.
+  The failed Vercel check requires external team authorization. It is external
+  state and cannot be handled automatically; Phase 9 remains In Progress.
 - **PR RECOVERY POLICY / ACCEPTED:** if PR #26 is rejected, do not delete the
   fork or rewrite the upstream repository. Preserve the fork branch and commit,
   record the maintainer reason, create a new revision branch from the latest

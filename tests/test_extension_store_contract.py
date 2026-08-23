@@ -371,7 +371,13 @@ def test_verified_environment_facts_maps_and_normalizes_discovery(tmp_path, monk
             "fact_probe_output_validity": FACT_PROBE_OUTPUT_VALIDITY,
         }},
     )
-    assert unknown is None
+    assert unknown is not None
+    assert unknown.facts.os is None
+    assert unknown.facts.arch is None
+    assert unknown.facts.cpu_cores is None
+    assert unknown.facts.memory_mb is None
+    assert unknown.facts.disk_mb is None
+    assert unknown.facts.docker_version is None
 
 
 def test_environment_facts_require_complete_verified_discovery(tmp_path, monkeypatch):
@@ -456,14 +462,17 @@ def test_environment_facts_reject_incomplete_probe_status_without_writing(tmp_pa
         "username": "deploy-user", "target_role": "isolated-development",
     })
     statuses = {**FACT_PROBE_STATUSES, "memory_mb": 1}
-    assert store.verified_environment_facts(
+    partial = store.verified_environment_facts(
         target, {"ok": True, "environment": {"os": "linux"}},
         {"evidence_manifest": {
             "complete": True, "fact_probe_complete": False,
             "fact_probe_statuses": statuses,
             "fact_probe_output_validity": FACT_PROBE_OUTPUT_VALIDITY,
         }},
-    ) is None
+    )
+    assert partial is not None
+    assert partial.facts.os == "linux"
+    assert partial.facts.memory_mb is None
     assert store.load_config().environment_facts == []
 
 
@@ -490,14 +499,21 @@ def test_environment_facts_rejects_empty_or_invalid_probe_output(
         "username": "deploy-user", "target_role": "isolated-development",
     })
     environment = {**VALID_FACT_ENVIRONMENT, field: value}
-    assert store.verified_environment_facts(
+    verified = store.verified_environment_facts(
         target, {"ok": True, "environment": environment},
         {"evidence_manifest": {
             "complete": True, "fact_probe_complete": True,
             "fact_probe_statuses": FACT_PROBE_STATUSES,
             "fact_probe_output_validity": FACT_PROBE_OUTPUT_VALIDITY,
         }},
-    ) is None
+    )
+    assert verified is not None
+    assert getattr(verified.facts, {
+        "os": "os", "arch": "arch", "docker_version": "docker_version",
+        "compose_version": "compose_version", "python_version": "python_version",
+        "uv_version": "uv_version", "cpu": "cpu_cores", "memory_mb": "memory_mb",
+        "disk_free_mb": "disk_mb",
+    }[field]) is None
     assert store.load_config().environment_facts == []
 
 
@@ -510,14 +526,16 @@ def test_environment_facts_rejects_failed_probe_status(tmp_path, monkeypatch):
         "username": "deploy-user", "target_role": "isolated-development",
     })
     statuses = {**FACT_PROBE_STATUSES, "docker": 1}
-    assert store.verified_environment_facts(
+    verified = store.verified_environment_facts(
         target, {"ok": True, "environment": VALID_FACT_ENVIRONMENT},
         {"evidence_manifest": {
             "complete": True, "fact_probe_complete": False,
             "fact_probe_statuses": statuses,
             "fact_probe_output_validity": FACT_PROBE_OUTPUT_VALIDITY,
         }},
-    ) is None
+    )
+    assert verified is not None
+    assert verified.facts.docker_version is None
     assert store.load_config().environment_facts == []
 
 
@@ -588,6 +606,86 @@ def test_store_route_has_stable_views_and_no_sensitive_fields(monkeypatch):
     required = {"id", "manifest_version", "repository", "provenance", "license", "permissions", "network_exposure", "data_sensitivity", "operational_risk", "actions"}
     assert all(required <= item.keys() for item in body["all"])
     assert all(secret not in response.text for secret in ("container_id", "install_dir", "data_dir", "private_key", "password"))
+
+
+def test_discovery_and_store_routes_expose_partial_facts_without_actions(tmp_path, monkeypatch):
+    from extensions import store
+
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    fingerprint = "SHA256:" + "A" * 43
+    target = store.upsert_target({
+        "id": "unknown-route-target", "name": "Unknown target", "host": "safe.example",
+        "username": "deploy-user", "target_role": "isolated-development",
+        "host_key_algorithm": "ssh-ed25519", "host_key": fingerprint,
+    })
+    statuses = {key: 0 for key in FACT_PROBE_STATUSES}
+    validity = {key: True for key in FACT_PROBE_STATUSES}
+    validity.update({
+        "os": False, "cpu": False, "memory_mb": False, "disk_mb": False,
+        "docker": False, "compose": False, "python": False, "uv": False,
+    })
+    incomplete_discovery = {
+        "ok": True,
+        "host_key_algorithm": "ssh-ed25519",
+        "host_key": fingerprint,
+        "privileges": {"can_deploy": False, "can_admin": False},
+        "environment": {
+            "os": None, "arch": "x86_64", "cpu": None, "memory_mb": None,
+            "disk_free_mb": None, "docker_version": None, "compose_version": None,
+            "python_version": None, "uv_version": None, "listening_ports": [],
+            "tcp_listeners": [],
+            "listening_ports_probe": {"status": 0, "complete": True, "payload_present": True},
+            "fact_probe_statuses": statuses,
+            "fact_probe_output_validity": validity,
+            "fact_probe_complete": False,
+        },
+        "instances": [],
+        "deployment_modes": [{"id": "compose", "available": None, "recommended": False}],
+    }
+
+    async def fake_intent(_body):
+        return object()
+
+    async def fake_discovery(_body, *, approved_plan):
+        return incomplete_discovery
+
+    monkeypatch.setattr(main, "_validate_read_only_discovery_intent", fake_intent)
+    monkeypatch.setattr(main, "discover_environment", fake_discovery)
+    body = {
+        "target": target.model_dump(),
+        "credential": {"password": "session-only"},
+    }
+    discovery_response = TestClient(main.app, base_url="http://testserver").post(
+        "/api/extensions/discover", json=body,
+    )
+    assert discovery_response.status_code == 200
+    discovery_public = discovery_response.json()
+    assert discovery_public["environment"] == {
+        "os": None, "arch": "x86_64", "cpu_cores": None, "memory_mb": None,
+        "disk_mb": None, "docker_version": None, "compose_version": None,
+        "python_version": None, "uv_version": None,
+    }
+    assert set(discovery_public["unknown_facts"]) == {
+        "os", "cpu_cores", "memory_mb", "disk_mb", "docker_version",
+        "compose_version", "python_version", "uv_version",
+    }
+    assert discovery_public["capabilities"]["docker_available"] is None
+    assert discovery_public["capabilities"]["compose_available"] is None
+
+    store_response = TestClient(main.app, base_url="http://testserver").get(
+        "/api/extensions/store",
+    )
+    assert store_response.status_code == 200
+    store_public = store_response.json()
+    assert set(store_public) == {"installed", "recommended", "all"}
+    recommended = next(item for item in store_public["recommended"] if item["id"] == "chatgpt2api")
+    assert recommended["confidence"] == "unknown"
+    assert recommended["actions"] == []
+    assert set(recommended["unknown_facts"]) == {
+        "os", "cpu_cores", "memory_mb", "disk_mb", "docker_version",
+        "compose_version", "python_version", "uv_version",
+    }
+    assert all(item["actions"] == [] for item in store_public["all"] if item["status"] != "available")
 
 
 def test_store_ui_consumes_api_actions_without_planned_rows():
@@ -824,7 +922,11 @@ def test_store_contract_partial_facts_do_not_recommend_or_satisfy_requirements(t
     result = store_projection(
         CATALOG, [], environment_projection=projection, environment_facts=partial,
     )
-    assert result["recommended"] == []
+    assert [item["id"] for item in result["recommended"]] == ["chatgpt2api"]
+    item = result["recommended"][0]
+    assert item["confidence"] == "unknown"
+    assert item["actions"] == []
+    assert item["unknown_facts"] == ["memory_mb", "disk_mb"]
 
 
 def test_store_contract_missing_expired_or_drifted_facts_fail_closed(tmp_path, monkeypatch):

@@ -3853,7 +3853,8 @@ def test_extension_plan_discovery_and_instance_routes_expose_only_public_product
     instance_response = asyncio.run(main.extension_instances())
 
     assert set(discovery_response) == {
-        "ready", "evidence_manifest", "capabilities", "instances", "deployment_modes",
+        "ready", "evidence_manifest", "capabilities", "environment",
+        "unknown_facts", "reasons", "instances", "deployment_modes",
     }
     assert set(discovery_response["capabilities"]) == {
         "can_deploy", "can_admin", "docker_available", "compose_available",

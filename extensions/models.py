@@ -98,8 +98,8 @@ class EnvironmentProjection(BaseModel):
     target_id: str
     target_identity_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
     observed_at: str
-    docker_available: bool = False
-    compose_available: bool = False
+    docker_available: bool | None = None
+    compose_available: bool | None = None
     evidence_complete: bool = False
     confidence: Literal["high", "medium", "unknown"] = "unknown"
 

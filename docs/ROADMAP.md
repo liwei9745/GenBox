@@ -386,7 +386,8 @@ Offer the chatgpt2api changes to the original author in a reviewable form.
 ## Phase 9: Sender Push Source Cleanup (User-Selected)
 
 **Status:** In Progress (receiver v2.6.1 shipped; receiver clean deployment
-verified; sender PR #26 awaiting maintainer review)
+verified; PR #26 is OPEN/MERGEABLE/UNSTABLE with no maintainer review; Vercel
+authorization failure is external state and cannot be handled automatically)
 
 **Topic contracts:** `docs/INTEGRATION.md`, `docs/DEVELOPMENT-LIFECYCLE.md`,
 `docs/chatgpt2api-push-integration.md`
@@ -443,7 +444,10 @@ selection.
 
 ## Phase 10: GenBox Store Foundation
 
-**Status:** In Progress (Store projection + identity-bound fail-closed environment facts complete; external/ownership route gates and recommendation reasons verified 2026-08-22; environment collection, adapter lifecycle, and full acceptance remain)
+**Status:** In Progress (local acceptance-2 closure PASS for Store projection,
+identity-bound facts, explicit unknown-facts public contract, and ownership
+gates on 2026-08-23; live/clean-deployment, restart, multi-target, and adapter
+lifecycle verification remain unverified)
 
 **Topic contract:** `docs/GENBOX-STORE-REPAIR-COPILOT.md`
 
