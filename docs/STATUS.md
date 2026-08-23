@@ -12,7 +12,7 @@
   from backend capability.
 - **VERIFIED:** commit `d2d5eb3` makes future, expired, and forged environment
   projections fail closed, including TTL and identity-bound checks.
-- **VERIFIED 2026-08-23 (current worktree uncommitted; pending local commit):**
+- **VERIFIED 2026-08-23 (committed in `1383f53`):**
   - `EnvironmentFacts` typed model (`extra=forbid`, unknown values `None`,
     UTC-only `observed_at`) added in `extensions/models.py`; legacy
     `extensions.json` without the field loads as empty.
@@ -29,16 +29,21 @@
 - **LOCAL ACCEPTANCE-2 CLOSURE / PASS:** W1-W4 local review records plus
   `docs/PHASE10-FINAL-REVIEW-20260823.md`; final local verification 2026-08-23:
   `684 passed`; four `node --check` commands, explicit `py_compile`, and
-  `git diff --check` passed. The closure remains in the current uncommitted
-  worktree and is pending local commit. This PASS is local acceptance-2 closure
-  only; it does not claim live or clean-deployment acceptance.
-- **PHASE 10B LOCAL EXTENSION / VERIFIED 2026-08-23 (uncommitted):** frontend
+  `git diff --check` passed. This PASS is local acceptance-2 closure only; it
+  does not claim live or clean-deployment acceptance.
+- **PHASE 10B LOCAL EXTENSION / VERIFIED 2026-08-23 (committed in `1383f53`):** frontend
   Store rendering now blocks deploy for unknown/partial/planned/external rows
   and displays null Docker/Compose capabilities as unknown; all 12 catalog
   entries pass metadata completeness checks. Final local verification after
   the frontend regression fix: `686 passed`, Node checks, explicit `py_compile`,
-  and `git diff --check` passed. Changes await a separate local commit and do
-  not change the live/clean-deployment boundary.
+  and `git diff --check` passed. This does not change the live/clean-deployment
+  boundary.
+- **CLEAN DEPLOYMENT / BLOCKED 2026-08-23:** authorized push to the personal
+  GenBox branch completed at `1383f53`; clean clone and local Docker image build
+  passed. Compose execution was not accepted because Windows path handling
+  could not open the cloned Compose file. A Docker-only fallback stopped at the
+  setup-status assertion before Store API checks. All temporary resources were
+  cleaned; no VPS, SSH, upstream PR, or production operation occurred.
 - **BOUNDARY:** Recommended is high only with complete verified discovery and
   Docker/Compose evidence plus all nine environment facts observed. The current
   slice still requires live/clean-deployment, restart, multi-target, and adapter
