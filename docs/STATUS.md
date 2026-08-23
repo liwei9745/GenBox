@@ -32,6 +32,13 @@
   `git diff --check` passed. The closure remains in the current uncommitted
   worktree and is pending local commit. This PASS is local acceptance-2 closure
   only; it does not claim live or clean-deployment acceptance.
+- **PHASE 10B LOCAL EXTENSION / VERIFIED 2026-08-23 (uncommitted):** frontend
+  Store rendering now blocks deploy for unknown/partial/planned/external rows
+  and displays null Docker/Compose capabilities as unknown; all 12 catalog
+  entries pass metadata completeness checks. Final local verification after
+  the frontend regression fix: `686 passed`, Node checks, explicit `py_compile`,
+  and `git diff --check` passed. Changes await a separate local commit and do
+  not change the live/clean-deployment boundary.
 - **BOUNDARY:** Recommended is high only with complete verified discovery and
   Docker/Compose evidence plus all nine environment facts observed. The current
   slice still requires live/clean-deployment, restart, multi-target, and adapter

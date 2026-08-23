@@ -65,6 +65,15 @@ def test_actions_are_rendered_only_from_backend_list_through_deploy_allowlist():
     assert "extension-store-action" in block
 
 
+def test_unknown_partial_and_non_deployable_rows_cannot_render_deploy():
+    source = JS.read_text(encoding="utf-8")
+    block = store_block(source)
+
+    assert "['planned','repository_unverified','unknown'].indexOf(status)>=0" in block
+    assert "item.confidence==='unknown'||item.confidence==='partial'" in block
+    assert "extension-store-readonly" in block
+
+
 def test_planned_and_unverified_items_show_reasons_without_execute_buttons():
     source = JS.read_text(encoding="utf-8")
     block = store_block(source)
@@ -96,7 +105,8 @@ def test_external_instances_are_read_only_without_management_actions():
     # The external branch short-circuits before any action mapping, so no
     # external row can ever hold a button.
     actions_html = source.split("function storeActionsHtml", 1)[1].split("function storeRecommendationHtml", 1)[0]
-    assert "if(item.ownership==='external')return '<span class=\"extension-store-readonly\">'" in actions_html
+    assert "item.ownership==='external'" in actions_html
+    assert "return '<span class=\"extension-store-readonly\">'" in actions_html
     assert actions_html.index("extension-store-readonly") < actions_html.index("storeActionButton(action,item)")
 
 
@@ -117,6 +127,15 @@ def test_recommended_items_render_confidence_reasons_and_unknown_facts():
     # View-level empty states stay bilingual and per-view.
     assert "extensions.store_unknown_environment" in block
     assert "extensions.store_all_empty" in block
+
+
+def test_null_discovery_capabilities_render_as_unknown_not_unavailable():
+    source = JS.read_text(encoding="utf-8")
+
+    assert "value!==true&&value!==false" in source
+    assert "[caps.docker_available,caps.compose_available]" in source
+    assert "extensions.store_unknown_value" in source
+    assert "summary.children[index].lastChild.textContent" in source
 
 
 def test_store_i18n_keys_are_referenced_and_bilingual():
