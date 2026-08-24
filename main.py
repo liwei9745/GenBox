@@ -1078,7 +1078,7 @@ async def _process_image_gen(gen_id: str):
                 # 写入详细错误日志到 logs.jsonl
                 _write_log("generation_error", f"{pid} 失败: {res.error[:200]}", {
                     "provider_id": pid,
-                    "model": cfg.model if cfg else pid,
+                    "model": (p_cfg.model if p_cfg else pid),
                     "error": res.error[:500],
                     "mode": task.get("mode", "t2i"),
                     "elapsed_seconds": res.elapsed_seconds,

@@ -29,6 +29,25 @@ CHINESE_PROVIDERS = {
 }
 
 
+def _safe_text(value: Any) -> str:
+    """Normalize an upstream/error value to a printable UTF-8 string.
+
+    Some third-party endpoints echo non-ASCII characters in bodies or headers.
+    Modern httpx/JSON paths are UTF-8 safe, but str()-conversions in older
+    packaged environments can raise ``UnicodeEncodeError: 'ascii'`` when the
+    value flows through a repr/log. This keeps any error/report text printable
+    and never drops the original information.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
+    try:
+        return str(value).encode("utf-8", errors="replace").decode("utf-8", errors="replace")
+    except Exception:
+        return repr(value).encode("utf-8", errors="replace").decode("utf-8", errors="replace")
+
+
 def _get_proxy_url(cfg: ProviderConfig = None) -> str | None:
     """获取代理 URL（支持 Provider 级别跳过代理）
     
@@ -233,7 +252,7 @@ async def generate_for_provider(
         try:
             result = await _dispatch_generate(cfg, prompt, protocol, **kwargs)
         except Exception as e:
-            result = ImageResult(success=False, error=f"[{cfg.name}] {str(e)}", model=cfg.id)
+            result = ImageResult(success=False, error=f"[{cfg.name}] {_safe_text(e)}", model=cfg.id)
 
         if result.success:
             pool.mark_success(api_key)
@@ -263,7 +282,7 @@ async def _try_generate_with_endpoint(cfg, prompt, url, key, protocol, **kwargs)
     try:
         result = await _dispatch_generate(cfg, prompt, protocol, **kwargs)
     except Exception as e:
-        result = ImageResult(success=False, error=f"[{cfg.name}] {str(e)}", model=cfg.id)
+        result = ImageResult(success=False, error=f"[{cfg.name}] {_safe_text(e)}", model=cfg.id)
     finally:
         cfg.base_url = original_url
         cfg.api_key = original_key
@@ -317,7 +336,7 @@ async def _http_post_with_retry(url, headers, payload, *, timeout=120.0, max_ret
                     continue
                 # 最后一次也失败，抛异常
                 raise httpx.HTTPStatusError(
-                    f"{resp.status_code} {resp.reason_phrase} | Response: {body_text}",
+                    f"{resp.status_code} {resp.reason_phrase} | Response: {_safe_text(body_text)}",
                     request=resp.request, response=resp
                 )
             resp.raise_for_status()
@@ -333,7 +352,7 @@ async def _http_post_with_retry(url, headers, payload, *, timeout=120.0, max_ret
             except Exception:
                 pass
             raise httpx.HTTPStatusError(
-                f"{e.response.status_code} {e.response.reason_phrase} | Response: {translate_upstream_error(body_text)}",
+                f"{e.response.status_code} {e.response.reason_phrase} | Response: {translate_upstream_error(_safe_text(body_text))}",
                 request=e.request, response=e.response
             ) from e
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
