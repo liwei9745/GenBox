@@ -1184,3 +1184,105 @@ def test_external_instances_cannot_reach_managed_route_operations(tmp_path, monk
         asyncio.run(main.extension_reset_admin_key(reset_request))
     assert exc_info.value.status_code == 400
     assert remote_calls == []
+
+
+def test_store_contract_installed_scoped_to_current_store_target(tmp_path, monkeypatch):
+    from extensions import store
+
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    target_a = store.save_target_metadata({
+        "id": "target-a", "name": "Target A", "host": "safe.example",
+        "username": "deploy-user", "target_role": "isolated-development",
+    })
+    target_b = store.save_target_metadata({
+        "id": "target-b", "name": "Target B", "host": "other.example",
+        "username": "deploy-user", "target_role": "production-read-only",
+    })
+    store.upsert_instance({
+        "id": "instance-a", "target_id": target_a.id, "service_port": 33010,
+        "install_dir": "/srv/a", "data_dir": "/srv/a/data",
+        "image": "registry.example/app@sha256:" + "a" * 64,
+        "status": "running", "managed": True, "ownership": "managed",
+    })
+    store.upsert_instance({
+        "id": "instance-b", "target_id": target_b.id, "service_port": 33011,
+        "install_dir": "/srv/b", "data_dir": "/srv/b/data",
+        "image": "registry.example/app@sha256:" + "b" * 64,
+        "status": "running", "managed": True, "ownership": "managed",
+    })
+
+    installed_ids = [item["instance_id"] for item in store.public_store_projection()["installed"]]
+    assert "instance-a" in installed_ids
+    assert "instance-b" not in installed_ids
+
+
+def test_store_contract_first_isolated_development_is_store_scope(tmp_path, monkeypatch):
+    from extensions import store
+
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    first = store.save_target_metadata({
+        "id": "target-first", "name": "First", "host": "first.example",
+        "username": "deploy-user", "target_role": "isolated-development",
+    })
+    second = store.save_target_metadata({
+        "id": "target-second", "name": "Second", "host": "second.example",
+        "username": "deploy-user", "target_role": "isolated-development",
+    })
+    store.upsert_instance({
+        "id": "instance-first", "target_id": first.id, "service_port": 33010,
+        "install_dir": "/srv/first", "data_dir": "/srv/first/data",
+        "image": "registry.example/app@sha256:" + "a" * 64,
+        "status": "running", "managed": True, "ownership": "managed",
+    })
+    store.upsert_instance({
+        "id": "instance-second", "target_id": second.id, "service_port": 33011,
+        "install_dir": "/srv/second", "data_dir": "/srv/second/data",
+        "image": "registry.example/app@sha256:" + "b" * 64,
+        "status": "running", "managed": True, "ownership": "managed",
+    })
+    verified = store.verified_environment_projection(
+        first,
+        {"ok": True},
+        {"evidence_manifest": {"complete": True}, "capabilities": {
+            "docker_available": True, "compose_available": True,
+        }},
+    )
+    assert verified is not None
+    store.save_environment_projection(verified)
+    facts = store.verified_environment_facts(
+        first, {"ok": True, "environment": VALID_FACT_ENVIRONMENT}, {
+            "evidence_manifest": {
+                "complete": True, "fact_probe_complete": True,
+                "fact_probe_statuses": FACT_PROBE_STATUSES,
+                "fact_probe_output_validity": FACT_PROBE_OUTPUT_VALIDITY,
+            },
+        },
+    )
+    assert facts is not None
+    store.save_environment_facts(facts)
+
+    projection = store.public_store_projection()
+    installed_ids = [item["instance_id"] for item in projection["installed"]]
+    assert installed_ids == ["instance-first"]
+    assert "instance-second" not in installed_ids
+    assert [item["id"] for item in projection["recommended"]] == ["chatgpt2api"]
+    assert projection["recommended"][0]["confidence"] == "high"
+
+
+def test_store_contract_no_isolated_target_keeps_legacy_installed(tmp_path, monkeypatch):
+    from extensions import store
+
+    monkeypatch.setattr(store, "EXTENSIONS_FILE", tmp_path / "extensions.json")
+    store.save_target_metadata({
+        "id": "target-b", "name": "Target B", "host": "other.example",
+        "username": "deploy-user", "target_role": "production-read-only",
+    })
+    store.upsert_instance({
+        "id": "instance-b", "target_id": "target-b", "service_port": 33011,
+        "install_dir": "/srv/b", "data_dir": "/srv/b/data",
+        "image": "registry.example/app@sha256:" + "b" * 64,
+        "status": "running", "managed": True, "ownership": "managed",
+    })
+
+    installed_ids = [item["instance_id"] for item in store.public_store_projection()["installed"]]
+    assert "instance-b" in installed_ids

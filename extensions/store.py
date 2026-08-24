@@ -1048,4 +1048,8 @@ def public_store_projection() -> dict:
 
     target = next((item for item in list_targets() if item.target_role == "isolated-development"), None)
     projection = get_environment_projection(target) if target else None
-    return store_projection(CATALOG, list_instances(), environment_projection=projection)
+    return store_projection(
+        CATALOG,
+        list_instances(target.id if target else ""),
+        environment_projection=projection,
+    )
