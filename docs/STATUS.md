@@ -1,6 +1,6 @@
 # Current Project Status
 
-**Last updated:** 2026-08-22
+**Last updated:** 2026-08-24
 **Current branch:** `codex/phase7-campaign-20260820`
 **Current phase:** Phase 9 Sender Push Source Cleanup (User-Selected) - **In Progress (receiver-grant shipped in v2.6.1 2026-08-21; sender PR #26 OPEN/MERGEABLE/UNSTABLE; no maintainer review; Vercel authorization failure is external state and cannot be handled automatically; clean E2E gates passed for receiver)**
 **Previous phase:** Phase 8 Upstream Delivery - **In Progress (proposal PRs open, awaiting upstream response)**
@@ -63,6 +63,28 @@
   slice still requires live/isolated-VPS verification, real multi-target behavior,
   adapter lifecycle verification, and full Store acceptance; Phase 10 remains In
   Progress and is not complete.
+
+## v2.6.3 stable release published (2026-08-24)
+
+- **VERIFIED:** release commit `72d7f16c78036dcbbef3d7808ca7b71d4d66b603`
+  was pushed to the personal GitHub repository and annotated tag `v2.6.3`
+  points to that commit.
+- **VERIFIED:** local release validation passed: full suite `698 passed`,
+  provider/startup/release focused suite `16 passed`, four `node --check`
+  commands, expanded Python `py_compile`, and `git diff --check`.
+- **VERIFIED:** tag-triggered GitHub Actions succeeded for Docker Image and
+  Desktop Clients, including Linux, Windows, macOS, Docker Compose packaging,
+  checksums, and Release creation.
+- **VERIFIED:** GitHub Release `GenBox v2.6.3` is published and not draft or
+  prerelease, with Windows/macOS/Linux binaries and zips, `GenBox.exe`, Docker
+  Compose bundle, and `SHA256SUMS.txt`.
+- **VERIFIED:** Windows `start.bat` and `start.ps1` now set UTF-8 console and
+  Python output settings and show bilingual startup/error guidance. This is
+  source/package evidence; manual verification on every Windows code page is
+  not claimed.
+- **BOUNDARY:** no VPS, production container, upstream PR, browser generation,
+  or clean-deployment acceptance was performed by this release task. Phase 10
+  remains In Progress.
 
 ## Phase 9 Sender Push Source Cleanup (User-Selected) queued (2026-08-20)
 
