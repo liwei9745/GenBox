@@ -4,6 +4,19 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.3] - 2026-08-24
+
+- Fixed: Provider forms no longer send masked API-key placeholders as real
+  credentials after reload.
+- Fixed: Provider model discovery preserves multi-key and endpoint settings and
+  retries valid effective keys for OpenAI-compatible `/models` endpoints.
+- Fixed: Store installed projections remain scoped to the active Store target
+  in multi-target configurations.
+- Fixed: Windows launchers set UTF-8 console/Python output and show bilingual
+  startup and failure guidance.
+- Security: masked or unavailable credentials fail closed and require explicit
+  re-entry instead of being transmitted upstream.
+
 ## [2.6.1] - 2026-08-21
 
 - Added: managed per-source deletion-grant capability in the Extension Center,
