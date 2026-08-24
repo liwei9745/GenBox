@@ -4514,8 +4514,8 @@ function renderProviderEdit() {
         modelOpts = '<option value="" disabled>' + i18nText('provider.load_models_first') + '</option>';
         if (p.model) modelOpts = '<option value="' + escAttr(p.model) + '" selected>' + escHtml(p.model) + ' (' + i18nText('provider.manual_model_suffix') + ')</option>' + modelOpts;
       }
-      var keyVal = p.api_key_masked || '';
-      var keyPlaceholder = p.has_key ? (keyVal || i18nText('provider.masked_configured')) : i18nText('provider.api_key_placeholder');
+      var keyVal = '';
+      var keyPlaceholder = p.has_key ? i18nText('provider.masked_configured') : i18nText('provider.api_key_placeholder');
       var statusColor = p.enabled ? '#22c55e' : '#6b7280';
       var statusTitle = p.enabled ? i18nText('dashboard.enabled') : i18nText('dashboard.disabled');
 
@@ -4927,7 +4927,18 @@ function fetchModels(idx) {
   btn.disabled = true; btn.textContent = '...';
   st.textContent = i18nText('provider.connecting'); st.style.color = 'var(--text-muted)';
 
-  var tmp = { id:pid||'tmp', name:nameVal, type:typeVal, base_url:urlVal, api_key:keyVal, model:'', color:colorVal, enabled:enVal, endpoint_type:etVal, models:[], quality:'', extra:{} };
+  var tmp = {
+    id:pid||'tmp', name:nameVal, type:typeVal, base_url:urlVal, api_key:keyVal,
+    api_keys: (document.getElementById('keys_' + idx).value || '').split('\n').map(function(s){ return s.trim(); }).filter(function(s){ return s.length > 0; }),
+    endpoints: collectEndpoints(idx),
+    model: (document.getElementById('model_' + idx) || {value:''}).value,
+    color:colorVal, enabled:enVal, endpoint_type:etVal, models:[],
+    display_name: (document.getElementById('display_name_' + idx) || {value:''}).value,
+    capabilities: {},
+    skip_proxy: document.getElementById('skip_proxy_' + idx) ? document.getElementById('skip_proxy_' + idx).checked : false,
+    quality:'', extra:{}
+  };
+  document.querySelectorAll('#providerEditBody .cap-check').forEach(function(cb){ tmp.capabilities[cb.dataset.cap] = cb.checked; });
 
     _authFetch('/api/providers', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(tmp)})
     .then(function(){ return _authFetch('/api/providers/fetch-models/' + pid); })

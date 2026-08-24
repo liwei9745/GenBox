@@ -71,6 +71,10 @@ class EndpointConfig(BaseModel):
         return short_url
 
 
+def _is_masked_secret(value: str) -> bool:
+    return "****" in str(value or "")
+
+
 class ProviderConfig(BaseModel):
     """单个 Provider 配置"""
     id: str                    # 唯一标识 (如 gpt-image, gemini, my-flux)
@@ -94,18 +98,22 @@ class ProviderConfig(BaseModel):
 
     def get_effective_keys(self) -> List[str]:
         """获取有效的 API Key 列表（api_keys 优先，fallback 到 api_key）"""
-        keys = [k for k in (self.api_keys or []) if k and k.strip()]
-        if not keys and self.api_key and self.api_key.strip():
+        keys = [k for k in (self.api_keys or []) if k and k.strip() and not _is_masked_secret(k)]
+        if not keys and self.api_key and self.api_key.strip() and not _is_masked_secret(self.api_key):
             keys = [self.api_key.strip()]
         return keys
 
     def get_active_endpoints(self) -> List[EndpointConfig]:
         """获取启用的端点列表；如果没有端点则从 base_url+api_key 构造一个"""
-        active = [ep for ep in (self.endpoints or []) if ep.enabled and ep.url and ep.key]
+        active = [
+            ep for ep in (self.endpoints or [])
+            if ep.enabled and ep.url and ep.key and not _is_masked_secret(ep.key)
+        ]
         if active:
             return active
-        if self.base_url and (self.api_key or self.get_effective_keys()):
-            key = self.api_key or (self.get_effective_keys()[0] if self.get_effective_keys() else "")
+        effective_keys = self.get_effective_keys()
+        if self.base_url and effective_keys:
+            key = effective_keys[0] if effective_keys else self.api_key
             return [EndpointConfig(url=self.base_url, key=key)]
         return []
 

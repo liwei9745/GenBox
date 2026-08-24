@@ -50,10 +50,18 @@
   with zero residuals. Evidence: `docs/PHASE10-W3-CLEAN-DEPLOYMENT-20260824.md`.
   This remains local/synthetic evidence and does not prove VPS, published-image,
   browser, or adapter-lifecycle acceptance.
+- **LOCAL MULTI-TARGET / PASS 2026-08-24 (HEAD `6e11ab6`):** Store installed
+  projection is scoped to the first `isolated-development` target, keeping
+  installed instances aligned with the target-bound projection and facts; the
+  no-isolated-target legacy behavior remains covered. Focused verification:
+  `267 passed`; full verification: `693 passed`. The four `node --check`
+  commands, explicit PowerShell-expanded `py_compile`, and `git diff --check`
+  passed. This is local evidence only; it does not prove live or isolated-VPS
+  multi-target behavior.
 - **BOUNDARY:** Recommended is high only with complete verified discovery and
   Docker/Compose evidence plus all nine environment facts observed. The current
-  slice still requires live/clean-deployment, restart, multi-target, and adapter
-  lifecycle verification plus full Store acceptance; Phase 10 remains In
+  slice still requires live/isolated-VPS verification, real multi-target behavior,
+  adapter lifecycle verification, and full Store acceptance; Phase 10 remains In
   Progress and is not complete.
 
 ## Phase 9 Sender Push Source Cleanup (User-Selected) queued (2026-08-20)

@@ -889,7 +889,7 @@ async def fetch_models_from_upstream(cfg: ProviderConfig) -> List[str]:
     （火山方舟 Agent Plan 没有公开的模型列表 API，返回官方文档候选名，
      这些候选名仅表示「可能可用」，真实可用性需在生成时验证。）
     """
-    if not cfg.api_key:
+    if not cfg.get_effective_keys() and not cfg.get_active_endpoints():
         raise ValueError("API Key 未配置")
     if not cfg.base_url:
         raise ValueError("Base URL 未配置")
@@ -932,14 +932,24 @@ def _volcengine_plan_candidate_models(cfg: ProviderConfig) -> List[str]:
 
 async def _fetch_openai_models(cfg: ProviderConfig) -> List[str]:
     """OpenAI 兼容: GET /v1/models，根据 provider 类型推荐合适模型"""
-    headers = {"Authorization": f"Bearer {cfg.api_key}"}
-    base = cfg.base_url.rstrip('/')
+    explicit_endpoints = [endpoint for endpoint in (cfg.endpoints or []) if endpoint.enabled and endpoint.url and endpoint.key]
+    candidates = [(endpoint.url, endpoint.key) for endpoint in explicit_endpoints]
+    if not explicit_endpoints:
+        candidates = [(cfg.base_url, key) for key in cfg.get_effective_keys()]
+    last_response = None
 
-    # 尝试 /v1/models
     async with httpx.AsyncClient(timeout=30.0, proxy=_get_proxy_url(cfg)) as client:
-        resp = await client.get(f"{base}/models", headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
+        for base_url, api_key in candidates:
+            headers = {"Authorization": f"Bearer {api_key}"}
+            resp = await client.get(f"{base_url.rstrip('/')}/models", headers=headers)
+            if resp.status_code == 200:
+                last_response = resp
+                break
+            last_response = resp
+        if last_response is None:
+            raise ValueError("API Key 未配置")
+        last_response.raise_for_status()
+        data = last_response.json()
 
     raw_models = data.get("data", [])
     model_ids = [m.get("id", "") for m in raw_models if m.get("id")]

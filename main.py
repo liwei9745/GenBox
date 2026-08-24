@@ -240,6 +240,36 @@ class ProviderCreateReq(BaseModel):
     extra: dict = {}
 
 
+def _is_masked_secret(value: str) -> bool:
+    """识别 API 响应中的脱敏占位符，避免把它当成真实凭证保存。"""
+    return "****" in str(value or "")
+
+
+def _merge_provider_secrets(existing: ProviderConfig, req: ProviderCreateReq) -> dict:
+    """保留未在表单中重新输入的已存凭证。"""
+    payload = req.model_dump()
+    if not req.api_key or _is_masked_secret(req.api_key):
+        payload["api_key"] = existing.api_key if not _is_masked_secret(existing.api_key) else ""
+    if not req.api_keys or any(_is_masked_secret(key) for key in req.api_keys):
+        payload["api_keys"] = [key for key in (existing.api_keys or []) if not _is_masked_secret(key)]
+
+    incoming_endpoints = payload.get("endpoints") or []
+    existing_endpoints = existing.endpoints or []
+    if incoming_endpoints and existing_endpoints:
+        for index, endpoint in enumerate(incoming_endpoints):
+            if index >= len(existing_endpoints):
+                break
+            if not endpoint.key or _is_masked_secret(endpoint.key):
+                endpoint.key = (
+                    existing_endpoints[index].key
+                    if not _is_masked_secret(existing_endpoints[index].key)
+                    else ""
+                )
+    elif not incoming_endpoints:
+        payload["endpoints"] = list(existing_endpoints)
+    return payload
+
+
 # ──────────────────────────────────────────────────────────────
 # FastAPI 实例
 # ──────────────────────────────────────────────────────────────
@@ -629,7 +659,10 @@ async def create_provider(req: ProviderCreateReq):
             existing_idx = i
             break
 
-    new_p = ProviderConfig(**req.model_dump())
+    if existing_idx is not None:
+        new_p = ProviderConfig(**_merge_provider_secrets(cfg.providers[existing_idx], req))
+    else:
+        new_p = ProviderConfig(**req.model_dump())
 
     if existing_idx is not None:
         cfg.providers[existing_idx] = new_p
