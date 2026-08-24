@@ -123,6 +123,15 @@ at the setup-status assertion before Store API acceptance; all containers,
 images, clones, and temporary resources were cleaned. No VPS, SSH, upstream
 PR, or production operation occurred.
 
+**Clean deployment W3 / PASS 2026-08-24:** after a Windows diagnostic wave, the
+Compose clean deployment passed end-to-end on the personal-branch commit
+`1383f537...`: three Store views, `401` unauthenticated, unknown-facts
+fail-closed, planned/external read-only, metadata non-leak, and restart
+persistence. Root causes of earlier failures were harness-only (MSYS path to
+`docker.exe`, `--env-file` not used for interpolation, PS5.1 status helper).
+Isolated, synthetic, loopback-only, fully torn down. Evidence:
+`docs/PHASE10-W3-CLEAN-DEPLOYMENT-20260824.md`. Phase 10 remains In Progress.
+
 ---
 
 **Date:** 2026-08-23

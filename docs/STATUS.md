@@ -38,12 +38,18 @@
   the frontend regression fix: `686 passed`, Node checks, explicit `py_compile`,
   and `git diff --check` passed. This does not change the live/clean-deployment
   boundary.
-- **CLEAN DEPLOYMENT / BLOCKED 2026-08-23:** authorized push to the personal
-  GenBox branch completed at `1383f53`; clean clone and local Docker image build
-  passed. Compose execution was not accepted because Windows path handling
-  could not open the cloned Compose file. A Docker-only fallback stopped at the
-  setup-status assertion before Store API checks. All temporary resources were
-  cleaned; no VPS, SSH, upstream PR, or production operation occurred.
+- **LOCAL CLEAN DEPLOYMENT W3 / PASS 2026-08-24:** clean clone from the pushed
+  personal branch at `1383f537...` with a local Docker image passed the full
+  Compose Store acceptance: three views, `401` without auth, unknown-facts
+  fail-closed (`confidence=unknown`, `actions=[]`, field-level `unknown_facts`),
+  planned/external rows read-only, no forbidden public keys, and identical
+  projection across `restart`. Prior Compose failures were Windows harness
+  path/interpolation issues, not product defects; the corrected runner uses
+  absolute `-f` paths, shell-env interpolation, literal `ADMIN_KEY` override,
+  and a key-aware leak assertion. Isolated, synthetic, loopback-only; torn down
+  with zero residuals. Evidence: `docs/PHASE10-W3-CLEAN-DEPLOYMENT-20260824.md`.
+  This remains local/synthetic evidence and does not prove VPS, published-image,
+  browser, or adapter-lifecycle acceptance.
 - **BOUNDARY:** Recommended is high only with complete verified discovery and
   Docker/Compose evidence plus all nine environment facts observed. The current
   slice still requires live/clean-deployment, restart, multi-target, and adapter
