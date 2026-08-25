@@ -1,9 +1,9 @@
-# GenBox v2.6.3 (Stable)
+# GenBox v2.6.4 (Stable)
 
-This rolling file points to the prepared stable v2.6.3 notes:
+This rolling file points to the prepared stable v2.6.4 notes:
 
-- [中文 v2.6.3 稳定版说明](release-notes-v2.6.3-zh.md)
-- [English v2.6.3 stable release notes](release-notes-v2.6.3.md)
+- [中文 v2.6.4 稳定版说明](release-notes-v2.6.4-zh.md)
+- [English v2.6.4 stable release notes](release-notes-v2.6.4.md)
 
 The rc.1 through rc.8 candidate notes remain historical and do not describe a
 stable release. Ongoing implementation details belong in `docs/STATUS.md`.

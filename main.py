@@ -194,6 +194,15 @@ class GenerateRequest(BaseModel):
     upscale_ratio: str = "original"  # 宽高比：1:1, 16:9, 21:9, 4:3, 3:2, 9:16, 3:4, original
 
 
+def _normalize_generation_quantity(value: object) -> int:
+    """Keep a malformed or stale quantity from silently multiplying work."""
+    try:
+        quantity = int(value)
+    except (TypeError, ValueError):
+        return 1
+    return max(1, min(10, quantity))
+
+
 class GenerateResponse(BaseModel):
     generation_id: str
     results: dict
@@ -975,7 +984,8 @@ async def generate(req: GenerateRequest, request: Request):
     task_list = []
     provider_kwargs_map = {}  # {pid: kwargs} per-provider overrides
     for pid in provider_ids:
-        qty = req.quantities.get(pid, 1) if req.quantities else 1
+        raw_qty = req.quantities.get(pid, 1) if req.quantities else 1
+        qty = _normalize_generation_quantity(raw_qty)
         # 为每个 provider 构建独立的 kwargs
         p_kwargs = dict(kwargs)  # 复制全局 kwargs
         p_setting = req.provider_settings.get(pid, {})
@@ -5186,53 +5196,56 @@ def _first_run_setup() -> None:
     if not interactive:
         _write_env({"APP_MODE": "prod"})
         print(
-            "[Setup] Non-interactive startup selected production mode. "
-            "Configure ADMIN_KEY in the executable data .env before starting."
+            "[Setup] Non-interactive startup selected production mode / "
+            "非交互式启动已选择生产模式。Configure ADMIN_KEY in the executable "
+            "data .env before starting / 请先在可执行文件数据目录的 .env 中配置 ADMIN_KEY。"
         )
         return
 
-    print("GenBox first-run setup")
-    print("[1] Local desktop (development mode, localhost only)")
-    print("[2] Server/VPS (production mode with authentication)")
-    print("[3] Docker/headless (production mode; configure ADMIN_KEY manually)")
+    print("GenBox first-run setup / GenBox 首次启动设置")
+    print("[1] Local desktop / 本地桌面（开发模式，仅限本机）")
+    print("[2] Server/VPS / 服务器或 VPS（带身份认证的生产模式）")
+    print("[3] Docker/headless / Docker 或无界面（生产模式；需手动配置 ADMIN_KEY）")
 
     while True:
         try:
-            choice = input("Select deployment mode (1/2/3): ").strip()
+            choice = input("Select deployment mode (1/2/3) / 选择部署模式（1/2/3）：").strip()
         except (EOFError, KeyboardInterrupt):
             _write_env({"APP_MODE": "prod"})
             print(
-                "[Setup] Input ended; production mode selected. "
-                "Configure ADMIN_KEY before starting."
+                "[Setup] Input ended; production mode selected / 输入结束，已选择生产模式。"
+                " Configure ADMIN_KEY before starting / 启动前请配置 ADMIN_KEY。"
             )
             return
 
         if choice == "1":
             _write_env({"APP_MODE": "dev"})
-            print("[Setup] Local mode enabled; access is restricted to this computer.")
+            print("[Setup] Local mode enabled; access is restricted to this computer. / "
+                  "本地模式已启用；访问仅限此电脑。")
             return
 
         if choice == "2":
             _write_env({"APP_MODE": "prod"})
             origins = input(
-                "Allowed browser origins (comma-separated, Enter for defaults): "
+                "Allowed browser origins / 允许的浏览器来源（逗号分隔，回车使用默认值）："
             ).strip()
             if origins:
                 _write_env({"ALLOWED_ORIGINS": origins})
             admin_key = generate_admin_key()
-            print("[Setup] Production mode enabled. Save this administrator key now:")
+            print("[Setup] Production mode enabled. Save this administrator key now. / "
+                  "生产模式已启用，请立即保存管理员密钥：")
             print(admin_key)
             return
 
         if choice == "3":
             _write_env({"APP_MODE": "prod"})
             print(
-                "[Setup] Docker/headless production mode enabled. "
-                "Set ADMIN_KEY in .env before starting the service."
+                "[Setup] Docker/headless production mode enabled. / Docker 或无界面生产模式已启用。"
+                " Set ADMIN_KEY in .env before starting the service. / 启动服务前请在 .env 中设置 ADMIN_KEY。"
             )
             return
 
-        print("[Setup] Enter 1, 2, or 3.")
+        print("[Setup] Enter 1, 2, or 3. / 请输入 1、2 或 3。")
 
 
 def prepare_runtime_environment(executable_data_dir: Path, bundle_dir: Path) -> Optional[Path]:
@@ -5276,6 +5289,10 @@ def run_http_server(app_mode: str, port: int, host: Optional[str] = None) -> Non
 
 def run_application() -> None:
     """Prepare first-run state, reload it in-process, enforce auth, and serve."""
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     _first_run_setup()
     prepare_runtime_environment(BASE_DIR, BASE_PATH)
 
@@ -5284,18 +5301,19 @@ def run_application() -> None:
     try:
         port = int(os.getenv("GENBOX_PORT", "8891"))
     except ValueError as exc:
-        raise SystemExit("[Startup] GENBOX_PORT must be a valid integer.") from exc
+        raise SystemExit("[Startup] GENBOX_PORT must be a valid integer / GENBOX_PORT 必须是有效整数。") from exc
     if not 1 <= port <= 65535:
-        raise SystemExit("[Startup] GENBOX_PORT must be between 1 and 65535.")
+        raise SystemExit("[Startup] GENBOX_PORT must be between 1 and 65535 / GENBOX_PORT 必须在 1 到 65535 之间。")
 
     _require_production_admin_key(app_mode)
 
     local_host = "127.0.0.1" if app_mode == "dev" else "localhost"
     local_url = f"http://{local_host}:{port}"
     mode_str = "PRODUCTION" if is_prod_mode() else "DEVELOPMENT"
-    print(f"[GenBox] v{__version__} | {mode_str} | {local_url}")
-    print(f"[GenBox] Media: {GALLERY_DIR}")
-    print(f"[GenBox] Providers: {STORAGE_DIR / 'providers.json'}")
+    mode_label = f"{mode_str} / {'生产模式' if is_prod_mode() else '开发模式'}"
+    print(f"[GenBox] v{__version__} | {mode_label} | {local_url}")
+    print(f"[GenBox] Media / 媒体目录: {GALLERY_DIR}")
+    print(f"[GenBox] Providers / Provider 配置: {STORAGE_DIR / 'providers.json'}")
 
     if (
         getattr(sys, "frozen", False)

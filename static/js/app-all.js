@@ -1912,7 +1912,10 @@ function doGenerate() {
   var genRatio = currentSettings.ratio || '1:1';
   var genW = currentSettings.w || 1024;
   var genH = currentSettings.h || 1024;
-  var genQty = currentSettings.qty || 1;
+  // The visible control is authoritative. Cached per-model settings may be stale
+  // after an older release or a model switch and must not multiply the request.
+  var visibleQty = parseInt(document.getElementById('selQty').value, 10);
+  var genQty = Number.isFinite(visibleQty) ? Math.max(1, Math.min(10, visibleQty)) : 1;
 
   // 构建尺寸
   var genSize;

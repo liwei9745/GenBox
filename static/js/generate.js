@@ -326,7 +326,8 @@ window.doGenerate = function() {
   var genRatio = currentSettings.ratio || '1:1';
   var genW = currentSettings.w || 1024;
   var genH = currentSettings.h || 1024;
-  var genQty = currentSettings.qty || 1;
+  var visibleQty = parseInt(document.getElementById('selQty').value, 10);
+  var genQty = Number.isFinite(visibleQty) ? Math.max(1, Math.min(10, visibleQty)) : 1;
 
   var genSize;
   if (genRatio === 'auto') {

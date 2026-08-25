@@ -62,6 +62,16 @@ def test_generation_error_log_uses_p_cfg_not_undefined_cfg():
     assert "= cfg.model" not in block
 
 
+def test_generation_quantity_normalizes_invalid_and_stale_values():
+    from main import _normalize_generation_quantity
+
+    assert _normalize_generation_quantity(1) == 1
+    assert _normalize_generation_quantity("3") == 3
+    assert _normalize_generation_quantity(0) == 1
+    assert _normalize_generation_quantity("not-a-number") == 1
+    assert _normalize_generation_quantity(99) == 10
+
+
 def _read_main() -> str:
     import pathlib
 

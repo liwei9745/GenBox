@@ -4,6 +4,13 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.4] - 2026-08-25
+
+- Fixed: Packaged Windows first-run setup and startup summaries now show
+  bilingual Chinese/English guidance with UTF-8 output.
+- Fixed: Image generation uses the visible quantity control and ignores stale
+  cached values; invalid quantities fail safe to one image.
+
 ## [2.6.3] - 2026-08-24
 
 - Fixed: Provider forms no longer send masked API-key placeholders as real
