@@ -64,6 +64,31 @@
   adapter lifecycle verification, and full Store acceptance; Phase 10 remains In
   Progress and is not complete.
 
+## v2.6.4 packaged startup and image quantity release (2026-08-25)
+
+- **VERIFIED:** release commit `00bba347f4c0a28769c59c0cce2e256b59f90f16`
+  was pushed and annotated tag `v2.6.4` points to that commit. GitHub Actions
+  Docker and Desktop Clients workflows both completed successfully.
+- **VERIFIED:** local validation passed: full suite `700 passed`,
+  startup/provider/release/setup focused suite `57 passed`, five `node --check`
+  commands, expanded Python `py_compile`, and `git diff --check`.
+- **VERIFIED:** a freshly downloaded, extracted `GenBox-Windows.zip` from the
+  published `v2.6.4` Release was manually started in a disposable local temp
+  directory. Its first-run prompt showed Chinese/English labels; after choosing
+  local mode, a second run on an isolated loopback port started successfully
+  and was stopped cleanly. The initial default-port run encountered a local
+  port collision only and was not treated as a package failure.
+- **VERIFIED:** the packaged first-run path now configures UTF-8 stdout/stderr
+  and bilingual messages directly in `main.py`; the prior `v2.6.3` launcher
+  script-only change did not cover `GenBox.exe` and is superseded for this path.
+- **VERIFIED:** image generation derives `quantities` from the visible `selQty`
+  control, while backend normalization bounds malformed/stale values to `1..10`.
+  This addresses a stale local-storage value creating `3/3` tasks while the UI
+  displayed `1`.
+- **BOUNDARY:** local package startup evidence does not claim a successful live
+  provider generation, VPS validation, production deployment, or clean
+  deployment acceptance. Phase 10 remains In Progress.
+
 ## v2.6.3 stable release published (2026-08-24)
 
 - **VERIFIED:** release commit `72d7f16c78036dcbbef3d7808ca7b71d4d66b603`
