@@ -41,18 +41,22 @@
   not tracked in Git, bundled in GenBox, or present in a GenBox Release asset.
 - **VERIFIED / GITHUB CANDIDATE 2026-09-03:** commit
   `788924de268728e8a07d792d5f7495fdfe7f3f67` was fast-forward pushed to
-  `codex/phase7-campaign-20260820`. GenBox PR `#9` is `OPEN` and `MERGEABLE`,
-  with its head at that exact commit. Master PR Quality Gate run `33743056345`
-  was `IN_PROGRESS` at the 2026-09-03 check.
+  `codex/phase7-campaign-20260820`. GenBox PR `#9`, titled
+  `release: merge v2.6.6 campaign and precision follow-up`, remains `OPEN` and
+  `MERGEABLE`. Master PR Quality Gate run `33743177728`, job
+  `Test pull request`, completed successfully in `1m38s` against exact head
+  `221e1ac82480fb3651cbfd18ec9e49b8eaf3fd80`. This is verified hosted PR
+  quality-gate evidence only; it is not a `master` merge or a new Release.
 - **UNVERIFIED / EXTERNAL BOUNDARIES:** no real Provider precision-edit E2E was
   performed. Public model download, redistribution/commercial authorization,
   and real-photo acceptance remain `UNVERIFIED`. `liwei9745/rembg` remains an
   independent fork of `danielgatis/rembg`; the fork does not copy the parent's
   Release assets or grant model-weight rights.
 - **BOUNDARY / RESUME:** no VPS, remote-container, production, or other network
-  mutation was performed. Only this `STATUS.md` evidence update remains
-  uncommitted. Remote CI and approval are not complete, PR `#9` has not been
-  merged to `master`, and no new GitHub Release has been created.
+  mutation was performed. The implementation and preceding evidence commit are
+  pushed; only this hosted-CI record in `STATUS.md` awaits an evidence commit.
+  PR `#9` has not been merged to `master`, approval is not complete, and no new
+  GitHub Release has been created.
 
 - **VERIFIED / HISTORICAL V2.6.5 TAG FAILURE 2026-09-03:** the annotated
   `v2.6.5` tag points to commit `aa8b5ecda13384ad5734dc077ea73c674c1e02cd`
