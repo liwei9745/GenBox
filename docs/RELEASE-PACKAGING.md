@@ -27,6 +27,15 @@ validated against the pinned runtime-license manifest and is included in both
 Docker and source bundles. The source archive is assembled in a temporary file
 and is published only after the commit tree and sidecar have been written.
 
+Git-native `export-ignore` rules remove internal planning, handoff, review, and
+Phase 10 evidence documents from the public source view without changing the
+frozen commit. Product, architecture, status, roadmap, release, and operator
+documentation remain included. Packaging tests create a real Git archive and
+scan its exported text for host-local user paths and high-confidence credential
+shapes. They also reject runtime vault/media data, ONNX or compiled/archive
+binaries, and image metadata beyond the minimal JFIF container fields used by
+the public screenshots.
+
 For tag-triggered releases, `.github/workflows/build.yml` first validates that
 the canonical `v`-prefixed tag exactly matches `genbox_version.__version__`.
 Every quality, desktop-build, and release job depends on that gate. The release

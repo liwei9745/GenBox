@@ -7,6 +7,28 @@
 
 ## v2.6.5 local release preparation (updated 2026-09-03)
 
+- **BLOCKED / LOCAL SOURCE-EXPORT PRIVACY GATE 2026-09-03:** local candidate
+  commit `dd386db1829b450488e492147a41ea3340713fd0` contains exactly the reviewed
+  60-path candidate and remains unpushed. A clean-clone source package correctly
+  matched that commit's Git-archive bytes, but the archive also inherited a
+  tracked internal Phase 10 evidence document containing a host-local absolute
+  user path. No branch push, tag, GitHub Actions run, or Release was started.
+- **REMEDIATION / LOCAL ONLY:** the source export policy now excludes internal
+  `.planning`, handoff/review, Phase 10 evidence, and the historical Phase 7
+  secret-scan report through Git-native `export-ignore`; it does not edit those
+  internal documents or remove public product, architecture, status, roadmap,
+  or release documentation. Packaging regression coverage builds a real Git
+  archive and rejects unexpected local-user paths, credential shapes, runtime
+  vault/media data, ONNX/compiled/archive binaries, and non-minimal image
+  metadata. This remediation must be committed, independently reviewed, and
+  reproduced from a clean clone before any push, tag, or Release.
+- **VERIFIED / LOCAL EXPORT-POLICY REGRESSION 2026-09-03:** the packaging suite
+  passed `33`; the full repository suite passed `1293`. Tests use a real Git
+  fixture and controlled synthetic path/credential sentinels, confirm internal
+  evidence is absent while public documentation remains present, and prove the
+  scanner rejects an unexpected host-local path, credential, vault file, or
+  ONNX payload. No remote operation was performed.
+
 - **VERIFIED / LOCAL UPDATER FAIL-CLOSED GATE 2026-09-03:** automatic source,
   executable, and Docker update application now terminates with structured
   `update_apply_unavailable` before DNS, HTTP, Git, file replacement, or

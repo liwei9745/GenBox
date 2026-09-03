@@ -1,2 +1,5 @@
 .planning/ export-ignore
 HANDOFF.md export-ignore
+REVIEW.md export-ignore
+docs/PHASE10*.md export-ignore
+docs/PHASE7-SCAN-REPORT-*.md export-ignore

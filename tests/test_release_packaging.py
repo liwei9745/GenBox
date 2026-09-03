@@ -2,6 +2,7 @@ import subprocess
 import sys
 import zipfile
 import hashlib
+import io
 import json
 import re
 from pathlib import Path
@@ -12,6 +13,136 @@ from genbox_version import __version__
 
 
 ROOT = Path(__file__).parents[1]
+
+SOURCE_IMAGE_SUFFIXES = {".gif", ".jpeg", ".jpg", ".png", ".webp"}
+SOURCE_IMAGE_PREFIXES = ("docs/screenshots/", "screenshots/", "static/")
+SOURCE_IMAGE_METADATA_KEYS = {"jfif", "jfif_density", "jfif_unit", "jfif_version"}
+SOURCE_FORBIDDEN_BINARY_SUFFIXES = {
+    ".7z",
+    ".bin",
+    ".db",
+    ".dll",
+    ".dylib",
+    ".exe",
+    ".gz",
+    ".onnx",
+    ".pyc",
+    ".so",
+    ".sqlite",
+    ".sqlite3",
+    ".tar",
+    ".zip",
+}
+SOURCE_RUNTIME_DATA_NAMES = {
+    "credential_vault.json",
+    "gallery.json",
+    "media_index.json",
+    "providers.json",
+    "sync_manifest.json",
+    "vault.json",
+}
+SOURCE_SYNTHETIC_USERS = {
+    "changed-user",
+    "deploy-user",
+    "operator",
+    "private",
+    "sentinel-user",
+    "someone",
+    "ubuntu",
+}
+SOURCE_LOCAL_PATH_PATTERNS = (
+    re.compile(r"[A-Za-z]:\\{1,2}Users\\{1,2}(?P<user>[A-Za-z0-9._-]+)[^\s`\"<>]*"),
+    re.compile(r"/(?:home|Users)/(?P<user>[A-Za-z0-9._-]+)[^\s`\"<>]*"),
+)
+SOURCE_SECRET_PATTERNS = {
+    "private_key": re.compile(r"-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----"),
+    "github_token": re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
+    "openai_token": re.compile(r"sk-[A-Za-z0-9_-]{20,}"),
+    "google_api_key": re.compile(r"AIza[0-9A-Za-z_-]{30,}"),
+    "slack_token": re.compile(r"xox[baprs]-[0-9A-Za-z-]{20,}"),
+    "tailscale_key": re.compile(r"tskey-[A-Za-z0-9_-]{20,}"),
+    "bearer_literal": re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]{20,}"),
+    "url_credential": re.compile(
+        r"https?://[^\s\"']*[?&](?:key|token|api_key|access_token|password)="
+        r"[^&\s\"']{8,}"
+    ),
+}
+
+
+def _is_controlled_archive_fixture(category, archive_name, value):
+    if not archive_name.startswith("tests/"):
+        return False
+    if category == "private_key":
+        return (
+            archive_name == "tests/test_extension_task_store.py"
+            and value == "-----BEGIN PRIVATE KEY-----"
+        )
+    if category == "bearer_literal":
+        return archive_name == "tests/test_provider_error_safety.py" and value.startswith(
+            "Bearer synthetic"
+        )
+    if category == "url_credential":
+        return any(
+            marker in value
+            for marker in (".example/", ".invalid/", ".test/", "synthetic", "redirect-secret")
+        )
+    return False
+
+
+def _assert_source_archive_sanitized(archive_path):
+    from PIL import Image
+
+    violations = []
+    scanned_text_files = 0
+    scanned_images = 0
+    with zipfile.ZipFile(archive_path) as archive:
+        names = [name for name in archive.namelist() if not name.endswith("/")]
+        assert not any(name.startswith("docs/PHASE10") for name in names)
+        assert not any(name.startswith("docs/PHASE7-SCAN-REPORT-") for name in names)
+        assert not any(
+            name == ".env"
+            or name.startswith((".planning/", ".pytest", "storage/"))
+            or Path(name).name in {"HANDOFF.md", "REVIEW.md"}
+            or Path(name).name in SOURCE_RUNTIME_DATA_NAMES
+            for name in names
+        )
+
+        for name in names:
+            suffix = Path(name).suffix.lower()
+            data = archive.read(name)
+            if suffix in SOURCE_IMAGE_SUFFIXES:
+                assert name.startswith(SOURCE_IMAGE_PREFIXES)
+                with Image.open(io.BytesIO(data)) as image:
+                    assert not image.getexif(), name
+                    assert set(image.info) <= SOURCE_IMAGE_METADATA_KEYS, name
+                with Image.open(io.BytesIO(data)) as image:
+                    image.verify()
+                scanned_images += 1
+                continue
+            if suffix in SOURCE_FORBIDDEN_BINARY_SUFFIXES:
+                violations.append(f"forbidden_binary:{name}")
+                continue
+            try:
+                text = data.decode("utf-8")
+            except UnicodeDecodeError:
+                violations.append(f"unexpected_binary:{name}")
+                continue
+
+            scanned_text_files += 1
+            for pattern in SOURCE_LOCAL_PATH_PATTERNS:
+                for match in pattern.finditer(text):
+                    if not (
+                        name.startswith("tests/")
+                        and match.group("user") in SOURCE_SYNTHETIC_USERS
+                    ):
+                        violations.append(f"local_path:{name}")
+            for category, pattern in SOURCE_SECRET_PATTERNS.items():
+                for match in pattern.finditer(text):
+                    if not _is_controlled_archive_fixture(category, name, match.group(0)):
+                        violations.append(f"{category}:{name}")
+
+    assert not violations, sorted(set(violations))
+    return {"images": scanned_images, "text_files": scanned_text_files}
 
 
 def test_release_version_is_consistent():
@@ -488,10 +619,103 @@ def _git_fixture(tmp_path, files):
     for name, contents in files.items():
         path = repo / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(contents, encoding="utf-8")
+        if isinstance(contents, bytes):
+            path.write_bytes(contents)
+        else:
+            path.write_text(contents, encoding="utf-8")
     subprocess.run(["git", "add", "--all"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "--quiet", "-m", "fixture"], cwd=repo, check=True)
     return repo, subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+
+
+def test_source_export_policy_excludes_internal_evidence_and_scans_archive(
+    tmp_path, monkeypatch
+):
+    from PIL import Image
+    from scripts import package_release
+
+    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+    for rule in (
+        ".planning/ export-ignore",
+        "HANDOFF.md export-ignore",
+        "REVIEW.md export-ignore",
+        "docs/PHASE10*.md export-ignore",
+        "docs/PHASE7-SCAN-REPORT-*.md export-ignore",
+    ):
+        assert rule in attributes
+
+    image_buffer = io.BytesIO()
+    Image.new("RGB", (1, 1), "white").save(image_buffer, format="PNG")
+    repo, frozen_commit = _git_fixture(
+        tmp_path,
+        {
+            ".gitattributes": attributes,
+            ".planning/STATE.md": "C:\\Users\\release-user\\private.txt\n",
+            "HANDOFF.md": "ghp_" + "a" * 30 + "\n",
+            "REVIEW.md": "-----BEGIN PRIVATE KEY-----\n",
+            "docs/PHASE10-EVIDENCE-REVIEW-20260823.md": (
+                "C:\\Users\\release-user\\AppData\\Local\\evidence\n"
+            ),
+            "docs/PHASE10B-EVIDENCE-MATRIX-20260823.md": "tskey-secret-material\n",
+            "docs/PHASE7-SCAN-REPORT-20260820.md": "-----BEGIN PRIVATE KEY-----\n",
+            "docs/PHASE5-EVIDENCE-2026-08-01.md": "retained historical evidence\n",
+            "docs/PRODUCT.md": "public product contract\n",
+            "docs/ARCHITECTURE.md": "public architecture contract\n",
+            "docs/ROADMAP.md": "public roadmap\n",
+            "docs/STATUS.md": "public status\n",
+            "docs/RELEASE-PACKAGING.md": "public release contract\n",
+            "static/assets/test.png": image_buffer.getvalue(),
+            "tests/synthetic_paths.py": (
+                'WINDOWS = r"C:\\Users\\someone\\image.png"\n'
+                'UNIX = "/home/deploy-user/image.png"\n'
+            ),
+        },
+    )
+    monkeypatch.setattr(package_release, "ROOT", repo)
+    sidecar = tmp_path / "license.txt"
+    sidecar.write_text("license\n", encoding="utf-8")
+    archive_path = tmp_path / "source.zip"
+    package_release.write_source_archive(
+        archive_path,
+        frozen_commit,
+        [(sidecar, "THIRD_PARTY_LICENSES/license.txt")],
+    )
+
+    with zipfile.ZipFile(archive_path) as archive:
+        names = set(archive.namelist())
+        for public_document in (
+            "docs/PRODUCT.md",
+            "docs/ARCHITECTURE.md",
+            "docs/ROADMAP.md",
+            "docs/STATUS.md",
+            "docs/RELEASE-PACKAGING.md",
+            "docs/PHASE5-EVIDENCE-2026-08-01.md",
+        ):
+            assert public_document in names
+        assert not any(name.startswith("docs/PHASE10") for name in names)
+
+    scan = _assert_source_archive_sanitized(archive_path)
+    assert scan == {"images": 1, "text_files": 9}
+
+
+@pytest.mark.parametrize(
+    ("archive_name", "contents"),
+    [
+        ("docs/leaked-path.md", "C:\\Users\\release-user\\private.txt\n"),
+        ("docs/leaked-secret.md", "ghp_" + "a" * 30 + "\n"),
+        ("storage/credential_vault.json", "{}\n"),
+        ("models/cutout.onnx", b"\x00onnx"),
+    ],
+)
+def test_source_archive_scan_rejects_private_or_runtime_payloads(
+    tmp_path, archive_name, contents
+):
+    archive_path = tmp_path / "unsafe.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(archive_name, contents)
+
+    with pytest.raises(AssertionError):
+        _assert_source_archive_sanitized(archive_path)
 
 
 def test_source_bundle_includes_pinned_runtime_license_assets(tmp_path):
