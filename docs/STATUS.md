@@ -7,6 +7,53 @@
 
 ## v2.6.6 release evidence (updated 2026-09-03)
 
+- **VERIFIED / LOCAL PRECISION AND CUTOUT 2026-09-03:** implicit
+  `gpt-image2-*` matching is removed; Precision Edit accepts persisted
+  capability/alias metadata or an explicit, revocable `gpt-image-2`
+  compatibility confirmation and otherwise fails closed. Cutout attention
+  states force details open without overwriting the remembered ready-state
+  preference, and focus is restored before details are hidden.
+- **VERIFIED / FINAL LOCAL GATE 2026-09-03:** the full repository suite passed
+  `1313` tests in `86.58s`; release-packaging coverage passed `42` tests in
+  `15.14s` after the candidate commit. Both
+  `tests/test_precision_edit_ui.mjs` and
+  `tests/test_cutout_model_install_ui.mjs` passed, as did the applicable
+  `node --check` checks, Python `py_compile`,
+  `python scripts/build_readme_lab.py --check`, and `git diff --check`.
+  Independent review of the implementation and evidence returned `PASS`.
+- **VERIFIED / LOCAL LAB 2026-09-03:** the root page,
+  `/api/runtime/status`, and cutout capability endpoint each returned HTTP
+  `200` on the loopback development service at port `8892`; runtime status
+  reported GenBox `v2.6.6` in development mode and cutout reported `ready`.
+- **VERIFIED / PRECISION UI AND README SCREENSHOT 2026-09-03:** the `sr-only`
+  UI bug is fixed; `tests/test_precision_edit_ui.mjs`, the applicable
+  `node --check`, and `198` focused Python tests passed. The final public
+  Precision Edit screenshot is `1600x1000`; both README and sanitized copies
+  have SHA-256
+  `ba7e44693fc6d718cb04e49c14092d00e752ab73c7b902a5038ea12012e61993`.
+  Its top action area is visibly rendered, assistive-only guidance is correctly
+  hidden, the ready model panel is collapsed, and the composite contains no
+  sensitive data.
+- **VERIFIED / LOCAL CUTOUT MODEL 2026-09-03:** the separately installed
+  `u2net_human_seg.onnx` matched `175997641` bytes and SHA-256
+  `01eb6a29a5c4d8edb30b56adad9bb3a2a0535338e480724a213e0acfd2d1c73c`;
+  capability probing and a synthetic local ONNX inference passed. The model is
+  not tracked in Git, bundled in GenBox, or present in a GenBox Release asset.
+- **VERIFIED / GITHUB CANDIDATE 2026-09-03:** commit
+  `788924de268728e8a07d792d5f7495fdfe7f3f67` was fast-forward pushed to
+  `codex/phase7-campaign-20260820`. GenBox PR `#9` is `OPEN` and `MERGEABLE`,
+  with its head at that exact commit. Master PR Quality Gate run `33743056345`
+  was `IN_PROGRESS` at the 2026-09-03 check.
+- **UNVERIFIED / EXTERNAL BOUNDARIES:** no real Provider precision-edit E2E was
+  performed. Public model download, redistribution/commercial authorization,
+  and real-photo acceptance remain `UNVERIFIED`. `liwei9745/rembg` remains an
+  independent fork of `danielgatis/rembg`; the fork does not copy the parent's
+  Release assets or grant model-weight rights.
+- **BOUNDARY / RESUME:** no VPS, remote-container, production, or other network
+  mutation was performed. Only this `STATUS.md` evidence update remains
+  uncommitted. Remote CI and approval are not complete, PR `#9` has not been
+  merged to `master`, and no new GitHub Release has been created.
+
 - **VERIFIED / HISTORICAL V2.6.5 TAG FAILURE 2026-09-03:** the annotated
   `v2.6.5` tag points to commit `aa8b5ecda13384ad5734dc077ea73c674c1e02cd`
   and was pushed. Desktop Clients run `33715658824` failed its three packaged
