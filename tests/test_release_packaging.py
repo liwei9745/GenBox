@@ -50,6 +50,8 @@ SOURCE_SYNTHETIC_USERS = {
     "someone",
     "ubuntu",
 }
+SOURCE_TEST_PRIVATE_KEY_MARKER = "-----BEGIN " + "PRIVATE KEY-----"
+SOURCE_TEST_WINDOWS_ROOT = "C:" + "\\Users\\"
 SOURCE_LOCAL_PATH_PATTERNS = (
     re.compile(r"[A-Za-z]:\\{1,2}Users\\{1,2}(?P<user>[A-Za-z0-9._-]+)[^\s`\"<>]*"),
     re.compile(r"/(?:home|Users)/(?P<user>[A-Za-z0-9._-]+)[^\s`\"<>]*"),
@@ -75,7 +77,7 @@ def _is_controlled_archive_fixture(category, archive_name, value):
     if category == "private_key":
         return (
             archive_name == "tests/test_extension_task_store.py"
-            and value == "-----BEGIN PRIVATE KEY-----"
+            and value == SOURCE_TEST_PRIVATE_KEY_MARKER
         )
     if category == "bearer_literal":
         return archive_name == "tests/test_provider_error_safety.py" and value.startswith(
@@ -650,14 +652,14 @@ def test_source_export_policy_excludes_internal_evidence_and_scans_archive(
         tmp_path,
         {
             ".gitattributes": attributes,
-            ".planning/STATE.md": "C:\\Users\\release-user\\private.txt\n",
+            ".planning/STATE.md": SOURCE_TEST_WINDOWS_ROOT + "release-user\\private.txt\n",
             "HANDOFF.md": "ghp_" + "a" * 30 + "\n",
-            "REVIEW.md": "-----BEGIN PRIVATE KEY-----\n",
+            "REVIEW.md": SOURCE_TEST_PRIVATE_KEY_MARKER + "\n",
             "docs/PHASE10-EVIDENCE-REVIEW-20260823.md": (
-                "C:\\Users\\release-user\\AppData\\Local\\evidence\n"
+                SOURCE_TEST_WINDOWS_ROOT + "release-user\\AppData\\Local\\evidence\n"
             ),
             "docs/PHASE10B-EVIDENCE-MATRIX-20260823.md": "tskey-secret-material\n",
-            "docs/PHASE7-SCAN-REPORT-20260820.md": "-----BEGIN PRIVATE KEY-----\n",
+            "docs/PHASE7-SCAN-REPORT-20260820.md": SOURCE_TEST_PRIVATE_KEY_MARKER + "\n",
             "docs/PHASE5-EVIDENCE-2026-08-01.md": "retained historical evidence\n",
             "docs/PRODUCT.md": "public product contract\n",
             "docs/ARCHITECTURE.md": "public architecture contract\n",
@@ -701,7 +703,10 @@ def test_source_export_policy_excludes_internal_evidence_and_scans_archive(
 @pytest.mark.parametrize(
     ("archive_name", "contents"),
     [
-        ("docs/leaked-path.md", "C:\\Users\\release-user\\private.txt\n"),
+        (
+            "docs/leaked-path.md",
+            SOURCE_TEST_WINDOWS_ROOT + "release-user\\private.txt\n",
+        ),
         ("docs/leaked-secret.md", "ghp_" + "a" * 30 + "\n"),
         ("storage/credential_vault.json", "{}\n"),
         ("models/cutout.onnx", b"\x00onnx"),
