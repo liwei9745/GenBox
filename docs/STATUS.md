@@ -5,15 +5,22 @@
 **Current phase:** Phase 9 Sender Push Source Cleanup (User-Selected) - **In Progress (receiver-grant shipped in v2.6.1 2026-08-21; sender PR #26 OPEN/MERGEABLE/UNSTABLE; no maintainer review; Vercel authorization failure is external state and cannot be handled automatically; clean E2E gates passed for receiver)**
 **Previous phase:** Phase 8 Upstream Delivery - **In Progress (proposal PRs open, awaiting upstream response)**
 
-## v2.6.5 local release preparation (updated 2026-09-03)
+## v2.6.6 local release preparation (updated 2026-09-03)
 
-- **BLOCKED / LOCAL SOURCE-EXPORT PRIVACY GATE 2026-09-03:** local candidate
-  commit `dd386db1829b450488e492147a41ea3340713fd0` contains exactly the reviewed
-  60-path candidate and remains unpushed. A clean-clone source package correctly
-  matched that commit's Git-archive bytes, but the archive also inherited a
-  tracked internal Phase 10 evidence document containing a host-local absolute
-  user path. No branch push, tag, GitHub Actions run, or Release was started.
-- **REMEDIATION / LOCAL ONLY:** the source export policy now excludes internal
+- **VERIFIED / HISTORICAL V2.6.5 TAG FAILURE 2026-09-03:** the annotated
+  `v2.6.5` tag points to commit `aa8b5ecda13384ad5734dc077ea73c674c1e02cd`
+  and was pushed. Desktop Clients run `33715658824` failed its three packaged
+  runtime smokes because `pydantic_settings` was absent from each frozen
+  executable. Docker Image run `33715658700` failed its HTTP startup smoke.
+  No v2.6.5 GitHub Release, release assets, or GHCR image were created.
+- **LOCAL / V2.6.6 SUCCESSOR CANDIDATE 2026-09-03:** the application version,
+  Docker Compose defaults, packaging tests, changelog, rolling notes, and
+  bilingual versioned notes identify `2.6.6`. This candidate carries Precision
+  Edit V4 plus the desktop dependency-collection and Docker readiness fixes.
+  It is a repair release candidate; no `v2.6.6` tag, Release, release asset, or
+  GHCR image exists, and hosted release CI remains unverified.
+- **VERIFIED / SOURCE-EXPORT PRIVACY REMEDIATION:** the source export policy now
+  excludes internal
   `.planning`, handoff/review, Phase 10 evidence, and the historical Phase 7
   secret-scan report through Git-native `export-ignore`; it does not edit those
   internal documents or remove public product, architecture, status, roadmap,
@@ -28,6 +35,121 @@
   evidence is absent while public documentation remains present, and prove the
   scanner rejects an unexpected host-local path, credential, vault file, or
   ONNX payload. No remote operation was performed.
+- **VERIFIED / CURRENT-CANDIDATE SOURCE-EXPORT RECHECK 2026-09-03:** the Docker
+  log-redaction Bearer sentinel is assembled from source-safe shell fragments at
+  runtime, so the redaction check still receives and removes the complete
+  synthetic value without embedding a contiguous high-confidence credential
+  shape in the public source. The unchanged source-export sanitizer scanned the
+  current candidate view (`270` files, including `243` text files and `27`
+  images) with zero violations. No scanner allowlist was broadened.
+- **VERIFIED / LOCAL DESKTOP ONEFILE CONTRACT FIX 2026-09-03:** `build.py` now
+  derives hidden-import smoke coverage from the complete direct runtime
+  requirement set, explicitly includes the dynamically loaded Pydantic and
+  multipart modules, collects required submodules/native data, and copies
+  metadata for all `18` pinned direct distributions, including bcrypt. The
+  generated spec and the PyInstaller CLI use the same hidden-import, submodule,
+  native/data, and metadata lists. The smoke verifies every pinned version plus
+  critical API symbols instead of checking only NumPy and ONNX Runtime.
+- **VERIFIED / LOCAL WINDOWS ONEFILE 2026-09-03:** a fresh temporary Python
+  `3.12.8` environment with PyInstaller `6.21.0` built `GenBox.exe`
+  successfully (`67,631,005` bytes). From an empty directory with
+  `PYTHONPATH`/`PYTHONHOME` removed and `PYTHONNOUSERSITE=1`, `--version`
+  returned `GenBox 2.6.6`; `--runtime-import-smoke` returned `status=ok`, all
+  `18` pinned distribution versions, `symbols=ok`, and
+  `encrypted_openssh=ok`. The packaged client smoke also passed on ephemeral
+  loopback port `53009`.
+- **VERIFIED / LOCAL DESKTOP REGRESSION 2026-09-03:** final
+  `python -m pytest -q tests/test_release_packaging.py` passed `42`; final
+  `python -m pytest -q` passed `1302`; Python compilation passed for the
+  version, build, license collector, and packaging-test modules. The desktop
+  workflow now applies the same environment scrub to Windows, macOS, and Linux
+  empty-directory checks.
+- **VERIFIED / LOCAL ENCRYPTED OPENSSH KEY PACKAGING FIX 2026-09-03:** the v2.6.6
+  runtime adds locally verified `bcrypt==5.0.0` for AsyncSSH's bcrypt KDF path.
+  Desktop and Docker runtime smokes generate a synthetic encrypted Ed25519
+  OpenSSH private key and require `asyncssh.import_private_key` with its
+  synthetic passphrase to succeed. `bcrypt._bcrypt` is included explicitly
+  without collecting the whole package. The complete installed Apache-2.0
+  license is required in desktop, Docker-image, Docker Compose, and source
+  packages. The collector accepts bcrypt's verified Windows
+  `.dist-info/LICENSE` and Linux `.dist-info/licenses/LICENSE` wheel layouts,
+  still requires exactly one matching file, and writes the fixed public path
+  `THIRD_PARTY_LICENSES/bcrypt/LICENSE`. No real key or passphrase is used or
+  persisted.
+- **BOUNDARY / DESKTOP:** this local Windows result does not establish hosted
+  Windows, macOS, or Linux success and does not create artifacts suitable for
+  publication. Require all three hosted desktop empty-directory checks before
+  creating a Release.
+- **VERIFIED / CI HTTP-SMOKE ROOT CAUSE 2026-09-03:** GitHub Actions run
+  `33715658700` built image ID
+  `sha256:e518cb38b5caefa5299a6d1b0fd0744fe57a8981f25eca412bd576de0020e972`
+  once, and the runtime-import smoke completed at `2026-09-03T04:38:33.787Z`.
+  The HTTP step began at `04:38:33.958Z`, and its first request failed at
+  `04:38:34.178Z` with curl error 56, about 214 milliseconds after step start.
+  The command retried connection-refused errors only, so the early connection
+  reset ended the step without a second readiness attempt, health evidence, or
+  container logs. The evidence identifies a startup-readiness race; that run
+  does not contain evidence of an application crash.
+- **LOCAL / CI CONTRACT FIX 2026-09-03:** the same-image HTTP smoke now uses a
+  90-second bounded readiness loop. Every attempt verifies container state,
+  liveness, and Docker health, then requires `/api/setup/status` to report
+  `app_mode=prod` and `auth_required=true`. Retry delay is capped at five
+  seconds. A stopped or unhealthy container ends the loop; terminal failure
+  prints bounded, credential-redacted container logs and fails. The build-once,
+  exact image-ID assertion, no-rebuild push, and per-tag image-ID gate remain
+  unchanged.
+- **VERIFIED / LOCAL EXACT-IMAGE HTTP SMOKE 2026-09-03:** an immutable Git
+  archive of commit `aa8b5ecda13384ad5734dc077ea73c674c1e02cd` built local
+  image ID
+  `sha256:713279850f9b6fe75d87ad101178d9fb79d7b3892298ceeced5ce2b28c1e7c0a`.
+  A uniquely named container created from that exact ID was still in Docker
+  health `starting` on both probes and passed the production setup-status JSON
+  contract on readiness attempt 2. The owned container was removed; no image
+  was pushed and no shared container or deployment was changed.
+- **VERIFIED / LOCAL CURRENT-SOURCE V2.6.6 DOCKER 2026-09-03:** the normal
+  repository-root build now excludes `.pytest*` development artifacts from the
+  Docker context and accepts the verified Linux bcrypt license metadata layout.
+  It built exact image ID
+  `sha256:7e9cb290ec41fec391e264887dfde474e346a06c5a1a3b1e23bf5796fdf55f1a`.
+  The exact-image runtime smoke verified bcrypt `5.0.0`, NumPy `2.4.3`, ONNX
+  Runtime `1.24.3`, the synthetic encrypted Ed25519 OpenSSH key round trip,
+  `main` import, the bcrypt notice, and the physical Apache-2.0 license file.
+  The standalone ownership-aware HTTP smoke passed the production setup-status
+  contract on readiness attempt 2 through a local Docker Desktop loopback
+  adapter, then removed its exact owned container. No image was pushed and no
+  shared container or deployment was changed.
+- **VERIFIED / LOCAL RELEASE-WORKFLOW SECURITY HARDENING 2026-09-03:** desktop,
+  Docker, and pull-request workflows now default to `contents: read`; only the
+  desktop Release job receives `contents: write`, and only the separate Docker
+  publish job receives `packages: write`. Artifact upload in the pull-request
+  workflow receives no repository-content write permission. All external
+  actions in all three workflows are pinned to the full 40-character commits
+  resolved read-only from their official `vX` tags on 2026-09-03, with tag
+  comments retained for review. The Windows packaged-runtime smoke uses a
+  unique GUID-owned `RUNNER_TEMP` directory and removes it in `finally`.
+- **VERIFIED / LOCAL OWNERSHIP AND SAME-IMAGE CONTRACT 2026-09-03:** the Docker
+  HTTP smoke now uses a random container name plus a per-run ownership label.
+  Cleanup runs only after successful creation and only when both the recorded
+  container ID and owner label match; collision or ownership mismatch refuses
+  deletion. The read-only build job saves and uploads the exact smoked image;
+  the publish job reloads it, verifies the original Buildx image ID, then tags,
+  re-verifies, and pushes without rebuilding.
+- **VERIFIED / LOCAL WORKFLOW REGRESSION 2026-09-03:** the final packaging suite
+  passed `42`, including executable mocked Docker cases for connection reset
+  followed by success, stopped container, readiness deadline, credential-log
+  redaction, pre-existing name collision, ownership mismatch, and both verified
+  bcrypt wheel license layouts. The suite also scans every workflow external
+  action for its reviewed full commit and allows only repository-local `./`
+  actions without a commit reference. The full repository suite passed `1302`.
+  All three workflow YAML files parsed (`10` jobs total), all six Docker inline
+  Bash blocks and the standalone smoke script passed Bash syntax validation,
+  the Windows block passed PowerShell parsing, and the working-tree diff passed
+  whitespace validation. The pull-request evidence heredoc now has an explicit
+  terminator and emits no end-of-file syntax warning.
+- **BOUNDARY / RESUME:** this workflow correction does not prove a new hosted
+  run and does not push an image, change a version, tag, Release, or deployment.
+  Resume by committing the reviewed candidate and observing the same-image
+  hosted smoke before making any publication claim.
 
 - **VERIFIED / LOCAL UPDATER FAIL-CLOSED GATE 2026-09-03:** automatic source,
   executable, and Docker update application now terminates with structured
@@ -57,8 +179,8 @@
   `can_download=false`. POST download fails closed before DNS/client/network
   work and the disabled UI says `来源/授权尚未验证`. The UI/API state framework
   and test-only injected fixtures retain verification, progress, cancellation,
-  and retry coverage, but v2.6.5 does not deliver a production network
-  installer. An operator may manually place the fixed-size/fingerprint model;
+  and retry coverage, but the v2.6.6 candidate does not deliver a production
+  network installer. An operator may manually place the fixed-size/fingerprint model;
   local models still require `ready` plus `executable=true` before cutout is
   enabled.
 - **VERIFIED / DISTRIBUTION BOUNDARY 2026-09-03:** packaged builds include
@@ -78,16 +200,27 @@
   YAML parsing (`6` jobs), and `git diff HEAD --check` passed. No public model
   download, Provider request, VPS, release, tag, push, or cleanup was performed.
 - **VERIFIED / RELEASE-CANDIDATE AND DOCKER WORKFLOW CONTRACT 2026-09-03:**
-  changelog, rolling notes, bilingual v2.6.5 notes, and third-party notices
-  identify this as an unpublished candidate and state that production model
-  network download/install is disabled while checkpoint provenance and
+  changelog, rolling notes, bilingual v2.6.6 notes, and third-party notices are
+  aligned to version `2.6.6`. The public notes contain stable release content;
+  this status is the source for transient publication and hosted-CI state. The
+  notes state that production model network download/install and automatic
+  update application remain disabled, while checkpoint provenance and
   commercial-use rights remain **UNVERIFIED**. Local
-  `python -m pytest -q tests/test_release_packaging.py` passed `28`. The tested
+  `python -m pytest -q tests/test_release_packaging.py` passed `42` with the
+  v2.6.6 version, notes, Compose pin, and tag contract. The tested
   Docker workflow requires a tag to match the packaged version before build,
   uses the single `steps.build.outputs.imageid` for runtime-import and HTTP
   smoke checks, and verifies each publish tag resolves to that same image ID
-  before push. This is local workflow-contract evidence only; no GitHub Actions
-  or other CI run, commit, tag, Release, or push is claimed.
+  before push. This is local workflow-contract evidence only; hosted v2.6.6
+  GitHub Actions remains unverified, and no tag, Release, or GHCR artifact is
+  claimed.
+- **VERIFIED / LOCAL V2.6.6 RELEASE CONTRACT 2026-09-03:**
+  `python -m pytest -q tests/test_release_packaging.py` passed `42`;
+  `python -m pytest -q` passed `1302`;
+  `python scripts/package_release.py --validate-release-tag v2.6.6` passed;
+  workflow YAML parsed with `6` desktop jobs and `3` Docker jobs; Python
+  compilation and `git diff --check` passed. These verification commands
+  performed no remote action.
 
 - **VERIFIED / LOCAL PROVIDER-OUTPUT SAFETY:** provider-returned images now
   share bounded decoding and validation before persistence, including encoded
@@ -96,13 +229,14 @@
   same bounded decoder. The current provider, precision/inpaint, and
   generation-control regression passed `252`; earlier variation safety and
   variation/generation targets passed `12` and `24`.
-- **VERIFIED / LOCAL RELEASE-NOTICE GATE:** NumPy `==2.4.3` and ONNX Runtime
-  `==1.24.3`, introduced through `requirements-cutout.txt`, are recorded in
-  `THIRD_PARTY_NOTICES.md` with their declared license information. The release
-  packaging test asserts dependency distribution, notice coverage, candidate
-  dates/links, tag/version gates, and the same-image Docker smoke/publish
-  contract; the current local suite passed `28`. The earlier combined release
-  and cutout target passed `89` before this candidate wording correction.
+- **VERIFIED / LOCAL RELEASE-NOTICE GATE:** bcrypt `==5.0.0`, NumPy `==2.4.3`,
+  and ONNX Runtime `==1.24.3` are recorded in `THIRD_PARTY_NOTICES.md` with
+  their declared license information and collected physical license assets.
+  The release packaging test asserts dependency distribution, notice coverage,
+  candidate dates/links, tag/version gates, and the same-image Docker
+  smoke/publish contract; the current v2.6.6 local suite passed `42`. The
+  earlier combined release and cutout target passed `89` before this candidate
+  wording correction.
 - **USER-CONFIRMED / LOCAL BROWSER:** the current Precision Edit V4 workflow
   works in the local browser. This supersedes only the September 2 manual
   browser-acceptance blocker; a real cutout refine POST remains **UNVERIFIED**.
@@ -110,17 +244,18 @@
   packaged, but the ONNX model file remains external and operator-provided. It
   is not bundled, must pass the fixed size and hash checks, and the capability
   fails closed until the model is installed and validated.
-- **BOUNDARY:** this is local v2.6.5 release preparation only. No VPS,
+- **BOUNDARY:** this is local v2.6.6 release preparation only. No VPS,
   production, source-cleanup, remote-deployment, clean-redeployment, or
-  cross-project acceptance is established, and no commit, tag, Release, or
-  push action was performed. The 2026-09-03 release notes describe a candidate,
-  not an already published release, and no CI result is inferred from local
-  verification.
-- **RESUME:** create and independently review one sanitized commit containing
-  the complete v2.6.5 candidate, then run source packaging only from that clean
-  checked-out commit with `--source-commit <sha>`. Keep public-model download
-  disabled until source provenance and authorization receive a separate
-  accepted decision and evidence gate.
+  cross-project acceptance is established. No v2.6.6 tag, Release, release
+  asset, or GHCR image exists, and no hosted CI result is inferred from local
+  verification. Public v2.6.6 notes intentionally omit these transient facts.
+  The pushed v2.6.5 tag remains an immutable historical failed candidate and
+  was not moved or deleted.
+- **RESUME:** after the sanitized candidate commit is independently reviewed,
+  run source packaging only from that clean checked-out commit with
+  `--source-commit <sha>`. Keep public-model download disabled until source
+  provenance and authorization receive a separate accepted decision and
+  evidence gate.
 
 ## Current bounded development strategy (2026-09-02)
 

@@ -1,6 +1,14 @@
-# GenBox v2.6.5 Release Candidate - Precision Edit V4
+# GenBox v2.6.5 Historical Release Candidate - Precision Edit V4
 
 Candidate date: 2026-09-03
+
+## Historical Outcome
+
+- The annotated `v2.6.5` tag was pushed, but the Desktop Clients workflow
+  (`33715658824`) and Docker Image workflow (`33715658700`) both failed.
+- No v2.6.5 GitHub Release, release assets, or GHCR image were created. These
+  notes describe the historical candidate and must not be read as a published
+  release record.
 
 ## Included
 
@@ -54,5 +62,5 @@ Candidate date: 2026-09-03
 ## Packaging
 
 - Docker Compose defaults are pinned to `ghcr.io/liwei9745/genbox:2.6.5`.
-- This is a prepared release candidate. No v2.6.5 tag or GitHub Release is
-  claimed by these notes.
+- The pushed tag did not produce a GitHub Release, release assets, or GHCR
+  image. Use the later v2.6.6 candidate for the CI corrections.

@@ -17,6 +17,7 @@ does not replace the dependency's complete license text.
 | aiofiles | 25.1.0 | Apache-2.0 |
 | Requests | 2.34.2 | Apache-2.0 |
 | AsyncSSH | 2.24.0 | EPL-2.0 OR GPL-2.0-or-later; GenBox relies on the GPL-compatible option |
+| bcrypt | 5.0.0 | Apache-2.0 |
 | Pillow | 12.3.0 | MIT-CMU |
 | cryptography | 49.0.0 | Apache-2.0 OR BSD-3-Clause |
 | python-dotenv | 1.2.2 | BSD-3-Clause |
@@ -28,7 +29,10 @@ does not replace the dependency's complete license text.
 | NumPy | 2.4.3 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
 | ONNX Runtime | 1.24.3 | MIT |
 
-The NumPy homepage is <https://numpy.org>. Its bundled license identifies
+The bcrypt homepage is <https://github.com/pyca/bcrypt/>. Its installed
+distribution includes the complete Apache License 2.0 text. GenBox uses bcrypt
+through AsyncSSH to import passphrase-protected OpenSSH private keys. The NumPy
+homepage is <https://numpy.org>. Its bundled license identifies
 Copyright (c) 2005-2025, NumPy Developers, and records the separately licensed
 components included in binary distributions. The ONNX Runtime homepage is
 <https://onnxruntime.ai>; its bundled MIT license identifies Copyright (c)
@@ -39,7 +43,7 @@ required license assets are missing.
 
 Packaged GenBox builds carry the Python runtime, NumPy, and ONNX Runtime needed
 by the local cutout adapter. They do **not** carry the
-`u2net_human_seg.onnx` checkpoint. In v2.6.5, production network download and
+`u2net_human_seg.onnx` checkpoint. In v2.6.6, production network download and
 installation are disabled and fail closed because the checkpoint's provenance
 and commercial-use rights remain unverified. The UI and API expose only the
 disabled capability/status framework; the browser cannot choose a download URL

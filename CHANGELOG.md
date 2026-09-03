@@ -4,7 +4,60 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
-## [2.6.5] - 2026-09-03 (release candidate)
+## [2.6.6] - 2026-09-03
+
+### Added
+
+- Precision Edit V4 adds editable arrow, rectangle, ellipse, brush, eraser,
+  and text annotations; resize-only expansion; result comparison; local cutout
+  and refine controls; and responsive workbench behavior.
+
+### Changed
+
+- Desktop onefile packaging now uses one complete contract for runtime imports,
+  dynamic submodules, native/data collection, distribution metadata, exact
+  pinned versions, and critical API symbols in both generated spec and CLI
+  builds.
+- AsyncSSH passphrase-protected OpenSSH private-key support now includes pinned
+  `bcrypt==5.0.0`, its compiled backend, and a synthetic encrypted Ed25519 key
+  import smoke in desktop and Docker release paths.
+- Docker image HTTP smoke now waits within a bounded readiness loop, verifies
+  container liveness/health and production setup status, and emits bounded
+  redacted logs on terminal failure while preserving the exact-image publish
+  contract.
+- Current version is `2.6.6`; Docker Compose defaults are pinned to
+  `ghcr.io/liwei9745/genbox:2.6.6`.
+
+### Security
+
+- Empty-directory desktop smoke removes `PYTHONPATH` and `PYTHONHOME`, disables
+  user site packages, and verifies the frozen executable without external
+  Python package inheritance.
+- Desktop, Docker-image, Docker Compose, and source packages carry bcrypt's
+  complete Apache License 2.0 text alongside the dependency notice.
+- Automatic update application and restart remain disabled pending the signed
+  release-manifest and rollback contract; the in-app version check remains
+  informational and installation remains manual.
+- Production cutout-model network download and installation remain disabled
+  while checkpoint provenance and commercial-use rights are **UNVERIFIED**.
+
+### Verification And Boundaries
+
+- A local Windows Python 3.12.8/PyInstaller 6.21.0 onefile build produced a
+  67,631,005-byte v2.6.6 executable and passed all 18 pinned runtime versions,
+  API symbols, encrypted OpenSSH key, and packaged-client HTTP smokes.
+- A current-source local Docker image passed exact-image runtime, bcrypt
+  license, encrypted OpenSSH key, and bounded HTTP readiness smokes.
+- Final local verification passed `42` release-packaging tests and `1302` total
+  repository tests, plus the v2.6.6 tag contract, workflow YAML parsing, Python
+  compilation, and diff whitespace validation.
+- The earlier `v2.6.5` tag was pushed, but Desktop Clients run `33715658824`
+  and Docker Image run `33715658700` failed. No v2.6.5 GitHub Release, release
+  assets, or GHCR image were created.
+- Real Provider requests, VPS deployment, source cleanup, and cross-project
+  end-to-end operation were not part of this release verification.
+
+## [2.6.5] - 2026-09-03 (historical candidate; tag workflows failed)
 
 ### Added
 
@@ -25,7 +78,7 @@ All notable GenBox changes are recorded here. The format follows
 - The release package includes Python 3.12, NumPy, and ONNX Runtime for local
   cutout execution, while the ONNX checkpoint remains external and is never
   embedded in the package.
-- Current version is `2.6.5`; Docker Compose defaults are pinned to
+- The candidate version was `2.6.5`; Docker Compose defaults were pinned to
   `ghcr.io/liwei9745/genbox:2.6.5`.
 
 ### Security
@@ -58,6 +111,9 @@ All notable GenBox changes are recorded here. The format follows
   this evidence contains the checkpoint.
 - This evidence is local only. It does not establish VPS, production,
   source-cleanup, remote-deployment, or cross-project delivery acceptance.
+- The annotated `v2.6.5` tag was pushed, but Desktop Clients run `33715658824`
+  and Docker Image run `33715658700` failed. No GitHub Release, release assets,
+  or GHCR image were created for v2.6.5.
 
 ## [2.6.4] - 2026-08-25
 

@@ -10,18 +10,19 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   PYTHON_VERSION: '3.12'
 
+permissions:
+  contents: read
+
 jobs:
   release-contract:
     name: Validate release identity
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -34,28 +35,20 @@ jobs:
   build:
     needs: release-contract
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      packages: write
+    outputs:
+      image_id: ${{ steps.build.outputs.imageid }}
+      image_tags: ${{ steps.meta.outputs.tags }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -66,7 +59,7 @@ jobs:
 
       - name: Build Docker image once for smoke and publish
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           load: true
@@ -84,43 +77,76 @@ jobs:
           test -n "$RELEASE_IMAGE_ID"
           docker image inspect "$RELEASE_IMAGE_ID" >/dev/null
           docker run --rm --entrypoint python "$RELEASE_IMAGE_ID" -c \
-            "import aiofiles, asyncssh, cryptography, dotenv, fastapi, httpx, multipart, numpy, onnxruntime, PIL, psutil, pydantic, pydantic_settings, requests, typing_extensions, tzdata, uvicorn; assert numpy.__version__ == '2.4.3'; assert onnxruntime.__version__ == '1.24.3'; import main; print('docker runtime import smoke passed')"
+            "from importlib import metadata; from pathlib import Path; import aiofiles, asyncssh, bcrypt, cryptography, dotenv, fastapi, httpx, multipart, numpy, onnxruntime, PIL, psutil, pydantic, pydantic_settings, requests, typing_extensions, tzdata, uvicorn; assert metadata.version('bcrypt') == '5.0.0'; assert numpy.__version__ == '2.4.3'; assert onnxruntime.__version__ == '1.24.3'; assert Path('/app/THIRD_PARTY_NOTICES.md').is_file(); assert Path('/app/THIRD_PARTY_LICENSES/bcrypt/LICENSE').is_file(); passphrase = 'genbox-runtime-smoke-only'; private_key = asyncssh.generate_private_key('ssh-ed25519'); encrypted_key = private_key.export_private_key('openssh', passphrase); assert asyncssh.import_private_key(encrypted_key, passphrase).get_algorithm() == 'ssh-ed25519'; import main; print('docker runtime import smoke passed')"
 
       - name: Smoke test exact built image over HTTP
+        timeout-minutes: 3
+        env:
+          RELEASE_IMAGE_ID: ${{ steps.build.outputs.imageid }}
+        run: bash .github/scripts/docker-release-http-smoke.sh
+
+      - name: Save smoke-tested Docker image without rebuilding
         env:
           RELEASE_IMAGE_ID: ${{ steps.build.outputs.imageid }}
         run: |
           set -euo pipefail
           test -n "$RELEASE_IMAGE_ID"
-          container_name="genbox-release-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          cleanup() {
-            docker rm -f "$container_name" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-          admin_key="$(openssl rand -hex 32)"
-          docker run --detach --name "$container_name" \
-            --env APP_MODE=prod \
-            --env GENBOX_PORT=8891 \
-            --env ADMIN_KEY="$admin_key" \
-            --publish 127.0.0.1::8891 \
-            "$RELEASE_IMAGE_ID" >/dev/null
-          test "$(docker inspect --format '{{.Image}}' "$container_name")" = "$RELEASE_IMAGE_ID"
-          host_port="$(docker port "$container_name" 8891/tcp | sed -n 's/^127\.0\.0\.1:\([0-9][0-9]*\)$/\1/p' | head -n 1)"
-          test -n "$host_port"
-          curl --fail --silent --show-error \
-            --retry 30 --retry-connrefused --retry-delay 1 --max-time 5 \
-            "http://127.0.0.1:${host_port}/api/setup/status" >/dev/null
+          docker image inspect "$RELEASE_IMAGE_ID" >/dev/null
+          docker save --output "$RUNNER_TEMP/genbox-release-image.tar" "$RELEASE_IMAGE_ID"
+          test -s "$RUNNER_TEMP/genbox-release-image.tar"
+
+      - name: Upload exact smoke-tested Docker image
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: genbox-release-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/genbox-release-image.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  push:
+    name: Push exact smoke-tested image
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Download exact smoke-tested Docker image
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: genbox-release-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/genbox-release-image
+
+      - name: Load and verify exact smoke-tested Docker image
+        env:
+          RELEASE_IMAGE_ID: ${{ needs.build.outputs.image_id }}
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_IMAGE_ID"
+          docker load --input "$RUNNER_TEMP/genbox-release-image/genbox-release-image.tar"
+          test "$(docker image inspect --format '{{.Id}}' "$RELEASE_IMAGE_ID")" = "$RELEASE_IMAGE_ID"
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push smoke-tested Docker image without rebuilding
         env:
-          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
-          RELEASE_IMAGE_ID: ${{ steps.build.outputs.imageid }}
+          IMAGE_TAGS: ${{ needs.build.outputs.image_tags }}
+          RELEASE_IMAGE_ID: ${{ needs.build.outputs.image_id }}
         run: |
           set -euo pipefail
           test -n "$RELEASE_IMAGE_ID"
+          test "$(docker image inspect --format '{{.Id}}' "$RELEASE_IMAGE_ID")" = "$RELEASE_IMAGE_ID"
           pushed=0
           while IFS= read -r tag; do
             test -n "$tag" || continue
+            docker tag "$RELEASE_IMAGE_ID" "$tag"
             test "$(docker image inspect --format '{{.Id}}' "$tag")" = "$RELEASE_IMAGE_ID"
             docker push "$tag"
             pushed=$((pushed + 1))

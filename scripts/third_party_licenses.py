@@ -15,6 +15,14 @@ MINIMUM_PYTHON = (3, 11)
 SUPPORTED_PLATFORMS = {"windows", "darwin", "linux"}
 SUPPORTED_ARCHITECTURES = {"amd64", "x86_64", "arm64", "aarch64"}
 RUNTIME_LICENSES = {
+    "bcrypt": {
+        "version": "5.0.0",
+        "files": {
+            "LICENSE": lambda path: path.endswith(
+                (".dist-info/LICENSE", ".dist-info/licenses/LICENSE")
+            ),
+        },
+    },
     "numpy": {
         "version": "2.4.3",
         "files": {

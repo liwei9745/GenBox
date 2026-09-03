@@ -18,16 +18,19 @@ env:
   APP_NAME: GenBox
   PYTHON_VERSION: '3.12'
 
+permissions:
+  contents: read
+
 jobs:
   release-contract:
     name: Validate release identity
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -43,10 +46,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -76,10 +79,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -92,21 +95,34 @@ jobs:
       - name: Smoke test packaged runtime from an empty directory
         shell: pwsh
         run: |
-          $smoke = Join-Path $env:RUNNER_TEMP "genbox-packaged-runtime-smoke"
-          New-Item -ItemType Directory -Force $smoke | Out-Null
-          Copy-Item dist/GenBox.exe $smoke/GenBox.exe
-          Push-Location $smoke
-          ./GenBox.exe --version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./GenBox.exe --runtime-import-smoke
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Pop-Location
+          $ErrorActionPreference = "Stop"
+          $smoke = Join-Path $env:RUNNER_TEMP ("genbox-packaged-runtime-smoke-" + [guid]::NewGuid().ToString("N"))
+          New-Item -ItemType Directory -Path $smoke | Out-Null
+          $locationPushed = $false
+          try {
+            Copy-Item dist/GenBox.exe $smoke/GenBox.exe
+            Push-Location $smoke
+            $locationPushed = $true
+            Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+            Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
+            $env:PYTHONNOUSERSITE = "1"
+            ./GenBox.exe --version
+            if ($LASTEXITCODE -ne 0) { throw "packaged version smoke failed with exit code $LASTEXITCODE" }
+            ./GenBox.exe --runtime-import-smoke
+            if ($LASTEXITCODE -ne 0) { throw "packaged runtime import smoke failed with exit code $LASTEXITCODE" }
+          }
+          finally {
+            if ($locationPushed) { Pop-Location }
+            if (Test-Path -LiteralPath $smoke) {
+              Remove-Item -LiteralPath $smoke -Recurse -Force
+            }
+          }
 
       - name: Smoke test packaged client
         run: python scripts/smoke_client.py --executable dist/GenBox.exe
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ env.APP_NAME }}-Windows-x64
           path: |
@@ -123,10 +139,10 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -141,14 +157,14 @@ jobs:
           smoke="$(mktemp -d)"
           cp dist/GenBox "$smoke/GenBox"
           cd "$smoke"
-          ./GenBox --version
-          ./GenBox --runtime-import-smoke
+          env -u PYTHONPATH -u PYTHONHOME PYTHONNOUSERSITE=1 ./GenBox --version
+          env -u PYTHONPATH -u PYTHONHOME PYTHONNOUSERSITE=1 ./GenBox --runtime-import-smoke
 
       - name: Smoke test packaged client
         run: python scripts/smoke_client.py --executable dist/GenBox
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ env.APP_NAME }}-macOS
           path: |
@@ -165,10 +181,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -188,14 +204,14 @@ jobs:
           smoke="$(mktemp -d)"
           cp dist/GenBox "$smoke/GenBox"
           cd "$smoke"
-          ./GenBox --version
-          ./GenBox --runtime-import-smoke
+          env -u PYTHONPATH -u PYTHONHOME PYTHONNOUSERSITE=1 ./GenBox --version
+          env -u PYTHONPATH -u PYTHONHOME PYTHONNOUSERSITE=1 ./GenBox --runtime-import-smoke
 
       - name: Smoke test packaged client
         run: python scripts/smoke_client.py --executable dist/GenBox
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ env.APP_NAME }}-Linux-x64
           path: |
@@ -216,22 +232,22 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Download Windows artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ env.APP_NAME }}-Windows-x64
           path: artifacts/windows
 
       - name: Download macOS artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ env.APP_NAME }}-macOS
           path: artifacts/macos
 
       - name: Download Linux artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ env.APP_NAME }}-Linux-x64
           path: artifacts/linux
