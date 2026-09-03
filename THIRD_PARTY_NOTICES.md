@@ -9,6 +9,7 @@ does not replace the dependency's complete license text.
 
 | Package | Version | License expression or declared license |
 |---|---:|---|
+| CPython | 3.12.x release build runtime | Python Software Foundation License Version 2 and included historical notices |
 | FastAPI | 0.139.0 | MIT |
 | Uvicorn | 0.51.0 | BSD-3-Clause |
 | python-multipart | 0.0.32 | Apache-2.0 |
@@ -24,6 +25,37 @@ does not replace the dependency's complete license text.
 | psutil | 7.2.2 | BSD-3-Clause |
 | typing-extensions | 4.16.0 | PSF-2.0 |
 | tzdata | 2026.3 | Apache-2.0 |
+| NumPy | 2.4.3 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
+| ONNX Runtime | 1.24.3 | MIT |
+
+The NumPy homepage is <https://numpy.org>. Its bundled license identifies
+Copyright (c) 2005-2025, NumPy Developers, and records the separately licensed
+components included in binary distributions. The ONNX Runtime homepage is
+<https://onnxruntime.ai>; its bundled MIT license identifies Copyright (c)
+Microsoft Corporation, and its distribution includes additional third-party
+notices. Release artifacts carry these installed license files under
+`THIRD_PARTY_LICENSES/`; a release build fails if the pinned distributions or
+required license assets are missing.
+
+Packaged GenBox builds carry the Python runtime, NumPy, and ONNX Runtime needed
+by the local cutout adapter. They do **not** carry the
+`u2net_human_seg.onnx` checkpoint. In v2.6.5, production network download and
+installation are disabled and fail closed because the checkpoint's provenance
+and commercial-use rights remain unverified. The UI and API expose only the
+disabled capability/status framework; the browser cannot choose a download URL
+or filesystem destination. An operator may manually place the expected model
+file, which GenBox accepts only after checking the fixed size, SHA-256, and MD5
+values recorded by the local adapter.
+
+The matching fingerprints establish byte identity with the pinned remote asset;
+they do not establish the checkpoint's complete conversion history, training-
+data provenance, or commercial-use rights. Those three matters remain
+**UNVERIFIED**. Users are responsible for confirming that the checkpoint and
+its training-data rights are suitable for their intended use before acquiring
+or using it. A future network installer must remain disabled until its source
+and authorization receive separate approval. The checkpoint remains an external
+user-acquired asset and is not redistributed in GenBox source or release
+packages.
 
 ## Development and build dependencies
 

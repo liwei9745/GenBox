@@ -45,6 +45,7 @@
     "common.delete_icon":{"zh-CN":"🗑 删除","en":"🗑 Delete"},
     "common.download_original":{"zh-CN":"⬇ 下载原图","en":"⬇ Download original"},
     "common.image_to_image":{"zh-CN":"🎯 图生图","en":"🎯 Image to image"},
+    "common.precision_edit":{"zh-CN":"🎯 精准改图","en":"🎯 Precise image edit"},
     "common.create_video":{"zh-CN":"🎬 生视频","en":"🎬 Create video"},
     "common.insert":{"zh-CN":"📥 插入","en":"📥 Insert"},
     "common.search_prompt":{"zh-CN":"搜索提示词..","en":"Search prompts..."},
@@ -83,7 +84,6 @@
     "update.ignore":{"zh-CN":"忽略此版本","en":"Ignore this version"},
     "update.later":{"zh-CN":"稍后","en":"Later"},
     "update.download":{"zh-CN":"前往下载","en":"Go to download"},
-    "update.apply":{"zh-CN":"立即更新","en":"Update now"},
     "update.checking":{"zh-CN":"检查更新...","en":"Checking for updates..."},
     "update.open_status":{"zh-CN":"点击查看更新状态","en":"View update status"},
     "auth.required":{"zh-CN":"需要认证","en":"Authentication required"},
@@ -122,6 +122,7 @@
     "creator.quality":{"zh-CN":"质量","en":"Quality"},
     "creator.size":{"zh-CN":"尺寸","en":"Size"},
     "creator.aspect_ratio":{"zh-CN":"宽高比","en":"Aspect ratio"},
+    "creator.exact_ratio_crop":{"zh-CN":"精确裁切到所选比例（可能裁掉画面边缘，默认关闭）","en":"Crop exactly to the selected ratio (may trim edges; off by default)"},
     "creator.quantity":{"zh-CN":"生成数量","en":"Quantity"},
     "creator.save_settings":{"zh-CN":"💾 保存设置","en":"💾 Save settings"},
     "creator.strength":{"zh-CN":"变换强度","en":"Variation strength"},
@@ -134,7 +135,70 @@
     "creator.t2i":{"zh-CN":"📝 文生图","en":"📝 Text to image"},
     "creator.i2i":{"zh-CN":"🖼 图生图","en":"🖼 Image to image"},
     "creator.variation":{"zh-CN":"🔄 变形","en":"🔄 Variation"},
+    "creator.inpaint":{"zh-CN":"🖌 局部重绘","en":"🖌 Inpaint"},
+    "creator.codex_edit":{"zh-CN":"🪄 Codex 改图","en":"🪄 Codex Image Edit"},
+    "creator.codex_edit_hint":{"zh-CN":"上传一张或多张参考图，描述你想怎么改，GenBox 会通过当前图片编辑模型生成新图。原图会保留。","en":"Upload one or more reference images and describe the changes. GenBox uses the selected image-editing model and keeps the originals."},
+    "creator.precision_edit":{"zh-CN":"🎯 精准改图","en":"🎯 Precise Image Edit"},
+    "creator.precision_edit_hint":{"zh-CN":"上传图片，标出要改哪里，再写清楚怎么改。","en":"Upload an image, mark where to edit, then describe the change."},
+    "creator.precision_edit_canvas_hint":{"zh-CN":"上传图片，用箭头、矩形或文字指出要改哪里，再写清楚怎么改。","en":"Upload an image, use arrows, rectangles, or text to mark the area, then describe the change."},
+    "creator.precision_edit_empty":{"zh-CN":"从文生图结果的灯箱点击“精准改图”，即可开始批注。","en":"Open a text-to-image result in the lightbox and choose Precise Image Edit to start annotating."},
+    "creator.precision_edit_canvas_label":{"zh-CN":"精准改图批注画布","en":"Precise image edit annotation canvas"},
+    "creator.precision_edit_title":{"zh-CN":"🎯 精准改图","en":"🎯 Precise Image Edit"},
+    "creator.precision_edit_annotation_badge":{"zh-CN":"批注式改图","en":"Annotation edit"},
+    "creator.precision_edit_canvas":{"zh-CN":"批注画布","en":"Annotation canvas"},
+    "creator.precision_edit_choose_image":{"zh-CN":"选择原图","en":"Choose image"},
+    "creator.precision_edit_local_upload":{"zh-CN":"本地上传","en":"Upload from device"},
+    "creator.precision_edit_from_gallery":{"zh-CN":"从图库选择","en":"Choose from library"},
+    "creator.precision_edit_loading_gallery":{"zh-CN":"正在加载图库图片...","en":"Loading library images..."},
+    "creator.precision_edit_gallery_empty":{"zh-CN":"图库中暂无可用图片。","en":"No images are available in the library."},
+    "creator.precision_edit_gallery_loaded":{"zh-CN":"已从图库载入图片，可以开始批注。","en":"Image loaded from the library. You can start annotating."},
+    "creator.precision_edit_text_placeholder":{"zh-CN":"输入批注文字","en":"Enter annotation text"},
+    "creator.precision_edit_upload":{"zh-CN":"选择一张要修改的图片","en":"Choose an image to edit"},
+    "creator.precision_edit_upload_hint":{"zh-CN":"也可以从文生图结果直接发送到这里","en":"You can also send an image here from a generated result"},
+    "creator.precision_edit_toolbar":{"zh-CN":"精准改图批注工具","en":"Precise edit annotation tools"},
+    "creator.precision_edit_select":{"zh-CN":"选择","en":"Select"},
+    "creator.precision_edit_arrow":{"zh-CN":"箭头","en":"Arrow"},
+    "creator.precision_edit_rectangle":{"zh-CN":"矩形","en":"Rectangle"},
+    "creator.precision_edit_text":{"zh-CN":"文字","en":"Text"},
+    "creator.precision_edit_color":{"zh-CN":"批注颜色","en":"Annotation color"},
+    "creator.precision_edit_color_short":{"zh-CN":"颜色","en":"Color"},
+    "creator.precision_edit_stroke":{"zh-CN":"线宽","en":"Line width"},
+    "creator.precision_edit_undo":{"zh-CN":"撤销","en":"Undo"},
+    "creator.precision_edit_redo":{"zh-CN":"重做","en":"Redo"},
+    "creator.precision_edit_annotations":{"zh-CN":"显示批注","en":"Show annotations"},
+    "creator.precision_edit_clear":{"zh-CN":"清除批注","en":"Clear annotations"},
+    "creator.precision_edit_instruction":{"zh-CN":"修改说明","en":"Edit instruction"},
+    "creator.precision_edit_instruction_placeholder":{"zh-CN":"例如：把箭头指向的杯子改成透明玻璃杯，其他内容保持不变。","en":"For example: replace the cup indicated by the arrow with a clear glass cup and keep everything else unchanged."},
+    "creator.precision_edit_guidance":{"zh-CN":"批注负责指出位置，修改说明负责告诉模型怎么改；未标注区域应尽量保持不变。","en":"Annotations identify the location; the instruction explains the change. Unmarked areas should remain unchanged where possible."},
+    "creator.precision_edit_annotation_preview":{"zh-CN":"批注图预览","en":"Annotated image preview"},
+    "creator.precision_edit_preview_empty":{"zh-CN":"添加批注后，这里会显示提交给模型的批注图。","en":"The annotated image sent to the model will appear here after you add annotations."},
+    "creator.precision_edit_model_notice":{"zh-CN":"需要支持图片编辑和参考图理解的模型","en":"Requires a model that supports image editing and reference-image understanding"},
+    "creator.precision_edit_model_hint":{"zh-CN":"这里只显示已确认支持图片编辑的模型；自定义模型需要手动确认一次。","en":"Only confirmed image-editing models are shown. Custom models require one manual confirmation."},
+    "creator.precision_edit_model_select":{"zh-CN":"编辑模型","en":"Editing model"},
+    "creator.precision_edit_no_model":{"zh-CN":"暂无已验证的精准改图模型","en":"No verified precise-edit model available"},
+    "creator.precision_edit_no_endpoint":{"zh-CN":"暂无可用端点","en":"No available endpoint"},
+    "creator.precision_edit_endpoint_select":{"zh-CN":"编辑端点","en":"Edit endpoint"},
+    "creator.precision_edit_authorize":{"zh-CN":"确认支持并启用","en":"Confirm support and enable"},
+    "creator.precision_edit_authorize_hint":{"zh-CN":"仅在你确认该端点和模型支持 OpenAI 兼容图片编辑时启用。","en":"Enable only after confirming this endpoint and model support OpenAI-compatible image editing."},
+    "creator.precision_edit_authorize_confirm":{"zh-CN":"我确认已验证该端点和模型支持 OpenAI 兼容图片编辑。启用后仍会在提交时校验。","en":"I confirm this endpoint and model support OpenAI-compatible image editing. Submission remains validated."},
+    "creator.precision_edit_authorize_saved":{"zh-CN":"已保存用户确认，可以提交精准改图。","en":"User confirmation saved. Precise edit can now be submitted."},
+    "creator.precision_edit_authorized":{"zh-CN":"已启用","en":"Enabled"},
+    "creator.precision_edit_unconfirmed":{"zh-CN":"待确认","en":"Unconfirmed"},
+    "creator.precision_edit_tools":{"zh-CN":"批注工具","en":"Annotation tools"},
+    "creator.precision_tool_select":{"zh-CN":"选择","en":"Select"},
+    "creator.precision_tool_arrow":{"zh-CN":"箭头","en":"Arrow"},
+    "creator.precision_tool_rect":{"zh-CN":"矩形","en":"Rectangle"},
+    "creator.precision_tool_text":{"zh-CN":"文字","en":"Text"},
+    "creator.precision_annotations_visible":{"zh-CN":"显示批注","en":"Show annotations"},
+    "creator.precision_clear":{"zh-CN":"清除全部批注","en":"Clear all annotations"},
+    "creator.precision_edit_prompt":{"zh-CN":"修改说明","en":"Edit instruction"},
+    "creator.precision_edit_prompt_placeholder":{"zh-CN":"结合批注，描述希望如何修改...","en":"Describe the requested change together with the annotations..."},
+    "creator.precision_text_prompt":{"zh-CN":"输入这条批注的内容","en":"Enter this annotation"},
+    "creator.precision_source_required":{"zh-CN":"请先从文生图结果的灯箱发送一张图片。","en":"Send an image from a text-to-image result lightbox first."},
+    "creator.precision_annotation_required":{"zh-CN":"请至少添加一个箭头、矩形或文字批注，指出需要修改的位置。","en":"Add at least one arrow, rectangle, or text note to identify what should change."},
+    "creator.precision_ready":{"zh-CN":"批注已准备好。请选择支持图片编辑的模型后提交。","en":"Annotations are ready. Choose an image-editing model before submitting."},
     "creator.generate_image":{"zh-CN":"🚀 生成图片","en":"🚀 Generate image"},
+    "creator.stop_generation":{"zh-CN":"⏹ 停止生成","en":"⏹ Stop generation"},
     "creator.newbie_mode":{"zh-CN":"📝 新手模式","en":"📝 Beginner mode"},
     "creator.pro_mode":{"zh-CN":"🎯 专业模式","en":"🎯 Pro mode"},
     "creator.prompt_label":{"zh-CN":"提示词 Prompt","en":"Prompt"},
@@ -972,8 +1036,12 @@
     "task.network.http_probe":{"zh-CN":"检查 VPS 能否访问 GenBox","en":"Check VPS access to GenBox"},
     "task.network.destination_ready":{"zh-CN":"保存可用访问地址","en":"Save reachable URL"},
     "status.cancelled":{"zh-CN":"已取消","en":"Cancelled"},
+    "status.generating_html":{"zh-CN":"⏳ 正在生成...","en":"⏳ Generating..."},
+    "status.cancelling_html":{"zh-CN":"⏹ 正在停止...","en":"⏹ Stopping..."},
+    "status.cancel_failed":{"zh-CN":"停止失败：","en":"Stop failed: "},
     "sync.zoom_title":{"zh-CN":"点击放大","en":"Click to enlarge"},
     "sync.zoom_aria_prefix":{"zh-CN":"放大预览 ","en":"Enlarge preview "},
+    "prompt.shuffle":{"zh-CN":"换一批","en":"Shuffle"},
     "prompt.category_style":{"zh-CN":"🎬 风格","en":"🎬 Style"},
     "prompt.cinematic":{"zh-CN":"电影感画面","en":"Cinematic scene"},
     "prompt.cyberpunk":{"zh-CN":"赛博朋克城市","en":"Cyberpunk city"},
@@ -1084,6 +1152,7 @@
     "image.unavailable":{"zh-CN":"无法获取图片","en":"Could not retrieve image"},
     "image.data_failed":{"zh-CN":"获取图片数据失败","en":"Could not load image data"},
     "image.sent_i2i":{"zh-CN":"已发送到图生图模式","en":"Sent to image-to-image"},
+    "image.sent_precision_edit":{"zh-CN":"已发送到精准改图，请选择支持图片编辑的模型后提交","en":"Sent to precise image edit. Choose a verified image-editing model before submitting."},
     "image.load_failed":{"zh-CN":"加载图片失败: ","en":"Image loading failed: "},
     "image.sent_i2v":{"zh-CN":"已发送到图生视频模式","en":"Sent to image-to-video"},
     "image.load_failed_compact":{"zh-CN":"加载图片失败:","en":"Image loading failed: "},
@@ -1111,17 +1180,12 @@
     "update.checking_progress":{"zh-CN":"正在检查更新...","en":"Checking for updates..."},
     "update.available_badge":{"zh-CN":"可更新","en":"Update available"},
     "update.available_suffix":{"zh-CN":"可用","en":"available"},
-    "update.speed_test":{"zh-CN":"测速","en":"Test speed"},
     "update.up_to_date_badge":{"zh-CN":"已是最新","en":"Up to date"},
     "update.up_to_date":{"zh-CN":"当前已是最新版本","en":"Already up to date"},
     "update.recheck":{"zh-CN":"重新检查","en":"Check again"},
     "update.check_failed_badge":{"zh-CN":"检查失败","en":"Check failed"},
     "update.check_failed_prefix":{"zh-CN":"检查失败: ","en":"Check failed: "},
-    "update.testing_mirrors":{"zh-CN":"正在测试 GitHub 镜像线路...","en":"Testing GitHub mirror routes..."},
-    "update.mirror_results":{"zh-CN":"GitHub 镜像测速","en":"GitHub mirror speed test"},
     "update.unavailable":{"zh-CN":"不可用","en":"Unavailable"},
-    "update.use_mirror":{"zh-CN":"使用此线路更新","en":"Update with this route"},
-    "update.speed_test_failed_prefix":{"zh-CN":"测速失败: ","en":"Speed test failed: "},
     "update.auto_check_off":{"zh-CN":"自动检查已关闭","en":"Automatic checking is off"},
     "update.check_failed":{"zh-CN":"更新检查失败","en":"Update check failed"},
     "update.ignored_suffix":{"zh-CN":"已忽略","en":"ignored"},
@@ -1129,13 +1193,12 @@
     "update.found_new":{"zh-CN":"发现新版本","en":"New version found"},
     "update.no_notes":{"zh-CN":"暂无更新说明","en":"No release notes"},
     "update.none_available":{"zh-CN":"当前没有可用更新","en":"No updates are available right now."},
-    "update.updating":{"zh-CN":"更新中...","en":"Updating..."},
-    "update.updating_message":{"zh-CN":"正在更新，请保持此页面打开...","en":"Updating, please keep this page open..."},
     "update.success":{"zh-CN":"更新成功","en":"Update succeeded"},
-    "update.restart_soon":{"zh-CN":"服务将在 3 秒后重启...","en":"The service will restart in 3 seconds..."},
     "update.failed":{"zh-CN":"更新失败","en":"Update failed"},
     "update.failed_prefix":{"zh-CN":"更新失败: ","en":"Update failed: "},
-    "update.retry":{"zh-CN":"重试更新","en":"Retry update"},
+    "update.auto_apply_unavailable":{"zh-CN":"自动更新暂不可用","en":"Automatic update unavailable"},
+    "update.manual_install_guidance":{"zh-CN":"自动更新暂不可用。请仅从 GenBox 固定的 GitHub Releases 页面核对版本和发布资产后手动安装。","en":"Automatic update is unavailable. Use only the canonical GenBox GitHub Releases page, verify the version and release assets, then install manually."},
+    "update.open_verified_release":{"zh-CN":"打开固定 GitHub Release","en":"Open canonical GitHub Release"},
     "provider.empty_hint":{"zh-CN":"还没有 Provider。点击上方 [+ 添加] 创建一个。","en":"No providers yet. Click [+ Add] above to create one."},
     "provider.saved_prefix":{"zh-CN":"Provider \"","en":"Provider \""},
     "provider.saved_suffix":{"zh-CN":"” 已保存","en":"\" saved"},
@@ -1244,6 +1307,47 @@
     "creator.i2i_hint":{"zh-CN":"上传参考图并描述想要的修改方向","en":"Upload a reference image and describe the edit direction"},
     "creator.variation_settings":{"zh-CN":"变体设置","en":"Variation settings"},
     "creator.variation_hint":{"zh-CN":"基于源图生成新的变化版本","en":"Generate new variations from the source image"},
+    "creator.inpaint_settings":{"zh-CN":"局部重绘设置","en":"Inpaint settings"},
+    "creator.inpaint_hint":{"zh-CN":"上传底图并涂白要修改的区域；提交前请先选择支持“图片编辑/局部重绘”的模型。","en":"Upload a base image, paint the areas to change in white, and select a model that supports image editing/inpainting before submitting."},
+    "creator.inpaint_base_image":{"zh-CN":"底图","en":"Base image"},
+    "creator.inpaint_mask_hint":{"zh-CN":"在需要修改的区域涂白；黑色区域会保持不变。","en":"Paint white over areas to edit; black areas are preserved."},
+    "creator.inpaint_edit_area":{"zh-CN":"白色：编辑","en":"White: edit"},
+    "creator.inpaint_keep_area":{"zh-CN":"黑色：保留","en":"Black: keep"},
+    "creator.inpaint_upload":{"zh-CN":"点击或拖拽上传一张底图","en":"Click or drag one base image here"},
+    "creator.inpaint_mask":{"zh-CN":"编辑遮罩","en":"Edit mask"},
+    "creator.inpaint_canvas_label":{"zh-CN":"局部重绘编辑遮罩","en":"Inpaint edit mask"},
+    "creator.inpaint_canvas_empty":{"zh-CN":"上传底图后即可涂抹需要修改的区域","en":"Upload a base image to paint the areas to change"},
+    "creator.inpaint_toolbar_label":{"zh-CN":"局部重绘工具","en":"Inpaint tools"},
+    "creator.inpaint_tool_group_label":{"zh-CN":"遮罩工具","en":"Mask tools"},
+    "creator.inpaint_history_group_label":{"zh-CN":"遮罩历史","en":"Mask history"},
+    "creator.inpaint_brush":{"zh-CN":"画笔","en":"Brush"},
+    "creator.inpaint_eraser":{"zh-CN":"橡皮","en":"Eraser"},
+    "creator.inpaint_brush_size":{"zh-CN":"笔刷尺寸","en":"Brush size"},
+    "creator.inpaint_undo":{"zh-CN":"撤销","en":"Undo"},
+    "creator.inpaint_redo":{"zh-CN":"重做","en":"Redo"},
+    "creator.inpaint_clear_mask":{"zh-CN":"清空遮罩","en":"Clear mask"},
+    "creator.inpaint_clear":{"zh-CN":"清空","en":"Clear"},
+    "creator.inpaint_prompt":{"zh-CN":"修改提示词","en":"Edit prompt"},
+    "creator.inpaint_prompt_placeholder":{"zh-CN":"描述希望如何修改已涂抹的区域...","en":"Describe how to change the painted areas..."},
+    "creator.inpaint_image_too_large":{"zh-CN":"底图像素过大，无法创建局部重绘遮罩。","en":"The base image is too large to create an inpaint mask."},
+    "creator.inpaint_base_required":{"zh-CN":"请先上传一张底图。","en":"Upload a base image first."},
+    "creator.inpaint_mask_required":{"zh-CN":"请在需要修改的区域涂抹遮罩。","en":"Paint a mask over the areas to change."},
+    "creator.inpaint_model_required":{"zh-CN":"请先选择一个生图 Provider。","en":"Select an image provider first."},
+    "creator.inpaint_protocol_unverified":{"zh-CN":"这个模型目前只能普通生图，暂时不能修改已有图片。请换一个标有“图片编辑/局部重绘”的模型。","en":"This model currently supports regular image generation only. Choose a model marked “Image editing/Inpaint” to edit an existing image."},
+    "creator.inpaint_provider_unsupported_reason":{"zh-CN":"这个模型不支持修改已有图片，请换一个支持“图片编辑/局部重绘”的模型。","en":"This model does not support editing an existing image. Choose one marked “Image editing/Inpaint”."},
+    "creator.inpaint_provider_unknown":{"zh-CN":"暂时无法确认这个模型是否支持局部重绘，因此没有提交任务。请选择明确标有“图片编辑/局部重绘”的模型。","en":"This model's inpainting support could not be confirmed, so no task was submitted. Choose one explicitly marked “Image editing/Inpaint”."},
+    "creator.inpaint_provider_unsupported":{"zh-CN":"当前模型不能做局部重绘","en":"The selected model cannot inpaint"},
+    "creator.inpaint_manual_choice":{"zh-CN":"允许手动选择未确认支持的模型（提交时仍会检查）","en":"Allow manual selection of models without confirmed support (checked again before submit)"},
+    "creator.model_help_t2i":{"zh-CN":"文生图：显示支持直接生成图片的模型。","en":"Text to image: models that can generate images directly are shown."},
+    "creator.model_help_i2i":{"zh-CN":"图生图：显示支持参考图片编辑的模型。","en":"Image to image: models that support editing a reference image are shown."},
+    "creator.model_help_precision_edit":{"zh-CN":"精准改图：显示支持参考图片编辑的模型；批注位置由模型理解，不等同于已验证的遮罩协议。","en":"Precise image edit: models that support reference-image editing are shown. Annotation positions are interpreted by the model and are not a verified mask protocol."},
+    "creator.model_help_inpaint":{"zh-CN":"局部重绘：只显示明确支持“图片编辑/遮罩”的模型。","en":"Inpaint: only models explicitly supporting image editing and masks are shown."},
+    "creator.model_help_available":{"zh-CN":"当前可用模型：","en":"Available models: "},
+    "creator.model_help_none":{"zh-CN":"当前没有已确认支持此功能的模型。自定义模型请在模型设置中配置对应能力。","en":"No model is confirmed for this feature yet. Configure the capability for a custom model in Model Settings."},
+    "creator.model_help_custom":{"zh-CN":"自定义模型提示：文生图需启用 t2i，图生图需启用 i2i，局部重绘需启用 inpaint_mask。","en":"Custom model hint: enable t2i for text-to-image, i2i for image-to-image, and inpaint_mask for inpainting."},
+    "creator.inpaint_model_unavailable":{"zh-CN":"该模型未确认支持局部重绘，当前不可选。可勾选下方“允许手动选择”进行配置。","en":"This model has no confirmed inpainting support and is unavailable. Enable manual selection below to configure it."},
+    "creator.inpaint_ready":{"zh-CN":"遮罩已准备好，可提交局部重绘。","en":"The mask is ready to submit for inpainting."},
+    "creator.inpaint_unavailable":{"zh-CN":"当前版本仅提供局部重绘入口，尚无可验证的遮罩协议，未提交任务。","en":"The inpaint entry is present, but no verified mask protocol is available in this version; no task was submitted."},
     "creator.generate_variation":{"zh-CN":"生成变体","en":"Generate variation"},
     "creator.prompt_title":{"zh-CN":"提示词 PROMPT","en":"Prompt"},
     "creator.prompt_hint":{"zh-CN":"输入画面描述后直接生成","en":"Enter a scene description and generate directly"},
@@ -1252,6 +1356,13 @@
     "creator.assist_tools":{"zh-CN":"辅助工具","en":"Assist tools"},
     "creator.task_monitor":{"zh-CN":"任务监视器","en":"Task monitor"},
     "creator.task_summary":{"zh-CN":"生成时会自动展开进度和日志","en":"Progress and logs expand automatically during generation"},
+    "creator.precision_focus_show_preview":{"zh-CN":"展开实时预览","en":"Show live preview"},
+    "creator.precision_focus_hide_preview":{"zh-CN":"收起实时预览","en":"Hide live preview"},
+    "creator.precision_focus_show_tasks":{"zh-CN":"展开任务监视器","en":"Show task monitor"},
+    "creator.precision_focus_hide_tasks":{"zh-CN":"收起任务监视器","en":"Hide task monitor"},
+    "creator.precision_focus_result_ready":{"zh-CN":"生成结果已到达，可展开实时预览查看。","en":"Generation results are ready. Open live preview to view them."},
+    "creator.precision_focus_result_ready_short":{"zh-CN":"有新结果","en":"New result"},
+    "creator.precision_focus_task_running_short":{"zh-CN":"任务进行中","en":"Task running"},
     "creator.model_tasks":{"zh-CN":"模型任务","en":"Model tasks"},
     "creator.runtime_logs":{"zh-CN":"运行日志","en":"Runtime logs"},
     "creator.keep_recent":{"zh-CN":"保留最近创作记录","en":"Keep recent creation history"},
@@ -1762,7 +1873,7 @@
     if (scope.nodeType === 1 && scope.hasAttribute('data-i18n')) nodes.push(scope);
     Array.prototype.push.apply(nodes, scope.querySelectorAll('[data-i18n]'));
     nodes.forEach(function (node) { node.textContent = t(node.getAttribute('data-i18n')); });
-    ['title', 'placeholder', 'aria-label'].forEach(function (attribute) {
+    ['title', 'placeholder', 'aria-label', 'alt'].forEach(function (attribute) {
       var marker = 'data-i18n-' + attribute;
       var marked = [];
       if (scope.nodeType === 1 && scope.hasAttribute(marker)) marked.push(scope);
@@ -1814,6 +1925,242 @@
   MESSAGES['extensions.push_save_to_vault'] = {"zh-CN":"保存到本机凭证库","en":"Save to local credential vault"};
   MESSAGES['extensions.push_key_not_available'] = {"zh-CN":"当前没有可保存的新 Push 密钥。请先创建或轮换密钥；如需保留现有密钥，请从 chatgpt2api 重新配置。","en":"There is no new Push key available to save. Create or rotate a key first; to keep the existing key, retrieve it from chatgpt2api."};
   MESSAGES['extensions.push_key_ready_to_save'] = {"zh-CN":"新 Push 密钥仅在本次创建或轮换后可见。请先复制配置，再勾选本地保存并确认。","en":"A new Push key is available from this create or rotation. Copy the configuration, then opt in and confirm local saving."};
+  MESSAGES['creator.precision_edit_overall_instruction'] = {"zh-CN":"整体要求（可选）","en":"Overall instructions (optional)"};
+  MESSAGES['creator.precision_edit_overall_instruction_placeholder'] = {"zh-CN":"例如：未标注区域保持不变。","en":"For example: Keep unmarked areas unchanged."};
+  MESSAGES['creator.precision_edit_model_picker'] = {"zh-CN":"选择编辑模型","en":"Choose an editing model"};
+  MESSAGES['creator.precision_edit_model_picker_hint'] = {"zh-CN":"先选服务端点，再选该端点提供的图片编辑模型。","en":"Choose the service endpoint first, then an image-editing model from that endpoint."};
+  MESSAGES['creator.precision_edit_header_hint'] = {"zh-CN":"在画布上标出位置，再为每处填写修改说明。","en":"Mark locations on the canvas, then describe each change."};
+  MESSAGES['creator.precision_help_label'] = {"zh-CN":"查看精准改图帮助","en":"View precise image edit help"};
+  MESSAGES['creator.precision_help_title'] = {"zh-CN":"精准改图操作说明","en":"Precise image edit guide"};
+  MESSAGES['creator.precision_help_steps'] = {"zh-CN":"选择图片，在画布上标注位置，为每处写明修改要求，再提交给编辑模型。","en":"Choose an image, mark locations on the canvas, describe every change, then submit it to the editing model."};
+  MESSAGES['creator.precision_help_send_result'] = {"zh-CN":"生成结果也可以通过“精准改图”操作直接发送到这里。","en":"You can also send a generated result here with its Precise image edit action."};
+  MESSAGES['creator.precision_docs_open'] = {"zh-CN":"文档说明","en":"Guide"};
+  MESSAGES['creator.precision_docs_close'] = {"zh-CN":"关闭精准改图文档","en":"Close precise image edit guide"};
+  MESSAGES['creator.precision_docs_kicker'] = {"zh-CN":"操作文档","en":"Workflow guide"};
+  MESSAGES['creator.precision_docs_title'] = {"zh-CN":"精准改图","en":"Precise image edit"};
+  MESSAGES['creator.precision_docs_intro'] = {"zh-CN":"在一个工作台中完成轻量批注、透明抠图、纯尺寸扩图和版本比较；这里不会提供图层栈或全局滤镜。","en":"Use one workbench for lightweight annotations, transparent cutout, pure size expansion, and version comparison; it does not provide layer stacks or global filters."};
+  MESSAGES['creator.precision_docs_shapes_title'] = {"zh-CN":"形状与二次编辑","en":"Shapes and second-pass edits"};
+  MESSAGES['creator.precision_docs_shapes_body'] = {"zh-CN":"用椭圆、矩形、箭头或画笔标出修改位置。切换到“选择/移动”后可拖动已有批注；形状使用控制点缩放，箭头直接拖动起点或终点。按住 Alt 再绘制可避免误选已有形状。","en":"Use ellipse, rectangle, arrow, or brush marks to indicate edit locations. Switch to Select/Move to drag existing annotations; shape handles resize regions, and arrow endpoints can be dragged directly. Hold Alt while drawing to avoid selecting an existing shape."};
+  MESSAGES['creator.precision_docs_eraser_title'] = {"zh-CN":"橡皮擦与历史","en":"Eraser and history"};
+  MESSAGES['creator.precision_docs_eraser_body'] = {"zh-CN":"橡皮擦可点击删除选中的对象，也可在画笔轨迹上拖动擦除；移动、缩放、擦除和清除都可撤销/重做。","en":"The eraser can click to delete the selected object, or drag over brush strokes to erase them. Move, resize, erase, and clear actions all support undo/redo."};
+  MESSAGES['creator.precision_docs_text_title'] = {"zh-CN":"文字批注","en":"Text annotations"};
+  MESSAGES['creator.precision_docs_text_body'] = {"zh-CN":"文字工具单击画布添加文字；切到“选择/移动”后可拖动移动，双击已有文字可再次编辑，选中后可调整字号和颜色。","en":"With the text tool, click once on the canvas to add text. Switch to Select/Move to drag it, double-click existing text to edit it again, and adjust font size or color while it is selected."};
+  MESSAGES['creator.precision_docs_cutout_title'] = {"zh-CN":"抠图、羽化与选区","en":"Cutout, feather, and selection"};
+  MESSAGES['creator.precision_docs_cutout_body'] = {"zh-CN":"一键抠图会追加真实透明 PNG 版本。选择透明版本后可用 0–64 px 羽化精修 alpha 边缘；勾选“仅精修画布选区”时，画笔、矩形或椭圆会作为局部选区。棋盘格只用于预览，不会改变文件透明度。","en":"One-click cutout appends a real transparent PNG version. After selecting a transparent version, use 0-64 px feathering to refine the alpha edge; when Refine canvas selection only is enabled, brush, rectangle, and ellipse marks become the local selection. The checkerboard is preview-only and does not change file transparency."};
+  MESSAGES['creator.precision_docs_resize_title'] = {"zh-CN":"纯尺寸扩图","en":"Pure size expansion"};
+  MESSAGES['creator.precision_docs_resize_body'] = {"zh-CN":"无需批注也可开启“改变尺寸”，填写目标宽高和构图说明后提交。请求只携带底图、目标尺寸与构图说明；模型必须明确声明支持该尺寸。","en":"You can submit without annotations by enabling Change size, then entering target dimensions and composition guidance. The request carries only the base image, target size, and guidance; the model must explicitly declare support for that size."};
+  MESSAGES['creator.precision_docs_versions_title'] = {"zh-CN":"版本与对比","en":"Versions and comparison"};
+  MESSAGES['creator.precision_docs_versions_body'] = {"zh-CN":"版本栏只切换浏览结果，不会自动替换底图。“修改前”显示当前版本的父版本，“修改后”显示所选版本，“对比”可拖动分隔线。只有“设为下一次底图”会改变后续编辑基准。","en":"The version rail only browses results and never replaces the base image automatically. Before shows the current version parent, After shows the selected version, and Compare exposes a draggable divider. Only Use as next base changes the base for later edits."};
+  MESSAGES['creator.precision_docs_models_title'] = {"zh-CN":"模型筛选","en":"Model filtering"};
+  MESSAGES['creator.precision_docs_models_body'] = {"zh-CN":"显示模型菜单只控制列表可见性并保存在本机；取消会还原打开前选择。别名仅用于显示，提交始终使用真实模型 ID；精准改图能力与尺寸能力必须由端点明确声明或由你确认，不会从名称猜测。","en":"The displayed-model menu only controls local list visibility; Cancel restores the selection from before opening. Aliases are display-only, while submissions always use the real model ID; precise-edit and size capabilities must be declared by the endpoint or explicitly confirmed by you, never inferred from names."};
+  MESSAGES['creator.precision_replace_image'] = {"zh-CN":"更换图片","en":"Replace image"};
+  MESSAGES['creator.precision_replace_task_active'] = {"zh-CN":"请先停止当前精准改图任务，再更换图片。","en":"Stop the current precise edit task before replacing the image."};
+  MESSAGES['creator.precision_replace_confirm'] = {"zh-CN":"更换图片会清除当前提示词与修改说明、批注、版本、尺寸调整和任务记录。继续吗？","en":"Replacing the image clears the current prompt and instructions, annotations, versions, size changes, and task details. Continue?"};
+  MESSAGES['creator.precision_model_help_label'] = {"zh-CN":"查看模型选择说明","en":"View model selection help"};
+  MESSAGES['creator.precision_config_docs'] = {"zh-CN":"打开项目内配置说明","en":"Open project configuration guide"};
+  MESSAGES['creator.precision_config_docs_short'] = {"zh-CN":"配置说明","en":"Config guide"};
+  MESSAGES['creator.precision_display_mode'] = {"zh-CN":"显示模式","en":"Display mode"};
+  MESSAGES['creator.precision_manual_edit'] = {"zh-CN":"手动编辑","en":"Manual editing"};
+  MESSAGES['creator.precision_edit_annotation_group'] = {"zh-CN":"批注类型","en":"Annotation type"};
+  MESSAGES['creator.precision_edit_style_group'] = {"zh-CN":"批注样式","en":"Annotation style"};
+  MESSAGES['creator.precision_edit_history_group'] = {"zh-CN":"批注历史","en":"Annotation history"};
+  MESSAGES['creator.precision_edit_changes'] = {"zh-CN":"修改列表","en":"Change list"};
+  MESSAGES['creator.precision_edit_changes_empty'] = {"zh-CN":"添加箭头、矩形、椭圆、画笔或文字后，在这里填写每个位置如何修改。","en":"Add an arrow, rectangle, ellipse, brush mark, or text, then describe each change here."};
+  MESSAGES['creator.precision_edit_object_instruction'] = {"zh-CN":"这个位置要怎么改","en":"How should this location change?"};
+  MESSAGES['creator.precision_edit_object_instruction_placeholder'] = {"zh-CN":"例如：换成透明玻璃杯","en":"For example: replace with a clear glass cup"};
+  MESSAGES['creator.precision_edit_delete'] = {"zh-CN":"删除","en":"Delete"};
+  MESSAGES['creator.precision_instruction_required'] = {"zh-CN":"请为每个标注填写“这个位置要怎么改”。","en":"Describe how every marked location should change."};
+  MESSAGES['creator.precision_edit_file_required'] = {"zh-CN":"请选择图片文件。","en":"Choose an image file."};
+  MESSAGES['creator.precision_original'] = {"zh-CN":"原","en":"Original"};
+  MESSAGES['creator.precision_versions'] = {"zh-CN":"版本","en":"Versions"};
+  MESSAGES['creator.precision_use_as_base'] = {"zh-CN":"设为下一次底图","en":"Use as next base"};
+  MESSAGES['creator.precision_base_updated'] = {"zh-CN":"已明确设为下一次修改底图。","en":"Set as the base for the next edit."};
+  MESSAGES['creator.precision_before'] = {"zh-CN":"修改前","en":"Before"};
+  MESSAGES['creator.precision_after'] = {"zh-CN":"修改后","en":"After"};
+  MESSAGES['creator.precision_compare'] = {"zh-CN":"对比","en":"Compare"};
+  MESSAGES['creator.precision_version_view'] = {"zh-CN":"版本视图","en":"Version view"};
+  MESSAGES['creator.precision_compare_slider'] = {"zh-CN":"对比滑块","en":"Comparison slider"};
+  MESSAGES['creator.precision_fullscreen'] = {"zh-CN":"全屏","en":"Fullscreen"};
+  MESSAGES['creator.precision_version_shortcuts'] = {"zh-CN":"版本快捷栏","en":"Version shortcuts"};
+  MESSAGES['creator.precision_subject_actions'] = {"zh-CN":"主体处理","en":"Subject processing"};
+  MESSAGES['creator.precision_size_title'] = {"zh-CN":"画布尺寸","en":"Canvas size"};
+  MESSAGES['creator.precision_size_preserve'] = {"zh-CN":"保持原图","en":"Keep original"};
+  MESSAGES['creator.precision_size_resize'] = {"zh-CN":"改变尺寸","en":"Change size"};
+  MESSAGES['creator.precision_size_preserve_hint'] = {"zh-CN":"默认保持原图尺寸和比例，不会套用文生图设置。","en":"Keeps the source dimensions and aspect ratio by default; text-to-image settings are not reused."};
+  MESSAGES['creator.precision_size_resize_active_hint'] = {"zh-CN":"已开启改变尺寸；GenBox 会发送所选像素尺寸，后端会由尺寸推导构图比例约束。","en":"Size change is enabled. GenBox sends the selected pixel size; the backend derives the aspect-ratio composition constraint from it."};
+  MESSAGES['creator.precision_size_preset'] = {"zh-CN":"常用尺寸","en":"Common sizes"};
+  MESSAGES['creator.precision_size_custom'] = {"zh-CN":"自定义","en":"Custom"};
+  MESSAGES['creator.precision_size_preset_name'] = {"zh-CN":"预设名称","en":"Preset name"};
+  MESSAGES['creator.precision_size_preset_name_placeholder'] = {"zh-CN":"例如：横版封面","en":"For example: Landscape cover"};
+  MESSAGES['creator.precision_size_saved_actions'] = {"zh-CN":"已保存尺寸预设","en":"Saved size presets"};
+  MESSAGES['creator.precision_size_save_preset'] = {"zh-CN":"保存当前尺寸","en":"Save current size"};
+  MESSAGES['creator.precision_size_delete_preset'] = {"zh-CN":"删除所选","en":"Delete selected"};
+  MESSAGES['creator.precision_size_reset_presets'] = {"zh-CN":"重置已保存","en":"Reset saved"};
+  MESSAGES['creator.precision_size_preset_name_invalid'] = {"zh-CN":"请输入 1 到 40 个字符的预设名称；控制字符会被移除。","en":"Enter a preset name from 1 to 40 characters; control characters are removed."};
+  MESSAGES['creator.precision_size_preset_exists'] = {"zh-CN":"“{name}”已经保存，无需重复添加。","en":"“{name}” is already saved."};
+  MESSAGES['creator.precision_size_preset_name_duplicate'] = {"zh-CN":"名称“{name}”已用于另一个尺寸。","en":"The name “{name}” is already used for another size."};
+  MESSAGES['creator.precision_size_preset_size_duplicate'] = {"zh-CN":"该尺寸已存在：{name}","en":"That size already exists: {name}"};
+  MESSAGES['creator.precision_size_preset_limit'] = {"zh-CN":"最多保存 {count} 个尺寸预设。","en":"You can save up to {count} size presets."};
+  MESSAGES['creator.precision_size_preset_storage_error'] = {"zh-CN":"浏览器未能保存尺寸预设；当前尺寸仍可手动使用。","en":"The browser could not save size presets; you can still use the current dimensions manually."};
+  MESSAGES['creator.precision_size_preset_saved'] = {"zh-CN":"已保存“{name}”。","en":"Saved “{name}”."};
+  MESSAGES['creator.precision_size_preset_delete_saved_only'] = {"zh-CN":"只能删除已保存的自定义尺寸预设。","en":"Only saved custom size presets can be deleted."};
+  MESSAGES['creator.precision_size_preset_deleted'] = {"zh-CN":"已删除“{name}”。","en":"Deleted “{name}”."};
+  MESSAGES['creator.precision_size_preset_reset_empty'] = {"zh-CN":"当前没有已保存的尺寸预设。","en":"There are no saved size presets."};
+  MESSAGES['creator.precision_size_preset_reset_confirm'] = {"zh-CN":"清除全部已保存的尺寸预设？内置尺寸不会受影响。","en":"Clear all saved size presets? Built-in sizes will not be changed."};
+  MESSAGES['creator.precision_size_preset_reset_done'] = {"zh-CN":"已清除全部已保存的尺寸预设。","en":"All saved size presets were cleared."};
+  MESSAGES['creator.precision_size_preset_unconfirmed'] = {"zh-CN":"此本地尺寸可以选择；提交改变尺寸请求前，模型仍需明确声明支持。","en":"This local size remains selectable; submission still requires explicit model support."};
+  MESSAGES['creator.precision_size_preset_undeclared'] = {"zh-CN":"此本地尺寸可以选择；当前模型未声明支持，提交时会阻止。","en":"This local size remains selectable; the current model has not declared support, so submission will be blocked."};
+  MESSAGES['creator.precision_size_width'] = {"zh-CN":"宽度 (px)","en":"Width (px)"};
+  MESSAGES['creator.precision_size_height'] = {"zh-CN":"高度 (px)","en":"Height (px)"};
+  MESSAGES['creator.precision_aspect_ratio_hint_empty'] = {"zh-CN":"选择目标尺寸后，GenBox 会发送像素尺寸；后端会由尺寸推导构图比例约束。","en":"After you choose a target size, GenBox sends the pixel size; the backend derives the aspect-ratio composition constraint from it."};
+  MESSAGES['creator.precision_aspect_ratio_hint'] = {"zh-CN":"将发送像素尺寸 {size}；后端会由它推导“{ratio}”构图约束。“8K”等风格词不等于实际输出像素。","en":"Will send pixel size {size}; the backend derives “{ratio}” as the composition constraint. Style words like “8K” do not set the actual output pixels."};
+  MESSAGES['creator.precision_size_instruction'] = {"zh-CN":"构图调整说明","en":"Composition guidance"};
+  MESSAGES['creator.precision_size_instruction_placeholder'] = {"zh-CN":"例如：向左右扩展背景，人物大小和位置保持不变","en":"For example: extend the background sideways while keeping the subject size and position."};
+  MESSAGES['creator.precision_size_prompt_preset'] = {"zh-CN":"构图说明预设","en":"Composition presets"};
+  MESSAGES['creator.precision_size_prompt_preset_choose'] = {"zh-CN":"选择后追加到构图说明","en":"Choose to append to the guidance"};
+  MESSAGES['creator.precision_size_prompt_preset_append_hint'] = {"zh-CN":"选择预设会追加到已有说明，不会覆盖；之后仍可自由编辑。","en":"A preset is appended to existing guidance without replacing it, and remains freely editable."};
+  MESSAGES['creator.precision_size_prompt_preset_keep_style_subject'] = {"zh-CN":"保持原有画面风格与主体元素，向四周自然扩展","en":"Preserve the original visual style and main elements, extending naturally in all directions."};
+  MESSAGES['creator.precision_size_prompt_preset_keep_person'] = {"zh-CN":"保持人物大小和位置，补全背景","en":"Keep the person's size and position, and complete the background."};
+  MESSAGES['creator.precision_size_prompt_preset_center_subject'] = {"zh-CN":"主体居中，扩展环境并保持光影一致","en":"Center the subject, extend the environment, and keep lighting consistent."};
+  MESSAGES['creator.precision_size_prompt_preset_extend_left'] = {"zh-CN":"向左延展场景并保持透视","en":"Extend the scene to the left while preserving perspective."};
+  MESSAGES['creator.precision_size_prompt_preset_extend_right'] = {"zh-CN":"向右延展场景并保持透视","en":"Extend the scene to the right while preserving perspective."};
+  MESSAGES['creator.precision_size_prompt_preset_banner'] = {"zh-CN":"扩展为横幅构图并保留关键元素","en":"Expand to a banner composition while retaining key elements."};
+  MESSAGES['creator.precision_size_prompt_preset_too_long'] = {"zh-CN":"追加此预设会超过 500 个字符，请先精简构图说明。","en":"Appending this preset would exceed 500 characters. Shorten the composition guidance first."};
+  MESSAGES['creator.precision_size_resize_hint'] = {"zh-CN":"只有开启改变尺寸时才会把目标尺寸交给模型；构图说明帮助模型理解画面，不会把“8K”等描述词当成实际像素。","en":"The target size is sent only in Change size mode. Composition guidance helps the model frame the scene, but words like “8K” are not treated as actual pixels."};
+  MESSAGES['creator.precision_output_size_policy'] = {"zh-CN":"输出尺寸策略","en":"Output size policy"};
+  MESSAGES['creator.precision_output_size_policy_strict'] = {"zh-CN":"严格匹配","en":"Strict"};
+  MESSAGES['creator.precision_output_size_policy_fit_crop'] = {"zh-CN":"本地适配","en":"Local fit/crop"};
+  MESSAGES['creator.precision_output_size_policy_strict_hint'] = {"zh-CN":"默认严格匹配；上游返回尺寸不一致时失败，并提示实际尺寸，不会自动重试付费请求。","en":"Strict is the default. If the upstream size differs, the task fails with the actual size and does not auto-retry a paid request."};
+  MESSAGES['creator.precision_output_size_policy_fit_crop_hint'] = {"zh-CN":"若上游输出接近目标，GenBox 会本地居中裁切并高质量缩放到目标尺寸，不再次调用模型，并记录原始尺寸。","en":"If the upstream output is near the target, GenBox locally center-crops and high-quality scales it to the target, records the original size, and does not call the model again."};
+  MESSAGES['creator.precision_output_size_adjusted'] = {"zh-CN":"上游实际 {actual}，本地适配为 {target}。","en":"Upstream returned {actual}; locally fit/cropped to {target}."};
+  MESSAGES['creator.precision_output_size_strict_mismatch'] = {"zh-CN":"上游实际 {actual}，目标 {target}；严格匹配已失败。可改用本地适配，不会自动重试付费请求。","en":"Upstream returned {actual}, target was {target}; strict matching failed. You can switch to local fit/crop; GenBox will not auto-retry a paid request."};
+  MESSAGES['creator.precision_size_capability_label'] = {"zh-CN":"当前尺寸模型支持状态","en":"Current size model support"};
+  MESSAGES['creator.precision_size_capability_model_required'] = {"zh-CN":"先选择并确认一个精准改图模型，再确认当前目标尺寸。","en":"Select and confirm a precision-edit model before confirming the current target size."};
+  MESSAGES['creator.precision_size_capability_invalid'] = {"zh-CN":"先输入有效的目标宽度和高度。","en":"Enter a valid target width and height first."};
+  MESSAGES['creator.precision_size_capability_unknown'] = {"zh-CN":"当前模型尚未明确确认支持目标尺寸 {size}，因此暂不能生成。","en":"The current model has not explicitly confirmed support for {size}, so generation remains disabled."};
+  MESSAGES['creator.precision_size_capability_unsupported'] = {"zh-CN":"目标尺寸 {size} 不在当前模型已确认的尺寸中，因此暂不能生成。","en":"Target size {size} is not among the sizes confirmed for the current model, so generation remains disabled."};
+  MESSAGES['creator.precision_size_capability_supported'] = {"zh-CN":"当前模型已确认支持目标尺寸 {size}。","en":"The current model is confirmed to support target size {size}."};
+  MESSAGES['creator.precision_size_confirm_action_empty'] = {"zh-CN":"确认当前尺寸","en":"Confirm current size"};
+  MESSAGES['creator.precision_size_revoke_action_empty'] = {"zh-CN":"撤销当前尺寸确认","en":"Revoke current size confirmation"};
+  MESSAGES['creator.precision_size_confirm_action'] = {"zh-CN":"确认当前模型支持 {size}","en":"Confirm current model supports {size}"};
+  MESSAGES['creator.precision_size_revoke_action'] = {"zh-CN":"撤销 {size} 确认","en":"Revoke confirmation for {size}"};
+  MESSAGES['creator.precision_size_confirm_dialog'] = {"zh-CN":"请仅在你确认当前端点和模型支持精准改图尺寸 {size} 时继续。是否保存此尺寸确认？","en":"Continue only if you have verified that the current endpoint and model support precision editing at {size}. Save this size confirmation?"};
+  MESSAGES['creator.precision_size_revoke_dialog'] = {"zh-CN":"撤销当前模型对尺寸 {size} 的确认？撤销后该尺寸将不能生成，直到再次确认。","en":"Revoke the current model's confirmation for {size}? Generation at this size will be disabled until it is confirmed again."};
+  MESSAGES['creator.precision_size_confirming'] = {"zh-CN":"正在保存当前模型对 {size} 的支持确认…","en":"Saving confirmation that the current model supports {size}…"};
+  MESSAGES['creator.precision_size_revoking'] = {"zh-CN":"正在撤销当前模型对 {size} 的尺寸确认…","en":"Revoking the current model's size confirmation for {size}…"};
+  MESSAGES['creator.precision_size_confirmed'] = {"zh-CN":"已确认当前模型支持尺寸 {size}。","en":"Confirmed that the current model supports {size}."};
+  MESSAGES['creator.precision_size_revoked'] = {"zh-CN":"已撤销当前模型对尺寸 {size} 的确认。","en":"Revoked the current model's confirmation for {size}."};
+  MESSAGES['creator.precision_size_capability_save_failed'] = {"zh-CN":"尺寸支持状态保存失败，请稍后重试。","en":"Could not save the size support state. Try again shortly."};
+  MESSAGES['creator.precision_size_invalid'] = {"zh-CN":"请输入 64 到 8192 之间的有效宽高，且总像素不要超过安全上限。","en":"Enter valid dimensions between 64 and 8192 within the pixel safety limit."};
+  MESSAGES['creator.precision_size_instruction_required'] = {"zh-CN":"请填写构图调整说明，告诉模型扩展哪里、哪些主体需要保持不变。","en":"Describe how to reframe or outpaint the image and what must stay unchanged."};
+  MESSAGES['creator.precision_processing_progress'] = {"zh-CN":"处理进度","en":"Processing progress"};
+  MESSAGES['creator.precision_processing_empty'] = {"zh-CN":"提交改图后，这里会显示当前阶段、结果和可恢复的错误信息。","en":"After you submit an edit, this area will show the current stage, result, and recoverable error details."};
+  MESSAGES['creator.precision_task'] = {"zh-CN":"精准任务","en":"Precision task"};
+  MESSAGES['creator.precision_edit_ellipse'] = {"zh-CN":"椭圆","en":"Ellipse"};
+  MESSAGES['creator.precision_edit_brush'] = {"zh-CN":"画笔","en":"Brush"};
+  MESSAGES['creator.precision_edit_eraser'] = {"zh-CN":"橡皮擦","en":"Eraser"};
+  MESSAGES['creator.precision_edit_eraser_hint'] = {"zh-CN":"橡皮擦：点击删除选中标注；拖过画笔轨迹擦除，可撤销。","en":"Eraser: click to delete the selected annotation, or drag over a brush stroke to erase it. Undo is available."};
+  MESSAGES['creator.precision_edit_eraser_deleted'] = {"zh-CN":"已删除选中的标注，可用撤销恢复。","en":"Selected annotation deleted. Use Undo to restore it."};
+  MESSAGES['creator.precision_edit_text_size'] = {"zh-CN":"文字大小","en":"Text size"};
+  MESSAGES['creator.precision_model_display'] = {"zh-CN":"显示模型","en":"Displayed models"};
+  MESSAGES['creator.precision_model_display_all'] = {"zh-CN":"全部 {count} 个模型","en":"All {count} models"};
+  MESSAGES['creator.precision_model_display_summary'] = {"zh-CN":"已显示 {selected}/{total} 个","en":"Showing {selected} of {total}"};
+  MESSAGES['creator.precision_model_menu_title'] = {"zh-CN":"显示模型","en":"Displayed models"};
+  MESSAGES['creator.precision_model_menu_hint'] = {"zh-CN":"只影响本机列表可见性；提交仍使用真实模型 ID。","en":"Controls local list visibility only; submissions still use the real model ID."};
+  MESSAGES['creator.precision_model_select_all'] = {"zh-CN":"全选","en":"Select all"};
+  MESSAGES['creator.precision_model_clear'] = {"zh-CN":"清空","en":"Clear"};
+  MESSAGES['creator.precision_model_apply'] = {"zh-CN":"确定","en":"OK"};
+  MESSAGES['creator.precision_model_keep_one'] = {"zh-CN":"至少保留一个可见模型。","en":"Keep at least one visible model."};
+  MESSAGES['creator.precision_model_none_available'] = {"zh-CN":"当前端点没有可显示的精准改图模型。","en":"No precise-edit models are available for this endpoint."};
+  MESSAGES['creator.precision_retry_model_required'] = {"zh-CN":"无法重试精准改图：上次请求没有保存当前服务端点的明确模型，请重新选择并提交。","en":"Cannot retry precision edit: the previous request did not preserve an explicit model for this provider. Select the model and submit again."};
+  MESSAGES['creator.precision_pure_resize_ready'] = {"zh-CN":"纯扩图已就绪：将只提交目标尺寸和构图说明，不发送批注。","en":"Size expansion is ready. Only the target size and composition guidance will be sent, without annotations."};
+  MESSAGES['creator.precision_zoom'] = {"zh-CN":"查看缩放","en":"View zoom"};
+  MESSAGES['creator.precision_zoom_fit'] = {"zh-CN":"适合窗口","en":"Fit"};
+  MESSAGES['creator.precision_zoom_hint'] = {"zh-CN":"只调整查看大小，不改变图片尺寸。按住 Ctrl 滚轮也可缩放。","en":"Changes only the viewing scale, not image dimensions. Ctrl+wheel also zooms."};
+  MESSAGES['creator.precision_quick_tools'] = {"zh-CN":"常用处理","en":"Quick tools"};
+  MESSAGES['creator.precision_quick_hint'] = {"zh-CN":"先选功能，再在画布上圈出位置。","en":"Choose an action, then mark the area on the canvas."};
+  MESSAGES['creator.precision_ai_remove'] = {"zh-CN":"AI 消除","en":"AI removal"};
+  MESSAGES['creator.precision_remove_people'] = {"zh-CN":"消除路人","en":"Remove people"};
+  MESSAGES['creator.precision_remove_watermark'] = {"zh-CN":"消除水印","en":"Remove watermark"};
+  MESSAGES['creator.precision_manual_selection'] = {"zh-CN":"手动选区","en":"Manual selection"};
+  MESSAGES['creator.precision_ai_remove_ready'] = {"zh-CN":"请用画笔涂出要消除的区域；系统会为这处批注自动填写修改说明。","en":"Brush over the area to remove. Its edit instruction will be filled automatically."};
+  MESSAGES['creator.precision_remove_people_instruction'] = {"zh-CN":"移除标记区域内的路人，并根据周围环境自然补全背景，其他区域保持不变。","en":"Remove bystanders inside the marked area and reconstruct the background naturally; preserve all other areas."};
+  MESSAGES['creator.precision_remove_watermark_instruction'] = {"zh-CN":"移除标记区域内的水印或覆盖文字，并根据周围内容自然补全，其他区域保持不变。","en":"Remove the watermark or overlay text inside the marked area and reconstruct surrounding content naturally; preserve all other areas."};
+  MESSAGES['creator.cutout_person'] = {"zh-CN":"一键抠出人物","en":"Extract person"};
+  MESSAGES['creator.cutout_person_start'] = {"zh-CN":"抠出人物","en":"Extract person"};
+  MESSAGES['creator.cutout_person_hint'] = {"zh-CN":"需要安装本地透明背景抠图组件；未安装时按钮会保持不可用。","en":"Requires a local transparent-background cutout component; the button stays disabled until installed."};
+  MESSAGES['creator.cutout_help_label'] = {"zh-CN":"查看抠图说明","en":"View cutout help"};
+  MESSAGES['creator.cutout_unconfigured_clear'] = {"zh-CN":"当前未安装透明背景抠图组件，可先用画笔圈选后交给编辑模型处理。","en":"No transparent-background cutout component is installed. You can still brush-select an area for the editing model."};
+  MESSAGES['creator.cutout_checking'] = {"zh-CN":"正在检查本地抠图组件…","en":"Checking the local cutout component…"};
+  MESSAGES['creator.cutout_check_failed'] = {"zh-CN":"暂时无法检查本地抠图组件，请稍后重试。","en":"The local cutout component could not be checked. Try again shortly."};
+  MESSAGES['creator.cutout_source_required'] = {"zh-CN":"请先在主画布加载一张本地图片。","en":"Load a local image on the main canvas first."};
+  MESSAGES['creator.cutout_processing'] = {"zh-CN":"正在本地抠出人物，完成前请保持页面打开。","en":"Extracting the person locally. Keep this page open until it finishes."};
+  MESSAGES['creator.cutout_busy'] = {"zh-CN":"本地抠图正在处理另一个请求，请稍后重试。","en":"Local cutout is processing another request. Try again shortly."};
+  MESSAGES['creator.cutout_timeout'] = {"zh-CN":"本地抠图已超时；底层处理可能仍在收尾，请稍后再试。","en":"Local cutout timed out; the underlying work may still be finishing. Try again later."};
+  MESSAGES['creator.cutout_failed'] = {"zh-CN":"本地抠图失败，未添加新版本。","en":"Local cutout failed. No new version was added."};
+  MESSAGES['creator.cutout_result_invalid'] = {"zh-CN":"本地抠图结果未通过验证，未添加新版本。","en":"The cutout result did not pass validation. No new version was added."};
+  MESSAGES['creator.cutout_source_changed'] = {"zh-CN":"抠图期间底图已更换，结果未添加到当前会话。","en":"The base image changed during cutout, so the result was not added to the current session."};
+  MESSAGES['creator.cutout_completed'] = {"zh-CN":"抠图完成，已添加为可浏览的新版本。","en":"Cutout complete. A new browseable version was added."};
+  MESSAGES['creator.cutout'] = {"zh-CN":"一键抠图","en":"Background removal"};
+  MESSAGES['creator.cutout_hint'] = {"zh-CN":"仅在已配置抠图组件时可用。","en":"Available only when a cutout component is configured."};
+  MESSAGES['creator.cutout_start'] = {"zh-CN":"开始抠图","en":"Start cutout"};
+  MESSAGES['creator.cutout_unconfigured'] = {"zh-CN":"尚未配置抠图组件","en":"Cutout component is not configured"};
+  MESSAGES['creator.cutout_ready'] = {"zh-CN":"抠图组件已就绪","en":"Cutout component is ready"};
+  MESSAGES['creator.cutout_refine'] = {"zh-CN":"精修透明边缘","en":"Refine alpha edge"};
+  MESSAGES['creator.cutout_refine_feather'] = {"zh-CN":"羽化","en":"Feather"};
+  MESSAGES['creator.cutout_refine_use_selection'] = {"zh-CN":"仅精修画布选区","en":"Refine canvas selection only"};
+  MESSAGES['creator.cutout_refine_selection_empty'] = {"zh-CN":"用画笔、矩形或椭圆标出选区后可启用。","en":"Add a brush, rectangle, or ellipse selection to enable this option."};
+  MESSAGES['creator.cutout_refine_selection_ready'] = {"zh-CN":"检测到 {count} 个可用选区；勾选后只精修这些区域。","en":"Found {count} usable selections. Enable the option to refine only those areas."};
+  MESSAGES['creator.cutout_refine_source_required'] = {"zh-CN":"请先选择一个透明抠图版本，再精修边缘。","en":"Select a transparent cutout version before refining its edge."};
+  MESSAGES['creator.cutout_refine_feather_invalid'] = {"zh-CN":"羽化值必须在 0 到 64 像素之间。","en":"Feather must be between 0 and 64 pixels."};
+  MESSAGES['creator.cutout_refine_processing'] = {"zh-CN":"正在本地精修透明边缘；完成前可取消等待。","en":"Refining the alpha edge locally. You can cancel waiting before it finishes."};
+  MESSAGES['creator.cutout_refine_failed'] = {"zh-CN":"透明边缘精修失败，未添加新版本。","en":"Alpha-edge refinement failed. No new version was added."};
+  MESSAGES['creator.cutout_refine_completed'] = {"zh-CN":"透明边缘精修完成，已追加为当前版本的子版本。","en":"Alpha-edge refinement is complete and was appended as a child version."};
+  MESSAGES['creator.cutout_restore_foreground'] = {"zh-CN":"还原前景","en":"Restore foreground"};
+  MESSAGES['creator.cutout_restore_min_alpha'] = {"zh-CN":"最低不透明度","en":"Minimum alpha"};
+  MESSAGES['creator.cutout_restore_hint'] = {"zh-CN":"使用原始底图在所选区域内恢复前景；需要透明抠图版本和画布选区。","en":"Use the original base image to restore foreground inside the selected area. A transparent cutout version and a canvas selection are required."};
+  MESSAGES['creator.cutout_restore_selection_empty'] = {"zh-CN":"需要画笔、矩形或椭圆选区后，才能使用前景还原。","en":"Add a brush, rectangle, or ellipse selection before using foreground restore."};
+  MESSAGES['creator.cutout_restore_selection_required'] = {"zh-CN":"还原前景需要先在画布上画出选区。","en":"Draw a canvas selection before restoring foreground."};
+  MESSAGES['creator.cutout_restore_source_required'] = {"zh-CN":"请先选择一个透明抠图版本，再使用前景还原。","en":"Select a transparent cutout version before using foreground restore."};
+  MESSAGES['creator.cutout_restore_min_alpha_invalid'] = {"zh-CN":"最低不透明度必须在 0 到 255 之间。","en":"Minimum alpha must be between 0 and 255."};
+  MESSAGES['creator.cutout_restore_ready'] = {"zh-CN":"前景还原已就绪：会把 {count} 个所选区域恢复到至少 {alpha} 的不透明度，并追加新版本。","en":"Foreground restore is ready: it will raise {count} selected region(s) to at least alpha {alpha} and append a new version."};
+  MESSAGES['creator.cutout_restore_processing'] = {"zh-CN":"正在按所选区域还原前景；完成前可取消等待。","en":"Restoring foreground in the selected region(s). You can cancel waiting before it finishes."};
+  MESSAGES['creator.cutout_restore_failed'] = {"zh-CN":"前景还原失败，未添加新版本。","en":"Foreground restore failed. No new version was added."};
+  MESSAGES['creator.cutout_restore_completed'] = {"zh-CN":"前景还原完成，已按至少 {alpha} 的不透明度在所选区域内追加新版本。","en":"Foreground restore is complete. A new version was appended in the selected region(s) using minimum alpha {alpha}."};
+  MESSAGES['creator.cutout_cancel_wait'] = {"zh-CN":"取消等待","en":"Cancel waiting"};
+  MESSAGES['creator.cutout_cancelled'] = {"zh-CN":"已取消等待；本地处理可能仍在收尾，结果不会添加到当前会话。","en":"Waiting was cancelled. Local processing may still finish, but its result will not be added to this session."};
+  MESSAGES['creator.cutout_model_title'] = {"zh-CN":"本地抠图模型","en":"Local cutout model"};
+  MESSAGES['creator.cutout_model_checking'] = {"zh-CN":"正在检查模型状态…","en":"Checking model status…"};
+  MESSAGES['creator.cutout_model_source'] = {"zh-CN":"来源","en":"Source"};
+  MESSAGES['creator.cutout_model_size'] = {"zh-CN":"大小","en":"Size"};
+  MESSAGES['creator.cutout_model_path'] = {"zh-CN":"本地路径","en":"Local path"};
+  MESSAGES['creator.cutout_model_size_approx'] = {"zh-CN":"约 176 MB","en":"About 176 MB"};
+  MESSAGES['creator.cutout_model_size_value'] = {"zh-CN":"{size} MB","en":"{size} MB"};
+  MESSAGES['creator.cutout_model_size_kb'] = {"zh-CN":"{size} KB","en":"{size} KB"};
+  MESSAGES['creator.cutout_model_size_bytes'] = {"zh-CN":"{size} 字节","en":"{size} bytes"};
+  MESSAGES['creator.cutout_model_not_bundled'] = {"zh-CN":"模型不随 GenBox 安装包内嵌。当前版本保留固定来源与许可证信息页，但自动下载保持禁用。","en":"The model is not embedded in GenBox. This version keeps the fixed source and license information available, but automated download remains disabled."};
+  MESSAGES['creator.cutout_model_license_warning'] = {"zh-CN":"注意：模型转换链、训练数据来源及商业使用权利均为 UNVERIFIED，因此当前版本禁用自动下载。","en":"Caution: the model conversion chain, training-data provenance, and commercial-use rights are UNVERIFIED, so automated download is disabled in this version."};
+  MESSAGES['creator.cutout_model_progress_label'] = {"zh-CN":"模型下载进度","en":"Model download progress"};
+  MESSAGES['creator.cutout_model_install'] = {"zh-CN":"下载并安装","en":"Download and install"};
+  MESSAGES['creator.cutout_model_install_unavailable'] = {"zh-CN":"来源/授权尚未验证","en":"Source/authorization unverified"};
+  MESSAGES['creator.cutout_model_cancel'] = {"zh-CN":"取消下载","en":"Cancel download"};
+  MESSAGES['creator.cutout_model_retry'] = {"zh-CN":"重试","en":"Retry"};
+  MESSAGES['creator.cutout_model_remove_retry'] = {"zh-CN":"删除并重试","en":"Remove and retry"};
+  MESSAGES['creator.cutout_model_remove_corrupt'] = {"zh-CN":"删除损坏文件","en":"Remove damaged file"};
+  MESSAGES['creator.cutout_model_delete'] = {"zh-CN":"删除模型","en":"Delete model"};
+  MESSAGES['creator.cutout_model_missing'] = {"zh-CN":"模型尚未安装；抠图保持不可用。","en":"The model is not installed; cutout remains unavailable."};
+  MESSAGES['creator.cutout_model_download_unavailable'] = {"zh-CN":"模型尚未安装；来源/授权尚未验证，自动下载已禁用。","en":"The model is not installed. Automated download is disabled because the source/authorization is unverified."};
+  MESSAGES['creator.cutout_model_queued'] = {"zh-CN":"下载任务已排队。","en":"The download task is queued."};
+  MESSAGES['creator.cutout_model_downloading'] = {"zh-CN":"正在下载并校验模型（{progress}%）。","en":"Downloading and validating the model ({progress}%)."};
+  MESSAGES['creator.cutout_model_verifying'] = {"zh-CN":"下载完成，正在核验大小与指纹。","en":"Download complete; verifying size and fingerprints."};
+  MESSAGES['creator.cutout_model_installing'] = {"zh-CN":"校验通过，正在原子安装模型。","en":"Verification passed; installing the model atomically."};
+  MESSAGES['creator.cutout_model_hash_mismatch'] = {"zh-CN":"模型指纹不匹配，损坏文件不会启用。可删除后重新下载。","en":"The model fingerprint does not match. The damaged file will not be enabled; remove it before retrying."};
+  MESSAGES['creator.cutout_model_error'] = {"zh-CN":"模型安装未完成；抠图保持不可用。可刷新状态或重试。","en":"Model installation did not complete; cutout remains unavailable. Refresh the status or retry."};
+  MESSAGES['creator.cutout_model_ready'] = {"zh-CN":"模型已通过大小与双指纹校验。正在以运行能力探测结果决定是否启用抠图。","en":"The model passed size and dual-fingerprint verification. Cutout is enabled only if the runtime capability probe is also executable."};
+  MESSAGES['creator.cutout_model_install_confirm'] = {"zh-CN":"将从固定的 rembg 托管资产下载 {size} 到 {path}。\n\n模型转换链、训练数据来源及商业使用权利均为 UNVERIFIED。GenBox 会核验本地文件与固定远端资产的大小、SHA-256 和 MD5，但这不等于商业授权。\n\n确认继续下载吗？","en":"GenBox will download {size} from the fixed rembg-hosted asset to {path}.\n\nThe model conversion chain, training-data provenance, and commercial-use rights are UNVERIFIED. GenBox verifies the local file against the fixed remote asset using size, SHA-256, and MD5, but that is not a commercial license.\n\nContinue with the download?"};
+  MESSAGES['creator.cutout_model_remove_corrupt_confirm'] = {"zh-CN":"确认删除 {path} 中未通过指纹校验的损坏模型文件吗？","en":"Remove the damaged model file at {path} that failed fingerprint verification?"};
+  MESSAGES['creator.cutout_model_remove_retry_confirm'] = {"zh-CN":"将删除 {path} 中未通过校验的文件，然后从固定 rembg 托管资产重新下载 {size}。模型来源链和商业使用权利仍为 UNVERIFIED。确认继续吗？","en":"GenBox will remove the failed file at {path}, then download {size} again from the fixed rembg-hosted asset. The model provenance chain and commercial-use rights remain UNVERIFIED. Continue?"};
+  MESSAGES['creator.cutout_model_delete_confirm'] = {"zh-CN":"确认删除已校验的本地抠图模型 {path} 吗？删除后，一键抠图会立即恢复为不可用。","en":"Delete the verified local cutout model at {path}? One-click cutout will become unavailable immediately."};
   global.GenBoxI18n = { messages: MESSAGES, language: language, t: t, apply: apply, setLanguage: setLanguage };
   global.t = t;
   global.i18nText = t;

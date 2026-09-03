@@ -4,6 +4,61 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.5] - 2026-09-03 (release candidate)
+
+### Added
+
+- Precision Edit V4 adds editable object annotations with arrow, rectangle,
+  ellipse, brush, eraser, and text tools; result-version comparison; local
+  cutout and refine controls; and responsive workbench behavior.
+- The cutout panel now provides the UI/API state framework for model status,
+  progress, cancellation, integrity-failure recovery, and confirmed local
+  deletion. Production network download and installation remain disabled.
+
+### Changed
+
+- Resize-only precision edits can request supported output expansion without
+  annotation payload fields. The explicit `fit_crop` option handles eligible
+  near-ratio output mismatches; the default remains strict exact-size output.
+- Model visibility is user-selectable, while precision-edit capability and alias
+  resolution require explicit provider declarations and remain fail closed.
+- The release package includes Python 3.12, NumPy, and ONNX Runtime for local
+  cutout execution, while the ONNX checkpoint remains external and is never
+  embedded in the package.
+- Current version is `2.6.5`; Docker Compose defaults are pinned to
+  `ghcr.io/liwei9745/genbox:2.6.5`.
+
+### Security
+
+- Cancellation and failure states remain explicit. Source/image and provider
+  output MIME handling is validated. Provider outputs also enforce compressed-
+  byte and decoded-pixel limits and reject decompression-bomb warnings or
+  errors before persistence. Provider-facing errors redact sensitive values
+  before they reach user-visible error detail.
+- The browser cannot provide a model URL, path, size, or digest. Because the
+  checkpoint's provenance and commercial-use rights remain **UNVERIFIED**,
+  v2.6.5 fails closed before any production network download or installation.
+  A manually placed model is accepted only after fixed size, SHA-256, and MD5
+  verification; cutout remains disabled until the model is `ready` and the
+  runtime capability probe reports `executable=true`.
+
+### Verification And Boundaries
+
+- **USER-CONFIRMED 2026-09-02:** the current Precision Edit V4 workflow works
+  in the local browser. Automated local tests cover the implementation
+  contracts; a real cutout refine POST is not claimed.
+- The local cutout adapter runtime is packaged, but its ONNX model file is not.
+  Production reports model download and installation as unsupported. An
+  operator may manually place the expected model file; matching its fixed size
+  and fingerprints verifies byte identity, not its conversion history,
+  training-data provenance, or commercial-use rights. Those matters remain
+  **UNVERIFIED**.
+- Automated tests cover the disabled production boundary and test-only installer
+  fixtures without performing a public model download. No release artifact in
+  this evidence contains the checkpoint.
+- This evidence is local only. It does not establish VPS, production,
+  source-cleanup, remote-deployment, or cross-project delivery acceptance.
+
 ## [2.6.4] - 2026-08-25
 
 - Fixed: Packaged Windows first-run setup and startup summaries now show

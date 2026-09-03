@@ -933,10 +933,14 @@ def test_frontend_provider_load_commits_only_current_generation():
         [
             "var _adminKey = ''; var _loginAttemptGeneration = 0;",
             "var allProviders = []; var selectedProviders = [];",
+            "var precisionEditModelPickerReady = false; var precisionEditAuthorizationPending = false;",
             _extract_js_function(source, "_showLogin"),
             _extract_js_function(source, "_authFetch"),
             _extract_js_function(source, "_captureLoginAttempt"),
             _extract_js_function(source, "_isCurrentLoginAttempt"),
+            _extract_js_function(source, "getPrecisionEditModelAuthorizationState"),
+            _extract_js_function(source, "updatePrecisionEditAuthorizationControl"),
+            _extract_js_function(source, "renderPrecisionEditModelPicker"),
             _extract_js_function(source, "loadProviders"),
         ]
     )
@@ -955,11 +959,16 @@ const context = {{
   Promise,
   Error,
   localStorage: {{getItem: function() {{ return null; }}, removeItem: function() {{}}}},
-  document: {{getElementById: function() {{ return {{style: {{}}, focus: function() {{}}}}; }}}},
+  document: {{getElementById: function(id) {{
+    if (id.indexOf('precisionEdit') === 0 || id === 'btnPrecisionAuthorizeModel') return null;
+    return {{style: {{}}, focus: function() {{}}}};
+  }}}},
   fetch: function() {{ return queue.shift(); }},
   loadProviderOrder: function() {{ commits.push('order'); }},
   renderProviderList: function() {{ commits.push('render-list'); }},
   renderCreatorProviderPickers: function() {{ commits.push('render-pickers'); }},
+  updatePrecisionResizeCapabilityUI: function() {{ commits.push('precision-resize'); }},
+  updateInpaintAvailability: function() {{ commits.push('inpaint'); }},
   loadModelDropdown: function() {{ commits.push('models'); }},
   setStatus: function(value) {{ commits.push('status:' + value); }},
   i18nText: function(key) {{ return key + ':'; }}
@@ -1065,6 +1074,43 @@ def test_frontend_never_persists_admin_key_in_browser_storage():
             if key_expression == "STORAGE_KEY":
                 assert script.name == "theme.js"
                 assert "const STORAGE_KEY = 'genbox-theme';" in source
+                continue
+            if key_expression == "PRECISION_RESIZE_PRESET_STORAGE_KEY":
+                assert script.name == "app-all.js"
+                assert (
+                    "var PRECISION_RESIZE_PRESET_STORAGE_KEY = "
+                    "'genbox_precision_resize_presets_v1';"
+                ) in source
+                continue
+            if key_expression == "PRECISION_MODEL_VISIBILITY_STORAGE_KEY":
+                assert script.name == "app-all.js"
+                assert (
+                    "var PRECISION_MODEL_VISIBILITY_STORAGE_KEY = "
+                    "'genbox_precision_model_visibility_v1';"
+                ) in source
+                visibility_writer = _extract_js_function(
+                    source, "writePrecisionModelVisibility"
+                )
+                visibility_sanitizer = _extract_js_function(
+                    source, "sanitizePrecisionModelVisibility"
+                )
+                assert "PRECISION_MODEL_VISIBILITY_KEY_PATTERN" in source
+                assert "PRECISION_MODEL_VISIBILITY_FORBIDDEN_PATTERN" in source
+                assert (
+                    "precisionEditModelVisibility = "
+                    "sanitizePrecisionModelVisibility(precisionEditModelVisibility);"
+                ) in visibility_writer
+                assert "raw[key] === false" in visibility_sanitizer
+                for forbidden in (
+                    "api_key",
+                    "apiKey",
+                    "base_url",
+                    "credential",
+                    "error_body",
+                    "provider_settings",
+                    "prompt",
+                ):
+                    assert forbidden not in visibility_writer
                 continue
             if store == "localStorage":
                 assert key_expression in allowed_local_keys | allowed_dynamic_local_keys, (

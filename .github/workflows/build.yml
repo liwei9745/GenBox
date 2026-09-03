@@ -19,8 +19,27 @@ env:
   PYTHON_VERSION: '3.12'
 
 jobs:
+  release-contract:
+    name: Validate release identity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Require tag to match packaged version
+        if: github.ref_type == 'tag'
+        run: >-
+          python scripts/package_release.py
+          --validate-release-tag "${{ github.ref_name }}"
+
   quality:
     name: Test release source
+    needs: release-contract
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -53,7 +72,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────
   build-windows:
     name: Build Windows
-    needs: quality
+    needs: [release-contract, quality]
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -70,6 +89,19 @@ jobs:
       - name: Build with PyInstaller
         run: python build.py
 
+      - name: Smoke test packaged runtime from an empty directory
+        shell: pwsh
+        run: |
+          $smoke = Join-Path $env:RUNNER_TEMP "genbox-packaged-runtime-smoke"
+          New-Item -ItemType Directory -Force $smoke | Out-Null
+          Copy-Item dist/GenBox.exe $smoke/GenBox.exe
+          Push-Location $smoke
+          ./GenBox.exe --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./GenBox.exe --runtime-import-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+
       - name: Smoke test packaged client
         run: python scripts/smoke_client.py --executable dist/GenBox.exe
 
@@ -77,7 +109,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-Windows-x64
-          path: dist/${{ env.APP_NAME }}.exe
+          path: |
+            dist/${{ env.APP_NAME }}.exe
+            dist/THIRD_PARTY_LICENSES
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────
@@ -85,7 +119,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────
   build-macos:
     name: Build macOS
-    needs: quality
+    needs: [release-contract, quality]
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -102,6 +136,14 @@ jobs:
       - name: Build with PyInstaller
         run: python build.py
 
+      - name: Smoke test packaged runtime from an empty directory
+        run: |
+          smoke="$(mktemp -d)"
+          cp dist/GenBox "$smoke/GenBox"
+          cd "$smoke"
+          ./GenBox --version
+          ./GenBox --runtime-import-smoke
+
       - name: Smoke test packaged client
         run: python scripts/smoke_client.py --executable dist/GenBox
 
@@ -109,7 +151,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-macOS
-          path: dist/${{ env.APP_NAME }}
+          path: |
+            dist/${{ env.APP_NAME }}
+            dist/THIRD_PARTY_LICENSES
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────
@@ -117,7 +161,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────
   build-linux:
     name: Build Linux
-    needs: quality
+    needs: [release-contract, quality]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -139,6 +183,14 @@ jobs:
       - name: Build with PyInstaller
         run: python build.py
 
+      - name: Smoke test packaged runtime from an empty directory
+        run: |
+          smoke="$(mktemp -d)"
+          cp dist/GenBox "$smoke/GenBox"
+          cd "$smoke"
+          ./GenBox --version
+          ./GenBox --runtime-import-smoke
+
       - name: Smoke test packaged client
         run: python scripts/smoke_client.py --executable dist/GenBox
 
@@ -146,7 +198,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-Linux-x64
-          path: dist/${{ env.APP_NAME }}
+          path: |
+            dist/${{ env.APP_NAME }}
+            dist/THIRD_PARTY_LICENSES
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────
@@ -154,7 +208,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────
   release:
     name: Create Release
-    needs: [build-windows, build-macos, build-linux]
+    needs: [release-contract, build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -198,6 +252,7 @@ jobs:
           cp LICENSE artifacts/release-windows/
           cp COPYRIGHT artifacts/release-windows/
           cp THIRD_PARTY_NOTICES.md artifacts/release-windows/
+          cp -R artifacts/windows/THIRD_PARTY_LICENSES artifacts/release-windows/
           cd artifacts/release-windows && zip -r ../${{ env.APP_NAME }}-Windows.zip .
 
       - name: Package macOS release
@@ -208,6 +263,7 @@ jobs:
           cp LICENSE artifacts/release-macos/
           cp COPYRIGHT artifacts/release-macos/
           cp THIRD_PARTY_NOTICES.md artifacts/release-macos/
+          cp -R artifacts/macos/THIRD_PARTY_LICENSES artifacts/release-macos/
           cd artifacts/release-macos && zip -r ../${{ env.APP_NAME }}-macOS.zip .
 
       - name: Package Linux release
@@ -218,10 +274,14 @@ jobs:
           cp LICENSE artifacts/release-linux/
           cp COPYRIGHT artifacts/release-linux/
           cp THIRD_PARTY_NOTICES.md artifacts/release-linux/
+          cp -R artifacts/linux/THIRD_PARTY_LICENSES artifacts/release-linux/
           cd artifacts/release-linux && zip -r ../${{ env.APP_NAME }}-Linux-x64.zip .
 
-      - name: Package Docker Compose release
-        run: python scripts/package_release.py --output artifacts --docker-only
+      - name: Package Docker Compose and source releases
+        run: >-
+          python scripts/package_release.py --output artifacts
+          --source-commit "${{ github.sha }}"
+          --licenses-dir artifacts/linux/THIRD_PARTY_LICENSES
 
       - name: Generate release checksums
         run: |
@@ -231,6 +291,7 @@ jobs:
             "${{ env.APP_NAME }}-macOS.zip" \
             "${{ env.APP_NAME }}-Linux-x64.zip" \
             "${{ env.APP_NAME }}-Docker-Compose-"*.zip \
+            "${{ env.APP_NAME }}-Source-"*.zip \
             windows/${{ env.APP_NAME }}.exe \
             macos/${{ env.APP_NAME }}-macOS \
             linux/${{ env.APP_NAME }}-Linux-x64 \
@@ -269,4 +330,5 @@ jobs:
             "artifacts/${{ env.APP_NAME }}-macOS.zip" \
             "artifacts/${{ env.APP_NAME }}-Linux-x64.zip" \
             artifacts/${{ env.APP_NAME }}-Docker-Compose-*.zip \
+            artifacts/${{ env.APP_NAME }}-Source-*.zip \
             "artifacts/SHA256SUMS.txt"

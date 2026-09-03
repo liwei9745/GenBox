@@ -18,7 +18,7 @@ RUN useradd -m -u 1000 genbox && \
 WORKDIR /app
 
 # 先复制依赖文件，利用 Docker 层缓存
-COPY requirements.txt .
+COPY requirements.txt requirements-cutout.txt ./
 RUN pip install -r requirements.txt
 
 # 复制项目文件

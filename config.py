@@ -5,9 +5,12 @@
 """
 import json
 import os
+import re
 import sys
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from pydantic import BaseModel
 
 from dotenv import load_dotenv
@@ -51,6 +54,14 @@ GALLERY_DIR.mkdir(exist_ok=True)
 PROVIDERS_FILE = STORAGE_DIR / "providers.json"
 
 
+def verify_ssl_enabled() -> bool:
+    """Verify outbound TLS unless an operator explicitly opts out."""
+    configured = os.getenv("VERIFY_SSL")
+    if configured is None:
+        return True
+    return configured.strip().lower() not in {"false", "0", "no", "off"}
+
+
 # ──────────────────────────────────────────────────────────────
 # 数据模型
 # ──────────────────────────────────────────────────────────────
@@ -75,6 +86,222 @@ def _is_masked_secret(value: str) -> bool:
     return "****" in str(value or "")
 
 
+class PrecisionEditProfile(str, Enum):
+    """Allowlisted request shapes for annotation-based image editing."""
+
+    OPENAI_IMAGES_EDITS_MULTIPART_REPEATED_IMAGE = (
+        "openai_images_edits_multipart_repeated_image"
+    )
+    OPENAI_IMAGES_EDITS_MULTIPART_IMAGE_ARRAY = (
+        "openai_images_edits_multipart_image_array"
+    )
+    OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE = (
+        "openai_images_edits_multipart_single_source_image"
+    )
+
+
+PRECISION_EDIT_CAPABILITY = "precision_edit"
+PRECISION_MODEL_ALIAS_FIELDS = ("alias_of", "canonical_model")
+PRECISION_MODEL_SIZE_FIELDS = ("supported_sizes", "supportedSizes", "sizes", "dimensions")
+PRECISION_MODEL_ALIAS_MAX_DEPTH = 1
+PRECISION_MODEL_DEFAULT_MAX_OUTPUT_PIXELS = 64 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class PrecisionModelCapabilityResolution:
+    """Fail-closed effective capability for one selected provider model."""
+
+    selected_model: str
+    canonical_model: str = ""
+    capability: Optional[Dict[str, Any]] = None
+    supported_sizes: Tuple[str, ...] = ()
+    alias_depth: int = 0
+    structure_valid: bool = False
+    precision_edit_confirmed: bool = False
+    size_declaration_present: bool = False
+    size_declaration_valid: bool = False
+    reason: str = "precision_model_unknown"
+
+
+def normalize_precision_capability_size(
+    value: object,
+    *,
+    max_output_pixels: int = PRECISION_MODEL_DEFAULT_MAX_OUTPUT_PIXELS,
+) -> Optional[str]:
+    """Accept only canonical WIDTHxHEIGHT strings within precision limits."""
+    if not isinstance(value, str):
+        return None
+    match = re.fullmatch(r"([1-9]\d{1,4})x([1-9]\d{1,4})", value)
+    if not match:
+        return None
+    width, height = int(match.group(1)), int(match.group(2))
+    if (
+        width < 64
+        or height < 64
+        or width > 8192
+        or height > 8192
+        or width * height > max_output_pixels
+    ):
+        return None
+    normalized = f"{width}x{height}"
+    return normalized if normalized == value else None
+
+
+def precision_capability_size_declaration(
+    capability: object,
+    *,
+    max_output_pixels: int = PRECISION_MODEL_DEFAULT_MAX_OUTPUT_PIXELS,
+) -> Tuple[bool, bool, Tuple[str, ...], str]:
+    """Return strict size metadata without accepting partial invalid declarations."""
+    if not isinstance(capability, dict):
+        return False, False, (), "precision_size_declaration_missing"
+
+    present_fields = [field for field in PRECISION_MODEL_SIZE_FIELDS if field in capability]
+    if not present_fields:
+        return False, False, (), "precision_size_declaration_missing"
+
+    field_sizes = []
+    for field in present_fields:
+        raw_values = capability[field]
+        if isinstance(raw_values, str):
+            values = [raw_values]
+        elif isinstance(raw_values, (list, tuple)):
+            values = list(raw_values)
+        else:
+            return True, False, (), "precision_size_declaration_invalid"
+        if not values:
+            return True, False, (), "precision_size_declaration_invalid"
+
+        sizes = []
+        seen = set()
+        for value in values:
+            normalized = normalize_precision_capability_size(
+                value,
+                max_output_pixels=max_output_pixels,
+            )
+            if normalized is None:
+                return True, False, (), "precision_size_declaration_invalid"
+            if normalized not in seen:
+                sizes.append(normalized)
+                seen.add(normalized)
+        field_sizes.append(tuple(sizes))
+
+    first_sizes = field_sizes[0]
+    first_set = set(first_sizes)
+    if any(set(sizes) != first_set for sizes in field_sizes[1:]):
+        return True, False, (), "precision_size_declaration_collision"
+    return True, True, first_sizes, ""
+
+
+def _precision_model_alias_target(capability: object) -> Tuple[Optional[str], str]:
+    if not isinstance(capability, dict):
+        return None, ""
+    present_fields = [field for field in PRECISION_MODEL_ALIAS_FIELDS if field in capability]
+    if not present_fields:
+        return None, ""
+
+    targets = []
+    for field in present_fields:
+        raw_target = capability[field]
+        if not isinstance(raw_target, str) or not raw_target or raw_target != raw_target.strip():
+            return None, "precision_alias_target_invalid"
+        targets.append(raw_target)
+    if len(set(targets)) != 1:
+        return None, "precision_alias_target_collision"
+    return targets[0], ""
+
+
+def resolve_precision_model_capability(
+    model_capabilities: object,
+    selected_model: object,
+    *,
+    max_output_pixels: int = PRECISION_MODEL_DEFAULT_MAX_OUTPUT_PIXELS,
+) -> PrecisionModelCapabilityResolution:
+    """Resolve one direct alias to one canonical capability without name guessing."""
+    model_id = selected_model if isinstance(selected_model, str) else ""
+    if not model_id or model_id != model_id.strip() or not isinstance(model_capabilities, dict):
+        return PrecisionModelCapabilityResolution(selected_model=model_id)
+
+    selected = model_capabilities.get(model_id)
+    if model_id in model_capabilities and not isinstance(selected, dict):
+        return PrecisionModelCapabilityResolution(
+            selected_model=model_id,
+            reason="precision_model_record_invalid",
+        )
+    if selected is None:
+        selected = {}
+
+    alias_target, alias_error = _precision_model_alias_target(selected)
+    if alias_error:
+        return PrecisionModelCapabilityResolution(selected_model=model_id, reason=alias_error)
+
+    canonical_model = model_id
+    canonical = selected
+    alias_depth = 0
+    if alias_target is not None:
+        if alias_target == model_id:
+            return PrecisionModelCapabilityResolution(
+                selected_model=model_id,
+                reason="precision_alias_cycle",
+            )
+        alias_depth = 1
+        canonical_model = alias_target
+        canonical = model_capabilities.get(canonical_model)
+        if not isinstance(canonical, dict):
+            return PrecisionModelCapabilityResolution(
+                selected_model=model_id,
+                canonical_model=canonical_model,
+                alias_depth=alias_depth,
+                reason="precision_alias_target_unknown",
+            )
+        next_target, next_error = _precision_model_alias_target(canonical)
+        if next_error:
+            return PrecisionModelCapabilityResolution(
+                selected_model=model_id,
+                canonical_model=canonical_model,
+                alias_depth=alias_depth,
+                reason=next_error,
+            )
+        if next_target is not None:
+            reason = (
+                "precision_alias_cycle"
+                if next_target in {model_id, canonical_model}
+                else "precision_alias_chain_too_deep"
+            )
+            return PrecisionModelCapabilityResolution(
+                selected_model=model_id,
+                canonical_model=canonical_model,
+                alias_depth=alias_depth,
+                reason=reason,
+            )
+
+    size_present, size_valid, sizes, size_reason = precision_capability_size_declaration(
+        canonical,
+        max_output_pixels=max_output_pixels,
+    )
+    precision_confirmed = canonical.get(PRECISION_EDIT_CAPABILITY) is True
+    reason = ""
+    if not precision_confirmed:
+        reason = "precision_edit_unconfirmed"
+    elif not size_present:
+        reason = "precision_size_declaration_missing"
+    elif not size_valid:
+        reason = size_reason
+
+    return PrecisionModelCapabilityResolution(
+        selected_model=model_id,
+        canonical_model=canonical_model,
+        capability=canonical,
+        supported_sizes=sizes,
+        alias_depth=alias_depth,
+        structure_valid=True,
+        precision_edit_confirmed=precision_confirmed,
+        size_declaration_present=size_present,
+        size_declaration_valid=size_valid,
+        reason=reason,
+    )
+
+
 class ProviderConfig(BaseModel):
     """单个 Provider 配置"""
     id: str                    # 唯一标识 (如 gpt-image, gemini, my-flux)
@@ -92,6 +319,7 @@ class ProviderConfig(BaseModel):
     color: str = "#0ea5e9"     # UI 卡片颜色
     display_name: str = ""     # 看板分组显示名称（空=使用 name）
     capabilities: Dict[str, bool] = {}  # 能力声明: {"t2i": True, "i2i": True, "i2v": False}
+    precision_edit_profile: Optional[PrecisionEditProfile] = None
     skip_proxy: bool = False   # 跳过全局代理（直连）
     endpoint_type: str = "auto"  # 端点协议类型: auto|openai|gemini|qwen|agnes|volc_ark_plan|volc_ark
     extra: Dict[str, Any] = {} # 扩展参数

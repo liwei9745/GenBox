@@ -1,0 +1,4 @@
+# Local transparent-background cutout runtime dependencies.
+# The model artifact is deliberately not installed or downloaded here.
+onnxruntime==1.24.3
+numpy==2.4.3

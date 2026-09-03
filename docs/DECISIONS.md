@@ -766,3 +766,39 @@ receipt precondition; it refines the sender-side opt-in granularity.
 - Historical evidence documents keep their `false` records as audit trail; a
   future receiver change re-proves the grant path under the scoped release
   process.
+
+## ADR-027: Automatic Self-Update Requires Signed Manifests And An Embedded Public Key
+
+**Status:** Accepted
+**Date:** 2026-09-03
+
+### Context
+
+The existing updater could accept browser-selected mirrors and download URLs,
+pull mutable source or container state, replace executable files, and restart
+the application without a trusted release signature. TLS and a release page do
+not establish artifact authenticity when GenBox has no embedded release public
+key and no signed-manifest production process.
+
+### Decision
+
+Automatic source, executable, and Docker update application is disabled and
+fails closed before DNS, HTTP, Git, file replacement, or restart activity. The
+browser cannot provide an update URL or mirror. GenBox may perform only a
+bounded, read-only check against the fixed canonical GitHub latest-release API
+over verified HTTPS and may direct the user to the fixed canonical GitHub
+Releases page for manual installation.
+
+Automatic application may be reconsidered only after all supported release
+forms are covered by a versioned signed manifest, the verification public key
+is embedded in GenBox, signature and artifact digest checks occur before any
+replacement or restart, rollback behavior is defined, and hostile-input and
+failure-path tests demonstrate that unverified artifacts cannot execute.
+
+### Consequences
+
+- `/api/update/apply` returns structured `update_apply_unavailable`; its request
+  body is an empty forbid-extra model and its query string accepts no input.
+- Browser mirror selection and arbitrary download routing are retired.
+- Release availability remains informational. Users verify and install from the
+  canonical GitHub Release manually until the signed update chain exists.

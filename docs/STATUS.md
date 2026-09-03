@@ -1,9 +1,336 @@
 # Current Project Status
 
-**Last updated:** 2026-08-24
+**Last updated:** 2026-09-03
 **Current branch:** `codex/phase7-campaign-20260820`
 **Current phase:** Phase 9 Sender Push Source Cleanup (User-Selected) - **In Progress (receiver-grant shipped in v2.6.1 2026-08-21; sender PR #26 OPEN/MERGEABLE/UNSTABLE; no maintainer review; Vercel authorization failure is external state and cannot be handled automatically; clean E2E gates passed for receiver)**
 **Previous phase:** Phase 8 Upstream Delivery - **In Progress (proposal PRs open, awaiting upstream response)**
+
+## v2.6.5 local release preparation (updated 2026-09-03)
+
+- **VERIFIED / LOCAL UPDATER FAIL-CLOSED GATE 2026-09-03:** automatic source,
+  executable, and Docker update application now terminates with structured
+  `update_apply_unavailable` before DNS, HTTP, Git, file replacement, or
+  restart. The apply body is an empty forbid-extra model; URL and mirror fields
+  or query parameters are rejected. Browser mirror selection is retired and
+  the UI directs users to the fixed canonical GitHub Releases page for manual
+  installation without sending a URL or mirror.
+- **VERIFIED / READ-ONLY CHECK BOUNDARY 2026-09-03:** version checking uses only
+  the fixed canonical GitHub latest-release HTTPS endpoint with TLS
+  verification, redirects and proxy-environment routing disabled, bounded
+  streamed JSON, strict version parsing, and release-note redaction. This is an
+  informational check, not artifact-authenticity or automatic-update evidence.
+- **DECISION:** ADR-027 requires a signed release manifest, embedded public key,
+  pre-replacement signature and digest verification, rollback design, and
+  adversarial tests before automatic update or restart can be enabled again.
+- **BOUNDARY / RESUME:** no release key, signing pipeline, network request,
+  update application, Git mutation, file replacement, restart, VPS action,
+  commit, tag, Release, or push was performed. Resume automatic-updater work
+  only after the release-signing contract and trusted public key are approved;
+  until then preserve the read-only check and manual-install flow.
+
+- **VERIFIED / LOCAL CUTOUT MODEL FRAMEWORK 2026-09-03:** the Precision Edit
+  cutout section retains the fixed `genbox-cutout-model-install-v1` source and
+  license-information framework, but production reports
+  `download_supported=false`, `install_supported=false`, and capability
+  `can_download=false`. POST download fails closed before DNS/client/network
+  work and the disabled UI says `来源/授权尚未验证`. The UI/API state framework
+  and test-only injected fixtures retain verification, progress, cancellation,
+  and retry coverage, but v2.6.5 does not deliver a production network
+  installer. An operator may manually place the fixed-size/fingerprint model;
+  local models still require `ready` plus `executable=true` before cutout is
+  enabled.
+- **VERIFIED / DISTRIBUTION BOUNDARY 2026-09-03:** packaged builds include
+  Python 3.12, NumPy, and ONNX Runtime, but not the ONNX checkpoint. Automated
+  public-model download is disabled because conversion history, training-data
+  provenance, and commercial-use rights remain **UNVERIFIED**. The internal
+  verifier accepts chunked responses without `Content-Length`; any present
+  length must be valid and exact, and streamed bytes still must match the fixed
+  size, SHA-256, and MD5. Installation waits for inference only to a fixed
+  deadline, then fails terminally and removes its owned `.part`.
+- **VERIFIED / AUTOMATED UI ONLY 2026-09-03:** local MJS coverage exercises the
+  installer state machine and API envelope without downloading the public model.
+  A real public download and real model inference remain **UNVERIFIED**.
+- **VERIFIED / RELEASE AND INSTALLER GATES 2026-09-03:** the combined targeted
+  release-packaging and cutout suite passed `89`; both cutout installer and
+  precision-edit MJS suites passed; Python/JavaScript syntax checks, workflow
+  YAML parsing (`6` jobs), and `git diff HEAD --check` passed. No public model
+  download, Provider request, VPS, release, tag, push, or cleanup was performed.
+- **VERIFIED / RELEASE-CANDIDATE AND DOCKER WORKFLOW CONTRACT 2026-09-03:**
+  changelog, rolling notes, bilingual v2.6.5 notes, and third-party notices
+  identify this as an unpublished candidate and state that production model
+  network download/install is disabled while checkpoint provenance and
+  commercial-use rights remain **UNVERIFIED**. Local
+  `python -m pytest -q tests/test_release_packaging.py` passed `28`. The tested
+  Docker workflow requires a tag to match the packaged version before build,
+  uses the single `steps.build.outputs.imageid` for runtime-import and HTTP
+  smoke checks, and verifies each publish tag resolves to that same image ID
+  before push. This is local workflow-contract evidence only; no GitHub Actions
+  or other CI run, commit, tag, Release, or push is claimed.
+
+- **VERIFIED / LOCAL PROVIDER-OUTPUT SAFETY:** provider-returned images now
+  share bounded decoding and validation before persistence, including encoded
+  and decoded byte limits, decoded-pixel limits, declared-versus-decoded MIME
+  consistency, and decompression-bomb rejection. Variation output uses the
+  same bounded decoder. The current provider, precision/inpaint, and
+  generation-control regression passed `252`; earlier variation safety and
+  variation/generation targets passed `12` and `24`.
+- **VERIFIED / LOCAL RELEASE-NOTICE GATE:** NumPy `==2.4.3` and ONNX Runtime
+  `==1.24.3`, introduced through `requirements-cutout.txt`, are recorded in
+  `THIRD_PARTY_NOTICES.md` with their declared license information. The release
+  packaging test asserts dependency distribution, notice coverage, candidate
+  dates/links, tag/version gates, and the same-image Docker smoke/publish
+  contract; the current local suite passed `28`. The earlier combined release
+  and cutout target passed `89` before this candidate wording correction.
+- **USER-CONFIRMED / LOCAL BROWSER:** the current Precision Edit V4 workflow
+  works in the local browser. This supersedes only the September 2 manual
+  browser-acceptance blocker; a real cutout refine POST remains **UNVERIFIED**.
+- **VERIFIED / PACKAGING CONTRACT:** the local cutout adapter runtime is
+  packaged, but the ONNX model file remains external and operator-provided. It
+  is not bundled, must pass the fixed size and hash checks, and the capability
+  fails closed until the model is installed and validated.
+- **BOUNDARY:** this is local v2.6.5 release preparation only. No VPS,
+  production, source-cleanup, remote-deployment, clean-redeployment, or
+  cross-project acceptance is established, and no commit, tag, Release, or
+  push action was performed. The 2026-09-03 release notes describe a candidate,
+  not an already published release, and no CI result is inferred from local
+  verification.
+- **RESUME:** create and independently review one sanitized commit containing
+  the complete v2.6.5 candidate, then run source packaging only from that clean
+  checked-out commit with `--source-commit <sha>`. Keep public-model download
+  disabled until source provenance and authorization receive a separate
+  accepted decision and evidence gate.
+
+## Current bounded development strategy (2026-09-02)
+
+- **CURRENT PRODUCT PRIORITY / USER-CONFIRMED 2026-09-02:** precision edit V4
+  remains the sole active product-development scope for local acceptance. Local
+  implementation, regression evidence, and user-confirmed browser acceptance
+  are recorded below; real refine POST and real Provider precision edit still
+  require user-led validation. Extension-center, deployment, Push, video, VPS,
+  cleanup, release, and other unrelated feature work remain deferred.
+- **CURRENT CONTRACT:** `docs/precision-edit-v4-research.md` is the active
+  local precision-edit V4 research/contract document for this bounded work.
+- **BOUNDARY:** local evidence does not change the official Phase 9/10
+  completion state and does not authorize external Provider, VPS, production,
+  cleanup, commit, tag, Release, or push actions.
+
+## Precision edit V4 final local implementation evidence (2026-09-02)
+
+- **VERIFIED / LOCAL FAILURE CLASSIFICATION 2026-09-02:** the current
+  `gen_0047` failure is a local source-size capability gate rejection before
+  any HTTP request is made. It is not evidence that the selected model lacks
+  precision-edit support. Historical successful precision-edit paths
+  `gen_0024`, `gen_0026`, `gen_0027`, and `gen_0035` demonstrate that this
+  path has previously succeeded. Earlier failures remain separately classified
+  as an upstream `503` and a strict output-size mismatch; they must not be
+  conflated with unsupported-model claims.
+- **VERIFIED / LOCAL CAPABILITY RULE 2026-09-02:** alias resolution accepts
+  only an explicit `alias_of` or `canonical_model` declaration. The resolved
+  canonical model must declare `precision_edit=true`, declare valid
+  `supported_sizes`, and include the source size. Missing declarations,
+  unconfirmed mappings, and similar-name collisions remain fail-closed. The
+  actual requested model name is preserved and is never rewritten.
+- **USER-CONFIRMED / LOCAL SNAPSHOT:** a repository-external snapshot was
+  captured under OS temp as `genbox-precision-v4-snapshot-20260902-095532`.
+  The stable status record intentionally keeps only this basename and no user
+  absolute path.
+- **USER-CONFIRMED / LOCAL UX IMPLEMENTED:** the precision workbench covers the
+  user's nine requested areas locally: object selection/move; arrow, rectangle,
+  and ellipse secondary movement/scaling; eraser and text flows with complete
+  in-app help; cutout refine with feather range `0..64`, letterbox-safe mask
+  mapping, quantile-based alpha calibration, optional selection mask, explicit
+  foreground restore, alpha/version handling, and stale-response guards; resize-only first
+  submit and retry with no annotation fields or `image_data_list`; compact `?`
+  help immediately beside the annotation canvas plus top `文档说明` dialog;
+  transparent After/Compare rendering over a checkerboard; and strict
+  non-sensitive model-display preference persistence with alias/capability
+  separation. The model display dropdown is a portaled compact multi-select
+  popover at the shared `--z-overlay` layer above the sidebar and below modals;
+  long model names wrap inside checkbox rows, controls remain clickable at
+  narrow widths, focus enters the menu, Tab loops inside it, and
+  Escape/Cancel/OK restore focus to the trigger.
+- **USER-CONFIRMED / PAYLOAD CONTRACT:** resize-only generation payloads omit
+  `annotation_image_data`, `annotation_contract`, `annotation_data`,
+  `annotation_objects`, `annotations`, and `image_data_list` entirely, including
+  on retry. Empty arrays, empty objects, empty strings, and null values are not
+  accepted as substitutes for omission.
+- **VERIFIED / LOCAL 422 FIX 2026-09-02:** the annotated-submit `422` root
+  cause was frontend leakage of local-only annotation metadata into the runtime
+  request envelope. `annotation_data` and `annotation_objects` are now retained
+  only for local UI/contract state and are not sent as provider/backend request
+  fields; pure resize still omits every annotation field listed above.
+- **USER-CONFIRMED / MODEL ALIAS FACT:** `gpt-image2-b` and similar entries are
+  `gpt-image-2` channel/account aliases. Do not infer capability, supported
+  size, or OpenAI model identity from alias text alone.
+- **VERIFIED / LOCAL ALIAS SIZE FIX 2026-09-02:** the
+  `source_size_not_declared` failure was caused by custom model aliases such as
+  `gpt-image2-b` being treated as canonical model identities, so the provider
+  size declaration was not resolved for the selected model. Compatibility now
+  accepts an explicit `alias_of`/`canonical_model` relationship and resolves
+  capability through the declared canonical model; undeclared sizes and
+  ambiguous model-name collisions continue to fail closed.
+- **USER-CONFIRMED / SIZE-EXPANSION BUG CLOSURE:** the local precision
+  size-expansion failure was traced to frontend capability/readiness drift: the
+  UI could lose the explicitly selected model on retry, accept stale or loose
+  provider size declarations, and refresh readiness too late after exact-size
+  authorization changes. The closed local contract now keeps the explicit model
+  on first submit and retry, uses explicit current-`WxH` capability
+  confirm/revoke, refreshes readiness on the resize events that affect
+  generation eligibility, accepts provider resize capability only as canonical
+  string-only `WxH` declarations, ignores noncanonical strings and object-shaped
+  `{width,height}`/`{w,h}` aliases, and applies the precision-specific
+  `64 * 1024 * 1024` output-pixel cap.
+- **USER-CONFIRMED / EXACT SIZE ROOT CAUSE:** the observed real output-size
+  failure was requested `1536x864` versus actual `1376x768`; the exact-output
+  gate discarded it as `precision_edit_output_size_mismatch`.
+- **VERIFIED / OPENAI DOCS 2026-09-02:** official OpenAI Images documentation
+  identifies `gpt-image-2` as usable for image generation and existing-image
+  edits. The accepted exact-size contract is: each side `<= 3840`, width and
+  height are multiples of `16`, aspect ratio is within `1:3..3:1`, and total
+  pixels are `655360..8294400`; sizes above `2560x1440` are experimental.
+  Valid exact examples include `1280x720`, `1536x864`, `1792x768`,
+  `2560x1440`, and `3840x2160`. `1920x1080` is not a valid exact request
+  because `1080` is not divisible by `16`. Do not record or rely on a `4000px`
+  max-edge claim. A gateway or upstream may still return a different size;
+  GenBox must verify the returned pixels and then fail under `strict` or apply
+  only explicit `fit_crop`. Prompt words such as `8K` are style/detail
+  guidance, not a request for an 8K output file.
+- **USER-CONFIRMED / RESIZE POLICY:** `precision_output_size_policy` remains in
+  resize payloads. The default is `strict`. `fit_crop` is explicit
+  page-session memory only and is not written to localStorage. It may accept a
+  single provider call only when ratio delta is `<= 5%` and upscale is
+  `<= 1.5`; GenBox then applies a center cover crop with LANCZOS, preserves
+  alpha where present, records metadata, and surfaces a warning. No
+  `precision_aspect_ratio_constraint` is sent or saved.
+- **USER-CONFIRMED / STRUCTURED PROMPT:** the backend derives and appends the
+  `16:9` or `21:9` structured prompt block from the canonical target `WxH`.
+  The frontend does not concatenate prompt text and does not send a separate
+  aspect field. A read-only aspect hint may remain in the UI.
+- **USER-CONFIRMED / LOCAL REVIEWS:** final backend, UI, Ops, and Docs reviews
+  reported P0/P1/P2/P3 all `0`; the targeted unauthorized/forbidden route
+  check returned the expected `403`.
+- **VERIFIED / LOCAL FINAL REGRESSIONS 2026-09-02:** alias/provider coverage
+  passed `131`; precision-related coverage passed `319`; the full repository
+  suite passed `1143`. All four MJS suites passed. Four `node --check`
+  commands, explicit `py_compile`, and `git diff --check` passed. Independent
+  review passed with `0` blockers.
+- **VERIFIED / LOCAL LAB 2026-09-02:** before final restart,
+  `Get-NetTCPConnection -LocalPort 8892 -State Listen` showed the owned local
+  listener at `127.0.0.1:8892` as PID `50984`. `.\start-lab.ps1 -Action stop`
+  safely stopped PID `50984`; `.\start-lab.ps1 -Action start -Background`
+  reported READY as PID `19960`, HEAD `f0e97f8`, version `2.6.4`. Fresh
+  read-only probes returned HTTP `200` for `/`, `/api/runtime/status`, and the
+  cutout capability endpoint; `/` had content length `193352`.
+  `/api/runtime/status` reported `version=2.6.4`, `runtime_head=f0e97f8`,
+  `runtime_id=a3d0fc431733`, `runtime_source=41cf5ae2cf9ba4ff`, `mode=dev`,
+  and `port=8892`. `Get-NetTCPConnection` confirmed the current listener on
+  `127.0.0.1:8892` is PID `19960`. Cutout capabilities reported
+  `state=ready`, `available=true`, `executable=true`, and
+  `adapter=u2net-human-seg-onnx`. The local lab was left running for user
+  acceptance.
+- **VERIFIED / LOCAL FRONTEND UPDATE 2026-09-02:** cutout refine now exposes
+  an explicit foreground-restore mode with selection-gated enablement, restore
+  alpha control, restore payload fields, and restore-aware completion/status
+  copy. Verification passed `node tests/test_precision_edit_ui.mjs`,
+  `python -m pytest -q tests/test_cutout_refine.py tests/test_cutout_refine_route.py`,
+  `node --check static/js/app-all.js`, `node --check static/js/i18n.js`, and
+  `git diff --check`.
+- **VERIFIED / LOCAL PLAYWRIGHT 2026-09-02:** synthetic three-viewport browser
+  checks passed at `390x844`, `937x920`, and `1200x800`: the model visibility
+  popover hit-tests to menu controls instead of `ASIDE#sidebar`, uses
+  `--z-overlay`, stays within viewport bounds with no horizontal overflow,
+  keeps its footer visible, wraps long model names without covering checkboxes,
+  and remains below the precision docs modal.
+- **UNVERIFIED / USER ACCEPTANCE REQUIRED:** real user-led browser visual
+  inspection with a non-sensitive local image, real cutout refine POST, and real
+  Provider precision edit remain **UNVERIFIED** until the user performs and
+  records sanitized acceptance evidence. Real Provider success and user-browser
+  manual acceptance are not established by the local evidence above.
+- **BOUNDARY:** no VPS, production instance, cleanup, commit, tag, Release,
+  push, or unrelated phase work was performed. No external Provider success is
+  claimed.
+- **RESUME:** with the existing local service still running, use a
+  non-sensitive image at
+  `http://127.0.0.1:8892/#/generate/precision_edit/precision`. Manually verify
+  the three viewport sizes above; source load; object select/move; arrow
+  endpoint scaling; rectangle/ellipse movement and resizing; eraser, text,
+  undo/redo; compact `?` and top `文档说明` dialog; resize-only first submit and
+  retry payload omission; transparent After/Compare checkerboard; cutout refine
+  mask/feather/alpha/version/stale guard; and one explicitly selected Provider
+  precision edit. Record only sanitized status, elapsed time, and result; do not
+  record filenames, prompts, credentials, host identity, user media, or raw
+  Provider responses.
+
+## Precision edit upstream-error redaction closure (2026-08-31)
+
+- **VERIFIED / LOCAL SECURITY FIX:** `providers/__init__.py` now sends the
+  technical detail retained by `_friendly_generation_error()` through the
+  shared sensitive-text redactor. The redactor also recognizes quoted JSON
+  credential fields and preserves useful surrounding JSON while masking API
+  keys, Bearer credentials, token-bearing query parameters, URL userinfo,
+  prefixed `sk-`-style secrets, and exact credentials configured on the
+  provider. The precision-edit upstream-error path is covered directly; all
+  test values are synthetic.
+- **VERIFIED / LOCAL TESTS:** focused provider error and precision contracts
+  passed `54 passed`; the broader precision/inpaint/generation-control target
+  passed `156 passed`; the full repository suite passed `851 passed`.
+  `tests/test_precision_edit_ui.mjs`, `tests/test_generation_error_ui.mjs`,
+  `tests/test_stop_generation_ui.mjs`, and `tests/test_i18n.mjs` passed. Four
+  relevant `node --check` commands, `py_compile` for `main.py`,
+  `providers/__init__.py`, and `config.py`, and `git diff --check` passed.
+- **VERIFIED / LOCAL LAB:** after the fix, the owned lab was restarted with
+  `start-lab.ps1` and reported READY on `127.0.0.1:8892` as PID `33476`,
+  version `2.6.4`, mode `dev`, and HEAD `f0e97f8`. Both `/` and
+  `/api/runtime/status` returned HTTP `200` on 2026-08-31.
+- **BOUNDARY / RESUME:** no VPS, production instance, cleanup, execute marker,
+  tag, Release, or real provider credential was used. Real browser pointer
+  interaction, real GPT Image 2 editing, and a configured cutout adapter remain
+  **UNVERIFIED** and require explicit user-led acceptance. Resume by performing
+  only those manual interactions with a non-sensitive image and separately
+  selected external endpoint; do not infer external success from local tests.
+
+## Precision edit V3 latest validation status (2026-08-29)
+
+- **VERIFIED / LOCAL AUTOMATED:** the precision-edit validation suites passed
+  `147 passed`; this covers the precision-edit contracts, provider capability
+  and error behavior, inpaint compatibility, generation controls, and related
+  safety regressions.
+- **VERIFIED / LOCAL CAPABILITY AND CREDENTIALS:** the image-capability and
+  provider-credential suites passed `8 passed`.
+- **VERIFIED / LOCAL UI AND STATIC CHECKS:** `tests/test_precision_edit_ui.mjs`,
+  `tests/test_generation_error_ui.mjs`, `tests/test_stop_generation_ui.mjs`,
+  and `tests/test_i18n.mjs` passed. `node --check` passed for
+  `static/js/app-all.js`, `static/js/i18n.js`, `static/js/app.js`, and
+  `static/js/generate.js`; `py_compile` passed for `main.py`,
+  `providers/__init__.py`, and `config.py`; `git diff --check` passed.
+- **8892 PAGE EVIDENCE:** only the previously recorded static/structure checks
+  are accepted as **PASS**. The following browser interactions remain
+  **UNVERIFIED**: real local image upload, pointer drawing for annotations,
+  the reusable main-canvas before/after comparison drag line, version switching,
+  and dragging the canvas container border to resize its viewing area.
+- **EXTERNAL EVIDENCE:** real GPT Image 2 editing, a real transparent-background
+  cutout adapter, and external or isolated end-to-end verification remain
+  **UNVERIFIED**. Mock data, static contracts, and local tests do not establish
+  real provider success. No Phase 9 or Phase 10 completion is implied.
+- **ENVIRONMENT NOTE:** the first pytest attempt hit a Windows temporary-directory
+  permission error involving `pytest-current`; rerunning with independent
+  `--basetemp` directories completed successfully. This is recorded as a local
+  test-environment issue, not as a product failure.
+- **RESUME:** after an authorized Agent confirms the local lab is online, load a
+  non-sensitive test image in `#/generate/precision_edit/precision` and manually
+  verify the five interaction groups above without submitting a generation.
+  Then separately arrange a reachable, explicitly selected GPT Image 2 endpoint,
+  a configured cutout adapter, and isolated/external E2E evidence. Update this
+  document only with dated observations and keep the evidence labels separate.
+
+## Precision edit V3 local delivery slice (2026-08-28)
+
+- LOCAL VERIFIED: the current working tree adds the genbox-annotation-v3 contract for ellipse and freehand brush annotations, per-region instructions, normalized coordinates, undo/redo-safe erasing, view-only canvas zoom, and a stable source-aspect canvas surface. The existing arrow, rectangle, and text workflows remain available.
+- LOCAL VERIFIED: the precision workbench now exposes ellipse, arrow, rectangle, brush, eraser, and text tools; mobile controls use a two-row touch layout; the main canvas remains the reusable source/result surface; and the right-side task log/model picker stays in the focused workbench.
+- LOCAL VERIFIED: the cutout UI is fail-closed. Without an executable local cutout adapter, the person-extraction action remains disabled and explains that brush selection can still be sent to the edit model. No cutout adapter was installed or enabled in this slice.
+- VERIFIED 2026-08-28: node tests/test_precision_edit_ui.mjs passed; focused backend/provider tests passed 49; node --check static/js/app-all.js, Python compilation, and git diff --check passed. The loopback service owning 127.0.0.1:8892 was rechecked as the expected python.exe main.py process, served the current V3 JavaScript with HTTP 200, and returned no browser console errors after refresh. Desktop and mobile DOM checks confirmed no horizontal overflow; mobile canvas width recovered from the prior 2px regression and tool buttons measured at least 44px high.
+- UNVERIFIED: a real image upload gesture, pointer drawing against a user image, real GPT Image 2 edit output, upstream 21:9/resize behavior, and transparent-background cutout output still require a user-selected test image and a reachable compatible upstream/adapter. The service was not replaced or deployed remotely.
+- Resume: continue from the current working tree. For the next acceptance pass, load a non-sensitive test image in the precision workbench, exercise each pointer tool and the version comparison, then separately verify a real image-edit endpoint and any cutout adapter before changing the fail-closed gate.
 
 ## Phase 10 Store projection / environment fact slice (2026-08-22)
 
@@ -58,6 +385,63 @@
   commands, explicit PowerShell-expanded `py_compile`, and `git diff --check`
   passed. This is local evidence only; it does not prove live or isolated-VPS
   multi-target behavior.
+- **PRECISION EDIT / CUTOUT LOCAL 2026-08-27:** annotation v2 now requires
+  stable labels plus per-arrow/rectangle instructions, keeps text instructions
+  optional, sends only `label` (no `number` alias), draws label numbers on
+  the overlay, and converts version URLs back to data URLs for continued
+  editing. Cutout is fail-closed: no adapter returns structured `503` from
+  both capabilities and submission before image processing. Focused suites
+  pass; full suite `778 passed`; Node UI contract assertions, `node --check`,
+  explicit `py_compile`, and `git diff --check` pass; local lab restarted on
+  `8892` with HTTP `200`. Local evidence only; no live provider generation,
+  VPS, clean deployment, tag, or Release was performed. Phase 10 remains In
+  Progress.
+- **PRECISION EDIT UX FOLLOW-UP / VERIFIED LOCALLY 2026-08-28:** the reusable
+  main canvas now owns the version rail and before/after comparison surface;
+  the right inspector starts with fail-closed Cutout, followed by per-annotation
+  instructions, an explicit processing-progress empty state, and endpoint/model
+  selection. Fixed a deterministic initialization error caused by an undefined
+  Cutout control helper, kept per-object textareas connected while typing,
+  separated version browsing from base replacement, moved fullscreen to the
+  main canvas, and added complete pointer/capture handling for the comparison
+  slider. A synthetic repository image loaded at its native 1440 x 900 aspect
+  ratio; a rectangle annotation persisted; its instruction accepted Chinese
+  text while retaining focus; no browser console error was observed.
+  git diff --check, JavaScript syntax checks, both Node UI regression suites,
+  and the focused Python contracts (50 passed) succeeded. Lab restart reported
+  READY on http://127.0.0.1:8892/ at HEAD f0e97f8. Real GPT Image 2 precision
+  generation and a configured Cutout adapter remain **UNVERIFIED**; no VPS,
+  production, commit, push, tag, or Release action was performed. Resume by
+  having the user manually inspect the open precision-edit page, then diagnose
+  only reproducible UI or provider failures from fresh logs.
+- **PRECISION EDIT SIZE SAFETY / VERIFIED LOCALLY 2026-08-28:** the main-canvas
+  header now keeps the version rail, Before, After, Compare, and Fullscreen
+  controls together, with Fullscreen at the far right. Precision editing
+  defaults to preserving the source dimensions and aspect ratio and does not
+  inherit text-to-image ratio or size controls. A separate explicit Change size
+  mode provides presets, custom width/height, and composition guidance; 21:9
+  maps to 1792 x 768 as a requested target only. The request contract carries
+  `precision_size_mode`, `precision_target_size`, and
+  `precision_resize_prompt`. Preserve mode asks the provider for `size=auto`;
+  resize mode sends only the explicit target. Returned dimensions are checked
+  before saving, and a mismatch fails closed with
+  `precision_edit_output_size_mismatch` instead of silently cropping, stretching,
+  or replacing the annotation canvas. Completed versions remain browseable but
+  are not automatically promoted to the next editing base. `git diff --check`,
+  JavaScript syntax checks, both Node UI suites, and focused precision/inpaint
+  Python contracts passed (`56 passed`). Independent read-only review found no
+  remaining P1/P2 after closing two size-contract bypasses: precision editing
+  cannot inherit generic post-generation upscaling, and resize mode requires
+  non-empty composition guidance in the frontend, backend, and Provider layer.
+  Browser interaction verified the default preserve state, expandable resize
+  controls, required guidance field, right-aligned Fullscreen control, and no
+  new console errors. The lab is running at http://127.0.0.1:8892/ (PID 24324,
+  HTTP 200); the unrelated listener on 8891 was not changed. Real GPT Image 2 editing and
+  arbitrary resize/outpaint, including 21:9, remain **UNVERIFIED**. No VPS,
+  production, commit, push, tag, or Release action was performed. Resume with a
+  user-selected real endpoint only after fresh logs are available, and record
+  unsupported target-size responses as provider limitations rather than local
+  success.
 - **BOUNDARY:** Recommended is high only with complete verified discovery and
   Docker/Compose evidence plus all nine environment facts observed. The current
   slice still requires live/isolated-VPS verification, real multi-target behavior,

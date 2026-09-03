@@ -6,20 +6,25 @@ import os
 import sys
 import platform
 import re
+import base64
+import binascii
+import math
 import hmac
 import hashlib
 import threading
 import asyncio
+import io
 import json as _json
 import time
 import uuid
 import secrets
 import webbrowser
+import warnings
 import uvicorn
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Dict, List, Optional
-from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from genbox_version import __version__
 
@@ -59,13 +64,32 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, model_validator
+from pydantic_core import PydanticCustomError
+from PIL import Image
 
 from config import (
-    cfg_mgr, BASE_DIR, GALLERY_DIR, STORAGE_DIR, ProviderConfig, ProvidersConfig,
+    cfg_mgr, BASE_DIR, GALLERY_DIR, STORAGE_DIR, PrecisionEditProfile, ProviderConfig, ProvidersConfig,
     is_prod_mode, get_admin_key, verify_admin_key, generate_admin_key, reset_admin_key,
+    normalize_precision_capability_size, precision_capability_size_declaration,
+    resolve_precision_model_capability, verify_ssl_enabled,
 )
-from providers import generate_multi, enhance_prompt_with_llm, enhance_prompt_with_llm_detailed, ImageResult, fetch_models_from_upstream, _save_image, translate_upstream_error
+from providers import (
+    GeneratedImageValidationError,
+    ImageResult,
+    ProviderResponseValidationError,
+    _decode_generated_image_base64,
+    _endpoint_failure_summary,
+    _parse_provider_json_response,
+    _provider_error_text,
+    _save_image,
+    _stream_bounded_provider_response,
+    enhance_prompt_with_llm,
+    enhance_prompt_with_llm_detailed,
+    fetch_models_from_upstream,
+    generate_multi,
+    translate_upstream_error,
+)
 
 # ── 远程 chatgpt2api 兼容部署同步 ──
 from sync.models import RemoteImageRecord, SyncCandidate, SyncDeployment
@@ -128,6 +152,28 @@ from sync.push_sources import revoke_target_sources as revoke_target_push_source
 from sync.push_sources import rotate_source as rotate_push_source
 from sync.push_sources import set_source_grant_delete as set_push_source_grant_delete
 from sync.push_sources import source_key_belongs_to_instance
+from image_tools.cutout_onnx import (
+    ADAPTER_ID as CUTOUT_ADAPTER_ID,
+    MODEL_MANIFEST as CUTOUT_MODEL_MANIFEST,
+    MODEL_RELATIVE_PATH as CUTOUT_MODEL_RELATIVE_PATH,
+    CutoutAdapterError,
+    CutoutONNXAdapter,
+)
+from image_tools.cutout_model_manager import (
+    MODEL_INSTALL_CONTRACT as CUTOUT_MODEL_INSTALL_CONTRACT,
+    MODEL_SOURCE_ID as CUTOUT_MODEL_SOURCE_ID,
+    MODEL_SOURCE_PAGE as CUTOUT_MODEL_SOURCE_PAGE,
+    CutoutModelManager,
+    CutoutModelManagerError,
+)
+from image_tools.cutout_refine import (
+    CUTOUT_REFINE_CONTRACT,
+    CUTOUT_SELECTION_MASK_CONTRACT,
+    MAX_FEATHER_RADIUS,
+    CutoutRefineError,
+    refine_cutout_alpha,
+    save_refined_png_atomic,
+)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -179,8 +225,18 @@ class GenerateRequest(BaseModel):
     llm_provider_id: Optional[str] = None  # 指定用于优化提示词的 LLM Provider
     size: Optional[str] = None
     quality: Optional[str] = None
-    mode: str = "t2i"                # "t2i" 文生图 | "i2i" 图生图
+    mode: str = "t2i"                # t2i | i2i | inpaint | precision_edit
     image_data: Optional[str] = None  # base64 图片数据 (i2i 模式)
+    image_data_list: List[str] = []   # 多张参考图；image_data 保留兼容旧客户端
+    mask_data: Optional[str] = None    # 局部重绘遮罩（白色=编辑）
+    mask_contract: Optional[str] = None
+    annotation_image_data: Optional[str] = None  # 精准改图批注叠加图
+    annotation_contract: Optional[str] = None
+    annotations: List[dict] = []       # 箭头、矩形、文字的归一化坐标
+    precision_size_mode: str = "preserve"  # preserve | resize；精准改图不复用文生图尺寸
+    precision_target_size: Optional[str] = None
+    precision_resize_prompt: Optional[str] = None
+    precision_output_size_policy: str = "strict"  # strict | fit_crop；仅 precision resize
     strength: float = 0.55            # 变换强度 (i2i 模式)
     continuous: bool = False          # 连续生图模式（保持一致性）
     system_prompt: Optional[str] = None  # 系统提示词（专业模式）
@@ -188,10 +244,1266 @@ class GenerateRequest(BaseModel):
     quantities: dict = {}              # {provider_id: 数量(int)}，如 {"gpt-image": 2, "gemini": 1}
     # ── Per-provider 设置 ──
     provider_settings: dict = {}       # {provider_id: {quality, size, ...}}
+    exact_ratio_crop: bool = False      # 用户显式允许对近似画布做居中裁切
     # ── 尺寸自适应：小图生成 + 本地放大 ──
     upscale_to: Optional[str] = None
     upscale_method: str = "lanczos3"
     upscale_ratio: str = "original"  # 宽高比：1:1, 16:9, 21:9, 4:3, 3:2, 9:16, 3:4, original
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_unknown_precision_fields(cls, value):
+        """Reject likely precision aliases without changing other mode compatibility."""
+        if not isinstance(value, dict) or value.get("mode") != "precision_edit":
+            return value
+
+        known_fields = set(cls.model_fields)
+        precision_boundary_aliases = {
+            "imagedatalist",
+            "maskcontract",
+            "maskdata",
+            "upscaleratio",
+            "upscaleto",
+        }
+        for raw_name in value:
+            if not isinstance(raw_name, str) or raw_name in known_fields:
+                continue
+            normalized = re.sub(r"[^a-z0-9]", "", raw_name.lower())
+            if (
+                normalized.startswith("annotation")
+                or normalized.startswith("precision")
+                or normalized in precision_boundary_aliases
+            ):
+                raise PydanticCustomError(
+                    "precision_unknown_field",
+                    "precision_edit contains unsupported precision fields",
+                )
+        return value
+
+
+class CutoutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract: str
+    image_data: str
+
+
+class CutoutModelActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract: str
+    source_id: str
+    confirmed: StrictBool
+
+
+class CutoutRefineRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract: str
+    image_data: str
+    selection_mask_data: Optional[str] = None
+    selection_mask_contract: Optional[str] = None
+    feather_radius: StrictInt | StrictFloat = 0
+    restore_mode: bool = False
+    restore_source_image_data: Optional[str] = None
+    restore_min_alpha: StrictInt | StrictFloat = 255
+    parent_version_id: Optional[str] = None
+
+
+GENERATION_MODES = frozenset({"t2i", "i2i", "inpaint", "precision_edit"})
+INPAINT_MASK_CONTRACT = "genbox-edit-white-v1"
+PRECISION_ANNOTATION_CONTRACT_V1 = "genbox-annotation-v1"
+PRECISION_ANNOTATION_CONTRACT_V2 = "genbox-annotation-v2"
+PRECISION_ANNOTATION_CONTRACT_V3 = "genbox-annotation-v3"
+PRECISION_ANNOTATION_CONTRACT = PRECISION_ANNOTATION_CONTRACT_V1
+PRECISION_ANNOTATION_CONTRACTS = frozenset({
+    PRECISION_ANNOTATION_CONTRACT_V1,
+    PRECISION_ANNOTATION_CONTRACT_V2,
+    PRECISION_ANNOTATION_CONTRACT_V3,
+})
+PRECISION_EDIT_CAPABILITY = "precision_edit"
+PRECISION_ANNOTATION_TYPES = frozenset({"arrow", "rectangle", "ellipse", "brush", "text"})
+MAX_PRECISION_ANNOTATIONS = 100
+MAX_PRECISION_BRUSH_POINTS = 1024
+MAX_PRECISION_BRUSH_POINTS_TOTAL = 4096
+MAX_PRECISION_ANNOTATION_TEXT = 500
+MAX_PRECISION_ANNOTATION_TEXT_TOTAL = 4000
+MAX_PRECISION_PROMPT_TEXT = 2000
+MAX_PRECISION_RESIZE_PROMPT_TEXT = 500
+MAX_PRECISION_OUTPUT_PIXELS = int(
+    os.getenv("GENBOX_PRECISION_MAX_OUTPUT_PIXELS", str(64 * 1024 * 1024))
+)
+MAX_PRECISION_SUPPORTED_SIZES = 64
+CUTOUT_CONTRACT = "genbox-cutout-v1"
+# The adapter is declared locally, but capability is advertised only after the
+# fixed model manifest and CPU-only ONNX session have both been validated.
+CUTOUT_MODEL_PATH = BASE_DIR / CUTOUT_MODEL_RELATIVE_PATH
+CUTOUT_ADAPTER = CutoutONNXAdapter(model_path=CUTOUT_MODEL_PATH)
+CUTOUT_MODEL_MANAGER = CutoutModelManager(CUTOUT_ADAPTER)
+CUTOUT_ADAPTERS: tuple[str, ...] = (CUTOUT_ADAPTER_ID,)
+GENERATION_ALLOWED_IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/webp"})
+MAX_GENERATION_INPUT_BYTES = int(
+    os.getenv("GENBOX_GENERATE_MAX_IMAGE_BYTES", str(25 * 1024 * 1024))
+)
+MAX_GENERATION_INPUT_PIXELS = int(
+    os.getenv("GENBOX_GENERATE_MAX_IMAGE_PIXELS", "25000000")
+)
+_GENERATION_IMAGE_VALIDATION_LOCK = threading.RLock()
+_GENERATION_IMAGE_FORMAT_MIME_TYPES = {
+    "PNG": "image/png",
+    "JPEG": "image/jpeg",
+    "WEBP": "image/webp",
+}
+_GALLERY_FILE_EXTENSIONS = frozenset({".png"})
+_VIDEO_FILE_EXTENSIONS = frozenset({".mp4", ".webm", ".mov"})
+_VIDEO_THUMB_EXTENSIONS = frozenset({".jpg"})
+_VIDEO_MEDIA_TYPES = {
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
+}
+MAX_BYTE_RANGE_DIGITS = 20
+
+
+def _gallery_file_not_found() -> HTTPException:
+    return HTTPException(status_code=404, detail="图片不存在")
+
+
+def _video_file_not_found() -> HTTPException:
+    return HTTPException(status_code=404, detail="视频文件不存在")
+
+
+def _thumbnail_not_found() -> HTTPException:
+    return HTTPException(status_code=404, detail="缩略图不存在")
+
+
+def _resolve_confined_media_file(
+    root: Path,
+    filename: object,
+    *,
+    allowed_extensions: frozenset[str],
+    not_found,
+    must_exist: bool = True,
+) -> Path:
+    raw_name = str(filename or "")
+    probe = raw_name
+    for _ in range(5):
+        posix = PurePosixPath(probe)
+        windows = PureWindowsPath(probe)
+        if (
+            not probe
+            or probe in {".", ".."}
+            or "/" in probe
+            or "\\" in probe
+            or ":" in probe
+            or posix.is_absolute()
+            or windows.is_absolute()
+            or bool(windows.drive)
+            or len(posix.parts) != 1
+            or len(windows.parts) != 1
+            or posix.suffix.lower() not in allowed_extensions
+        ):
+            raise not_found()
+        decoded = unquote(probe)
+        if decoded == probe:
+            break
+        probe = decoded
+    else:
+        raise not_found()
+
+    try:
+        confined_root = Path(root).resolve(strict=True)
+        unresolved = confined_root / raw_name
+        if not confined_root.is_dir() or unresolved.is_symlink():
+            raise ValueError("unsafe media path")
+        candidate = unresolved.resolve(strict=must_exist)
+        candidate.relative_to(confined_root)
+    except (OSError, RuntimeError, ValueError):
+        raise not_found() from None
+    if candidate.parent != confined_root or candidate.name != raw_name:
+        raise not_found()
+    if must_exist and not candidate.is_file():
+        raise not_found()
+    if not must_exist and candidate.exists() and not candidate.is_file():
+        raise not_found()
+    return candidate
+
+
+def _resolve_gallery_file(filename: object) -> Path:
+    return _resolve_confined_media_file(
+        GALLERY_DIR,
+        filename,
+        allowed_extensions=_GALLERY_FILE_EXTENSIONS,
+        not_found=_gallery_file_not_found,
+    )
+
+
+def _resolve_video_file(filename: object, *, must_exist: bool = True) -> Path:
+    return _resolve_confined_media_file(
+        VIDEO_DIR,
+        filename,
+        allowed_extensions=_VIDEO_FILE_EXTENSIONS,
+        not_found=_video_file_not_found,
+        must_exist=must_exist,
+    )
+
+
+def _resolve_video_thumbnail_file(filename: object, *, must_exist: bool = True) -> Path:
+    return _resolve_confined_media_file(
+        VIDEO_THUMBS_DIR,
+        filename,
+        allowed_extensions=_VIDEO_THUMB_EXTENSIONS,
+        not_found=_thumbnail_not_found,
+        must_exist=must_exist,
+    )
+
+
+def _read_gallery_image_payload(path: Path) -> tuple[bytes, str, str]:
+    """Read and verify gallery bytes, deriving MIME from decoded content."""
+    try:
+        payload = path.read_bytes()
+        prompt_text = ""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(payload)) as image:
+                image_format = str(image.format or "").upper()
+                prompt_text = str((image.info or {}).get("Prompt") or "")
+                image.verify()
+            with Image.open(io.BytesIO(payload)) as image:
+                image.load()
+    except Exception:
+        raise HTTPException(
+            status_code=415,
+            detail={
+                "code": "gallery_image_invalid",
+                "message": "gallery image is not readable",
+            },
+        ) from None
+
+    mime_type = _GENERATION_IMAGE_FORMAT_MIME_TYPES.get(image_format, "")
+    if mime_type not in GENERATION_ALLOWED_IMAGE_MIME_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail={
+                "code": "gallery_image_mime_unsupported",
+                "message": "gallery image uses an unsupported MIME type",
+            },
+        )
+    return payload, mime_type, prompt_text
+
+
+def _load_gallery_image_payload(filename: object) -> tuple[Path, bytes, str, str]:
+    path = _resolve_gallery_file(filename)
+    payload, mime_type, prompt_text = _read_gallery_image_payload(path)
+    return path, payload, mime_type, prompt_text
+
+
+def _load_thumbnail_image_payload(filename: object) -> tuple[bytes, str]:
+    try:
+        _path, payload, mime_type, _prompt = _load_gallery_image_payload(filename)
+        return payload, mime_type
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+
+    try:
+        video_path = _resolve_video_file(filename, must_exist=False)
+        thumb_name = video_path.stem + "_thumb.jpg"
+        planned_thumb = _resolve_video_thumbnail_file(thumb_name, must_exist=False)
+    except HTTPException:
+        raise _thumbnail_not_found() from None
+
+    if planned_thumb.exists():
+        thumb_path = _resolve_video_thumbnail_file(thumb_name)
+    else:
+        try:
+            video_path = _resolve_video_file(filename)
+        except HTTPException:
+            raise _thumbnail_not_found() from None
+        if _generate_video_thumbnail(video_path) is None:
+            raise _thumbnail_not_found()
+        try:
+            thumb_path = _resolve_video_thumbnail_file(thumb_name)
+        except HTTPException:
+            raise _thumbnail_not_found() from None
+
+    payload, mime_type, _prompt = _read_gallery_image_payload(thumb_path)
+    return payload, mime_type
+
+
+def _parse_byte_range_spec(range_spec: str) -> Optional[tuple[Optional[int], Optional[int]]]:
+    match = re.fullmatch(r"(\d*)-(\d*)", str(range_spec or "").strip())
+    if not match:
+        return None
+
+    start_text, end_text = match.groups()
+    if not start_text and not end_text:
+        return None
+    if max(len(start_text), len(end_text)) > MAX_BYTE_RANGE_DIGITS:
+        return None
+    try:
+        start_value = int(start_text) if start_text else None
+        end_value = int(end_text) if end_text else None
+    except (ValueError, OverflowError):
+        return None
+    if start_value is not None and end_value is not None and end_value < start_value:
+        return None
+    return start_value, end_value
+
+
+def _resolve_byte_range_spec(range_spec: str, total: int) -> Optional[tuple[int, int]]:
+    parsed = _parse_byte_range_spec(range_spec)
+    if parsed is None or total <= 0:
+        return None
+
+    start_value, end_value = parsed
+    if start_value is not None:
+        start = start_value
+        if start >= total:
+            return None
+        if end_value is not None:
+            end = end_value
+            end = min(end, total - 1)
+        else:
+            end = total - 1
+        return start, end
+
+    if end_value is None:
+        return None
+    suffix_length = end_value
+    if suffix_length <= 0:
+        return None
+    return max(total - suffix_length, 0), total - 1
+
+
+def _parse_single_byte_range(range_header: str, total: int) -> Optional[tuple[int, int]]:
+    normalized = str(range_header or "").strip()
+    unit, separator, range_spec = normalized.partition("=")
+    if separator != "=" or unit.lower() != "bytes":
+        return None
+    return _resolve_byte_range_spec(range_spec, total)
+
+
+def _is_valid_multiple_byte_range(range_header: str, total: int) -> bool:
+    normalized = str(range_header or "").strip()
+    unit, separator, range_set = normalized.partition("=")
+    if separator != "=" or unit.lower() != "bytes":
+        return False
+
+    parts = range_set.split(",")
+    if len(parts) < 2:
+        return False
+    normalized_parts = [part.strip() for part in parts]
+    if any(not part or _parse_byte_range_spec(part) is None for part in normalized_parts):
+        return False
+    return any(_resolve_byte_range_spec(part, total) is not None for part in normalized_parts)
+
+
+def _memory_media_response(request: Request, payload: bytes, media_type: str) -> Response:
+    total = len(payload)
+    headers = {"Accept-Ranges": "bytes"}
+    range_header = request.headers.get("range") if request.method.upper() == "GET" else None
+    ignore_multiple_ranges = _is_valid_multiple_byte_range(range_header, total)
+    if range_header is None or ignore_multiple_ranges:
+        headers["Content-Length"] = str(total)
+        return Response(
+            content=b"" if request.method.upper() == "HEAD" else payload,
+            media_type=media_type,
+            headers=headers,
+        )
+
+    byte_range = _parse_single_byte_range(range_header, total)
+    if byte_range is None:
+        headers.update({
+            "Content-Range": f"bytes */{total}",
+            "Content-Length": "0",
+        })
+        return Response(
+            content=b"",
+            status_code=416,
+            media_type=media_type,
+            headers=headers,
+        )
+
+    start, end = byte_range
+    partial = payload[start : end + 1]
+    headers.update({
+        "Content-Range": f"bytes {start}-{end}/{total}",
+        "Content-Length": str(len(partial)),
+    })
+    return Response(
+        content=partial,
+        status_code=206,
+        media_type=media_type,
+        headers=headers,
+    )
+
+
+def _generation_contract_error(code: str, message: str, *, status_code: int = 422, **extra) -> HTTPException:
+    """Return a stable, secret-free error payload for generation input violations."""
+    detail = {"code": code, "message": message}
+    detail.update(extra)
+    return HTTPException(status_code=status_code, detail=detail)
+
+
+def _has_generation_value(value: object) -> bool:
+    return value is not None and (not isinstance(value, str) or bool(value.strip()))
+
+
+def _normalize_generation_mime_type(value: str) -> str:
+    mime_type = str(value or "").strip().lower()
+    return "image/jpeg" if mime_type == "image/jpg" else mime_type
+
+
+def _validate_generation_image_data(
+    value: object,
+    field_name: str,
+    *,
+    required_mime_type: Optional[str] = None,
+) -> dict:
+    """Decode and inspect one browser image payload before a task is created."""
+    if not isinstance(value, str) or not value.strip():
+        raise _generation_contract_error(
+            "image_data_required",
+            f"{field_name} must contain a base64 image payload",
+            field=field_name,
+        )
+
+    original_value = value.strip()
+    encoded = original_value
+    declared_mime_type = ""
+    if original_value.lower().startswith("data:"):
+        header, separator, encoded = original_value.partition(",")
+        if not separator:
+            raise _generation_contract_error(
+                "invalid_image_data_url",
+                f"{field_name} must be a base64 data URL",
+                field=field_name,
+            )
+        match = re.fullmatch(
+            r"data:([A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+);base64",
+            header,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            raise _generation_contract_error(
+                "invalid_image_data_url",
+                f"{field_name} must be a base64 data URL",
+                field=field_name,
+            )
+        declared_mime_type = _normalize_generation_mime_type(match.group(1))
+        if declared_mime_type not in GENERATION_ALLOWED_IMAGE_MIME_TYPES:
+            raise _generation_contract_error(
+                "unsupported_image_mime",
+                f"{field_name} uses an unsupported image MIME type",
+                field=field_name,
+            )
+
+    max_encoded_length = ((MAX_GENERATION_INPUT_BYTES + 2) // 3) * 4
+    if len(encoded) > max_encoded_length:
+        raise _generation_contract_error(
+            "image_too_large",
+            f"{field_name} exceeds the configured byte limit",
+            field=field_name,
+            max_bytes=MAX_GENERATION_INPUT_BYTES,
+        )
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError, TypeError):
+        raise _generation_contract_error(
+            "invalid_image_base64",
+            f"{field_name} is not valid base64",
+            field=field_name,
+        ) from None
+    if not payload:
+        raise _generation_contract_error(
+            "invalid_image_base64",
+            f"{field_name} decoded to an empty image",
+            field=field_name,
+        )
+    if len(payload) > MAX_GENERATION_INPUT_BYTES:
+        raise _generation_contract_error(
+            "image_too_large",
+            f"{field_name} exceeds the configured byte limit",
+            field=field_name,
+            max_bytes=MAX_GENERATION_INPUT_BYTES,
+        )
+
+    try:
+        # Pillow warning filters are process-global. Serialize the warning
+        # promotion so concurrent browser inputs cannot bypass the bomb guard.
+        with _GENERATION_IMAGE_VALIDATION_LOCK:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", Image.DecompressionBombWarning)
+                with Image.open(io.BytesIO(payload)) as image:
+                    width, height = image.size
+                    image_format = str(image.format or "").upper()
+                    if width <= 0 or height <= 0 or width * height > MAX_GENERATION_INPUT_PIXELS:
+                        raise _generation_contract_error(
+                            "image_pixels_exceeded",
+                            f"{field_name} exceeds the configured pixel limit",
+                            field=field_name,
+                            max_pixels=MAX_GENERATION_INPUT_PIXELS,
+                        )
+                    image.verify()
+                with Image.open(io.BytesIO(payload)) as image:
+                    image.load()
+    except HTTPException:
+        raise
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning):
+        raise _generation_contract_error(
+            "image_decompression_bomb",
+            f"{field_name} was rejected by the decompression-bomb guard",
+            field=field_name,
+        ) from None
+    except Exception:
+        raise _generation_contract_error(
+            "invalid_image_payload",
+            f"{field_name} is not a readable image",
+            field=field_name,
+        ) from None
+
+    actual_mime_type = _GENERATION_IMAGE_FORMAT_MIME_TYPES.get(image_format, "")
+    if actual_mime_type not in GENERATION_ALLOWED_IMAGE_MIME_TYPES:
+        raise _generation_contract_error(
+            "unsupported_image_mime",
+            f"{field_name} uses an unsupported image MIME type",
+            field=field_name,
+        )
+    if declared_mime_type and declared_mime_type != actual_mime_type:
+        raise _generation_contract_error(
+            "image_mime_mismatch",
+            f"{field_name} MIME type does not match its image payload",
+            field=field_name,
+        )
+    if required_mime_type and actual_mime_type != required_mime_type:
+        raise _generation_contract_error(
+            "unsupported_image_mime",
+            f"{field_name} must use {required_mime_type}",
+            field=field_name,
+        )
+    return {
+        "value": original_value,
+        "mime_type": actual_mime_type,
+        "width": width,
+        "height": height,
+    }
+
+
+def _precision_annotation_string_is_safe(value: str) -> bool:
+    """Reject annotation text that could be interpreted as executable content or a resource."""
+    if not value.isprintable():
+        return False
+    if re.search(r"(?i)(?:https?|ftp|file|data|javascript):|www\.", value):
+        return False
+    if "<" in value or ">" in value:
+        return False
+    return not re.search(
+        r"(?:^|\s)(?:[A-Za-z]:[\\/]|\\\\|\.\.[\\/]|/(?:[\w.-]+/)+[\w.-]+)",
+        value,
+    )
+
+
+def _precision_coordinate(annotation: dict, field_name: str, index: int) -> float:
+    value = annotation.get(field_name)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise _generation_contract_error(
+            "precision_annotation_coordinate_invalid",
+            f"annotations[{index}].{field_name} must be a normalized number",
+            field=f"annotations[{index}].{field_name}",
+        )
+    normalized = float(value)
+    if not math.isfinite(normalized) or normalized < 0.0 or normalized > 1.0:
+        raise _generation_contract_error(
+            "precision_annotation_coordinate_invalid",
+            f"annotations[{index}].{field_name} must be between 0 and 1",
+            field=f"annotations[{index}].{field_name}",
+        )
+    return normalized
+
+
+def _validate_precision_annotations(value: object, contract: str) -> List[dict]:
+    if not isinstance(value, list) or not value:
+        raise _generation_contract_error(
+            "precision_annotations_required",
+            "precision_edit requires at least one structured annotation",
+            field="annotations",
+        )
+    if len(value) > MAX_PRECISION_ANNOTATIONS:
+        raise _generation_contract_error(
+            "precision_annotations_exceeded",
+            "precision_edit contains too many annotations",
+            field="annotations",
+            max_annotations=MAX_PRECISION_ANNOTATIONS,
+        )
+
+    is_v2 = contract == PRECISION_ANNOTATION_CONTRACT_V2
+    is_v3 = contract == PRECISION_ANNOTATION_CONTRACT_V3
+    is_structured = is_v2 or is_v3
+    if contract == PRECISION_ANNOTATION_CONTRACT_V1:
+        allowed_fields = {
+            "arrow": frozenset({"type", "x1", "y1", "x2", "y2"}),
+            "rectangle": frozenset({"type", "x", "y", "width", "height"}),
+            "text": frozenset({"type", "x", "y", "text"}),
+        }
+    elif is_v2:
+        allowed_fields = {
+            "arrow": frozenset({"type", "label", "instruction", "x1", "y1", "x2", "y2"}),
+            "rectangle": frozenset({"type", "label", "instruction", "x", "y", "width", "height"}),
+            "text": frozenset({"type", "label", "text", "instruction", "x", "y"}),
+        }
+    elif is_v3:
+        allowed_fields = {
+            "arrow": frozenset({"type", "label", "instruction", "x1", "y1", "x2", "y2"}),
+            "rectangle": frozenset({"type", "label", "instruction", "x", "y", "width", "height"}),
+            "ellipse": frozenset({"type", "label", "instruction", "x", "y", "width", "height"}),
+            "brush": frozenset({"type", "label", "instruction", "points"}),
+            "text": frozenset({"type", "label", "text", "instruction", "x", "y"}),
+        }
+    else:
+        raise _generation_contract_error(
+            "precision_annotation_contract_unsupported",
+            "precision_edit annotation contract is unsupported",
+            mode="precision_edit",
+        )
+    coordinate_fields = {
+        "arrow": ("x1", "y1", "x2", "y2"),
+        "rectangle": ("x", "y", "width", "height"),
+        "ellipse": ("x", "y", "width", "height"),
+        "brush": (),
+        "text": ("x", "y"),
+    }
+    normalized_annotations: List[dict] = []
+    total_text_length = 0
+    seen_labels: set[int] = set()
+    total_brush_points = 0
+
+    for index, raw_annotation in enumerate(value):
+        if not isinstance(raw_annotation, dict):
+            raise _generation_contract_error(
+                "precision_annotation_invalid",
+                f"annotations[{index}] must be an object",
+                field=f"annotations[{index}]",
+            )
+        annotation_type = raw_annotation.get("type")
+        if annotation_type not in allowed_fields:
+            raise _generation_contract_error(
+                "precision_annotation_type_unsupported",
+                f"annotations[{index}].type is unsupported for {contract}",
+                field=f"annotations[{index}].type",
+            )
+        actual_fields = set(raw_annotation)
+        permitted_fields = allowed_fields[annotation_type]
+        if is_structured and annotation_type == "text":
+            required_fields = permitted_fields - {"instruction"}
+        else:
+            required_fields = permitted_fields
+        unknown_fields = sorted(actual_fields - permitted_fields)
+        missing_fields = sorted(required_fields - actual_fields)
+        if unknown_fields or missing_fields:
+            raise _generation_contract_error(
+                "precision_annotation_fields_unsupported",
+                f"annotations[{index}] contains missing or unsupported fields",
+                field=f"annotations[{index}]",
+                unsupported_fields=unknown_fields,
+                missing_fields=missing_fields,
+            )
+
+        normalized = {"type": annotation_type}
+        if is_structured:
+            label = raw_annotation.get("label")
+            if isinstance(label, bool) or not isinstance(label, int) or label <= 0:
+                raise _generation_contract_error(
+                    "precision_annotation_label_invalid",
+                    f"annotations[{index}].label must be a positive integer",
+                    field=f"annotations[{index}].label",
+                )
+            if label in seen_labels:
+                raise _generation_contract_error(
+                    "precision_annotation_label_duplicate",
+                    f"annotations[{index}].label must be unique",
+                    field=f"annotations[{index}].label",
+                )
+            seen_labels.add(label)
+            normalized["label"] = label
+        for field_name in coordinate_fields[annotation_type]:
+            normalized[field_name] = _precision_coordinate(raw_annotation, field_name, index)
+
+        if annotation_type == "arrow":
+            if normalized["x1"] == normalized["x2"] and normalized["y1"] == normalized["y2"]:
+                raise _generation_contract_error(
+                    "precision_annotation_geometry_invalid",
+                    f"annotations[{index}] arrow must have distinct endpoints",
+                    field=f"annotations[{index}]",
+                )
+        elif annotation_type in {"rectangle", "ellipse"}:
+            if normalized["width"] <= 0.0 or normalized["height"] <= 0.0:
+                raise _generation_contract_error(
+                    "precision_annotation_geometry_invalid",
+                    f"annotations[{index}] {annotation_type} must have positive width and height",
+                    field=f"annotations[{index}]",
+                )
+            if normalized["x"] + normalized["width"] > 1.0 or normalized["y"] + normalized["height"] > 1.0:
+                raise _generation_contract_error(
+                    "precision_annotation_geometry_invalid",
+                    f"annotations[{index}] {annotation_type} must stay within the normalized canvas",
+                    field=f"annotations[{index}]",
+                )
+        elif annotation_type == "brush":
+            points = raw_annotation.get("points")
+            if not isinstance(points, list) or len(points) < 2 or len(points) > MAX_PRECISION_BRUSH_POINTS:
+                raise _generation_contract_error(
+                    "precision_annotation_geometry_invalid",
+                    f"annotations[{index}].points must contain 2 to {MAX_PRECISION_BRUSH_POINTS} points",
+                    field=f"annotations[{index}].points",
+                )
+            normalized_points = []
+            for point_index, point in enumerate(points):
+                if not isinstance(point, dict) or set(point) != {"x", "y"}:
+                    raise _generation_contract_error(
+                        "precision_annotation_geometry_invalid",
+                        f"annotations[{index}].points[{point_index}] must contain only x and y",
+                        field=f"annotations[{index}].points[{point_index}]",
+                    )
+                normalized_points.append({
+                    "x": _precision_coordinate(point, "x", index),
+                    "y": _precision_coordinate(point, "y", index),
+                })
+            if all(point == normalized_points[0] for point in normalized_points[1:]):
+                raise _generation_contract_error(
+                    "precision_annotation_geometry_invalid",
+                    f"annotations[{index}].points must describe a non-empty path",
+                    field=f"annotations[{index}].points",
+                )
+            total_brush_points += len(normalized_points)
+            if total_brush_points > MAX_PRECISION_BRUSH_POINTS_TOTAL:
+                raise _generation_contract_error(
+                    "precision_annotation_geometry_exceeded",
+                    "precision_edit brush paths exceed the total point limit",
+                    field="annotations",
+                    max_total_points=MAX_PRECISION_BRUSH_POINTS_TOTAL,
+                )
+            normalized["points"] = normalized_points
+        if annotation_type == "text":
+            text = raw_annotation.get("text")
+            if not isinstance(text, str) or not text.strip():
+                raise _generation_contract_error(
+                    "precision_annotation_text_required",
+                    f"annotations[{index}].text must contain annotation text",
+                    field=f"annotations[{index}].text",
+                )
+            text = text.strip()
+            if len(text) > MAX_PRECISION_ANNOTATION_TEXT:
+                raise _generation_contract_error(
+                    "precision_annotation_text_exceeded",
+                    f"annotations[{index}].text is too long",
+                    field=f"annotations[{index}].text",
+                    max_length=MAX_PRECISION_ANNOTATION_TEXT,
+                )
+            if not _precision_annotation_string_is_safe(text):
+                raise _generation_contract_error(
+                    "precision_annotation_text_unsafe",
+                    f"annotations[{index}].text cannot contain URLs, HTML, or filesystem paths",
+                    field=f"annotations[{index}].text",
+                )
+            total_text_length += len(text)
+            if total_text_length > MAX_PRECISION_ANNOTATION_TEXT_TOTAL:
+                raise _generation_contract_error(
+                    "precision_annotation_text_exceeded",
+                    "precision_edit annotation text exceeds the total length limit",
+                    field="annotations",
+                    max_total_length=MAX_PRECISION_ANNOTATION_TEXT_TOTAL,
+                )
+            normalized["text"] = text
+        if is_structured:
+            instruction = raw_annotation.get("instruction")
+            instruction_required = annotation_type in {"arrow", "rectangle", "ellipse", "brush"}
+            if instruction_required and (not isinstance(instruction, str) or not instruction.strip()):
+                raise _generation_contract_error(
+                    "precision_annotation_instruction_required",
+                    f"annotations[{index}].instruction must contain an edit instruction",
+                    field=f"annotations[{index}].instruction",
+                )
+            if instruction is not None:
+                if not isinstance(instruction, str) or not instruction.strip():
+                    raise _generation_contract_error(
+                        "precision_annotation_instruction_required",
+                        f"annotations[{index}].instruction must be omitted or non-empty",
+                        field=f"annotations[{index}].instruction",
+                    )
+                instruction = instruction.strip()
+                if len(instruction) > MAX_PRECISION_ANNOTATION_TEXT:
+                    raise _generation_contract_error(
+                        "precision_annotation_instruction_exceeded",
+                        f"annotations[{index}].instruction is too long",
+                        field=f"annotations[{index}].instruction",
+                        max_length=MAX_PRECISION_ANNOTATION_TEXT,
+                    )
+                if not _precision_annotation_string_is_safe(instruction):
+                    raise _generation_contract_error(
+                        "precision_annotation_instruction_unsafe",
+                        f"annotations[{index}].instruction contains unsafe characters or resource references",
+                        field=f"annotations[{index}].instruction",
+                    )
+                total_text_length += len(instruction)
+                if total_text_length > MAX_PRECISION_ANNOTATION_TEXT_TOTAL:
+                    raise _generation_contract_error(
+                        "precision_annotation_text_exceeded",
+                        "precision_edit annotation text exceeds the total length limit",
+                        field="annotations",
+                        max_total_length=MAX_PRECISION_ANNOTATION_TEXT_TOTAL,
+                    )
+                normalized["instruction"] = instruction
+        normalized_annotations.append(normalized)
+    if is_structured:
+        normalized_annotations.sort(key=lambda item: item["label"])
+    return normalized_annotations
+
+
+def _validate_generation_request_inputs(req: GenerateRequest) -> dict:
+    """Enforce the generation input matrix before allocating a task ID."""
+    mode = req.mode if isinstance(req.mode, str) else ""
+    if mode not in GENERATION_MODES:
+        raise _generation_contract_error(
+            "invalid_mode",
+            "mode must be one of: t2i, i2i, inpaint, precision_edit",
+            field="mode",
+        )
+
+    output_size_policy_supplied = "precision_output_size_policy" in req.model_fields_set
+    if mode != "precision_edit" and output_size_policy_supplied:
+        raise _generation_contract_error(
+            "precision_output_size_policy_not_allowed",
+            "precision_output_size_policy is accepted only for precision_edit resize",
+            field="precision_output_size_policy",
+        )
+
+    has_image_list = bool(req.image_data_list)
+    has_mask_fields = _has_generation_value(req.mask_data) or _has_generation_value(req.mask_contract)
+    has_annotation_fields = (
+        _has_generation_value(req.annotation_image_data)
+        or _has_generation_value(req.annotation_contract)
+        or bool(req.annotations)
+    )
+    if mode == "t2i":
+        if _has_generation_value(req.image_data) or has_image_list:
+            raise _generation_contract_error(
+                "image_input_not_allowed",
+                "t2i does not accept image_data or image_data_list",
+                mode=mode,
+            )
+        if has_mask_fields:
+            raise _generation_contract_error(
+                "mask_input_not_allowed",
+                "t2i does not accept mask data",
+                mode=mode,
+            )
+        if has_annotation_fields:
+            raise _generation_contract_error(
+                "annotation_input_not_allowed",
+                "t2i does not accept precision annotation data",
+                mode=mode,
+            )
+        return {"mode": mode, "images": []}
+
+    if mode == "i2i":
+        if has_mask_fields:
+            raise _generation_contract_error(
+                "mask_input_not_allowed",
+                "i2i does not accept mask data",
+                mode=mode,
+            )
+        if has_annotation_fields:
+            raise _generation_contract_error(
+                "annotation_input_not_allowed",
+                "i2i does not accept precision annotation data",
+                mode=mode,
+            )
+        legacy_image = (
+            _validate_generation_image_data(req.image_data, "image_data")
+            if _has_generation_value(req.image_data)
+            else None
+        )
+        images = [
+            _validate_generation_image_data(item, f"image_data_list[{index}]")
+            for index, item in enumerate(req.image_data_list or [])
+        ]
+        if legacy_image and images and legacy_image["value"] != images[0]["value"]:
+            raise _generation_contract_error(
+                "i2i_base_image_conflict",
+                "image_data must match the first image_data_list item when both are supplied",
+                mode=mode,
+            )
+        if not images and legacy_image:
+            images = [legacy_image]
+        if not images:
+            raise _generation_contract_error(
+                "i2i_image_required",
+                "i2i requires at least one reference image",
+                mode=mode,
+            )
+        return {"mode": mode, "images": images}
+
+    if mode == "precision_edit":
+        if "image_data_list" in req.model_fields_set:
+            raise _generation_contract_error(
+                "precision_edit_image_data_list_not_allowed",
+                "precision_edit accepts exactly one base image through image_data",
+                mode=mode,
+            )
+        if has_mask_fields:
+            raise _generation_contract_error(
+                "mask_input_not_allowed",
+                "precision_edit does not accept inpaint mask data",
+                mode=mode,
+            )
+        precision_prompt = req.prompt.strip()
+        if len(precision_prompt) > MAX_PRECISION_PROMPT_TEXT:
+            raise _generation_contract_error(
+                "precision_edit_prompt_exceeded",
+                "precision_edit prompt is too long",
+                field="prompt",
+                max_length=MAX_PRECISION_PROMPT_TEXT,
+            )
+        if precision_prompt and not _precision_annotation_string_is_safe(precision_prompt):
+            raise _generation_contract_error(
+                "precision_edit_prompt_unsafe",
+                "precision_edit prompt cannot contain URLs, HTML, or filesystem paths",
+                field="prompt",
+            )
+        size_mode = str(req.precision_size_mode or "preserve").strip().lower()
+        if size_mode not in {"preserve", "resize"}:
+            raise _generation_contract_error(
+                "precision_size_mode_invalid",
+                "precision_size_mode must be preserve or resize",
+                field="precision_size_mode",
+            )
+        output_size_policy = str(req.precision_output_size_policy or "")
+        if output_size_policy not in {"strict", "fit_crop"}:
+            raise _generation_contract_error(
+                "precision_output_size_policy_invalid",
+                "precision_output_size_policy must be strict or fit_crop",
+                field="precision_output_size_policy",
+                allowed_policies=["strict", "fit_crop"],
+            )
+        if size_mode != "resize" and output_size_policy_supplied:
+            raise _generation_contract_error(
+                "precision_output_size_policy_not_allowed",
+                "precision_output_size_policy is accepted only for precision_edit resize",
+                field="precision_output_size_policy",
+            )
+        annotation_field_names = {
+            "annotation_image_data",
+            "annotation_contract",
+            "annotations",
+        }
+        supplied_annotation_fields = annotation_field_names.intersection(req.model_fields_set)
+        precision_canvas_only = not supplied_annotation_fields
+        if supplied_annotation_fields and supplied_annotation_fields != annotation_field_names:
+            raise _generation_contract_error(
+                "precision_resize_annotation_fields_conflict",
+                "precision annotation fields must be supplied as one complete annotated-edit envelope",
+                field="annotations",
+            )
+        if precision_canvas_only and size_mode != "resize":
+            raise _generation_contract_error(
+                "precision_canvas_only_resize_required",
+                "precision_edit without annotations requires precision_size_mode=resize",
+                field="precision_size_mode",
+            )
+        resize_prompt = str(req.precision_resize_prompt or "").strip()
+        if req.upscale_to is not None or req.upscale_ratio != "original":
+            raise _generation_contract_error(
+                "precision_upscale_not_allowed",
+                "precision_edit does not accept generic post-generation upscaling",
+                field="upscale_to",
+            )
+        if len(resize_prompt) > MAX_PRECISION_RESIZE_PROMPT_TEXT:
+            raise _generation_contract_error(
+                "precision_resize_prompt_exceeded",
+                "precision_resize_prompt is too long",
+                field="precision_resize_prompt",
+                max_length=MAX_PRECISION_RESIZE_PROMPT_TEXT,
+            )
+        if resize_prompt and not _precision_annotation_string_is_safe(resize_prompt):
+            raise _generation_contract_error(
+                "precision_resize_prompt_unsafe",
+                "precision_resize_prompt cannot contain URLs, HTML, or filesystem paths",
+                field="precision_resize_prompt",
+            )
+        target_size = str(req.precision_target_size or "")
+        if size_mode == "preserve":
+            generic_size = str(req.size or "").strip().lower()
+            if generic_size not in {"", "auto"} or target_size or resize_prompt:
+                raise _generation_contract_error(
+                    "precision_preserve_size_conflict",
+                    "preserve mode does not accept generation or resize dimensions",
+                    field="precision_size_mode",
+                )
+        else:
+            normalized_target_size = _normalize_precision_size(target_size)
+            if not normalized_target_size:
+                raise _generation_contract_error(
+                    "precision_target_size_invalid",
+                    "resize mode requires precision_target_size as WIDTHxHEIGHT",
+                    field="precision_target_size",
+                )
+            target_size = normalized_target_size
+            if not resize_prompt:
+                raise _generation_contract_error(
+                    "precision_resize_prompt_required",
+                    "resize mode requires precision_resize_prompt",
+                    field="precision_resize_prompt",
+                )
+        base_image = _validate_generation_image_data(req.image_data, "image_data")
+        if precision_canvas_only:
+            return {
+                "mode": mode,
+                "images": [base_image],
+                "precision_canvas_only": True,
+                "precision_size_mode": size_mode,
+                "precision_target_size": target_size,
+                "precision_resize_prompt": resize_prompt,
+                "precision_output_size_policy": output_size_policy,
+            }
+        annotation_contract = str(req.annotation_contract or "").strip()
+        if annotation_contract not in PRECISION_ANNOTATION_CONTRACTS:
+            raise _generation_contract_error(
+                "precision_annotation_contract_unsupported",
+                "precision_edit requires a supported annotation_contract",
+                mode=mode,
+                supported_contracts=sorted(PRECISION_ANNOTATION_CONTRACTS),
+            )
+        annotation_image = _validate_generation_image_data(
+            req.annotation_image_data,
+            "annotation_image_data",
+            required_mime_type="image/png",
+        )
+        if (base_image["width"], base_image["height"]) != (
+            annotation_image["width"],
+            annotation_image["height"],
+        ):
+            raise _generation_contract_error(
+                "precision_annotation_image_size_mismatch",
+                "image_data and annotation_image_data dimensions must match",
+                mode=mode,
+            )
+        annotations = _validate_precision_annotations(req.annotations, annotation_contract)
+        if annotation_contract == PRECISION_ANNOTATION_CONTRACT_V2:
+            annotations.sort(key=lambda item: item["label"])
+        return {
+            "mode": mode,
+            "images": [base_image],
+            "annotation_image": annotation_image,
+            "annotation_contract": annotation_contract,
+            "annotations": annotations,
+            "precision_canvas_only": False,
+            "precision_size_mode": size_mode,
+            "precision_target_size": target_size or None,
+            "precision_resize_prompt": resize_prompt or None,
+            **(
+                {"precision_output_size_policy": output_size_policy}
+                if size_mode == "resize"
+                else {}
+            ),
+        }
+
+    if has_annotation_fields:
+        raise _generation_contract_error(
+            "annotation_input_not_allowed",
+            "inpaint does not accept precision annotation data",
+            mode=mode,
+        )
+    if has_image_list:
+        raise _generation_contract_error(
+            "inpaint_image_data_list_not_allowed",
+            "inpaint accepts exactly one base image through image_data",
+            mode=mode,
+        )
+    base_image = _validate_generation_image_data(req.image_data, "image_data")
+    if not _has_generation_value(req.mask_data):
+        raise _generation_contract_error(
+            "inpaint_mask_required",
+            "inpaint requires mask_data",
+            mode=mode,
+        )
+    if req.mask_contract != INPAINT_MASK_CONTRACT:
+        raise _generation_contract_error(
+            "inpaint_mask_contract_unsupported",
+            f"inpaint requires mask_contract={INPAINT_MASK_CONTRACT}",
+            mode=mode,
+        )
+    mask_image = _validate_generation_image_data(
+        req.mask_data,
+        "mask_data",
+        required_mime_type="image/png",
+    )
+    if (base_image["width"], base_image["height"]) != (mask_image["width"], mask_image["height"]):
+        raise _generation_contract_error(
+            "inpaint_image_mask_size_mismatch",
+            "image_data and mask_data dimensions must match",
+            mode=mode,
+        )
+    return {"mode": mode, "images": [base_image], "mask": mask_image}
+
+
+def _validate_inpaint_provider_authorization(provider_ids: List[str], all_providers: dict) -> None:
+    """Allow inpaint only for a deliberately configured OpenAI mask adapter."""
+    unsupported = []
+    for provider_id in provider_ids:
+        provider = all_providers.get(provider_id)
+        if provider is None:
+            unsupported.append({"id": provider_id, "reason": "provider_not_found"})
+            continue
+        if getattr(provider, "type", "") != "image" or not getattr(provider, "enabled", False):
+            unsupported.append({"id": provider_id, "reason": "provider_not_enabled"})
+            continue
+        endpoint_type = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
+        if endpoint_type != "openai":
+            unsupported.append({"id": provider_id, "reason": "explicit_openai_required"})
+            continue
+        capabilities = getattr(provider, "capabilities", None)
+        if not isinstance(capabilities, dict) or capabilities.get("inpaint_mask") is not True:
+            unsupported.append({"id": provider_id, "reason": "inpaint_mask_capability_required"})
+    if unsupported:
+        raise _generation_contract_error(
+            "inpaint_provider_unsupported",
+            "inpaint requires an enabled image provider with endpoint_type=openai and capabilities.inpaint_mask=true",
+            providers=unsupported,
+        )
+
+
+def _provider_precision_model_capability(provider, selected_model: str) -> bool:
+    capabilities = getattr(provider, "capabilities", None)
+    if not isinstance(capabilities, dict) or capabilities.get(PRECISION_EDIT_CAPABILITY) is not True:
+        return False
+    resolution = _provider_precision_model_resolution(provider, selected_model)
+    return resolution.structure_valid and resolution.precision_edit_confirmed
+
+
+def _provider_precision_model_resolution(provider, selected_model: str):
+    extra = getattr(provider, "extra", None)
+    model_capabilities = extra.get("model_capabilities") if isinstance(extra, dict) else None
+    return resolve_precision_model_capability(
+        model_capabilities,
+        selected_model,
+        max_output_pixels=MAX_PRECISION_OUTPUT_PIXELS,
+    )
+
+
+def _normalize_precision_size(value: object) -> Optional[str]:
+    return normalize_precision_capability_size(
+        value,
+        max_output_pixels=MAX_PRECISION_OUTPUT_PIXELS,
+    )
+
+
+def _precision_declared_sizes(model_capabilities: object) -> set[str]:
+    """Return only valid, explicitly declared WIDTHxHEIGHT dimensions."""
+    _present, valid, sizes, _reason = precision_capability_size_declaration(
+        model_capabilities,
+        max_output_pixels=MAX_PRECISION_OUTPUT_PIXELS,
+    )
+    return set(sizes) if valid else set()
+
+
+def _precision_declared_size_list(model_capabilities: object) -> List[str]:
+    """Return valid declared sizes in stable first-seen order."""
+    _present, valid, sizes, _reason = precision_capability_size_declaration(
+        model_capabilities,
+        max_output_pixels=MAX_PRECISION_OUTPUT_PIXELS,
+    )
+    return list(sizes) if valid else []
+
+
+def _precision_model_declared_sizes(provider, selected_model: str) -> set[str]:
+    resolution = _provider_precision_model_resolution(provider, selected_model)
+    if not resolution.structure_valid or not resolution.size_declaration_valid:
+        return set()
+    return set(resolution.supported_sizes)
+
+
+def _validate_precision_edit_size_authorization(
+    provider_ids: List[str],
+    all_providers: dict,
+    provider_settings: dict,
+    generation_input: dict,
+) -> None:
+    if generation_input.get("precision_size_mode") != "resize":
+        return
+    target = generation_input.get("precision_target_size")
+    settings = provider_settings if isinstance(provider_settings, dict) else {}
+    unsupported = []
+    for provider_id in provider_ids:
+        provider = all_providers.get(provider_id)
+        setting = settings.get(provider_id) if isinstance(settings.get(provider_id), dict) else {}
+        model = str(setting.get("model") or "").strip()
+        sizes = _precision_model_declared_sizes(provider, model) if provider else set()
+        if not sizes:
+            unsupported.append({
+                "id": provider_id,
+                "model": model,
+                "reason": "precision_edit_size_capability_unknown",
+            })
+        elif target not in sizes:
+            unsupported.append({
+                "id": provider_id,
+                "model": model,
+                "reason": "precision_edit_target_size_not_declared",
+                "target_size": target,
+            })
+    if unsupported:
+        raise _generation_contract_error(
+            "precision_edit_size_unsupported",
+            "resize requires the selected model to explicitly declare the requested size",
+            providers=unsupported,
+            target_size=target,
+        )
+
+
+def _validate_precision_edit_provider_authorization(
+    provider_ids: List[str],
+    all_providers: dict,
+    provider_settings: dict,
+) -> None:
+    """Require an explicit model-level annotation-edit capability and transport."""
+    unsupported = []
+    settings = provider_settings if isinstance(provider_settings, dict) else {}
+    for provider_id in provider_ids:
+        provider = all_providers.get(provider_id)
+        if provider is None:
+            unsupported.append({"id": provider_id, "reason": "provider_not_found"})
+            continue
+        if getattr(provider, "type", "") != "image" or not getattr(provider, "enabled", False):
+            unsupported.append({"id": provider_id, "reason": "provider_not_enabled"})
+            continue
+        endpoint_type = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
+        if endpoint_type != "openai":
+            unsupported.append({"id": provider_id, "reason": "explicit_openai_required"})
+            continue
+        provider_setting = settings.get(provider_id, {})
+        if not isinstance(provider_setting, dict):
+            provider_setting = {}
+        selected_model = str(provider_setting.get("model") or "").strip()
+        if not selected_model:
+            unsupported.append({
+                "id": provider_id,
+                "model": "",
+                "reason": "precision_edit_explicit_model_required",
+            })
+            continue
+        if not _provider_precision_model_capability(provider, selected_model):
+            unsupported.append({
+                "id": provider_id,
+                "model": selected_model,
+                "reason": "precision_edit_model_capability_required",
+            })
+    if unsupported:
+        raise _generation_contract_error(
+            "precision_edit_provider_unsupported",
+            "precision_edit requires an explicitly verified OpenAI image-edit model",
+            providers=unsupported,
+        )
 
 
 def _normalize_generation_quantity(value: object) -> int:
@@ -244,9 +1556,19 @@ class ProviderCreateReq(BaseModel):
     color: str = "#0ea5e9"
     display_name: str = ""
     capabilities: Dict[str, bool] = {}  # 能力声明: {"t2i": True, "i2i": True}
+    precision_edit_profile: Optional[PrecisionEditProfile] = None
     skip_proxy: bool = False            # 跳过全局代理（直连）
     endpoint_type: str = "auto"         # 端点协议类型
     extra: dict = {}
+
+
+class PrecisionCapabilityReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model: str
+    enabled: bool
+    confirmed: bool = False
+    size: Optional[str] = None
 
 
 def _is_masked_secret(value: str) -> bool:
@@ -276,6 +1598,8 @@ def _merge_provider_secrets(existing: ProviderConfig, req: ProviderCreateReq) ->
                 )
     elif not incoming_endpoints:
         payload["endpoints"] = list(existing_endpoints)
+    if "precision_edit_profile" not in req.model_fields_set:
+        payload["precision_edit_profile"] = existing.precision_edit_profile
     return payload
 
 
@@ -399,8 +1723,105 @@ continuous_sessions: dict = {}  # {session_id: {"images": [...], "prompts": [...
 # 生图任务队列（带并发控制，防风控）
 # ──────────────────────────────────────────────────────────────
 image_tasks: dict = {}        # {gen_id: {status, progress, providers: {pid: {status, log, result}}, ...}}
+image_task_handles: dict = {}
 image_gen_semaphore = None    # 延迟初始化（FastAPI lifespan）
 MAX_CONCURRENT_GENERATIONS = 16  # 最大并发生图数，可调
+BACKGROUND_GENERATION_ERROR_MAX_LENGTH = 2400
+
+
+def _background_generation_error_text(value: object, provider: ProviderConfig) -> str:
+    """Sanitize a provider failure before task, log, history, or API exposure."""
+    error_text = _provider_error_text(value, provider).strip()
+    if not error_text:
+        error_text = type(value).__name__ if isinstance(value, BaseException) else "Provider generation failed"
+    return error_text[:BACKGROUND_GENERATION_ERROR_MAX_LENGTH]
+
+
+def _cleanup_image_task_handle(gen_id: str, handle=None):
+    current = image_task_handles.get(gen_id)
+    if current is not None and (handle is None or current is handle):
+        image_task_handles.pop(gen_id, None)
+
+
+def _image_state_progress(state: dict) -> int:
+    """Keep terminal failure/cancellation distinct from completed work."""
+    try:
+        progress = round(float(state.get("progress", 0)))
+    except (TypeError, ValueError):
+        progress = 0
+    progress = max(0, min(100, progress))
+    if state.get("status") in ("failed", "cancelled"):
+        return min(99, progress)
+    return progress
+
+
+def _image_task_progress(states: dict, overall_status: str) -> int:
+    if not states:
+        return 0
+    progress = round(sum(_image_state_progress(state) for state in states.values()) / len(states))
+    if overall_status in ("failed", "cancelled"):
+        return min(99, progress)
+    return progress
+
+
+def _image_task_elapsed(task: dict) -> float:
+    """Return the terminal snapshot duration, or the current duration while running."""
+    stored = task.get("elapsed_seconds")
+    if stored is not None:
+        try:
+            return round(max(0.0, float(stored)), 1)
+        except (TypeError, ValueError):
+            pass
+    start_time = task.get("start_time")
+    if not start_time:
+        return 0.0
+    return round(max(0.0, time.time() - start_time), 1)
+
+
+def _image_task_status(current_status: str, states: dict) -> str:
+    """Derive one truthful public status without hiding partial successes."""
+    child_statuses = [state.get("status") for state in states.values()]
+    if current_status == "cancelled" or "cancelled" in child_statuses:
+        return "cancelled"
+    if not child_statuses:
+        return current_status
+    if all(status in ("completed", "failed") for status in child_statuses):
+        return "completed" if "completed" in child_statuses else "failed"
+    return current_status
+
+
+def _refresh_image_task_state(task: dict) -> str:
+    """Normalize child progress and publish the status derived from it."""
+    states = task.get("provider_states", {})
+    for state in states.values():
+        state["progress"] = _image_state_progress(state)
+    status = _image_task_status(task.get("status", "queued"), states)
+    task["status"] = status
+    task["progress"] = _image_task_progress(states, status)
+    return status
+
+
+def _mark_image_task_cancelled(gen_id: str):
+    task = image_tasks.get(gen_id)
+    if not task:
+        return None
+    status = _refresh_image_task_state(task)
+    if status in ("completed", "failed", "cancelled"):
+        return status
+    states = task.get("provider_states", {})
+    if not any(state.get("status") in ("queued", "generating") for state in states.values()):
+        return status
+    task["status"] = "cancelled"
+    for state in states.values():
+        if state.get("status") in ("queued", "generating"):
+            state["status"] = "cancelled"
+            state["progress"] = _image_state_progress(state)
+            log = state.setdefault("log", [])
+            if not log or "已停止" not in log[-1]:
+                log.append(f"[{time.strftime('%H:%M:%S')}] ■ 已停止")
+    task["progress"] = _image_task_progress(task.get("provider_states", {}), task["status"])
+    task["elapsed_seconds"] = _image_task_elapsed(task)
+    return task["status"]
 
 
 def _load_history():
@@ -612,9 +2033,13 @@ async def list_providers():
     providers_data = []
     for p in cfg_mgr.config.providers:
         d = p.model_dump(exclude={"api_key", "api_keys", "endpoints"})
-        d["has_key"] = bool(p.api_key or p.api_keys)
+        # Endpoint-only providers are valid runtime configurations too. Keep
+        # this readiness flag aligned with the transport's active-endpoint logic.
+        d["has_key"] = bool(p.get_effective_keys() or p.get_active_endpoints())
         d["has_keys"] = len(p.get_effective_keys()) > 1
         d["key_count"] = len(p.get_effective_keys())
+        extra = p.extra if isinstance(p.extra, dict) else {}
+        d["model_capabilities"] = extra.get("model_capabilities", {})
         # API Key 脱敏
         keys = p.get_effective_keys()
         if keys:
@@ -628,7 +2053,7 @@ async def list_providers():
         # 端点脱敏
         d["endpoints"] = []
         for ep in (p.endpoints or []):
-            ep_dict = {"url": ep.url, "model": ep.model, "enabled": ep.enabled}
+            ep_dict = {"name": ep.name, "url": ep.url, "model": getattr(ep, "model", ""), "enabled": ep.enabled}
             if ep.key:
                 ep_dict["key_masked"] = ep.key[:4] + "****" + ep.key[-4:] if len(ep.key) > 8 else "****"
             d["endpoints"].append(ep_dict)
@@ -642,13 +2067,13 @@ async def get_provider(provider_id: str):
     for p in cfg_mgr.config.providers:
         if p.id == provider_id:
             d = p.model_dump(exclude={"api_key", "api_keys"})
-            d["has_key"] = bool(p.api_key or p.api_keys)
+            d["has_key"] = bool(p.get_effective_keys() or p.get_active_endpoints())
             keys = p.get_effective_keys()
             if keys:
                 d["api_key_masked"] = keys[0][:4] + "****" + keys[0][-4:] if len(keys[0]) > 8 else "****"
             d["endpoints"] = []
             for ep in (p.endpoints or []):
-                ep_dict = {"url": ep.url, "model": ep.model, "enabled": ep.enabled}
+                ep_dict = {"name": ep.name, "url": ep.url, "model": getattr(ep, "model", ""), "enabled": ep.enabled}
                 if ep.key:
                     ep_dict["key_masked"] = ep.key[:4] + "****" + ep.key[-4:] if len(ep.key) > 8 else "****"
                 d["endpoints"].append(ep_dict)
@@ -681,6 +2106,112 @@ async def create_provider(req: ProviderCreateReq):
     cfg_mgr.save(cfg)
     _write_log("provider", f"Provider '{req.id}' 已保存", {"type": req.type})
     return {"ok": True, "message": f"Provider '{req.id}' 已保存", "id": req.id}
+
+
+@app.post("/api/providers/{provider_id}/precision-capability")
+async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq):
+    """Persist an explicit, per-model user confirmation for precision editing."""
+    model = str(req.model or "").strip()
+    size_requested = "size" in req.model_fields_set
+    normalized_size = None
+    if size_requested:
+        normalized_size = _normalize_precision_size(req.size)
+        if not normalized_size:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "precision_size_invalid",
+                    "message": "Size must be a supported WIDTHxHEIGHT value",
+                },
+            )
+    provider = next((p for p in cfg_mgr.config.providers if p.id == provider_id), None)
+    if provider is None:
+        raise HTTPException(status_code=404, detail={"code": "provider_not_found", "message": "Provider not found"})
+    known_models = {str(item).strip() for item in (provider.models or [provider.model]) if str(item).strip()}
+    if not model or model not in known_models:
+        raise HTTPException(status_code=400, detail={"code": "precision_model_invalid", "message": "Model must belong to the selected provider"})
+    if (req.enabled or size_requested) and not req.confirmed:
+        raise HTTPException(status_code=400, detail={"code": "precision_confirmation_required", "message": "Explicit user confirmation is required"})
+    capabilities = dict(provider.capabilities or {})
+    extra = dict(provider.extra or {})
+    model_capabilities = dict(extra.get("model_capabilities") or {})
+    selected = dict(model_capabilities.get(model) or {})
+    resolution = resolve_precision_model_capability(
+        model_capabilities,
+        model,
+        max_output_pixels=MAX_PRECISION_OUTPUT_PIXELS,
+    )
+    selected_is_alias = any(field in selected for field in ("alias_of", "canonical_model"))
+    if selected_is_alias and not resolution.structure_valid:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "precision_model_alias_invalid",
+                "message": "Model alias metadata must resolve to one direct canonical model",
+            },
+        )
+    capability_model = resolution.canonical_model if resolution.structure_valid else model
+    capability_record = dict(resolution.capability or selected)
+
+    if size_requested:
+        if getattr(provider, "type", "") != "image":
+            raise HTTPException(status_code=400, detail={"code": "precision_provider_not_image", "message": "Provider must be an image provider"})
+        if not getattr(provider, "enabled", False):
+            raise HTTPException(status_code=400, detail={"code": "precision_provider_not_enabled", "message": "Provider must be enabled"})
+        if not (provider.get_effective_keys() or provider.get_active_endpoints()):
+            raise HTTPException(status_code=400, detail={"code": "precision_provider_key_required", "message": "Provider must have a configured key"})
+        endpoint_type = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
+        if endpoint_type != "openai":
+            raise HTTPException(status_code=400, detail={"code": "precision_provider_openai_required", "message": "Provider must use the OpenAI-compatible image transport"})
+        if not _provider_precision_model_capability(provider, model):
+            raise HTTPException(status_code=400, detail={"code": "precision_model_precision_edit_required", "message": "Model must already have explicit precision_edit capability"})
+
+        supported_sizes = list(resolution.supported_sizes) if resolution.size_declaration_valid else []
+        if req.enabled:
+            if normalized_size not in supported_sizes:
+                if len(supported_sizes) >= MAX_PRECISION_SUPPORTED_SIZES:
+                    raise HTTPException(
+                        status_code=400,
+                        detail={
+                            "code": "precision_size_limit_exceeded",
+                            "message": "Model supported size list is full",
+                            "max_sizes": MAX_PRECISION_SUPPORTED_SIZES,
+                        },
+                    )
+                supported_sizes.append(normalized_size)
+        else:
+            supported_sizes = [item for item in supported_sizes if item != normalized_size]
+
+        for legacy_field in ("supportedSizes", "sizes", "dimensions"):
+            capability_record.pop(legacy_field, None)
+        capability_record["supported_sizes"] = supported_sizes
+        model_capabilities[capability_model] = capability_record
+    elif req.enabled:
+        capabilities[PRECISION_EDIT_CAPABILITY] = True
+        capability_record[PRECISION_EDIT_CAPABILITY] = True
+        provider.endpoint_type = "openai"
+        if provider.precision_edit_profile is None:
+            provider.precision_edit_profile = (
+                PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_REPEATED_IMAGE
+            )
+    else:
+        capability_record.pop(PRECISION_EDIT_CAPABILITY, None)
+    model_capabilities[capability_model] = capability_record
+    extra["model_capabilities"] = model_capabilities
+    provider.capabilities = capabilities
+    provider.extra = extra
+    cfg_mgr.save(cfg_mgr.config)
+    _write_log("provider", "精准改图模型能力已更新", {"provider_id": provider_id, "model": model, "enabled": req.enabled})
+    if size_requested:
+        return {
+            "ok": True,
+            "provider_id": provider_id,
+            "model": model,
+            "enabled": req.enabled,
+            "size": normalized_size,
+            "supported_sizes": supported_sizes,
+        }
+    return {"ok": True, "provider_id": provider_id, "model": model, "enabled": req.enabled}
 
 
 @app.delete("/api/providers/{provider_id}")
@@ -772,7 +2303,7 @@ async def test_provider(provider_id: str):
                 ep_start = _time.time()
                 try:
                     # 轻量连通性检查：GET /models 或简单请求
-                    _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
+                    _verify_ssl = verify_ssl_enabled()
                     async with _httpx.AsyncClient(timeout=15.0, verify=_verify_ssl) as client:
                         headers = {"Authorization": f"Bearer {ep.key}"}
                         # 尝试 models 端点
@@ -859,7 +2390,7 @@ async def fetch_models(provider_id: str):
             except Exception as e:
                 return {
                     "success": False,
-                    "detail": f"拉取失败: {str(e)}。请确认 URL 支持 GET /v1/models 接口，或手动输入模型名称。",
+                    "detail": f"拉取失败: {_provider_error_text(e, p)}。请确认 URL 支持 GET /v1/models 接口，或手动输入模型名称。",
                     "provider_type": p.type,
                 }
     raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' 不存在")
@@ -937,9 +2468,523 @@ def _do_local_upscale(local_path: str, target_size: str, method: str = "lanczos3
 # ──────────────────────────────────────────────────────────────
 # 生图核心（异步队列 + 并发控制 + 实时进度）
 # ──────────────────────────────────────────────────────────────
+def _validate_cutout_model_action(req: CutoutModelActionRequest) -> None:
+    if req.contract != CUTOUT_MODEL_INSTALL_CONTRACT:
+        raise _generation_contract_error(
+            "cutout_model_contract_unsupported",
+            f"cutout model installation requires contract={CUTOUT_MODEL_INSTALL_CONTRACT}",
+            field="contract",
+        )
+    if req.source_id != CUTOUT_MODEL_SOURCE_ID:
+        raise _generation_contract_error(
+            "cutout_model_source_unsupported",
+            "cutout model source_id is not supported",
+            field="source_id",
+        )
+    if req.confirmed is not True:
+        raise _generation_contract_error(
+            "cutout_model_confirmation_required",
+            "explicit confirmation is required because checkpoint provenance and commercial authorization are unverified",
+            field="confirmed",
+            checkpoint_provenance_status="UNVERIFIED",
+            commercial_use_status="UNVERIFIED",
+        )
+
+
+def _cutout_model_manager_http_error(exc: CutoutModelManagerError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail=exc.to_detail())
+
+
+def _cutout_model_projection(capability: dict) -> dict:
+    try:
+        return CUTOUT_MODEL_MANAGER.model_projection_from_capability(capability)
+    except Exception:
+        return {
+            "contract": CUTOUT_MODEL_INSTALL_CONTRACT,
+            "source_id": CUTOUT_MODEL_SOURCE_ID,
+            "source_page": CUTOUT_MODEL_SOURCE_PAGE,
+            "filename": str(CUTOUT_MODEL_MANIFEST["filename"]),
+            "installed": False,
+            "valid": False,
+            "state": "invalid",
+            "reason": "cutout_model_status_unavailable",
+            "size_bytes": int(CUTOUT_MODEL_MANIFEST["size_bytes"]),
+            "sha256": str(CUTOUT_MODEL_MANIFEST["sha256"]),
+            "md5": str(CUTOUT_MODEL_MANIFEST["md5"]),
+            "download_supported": False,
+            "install_supported": False,
+            "confirmation_required": True,
+            "license": {
+                "checkpoint_provenance_status": "UNVERIFIED",
+                "commercial_use_status": "UNVERIFIED",
+            },
+            "active_task": None,
+        }
+
+
+@app.get("/api/image-tools/cutout/model")
+async def get_cutout_model_status():
+    try:
+        return await asyncio.to_thread(CUTOUT_MODEL_MANAGER.model_status)
+    except CutoutModelManagerError as exc:
+        raise _cutout_model_manager_http_error(exc) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_model_status_unavailable",
+                "message": "抠图模型状态暂时不可用",
+                "contract": CUTOUT_MODEL_INSTALL_CONTRACT,
+                "source_id": CUTOUT_MODEL_SOURCE_ID,
+            },
+        ) from None
+
+
+@app.post("/api/image-tools/cutout/model/download", status_code=202)
+async def start_cutout_model_download(req: CutoutModelActionRequest):
+    _validate_cutout_model_action(req)
+    try:
+        task = CUTOUT_MODEL_MANAGER.start_download()
+    except CutoutModelManagerError as exc:
+        raise _cutout_model_manager_http_error(exc) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_model_download_start_failed",
+                "message": "无法启动抠图模型下载任务",
+                "contract": CUTOUT_MODEL_INSTALL_CONTRACT,
+                "source_id": CUTOUT_MODEL_SOURCE_ID,
+            },
+        ) from None
+    return {"ok": True, "task": task}
+
+
+@app.get("/api/image-tools/cutout/model/download/{task_id}")
+async def get_cutout_model_download(task_id: str):
+    task = CUTOUT_MODEL_MANAGER.get_task(task_id)
+    if task is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "cutout_model_download_not_found",
+                "message": "抠图模型下载任务不存在",
+            },
+        )
+    return {"task": task}
+
+
+@app.delete("/api/image-tools/cutout/model/download/{task_id}")
+async def cancel_cutout_model_download(task_id: str):
+    task = await CUTOUT_MODEL_MANAGER.cancel_download(task_id)
+    if task is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "cutout_model_download_not_found",
+                "message": "抠图模型下载任务不存在",
+            },
+        )
+    return {"task": task}
+
+
+@app.post("/api/image-tools/cutout/model/delete")
+async def delete_cutout_model(req: CutoutModelActionRequest):
+    _validate_cutout_model_action(req)
+    try:
+        result = await asyncio.to_thread(CUTOUT_MODEL_MANAGER.delete_model)
+    except CutoutModelManagerError as exc:
+        raise _cutout_model_manager_http_error(exc) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_model_delete_failed",
+                "message": "抠图模型删除失败",
+                "contract": CUTOUT_MODEL_INSTALL_CONTRACT,
+                "source_id": CUTOUT_MODEL_SOURCE_ID,
+            },
+        ) from None
+    return {"ok": True, **result}
+
+
+@app.get("/api/image-tools/cutout/capabilities")
+async def get_cutout_capabilities():
+    if not CUTOUT_ADAPTERS:
+        capability = {
+            "code": "cutout_adapter_unavailable",
+            "message": "当前没有可用的本地抠图适配器，请先安装受支持的本地适配器后再试。",
+            "contract": CUTOUT_CONTRACT,
+            "available": False,
+            "executable": False,
+            "adapters": [],
+            "state": "unavailable",
+        }
+        capability["model"] = _cutout_model_projection(capability)
+        capability["can_download"] = capability["model"].get("download_supported") is True
+        raise HTTPException(
+            status_code=503,
+            detail=capability,
+        )
+    try:
+        capability = CUTOUT_ADAPTER.capabilities()
+    except CutoutAdapterError as exc:
+        capability = exc.to_detail(adapter_id=CUTOUT_ADAPTER_ID)
+    if not isinstance(capability, dict):
+        capability = {
+            "contract": CUTOUT_CONTRACT,
+            "available": False,
+            "executable": False,
+            "adapters": [],
+            "code": "cutout_capability_invalid",
+            "message": "本地抠图能力状态无效",
+            "state": "unavailable",
+        }
+    capability.setdefault("contract", CUTOUT_CONTRACT)
+    capability.setdefault("available", False)
+    capability.setdefault("executable", False)
+    capability.setdefault("adapters", list(CUTOUT_ADAPTERS) if capability.get("available") else [])
+    capability["model"] = _cutout_model_projection(capability)
+    capability["can_download"] = capability["model"].get("download_supported") is True
+    if capability.get("available") is not True or capability.get("executable") is not True:
+        # Keep the historical 503 fail-closed status while returning the
+        # reason (missing model/dependency/session) for a guided UI.
+        raise HTTPException(status_code=503, detail=capability)
+    return capability
+
+
+@app.post("/api/image-tools/cutout")
+async def cutout_image(req: CutoutRequest):
+    if req.contract != CUTOUT_CONTRACT:
+        raise _generation_contract_error(
+            "cutout_contract_unsupported",
+            f"cutout requires contract={CUTOUT_CONTRACT}",
+            field="contract",
+        )
+    if not CUTOUT_ADAPTERS:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "cutout_adapter_unavailable",
+                "message": "当前没有可用的本地抠图适配器，请先安装受支持的本地适配器后再试。",
+                "contract": CUTOUT_CONTRACT,
+                "available": False,
+                "executable": False,
+                "adapters": [],
+                "state": "unavailable",
+            },
+        )
+    try:
+        capability = CUTOUT_ADAPTER.capabilities()
+    except CutoutAdapterError as exc:
+        capability = exc.to_detail(adapter_id=CUTOUT_ADAPTER_ID)
+    if not isinstance(capability, dict) or capability.get("available") is not True or capability.get("executable") is not True:
+        if not isinstance(capability, dict):
+            capability = {
+                "code": "cutout_adapter_unavailable",
+                "message": "当前没有可用的本地抠图适配器。",
+                "contract": CUTOUT_CONTRACT,
+                "available": False,
+                "executable": False,
+                "adapters": [],
+            }
+        raise HTTPException(status_code=503, detail=capability)
+
+    try:
+        result = await CUTOUT_ADAPTER.process_async(req.image_data)
+    except CutoutAdapterError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.to_detail(adapter_id=CUTOUT_ADAPTER_ID)) from None
+    except Exception:
+        # Do not expose runtime/provider internals or write a partial result.
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_failed",
+                "message": "本地抠图失败，未保存结果",
+                "contract": CUTOUT_CONTRACT,
+                "available": True,
+                "executable": True,
+                "adapters": list(CUTOUT_ADAPTERS),
+                "cancel_supported": False,
+            },
+        ) from None
+
+    if not isinstance(result, dict) or not result.get("image_bytes"):
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_output_invalid",
+                "message": "本地抠图未返回有效结果，未保存结果",
+                "contract": CUTOUT_CONTRACT,
+                "available": True,
+                "executable": True,
+                "adapters": list(CUTOUT_ADAPTERS),
+            },
+        )
+
+    expected_size = None
+    if result.get("width") is not None and result.get("height") is not None:
+        try:
+            expected_size = (int(result["width"]), int(result["height"]))
+        except (TypeError, ValueError):
+            expected_size = None
+    try:
+        local_path = CUTOUT_ADAPTER.save_atomic(
+            result["image_bytes"],
+            GALLERY_DIR,
+            expected_size=expected_size,
+        )
+    except CutoutAdapterError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.to_detail(adapter_id=CUTOUT_ADAPTER_ID)) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_persistence_failed",
+                "message": "抠图结果保存失败，未返回不完整文件",
+                "contract": CUTOUT_CONTRACT,
+                "available": True,
+                "executable": True,
+                "adapters": list(CUTOUT_ADAPTERS),
+            },
+        ) from None
+
+    encoded = base64.b64encode(bytes(result["image_bytes"])).decode("ascii")
+    width_value = result.get("width")
+    height_value = result.get("height")
+    if width_value is None and expected_size:
+        width_value = expected_size[0]
+    if height_value is None and expected_size:
+        height_value = expected_size[1]
+    width = int(width_value or 0)
+    height = int(height_value or 0)
+    return {
+        "contract": CUTOUT_CONTRACT,
+        "success": True,
+        "status": "completed",
+        "source_preserved": True,
+        "transparent": True,
+        "preview_background": "checkerboard",
+        "available": True,
+        "executable": True,
+        "adapters": list(CUTOUT_ADAPTERS),
+        "adapter": result.get("adapter") or CUTOUT_ADAPTER_ID,
+        "image_data": "data:image/png;base64," + encoded,
+        "filename": Path(local_path).name,
+        "gallery_url": f"/api/gallery/image/{quote(Path(local_path).name)}",
+        "width": width,
+        "height": height,
+        "elapsed_seconds": float(result.get("elapsed_seconds") or 0.0),
+        "cancel_supported": False,
+    }
+
+
+@app.post("/api/image-tools/cutout/refine")
+async def refine_cutout_image(req: CutoutRefineRequest):
+    if req.contract != CUTOUT_REFINE_CONTRACT:
+        raise _generation_contract_error(
+            "cutout_refine_contract_unsupported",
+            f"cutout refinement requires contract={CUTOUT_REFINE_CONTRACT}",
+            field="contract",
+        )
+
+    selection_field_names = {
+        "selection_mask_data",
+        "selection_mask_contract",
+    }
+    supplied_selection_fields = selection_field_names.intersection(req.model_fields_set)
+    if supplied_selection_fields and supplied_selection_fields != selection_field_names:
+        raise _generation_contract_error(
+            "cutout_refine_selection_fields_conflict",
+            "selection mask data and contract must be supplied together",
+            field="selection_mask_data",
+        )
+    if supplied_selection_fields and req.selection_mask_contract != CUTOUT_SELECTION_MASK_CONTRACT:
+        raise _generation_contract_error(
+            "cutout_refine_selection_contract_unsupported",
+            f"selection mask requires contract={CUTOUT_SELECTION_MASK_CONTRACT}",
+            field="selection_mask_contract",
+        )
+    if supplied_selection_fields and (
+        not isinstance(req.selection_mask_data, str) or not req.selection_mask_data.strip()
+    ):
+        raise _generation_contract_error(
+            "cutout_refine_selection_mask_required",
+            "selection_mask_data must contain a PNG payload",
+            field="selection_mask_data",
+        )
+    restore_field_names = {
+        "restore_mode",
+        "restore_source_image_data",
+        "restore_min_alpha",
+    }
+    supplied_restore_fields = restore_field_names.intersection(req.model_fields_set)
+    if supplied_restore_fields and req.restore_mode is not True and supplied_restore_fields - {"restore_mode"}:
+        raise _generation_contract_error(
+            "cutout_refine_restore_fields_conflict",
+            "restore fields require restore_mode=true",
+            field="restore_mode",
+        )
+    if req.restore_mode and not supplied_selection_fields:
+        raise _generation_contract_error(
+            "cutout_refine_restore_selection_mask_required",
+            "restore_mode requires selection_mask_data and selection_mask_contract",
+            field="selection_mask_data",
+        )
+    if req.restore_mode and (
+        not isinstance(req.restore_source_image_data, str) or not req.restore_source_image_data.strip()
+    ):
+        raise _generation_contract_error(
+            "cutout_refine_restore_source_required",
+            "restore_mode requires restore_source_image_data",
+            field="restore_source_image_data",
+        )
+
+    feather_radius = float(req.feather_radius)
+    if not math.isfinite(feather_radius) or feather_radius < 0 or feather_radius > MAX_FEATHER_RADIUS:
+        raise _generation_contract_error(
+            "feather_radius_invalid",
+            "feather_radius is outside the supported range",
+            field="feather_radius",
+            minimum=0,
+            maximum=MAX_FEATHER_RADIUS,
+        )
+
+    parent_version_id = None
+    if req.parent_version_id is not None:
+        parent_version_id = str(req.parent_version_id).strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", parent_version_id):
+            raise _generation_contract_error(
+                "cutout_refine_parent_version_invalid",
+                "parent_version_id must be a bounded opaque identifier",
+                field="parent_version_id",
+            )
+
+    selection_mask_data = req.selection_mask_data if supplied_selection_fields else None
+    try:
+        result = await asyncio.to_thread(
+            refine_cutout_alpha,
+            req.image_data,
+            selection_mask_data,
+            feather_radius,
+            restore_mode=req.restore_mode,
+            restore_source_image_data=req.restore_source_image_data,
+            restore_min_alpha=req.restore_min_alpha,
+        )
+    except CutoutRefineError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.to_detail()) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_refine_failed",
+                "message": "本地透明边缘精修失败，未保存结果",
+                "contract": CUTOUT_REFINE_CONTRACT,
+                "operation": "alpha_refine",
+                "local_only": True,
+            },
+        ) from None
+
+    if not isinstance(result, dict) or not result.get("image_bytes"):
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_refine_output_invalid",
+                "message": "本地透明边缘精修未返回有效 PNG，未保存结果",
+                "contract": CUTOUT_REFINE_CONTRACT,
+                "operation": "alpha_refine",
+                "local_only": True,
+            },
+        )
+
+    try:
+        width = int(result["width"])
+        height = int(result["height"])
+        image_bytes = bytes(result["image_bytes"])
+        if width <= 0 or height <= 0 or not image_bytes:
+            raise ValueError("invalid refined image result")
+    except (KeyError, TypeError, ValueError, OverflowError):
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_refine_output_invalid",
+                "message": "本地透明边缘精修未返回有效 PNG，未保存结果",
+                "contract": CUTOUT_REFINE_CONTRACT,
+                "operation": "alpha_refine",
+                "local_only": True,
+            },
+        ) from None
+
+    try:
+        local_path = await asyncio.to_thread(
+            save_refined_png_atomic,
+            image_bytes,
+            GALLERY_DIR,
+            expected_size=(width, height),
+        )
+    except CutoutRefineError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.to_detail()) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_refine_persistence_failed",
+                "message": "透明边缘精修结果保存失败，未返回不完整文件",
+                "contract": CUTOUT_REFINE_CONTRACT,
+                "operation": "alpha_refine",
+                "local_only": True,
+            },
+        ) from None
+
+    try:
+        filename = Path(local_path).name
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_refine_persistence_failed",
+                "message": "透明边缘精修结果保存失败，未返回不完整文件",
+                "contract": CUTOUT_REFINE_CONTRACT,
+                "operation": "alpha_refine",
+                "local_only": True,
+            },
+        ) from None
+    encoded = base64.b64encode(image_bytes).decode("ascii")
+    return {
+        "contract": CUTOUT_REFINE_CONTRACT,
+        "success": True,
+        "status": "completed",
+        "operation": "alpha_refine",
+        "local_only": True,
+        "source_preserved": True,
+        "transparent": True,
+        "preview_background": "checkerboard",
+        "image_data": "data:image/png;base64," + encoded,
+        "filename": filename,
+        "gallery_url": f"/api/gallery/image/{quote(filename)}",
+        "width": width,
+        "height": height,
+        "version_id": f"cutout-refine-{uuid.uuid4().hex}",
+        "parent_version_id": parent_version_id,
+        "restore_mode": bool(result.get("restore_mode")),
+        "restore_min_alpha": result.get("restore_min_alpha"),
+        "restore_applied": bool(result.get("restore_applied")),
+        "selection_applied": bool(result.get("selection_applied")),
+        "selection_mask_contract": (
+            CUTOUT_SELECTION_MASK_CONTRACT if result.get("selection_applied") else None
+        ),
+        "feather_radius": float(result.get("feather_radius", feather_radius)),
+        "alpha_changed": bool(result.get("alpha_changed")),
+        "alpha_extrema": list(result.get("alpha_extrema") or []),
+    }
+
+
 @app.post("/api/generate")
 async def generate(req: GenerateRequest, request: Request):
     global generation_counter, image_gen_semaphore
+    generation_input = _validate_generation_request_inputs(req)
+    mode = generation_input["mode"]
+
     if image_gen_semaphore is None:
         image_gen_semaphore = asyncio.Semaphore(MAX_CONCURRENT_GENERATIONS)
 
@@ -947,19 +2992,6 @@ async def generate(req: GenerateRequest, request: Request):
     client_ip = request.client.host if request.client else "unknown"
     if not _check_rate_limit(client_ip, "generate"):
         raise HTTPException(status_code=429, detail="请求过于频繁，请稍后再试")
-
-    generation_counter += 1
-    gen_id = f"gen_{generation_counter:04d}_{uuid.uuid4().hex[:6]}"
-
-    # LLM 优化提示词（仅对文生图模式）
-    original_prompt = req.prompt
-    enhanced_by_llm = None
-    llm_error_msg = None
-    if req.enhance_prompt and req.mode == "t2i":
-        enhanced_by_llm = await enhance_prompt_with_llm(req.prompt, req.llm_provider_id)
-        if enhanced_by_llm == req.prompt:
-            # LLM 未配置或调用失败（返回了原始 prompt）
-            llm_error_msg = "LLM 优化未生效，请检查 Provider 配置"
 
     # 确定要调用的 Provider 列表
     if req.providers:
@@ -970,15 +3002,74 @@ async def generate(req: GenerateRequest, request: Request):
     if not provider_ids:
         raise HTTPException(status_code=400, detail="无可用的生图模型，请先在设置中配置")
 
+    all_providers = {p.id: p for p in cfg_mgr.config.providers}
+    if mode == "inpaint":
+        _validate_inpaint_provider_authorization(provider_ids, all_providers)
+    elif mode == "precision_edit":
+        _validate_precision_edit_provider_authorization(
+            provider_ids,
+            all_providers,
+            req.provider_settings,
+        )
+        _validate_precision_edit_size_authorization(
+            provider_ids,
+            all_providers,
+            req.provider_settings,
+            generation_input,
+        )
+
+    generation_counter += 1
+    gen_id = f"gen_{generation_counter:04d}_{uuid.uuid4().hex[:6]}"
+
+    # LLM 优化提示词（仅对文生图模式）
+    original_prompt = req.prompt
+    enhanced_by_llm = None
+    llm_error_msg = None
+    if req.enhance_prompt and mode == "t2i":
+        enhanced_by_llm = await enhance_prompt_with_llm(req.prompt, req.llm_provider_id)
+        if enhanced_by_llm == req.prompt:
+            # LLM 未配置或调用失败（返回了原始 prompt）
+            llm_error_msg = "LLM 优化未生效，请检查 Provider 配置"
+
     # 构建参数
     kwargs = {}
     if req.size: kwargs["size"] = req.size
     if req.quality: kwargs["quality"] = req.quality
-    if req.mode == "i2i" and req.image_data:
-        kwargs["image_data"] = req.image_data
+    kwargs["exact_ratio_crop"] = req.exact_ratio_crop
+    if mode == "i2i":
+        image_list = [item["value"] for item in generation_input["images"]]
+        kwargs["mode"] = mode
+        kwargs["image_data"] = image_list[0]
+        kwargs["image_data_list"] = image_list
         kwargs["strength"] = req.strength
-
-    all_providers = {p.id: p for p in cfg_mgr.config.providers}
+    elif mode == "inpaint":
+        kwargs.update({
+            "mode": mode,
+            "image_data": generation_input["images"][0]["value"],
+            "mask_data": generation_input["mask"]["value"],
+            "mask_contract": INPAINT_MASK_CONTRACT,
+            "inpaint_authorized": True,
+        })
+    elif mode == "precision_edit":
+        kwargs.update({
+            "mode": mode,
+            "image_data": generation_input["images"][0]["value"],
+            "precision_canvas_only": generation_input["precision_canvas_only"],
+            "precision_size_mode": generation_input["precision_size_mode"],
+            "precision_target_size": generation_input["precision_target_size"],
+            "precision_resize_prompt": generation_input["precision_resize_prompt"],
+            "precision_edit_authorized": True,
+        })
+        if generation_input["precision_size_mode"] == "resize":
+            kwargs["precision_output_size_policy"] = generation_input[
+                "precision_output_size_policy"
+            ]
+        if not generation_input["precision_canvas_only"]:
+            kwargs.update({
+                "annotation_image_data": generation_input["annotation_image"]["value"],
+                "annotation_contract": generation_input["annotation_contract"],
+                "annotations": generation_input["annotations"],
+            })
 
     # 构建任务列表 (pid, seq, qty) + per-provider kwargs
     task_list = []
@@ -988,11 +3079,15 @@ async def generate(req: GenerateRequest, request: Request):
         qty = _normalize_generation_quantity(raw_qty)
         # 为每个 provider 构建独立的 kwargs
         p_kwargs = dict(kwargs)  # 复制全局 kwargs
-        p_setting = req.provider_settings.get(pid, {})
+        p_setting = req.provider_settings.get(pid, {}) if isinstance(req.provider_settings, dict) else {}
+        if not isinstance(p_setting, dict):
+            p_setting = {}
         if p_setting.get("size"):
             p_kwargs["size"] = p_setting["size"]
         if p_setting.get("quality"):
             p_kwargs["quality"] = p_setting["quality"]
+        if mode == "precision_edit":
+            p_kwargs["model"] = str(p_setting["model"]).strip()
         provider_kwargs_map[pid] = p_kwargs
         for seq in range(qty):
             if pid in all_providers:
@@ -1018,7 +3113,7 @@ async def generate(req: GenerateRequest, request: Request):
     image_tasks[gen_id] = {
         "status": "queued",
         "progress": 0,
-        "mode": req.mode,
+        "mode": mode,
         "prompt": req.prompt,
         "enhanced_prompt": enhanced_by_llm,
         "llm_error": llm_error_msg,
@@ -1042,7 +3137,7 @@ async def generate(req: GenerateRequest, request: Request):
     }
 
     # 后台处理
-    asyncio.create_task(_process_image_gen(gen_id))
+    image_task_handles[gen_id] = asyncio.create_task(_process_image_gen(gen_id))
 
     _write_log("generate", f"生图任务已创建: {gen_id}, {len(task_list)} 个子任务", {"gen_id": gen_id, "providers": provider_ids})
 
@@ -1060,10 +3155,23 @@ async def generate(req: GenerateRequest, request: Request):
 
 
 async def _process_image_gen(gen_id: str):
+    try:
+        await _process_image_gen_impl(gen_id)
+    except asyncio.CancelledError:
+        _mark_image_task_cancelled(gen_id)
+        return
+    finally:
+        _cleanup_image_task_handle(gen_id, asyncio.current_task())
+
+
+async def _process_image_gen_impl(gen_id: str):
     """后台逐个处理生图任务（带并发控制）"""
     global image_gen_semaphore
     task = image_tasks.get(gen_id)
     if not task:
+        return
+
+    if task.get("status") == "cancelled":
         return
 
     task["status"] = "generating"
@@ -1072,6 +3180,8 @@ async def _process_image_gen(gen_id: str):
     from providers import generate_for_provider as _gen_one
 
     async def _run_one(key, pid, seq, p_cfg, prompt, kwargs):
+        if task.get("status") == "cancelled":
+            return
         t0 = time.time()
         state = task["provider_states"][key]
         state["status"] = "generating"
@@ -1089,6 +3199,11 @@ async def _process_image_gen(gen_id: str):
         tick_task = asyncio.create_task(_tick_progress())
         try:
             res = await _gen_one(p_cfg, prompt, **kwargs)
+            if task.get("status") == "cancelled":
+                state["status"] = "cancelled"
+                state["progress"] = 0
+                state["log"].append(f"[{time.strftime('%H:%M:%S')}] ■ 已停止")
+                return
             t1 = time.time()
             res.elapsed_seconds = round(t1 - t0, 1)
             res.started_at = t0
@@ -1108,21 +3223,30 @@ async def _process_image_gen(gen_id: str):
                         res.local_path = _upscaled
                         state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✔ 放大完成")
                 except Exception as ue:
-                    state["log"].append(f"[{time.strftime('%H:%M:%S')}] ⚠ 放大失败(保留原图): {str(ue)[:80]}")
+                    upscale_error = _background_generation_error_text(ue, p_cfg)
+                    state["log"].append(f"[{time.strftime('%H:%M:%S')}] ⚠ 放大失败(保留原图): {upscale_error[:80]}")
 
             if res.success:
+                for warning in getattr(res, "warnings", None) or []:
+                    warning_code = str(warning.get("code") or "generation_warning")[:80]
+                    warning_message = str(warning.get("message") or "")[:240]
+                    state["log"].append(
+                        f"[{time.strftime('%H:%M:%S')}] ⚠ {warning_code}: {warning_message}"
+                    )
                 state["status"] = "completed"
                 state["progress"] = 100
                 state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✔ 完成 ({res.elapsed_seconds}s)")
             else:
+                error_text = _background_generation_error_text(res.error, p_cfg)
+                res.error = error_text
                 state["status"] = "failed"
-                state["progress"] = 100
-                state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✗ 失败: {res.error[:120]}")
+                state["progress"] = _image_state_progress(state)
+                state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✗ 失败: {error_text[:120]}")
                 # 写入详细错误日志到 logs.jsonl
-                _write_log("generation_error", f"{pid} 失败: {res.error[:200]}", {
+                _write_log("generation_error", f"{pid} 失败: {error_text[:200]}", {
                     "provider_id": pid,
                     "model": (p_cfg.model if p_cfg else pid),
-                    "error": res.error[:500],
+                    "error": error_text[:500],
                     "mode": task.get("mode", "t2i"),
                     "elapsed_seconds": res.elapsed_seconds,
                 })
@@ -1132,6 +3256,10 @@ async def _process_image_gen(gen_id: str):
                 "local_path": res.local_path,
                 "generation_id": res.generation_id,
                 "error": res.error,
+                "error_code": getattr(res, "error_code", "") or None,
+                "error_details": getattr(res, "error_details", None),
+                "metadata": getattr(res, "metadata", None),
+                "warnings": getattr(res, "warnings", None) or [],
                 "model": pid,
                 "prompt": prompt,
                 "original_prompt": task["original_prompt"],
@@ -1143,12 +3271,22 @@ async def _process_image_gen(gen_id: str):
             task["results"][key] = state["result"]
         except Exception as e:
             t1 = time.time()
+            error_text = _background_generation_error_text(e, p_cfg)
             state["status"] = "failed"
-            state["progress"] = 100
-            state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✗ 异常: {str(e)[:120]}")
+            state["progress"] = _image_state_progress(state)
+            state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✗ 异常: {error_text[:120]}")
+            _write_log("generation_error", f"{pid} 异常: {error_text[:200]}", {
+                "provider_id": pid,
+                "model": (p_cfg.model if p_cfg else pid),
+                "error": error_text[:500],
+                "mode": task.get("mode", "t2i"),
+                "elapsed_seconds": round(t1 - t0, 1),
+            })
             state["result"] = {
                 "success": False, "local_path": None, "generation_id": None,
-                "error": str(e), "model": pid, "prompt": prompt,
+                "error": error_text, "model": pid, "prompt": prompt,
+                "error_code": None, "error_details": None,
+                "metadata": None, "warnings": [],
                 "original_prompt": task["original_prompt"], "seq": seq,
                 "elapsed_seconds": round(t1 - t0, 1), "started_at": t0, "finished_at": t1,
             }
@@ -1169,6 +3307,8 @@ async def _process_image_gen(gen_id: str):
 
     async def _run_provider_group(pid, items):
         for i, (p, s, q) in enumerate(items):
+            if task.get("status") == "cancelled":
+                return
             if i > 0:
                 await asyncio.sleep(1.5)
             key = f"{p}_{s}" if q > 1 else p
@@ -1179,10 +3319,14 @@ async def _process_image_gen(gen_id: str):
 
     await asyncio.gather(*[_run_provider_group(pid, items) for pid, items in provider_tasks.items()])
 
-    # 全部完成
+    if task.get("status") == "cancelled":
+        return
+
+    # 全部子任务结束；部分成功仍可交付结果，全失败则明确失败。
     elapsed = round(time.time() - task["start_time"], 1)
-    task["status"] = "completed"
-    task["progress"] = 100
+    task["status"] = _image_task_status(task.get("status", "generating"), task["provider_states"])
+    task["progress"] = _image_task_progress(task["provider_states"], task["status"])
+    task["elapsed_seconds"] = elapsed
 
     # 计算分组耗时
     group_timings = {}
@@ -1235,25 +3379,12 @@ async def get_generate_status(gen_id: str):
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
 
-    # 计算整体进度（加权平均每个 provider 的进度）
+    # 计算整体进度（每个 provider 的真实进度/耗时估算平均值）
     states = task["provider_states"]
-    total = len(states)
-    if total > 0:
-        progress = round(sum(s.get("progress", 0) for s in states.values()) / total)
-    else:
-        progress = 0
+    status = _refresh_image_task_state(task)
+    progress = task["progress"]
 
-    # 判断最终状态
-    status = task["status"]
-    if status == "completed":
-        pass
-    else:
-        done = sum(1 for s in states.values() if s.get("status") in ("completed", "failed"))
-        if done >= total and total > 0:
-            status = "completed"
-            task["status"] = "completed"
-
-    elapsed = round(time.time() - task["start_time"], 1) if task.get("start_time") else 0
+    elapsed = _image_task_elapsed(task)
 
     # 构建响应（不含 all_providers 大对象）
     provider_states_out = {}
@@ -1279,10 +3410,34 @@ async def get_generate_status(gen_id: str):
         "enhanced_prompt": task.get("enhanced_prompt"),
         "llm_error": task.get("llm_error"),
         "continuous_id": task.get("continuous_id"),
-        "results": task["results"] if status == "completed" else {},
+        # Only terminal tasks may deliver provider results. Every terminal
+        # outcome keeps its real result/error and timing projection, including
+        # failed and cancelled tasks with partial success.
+        "results": task["results"] if status in ("completed", "failed", "cancelled") else {},
         "group_timings": {pid: {"total": round(sum(img["elapsed"] for img in imgs), 1), "images": imgs}
-                          for pid, imgs in _calc_group_timings(task["results"]).items()} if status == "completed" else {},
+                          for pid, imgs in _calc_group_timings(task["results"]).items()}
+                          if status in ("completed", "failed", "cancelled") else {},
     }
+
+
+@app.post("/api/generate/cancel/{gen_id}")
+async def cancel_generate(gen_id: str):
+    task = image_tasks.get(gen_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    status = _refresh_image_task_state(task)
+    if status in ("completed", "failed", "cancelled"):
+        return {"ok": True, "status": status}
+    status = _mark_image_task_cancelled(gen_id)
+    if status != "cancelled":
+        return {"ok": True, "status": status}
+    handle = image_task_handles.get(gen_id)
+    if handle:
+        if not handle.done():
+            handle.cancel()
+        _cleanup_image_task_handle(gen_id, handle)
+    _write_log("generate", f"生图任务已取消: {gen_id}", {"gen_id": gen_id})
+    return {"ok": True, "status": status}
 
 
 class LLMOptimizeRequest(BaseModel):
@@ -1298,24 +3453,28 @@ class VariationRequest(BaseModel):
     provider_id: str = ""            # 空=第一个支持的 provider
     model: str = ""                  # 可选：指定模型
     size: str = "1024x1024"          # 256x256 | 512x512 | 1024x1024
-    n: int = 1                       # 生成数量 1-4
+    n: int = Field(default=1, ge=1, le=4)  # 生成数量 1-4
 
 
 @app.post("/api/images/variations")
 async def image_variations(req: VariationRequest):
     """图片变形：基于输入图片生成变体（OpenAI /images/variations 协议）"""
-    import base64 as _b64
     import httpx as _httpx
 
-    # 解析图片
-    if "," in req.image_data:
-        img_b64 = req.image_data.split(",")[1]
-    else:
-        img_b64 = req.image_data
-    try:
-        img_bytes = _b64.b64decode(img_b64)
-    except Exception:
-        raise HTTPException(status_code=400, detail="图片数据无效")
+    source_image = _validate_generation_image_data(req.image_data, "image_data")
+    source_value = source_image["value"]
+    source_encoded = (
+        source_value.partition(",")[2]
+        if source_value.lower().startswith("data:")
+        else source_value
+    )
+    img_bytes = base64.b64decode(source_encoded, validate=True)
+    source_mime = source_image["mime_type"]
+    source_filename = {
+        "image/png": "image.png",
+        "image/jpeg": "image.jpg",
+        "image/webp": "image.webp",
+    }[source_mime]
 
     # 找到可用 provider
     provider = None
@@ -1335,37 +3494,122 @@ async def image_variations(req: VariationRequest):
 
     # 支持多端点 failover
     endpoints = provider.get_active_endpoints()
-    last_error = None
+    endpoint_failures = []
+    result = None
+    last_response_validation = None
 
-    for ep in endpoints:
+    for endpoint_index, ep in enumerate(endpoints, start=1):
         url = f"{ep.url.rstrip('/')}/images/variations"
         headers = {"Authorization": f"Bearer {ep.key}"}
-        files = {"image": ("image.png", img_bytes, "image/png")}
-        data = {"model": model_id, "n": min(req.n, 4), "size": req.size, "response_format": "b64_json"}
+        files = {"image": (source_filename, img_bytes, source_mime)}
+        data = {"model": model_id, "n": req.n, "size": req.size, "response_format": "b64_json"}
 
         try:
-            _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
-            async with _httpx.AsyncClient(timeout=180.0, verify=_verify_ssl) as client:
-                resp = await client.post(url, headers=headers, files=files, data=data)
+            async with _httpx.AsyncClient(
+                timeout=180.0,
+                verify=verify_ssl_enabled(),
+            ) as client:
+                resp = await _stream_bounded_provider_response(
+                    client,
+                    "POST",
+                    url,
+                    response_image_count=req.n,
+                    headers=headers,
+                    files=files,
+                    data=data,
+                )
                 if resp.status_code >= 400:
-                    last_error = f"端点 {ep.url[:40]}... HTTP {resp.status_code}"
+                    response_detail = _provider_error_text(
+                        getattr(resp, "text", ""),
+                        provider,
+                    ).strip()[:240]
+                    failure = f"HTTP {resp.status_code}"
+                    if response_detail:
+                        failure += f": {response_detail}"
+                    endpoint_failures.append((endpoint_index, ep, failure))
                     continue  # 尝试下一个端点
-                result = resp.json()
+                result = _parse_provider_json_response(resp)
                 break  # 成功
-        except Exception as e:
-            last_error = f"端点 {ep.url[:40]}... {str(e)[:60]}"
+        except ProviderResponseValidationError as exc:
+            last_response_validation = exc
+            endpoint_failures.append((endpoint_index, ep, f"{exc.code}: {exc}"))
+            continue
+        except Exception as exc:
+            endpoint_failures.append(
+                (
+                    endpoint_index,
+                    ep,
+                    _provider_error_text(exc, provider).strip() or type(exc).__name__,
+                )
+            )
             continue  # 尝试下一个端点
     else:
-        raise HTTPException(status_code=502, detail=f"所有端点均失败: {last_error}")
+        if last_response_validation is not None:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "image_variation_invalid_response",
+                    "message": "variation provider returned an invalid response",
+                    "validation_code": last_response_validation.code,
+                    **last_response_validation.details,
+                },
+            )
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "image_variation_upstream_error",
+                "message": "all variation provider endpoints failed",
+                "upstream_error": _endpoint_failure_summary(provider, endpoint_failures),
+            },
+        )
 
-    # 解析结果
+    response_validation_details = {}
+    if not isinstance(result, dict):
+        response_validation_code = "variation_response_not_object"
+    elif not isinstance(result.get("data"), list):
+        response_validation_code = "variation_response_data_invalid"
+    elif len(result["data"]) != req.n:
+        response_validation_code = "variation_response_item_count_mismatch"
+        response_validation_details = {
+            "requested_count": req.n,
+            "actual_count": len(result["data"]),
+        }
+    else:
+        response_validation_code = ""
+        for item in result["data"]:
+            if not isinstance(item, dict):
+                response_validation_code = "variation_response_item_invalid"
+                break
+            if not isinstance(item.get("b64_json"), str) or not item["b64_json"].strip():
+                response_validation_code = "variation_response_image_missing"
+                break
+    if response_validation_code:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "image_variation_invalid_response",
+                "message": "variation provider returned an invalid response",
+                "validation_code": response_validation_code,
+                **response_validation_details,
+            },
+        )
+
     images_out = []
-    for item in result.get("data", []):
-        b64_data = item.get("b64_json")
-        if b64_data:
-            raw = _b64.b64decode(b64_data)
+    for item in result["data"]:
+        b64_data = item["b64_json"]
+        try:
+            raw = _decode_generated_image_base64(b64_data)
             local_path = _save_image(raw, provider.id, "variation", "")
-            images_out.append({"b64_json": b64_data, "local_path": local_path, "provider_id": provider.id})
+        except GeneratedImageValidationError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "image_variation_invalid_response",
+                    "message": "variation provider returned an invalid image",
+                    "validation_code": exc.code,
+                },
+            ) from None
+        images_out.append({"b64_json": b64_data, "local_path": local_path, "provider_id": provider.id})
 
     return {"success": True, "images": images_out, "model": model_id, "provider_id": provider.id}
 
@@ -1483,31 +3727,18 @@ async def gallery(limit: int = 50):
 
 
 @app.get("/api/gallery/thumb/{filename}")
-async def thumbnail(filename: str):
-    # 先查图片目录
-    fpath = GALLERY_DIR / filename
-    if fpath.exists():
-        return FileResponse(str(fpath))
-    # 再查视频缩略图目录
-    thumb_name = Path(filename).stem + "_thumb.jpg"
-    thumb_path = VIDEO_THUMBS_DIR / thumb_name
-    if thumb_path.exists():
-        return FileResponse(str(thumb_path))
-    # 尝试从视频生成缩略图
-    video_path = VIDEO_DIR / filename
-    if video_path.exists():
-        gen = _generate_video_thumbnail(video_path)
-        if gen and gen.exists():
-            return FileResponse(str(gen))
-    raise HTTPException(status_code=404, detail="缩略图不存在")
+async def thumbnail(filename: str, request: Request):
+    payload, mime_type = await asyncio.to_thread(_load_thumbnail_image_payload, filename)
+    return _memory_media_response(request, payload, mime_type)
 
 
 @app.get("/api/gallery/image/{filename}")
-async def gallery_image(filename: str):
-    fpath = GALLERY_DIR / filename
-    if not fpath.exists():
-        raise HTTPException(status_code=404, detail="图片不存在")
-    return FileResponse(str(fpath), media_type="image/png")
+async def gallery_image(filename: str, request: Request):
+    _fpath, payload, mime_type, _prompt = await asyncio.to_thread(
+        _load_gallery_image_payload,
+        filename,
+    )
+    return _memory_media_response(request, payload, mime_type)
 
 
 @app.delete("/api/gallery/{item_id}")
@@ -1688,11 +3919,12 @@ async def rename_gallery_item(body: dict = {}):
 async def gallery_image_base64(filename: str):
     """返回图片的 base64 数据，用于推送到参考图区域"""
     import base64 as _b64
-    fpath = GALLERY_DIR / filename
-    if not fpath.exists():
-        raise HTTPException(status_code=404, detail="图片不存在")
-    data = _b64.b64encode(fpath.read_bytes()).decode()
-    return {"filename": filename, "data": f"data:image/png;base64,{data}"}
+    _fpath, payload, mime_type, _prompt = await asyncio.to_thread(
+        _load_gallery_image_payload,
+        filename,
+    )
+    data = _b64.b64encode(payload).decode()
+    return {"filename": filename, "data": f"data:{mime_type};base64,{data}"}
 
 
 @app.get("/api/history")
@@ -2556,10 +4788,8 @@ async def video_status(task_id: str):
 @app.get("/api/video/file/{filename}")
 async def video_file(filename: str):
     """访问本地视频文件"""
-    fpath = VIDEO_DIR / filename
-    if not fpath.exists():
-        raise HTTPException(status_code=404, detail="视频文件不存在")
-    return FileResponse(str(fpath), media_type="video/mp4")
+    fpath = _resolve_video_file(filename)
+    return FileResponse(str(fpath), media_type=_VIDEO_MEDIA_TYPES[fpath.suffix.lower()])
 
 
 @app.get("/api/video/list")
@@ -2610,21 +4840,17 @@ async def preview_images():
     """返回图库中最近的图片base64列表（供视频页取图用）"""
     import base64 as _b64
     items = []
-    for f in sorted(GALLERY_DIR.glob("*.png"), reverse=True)[:40]:
+    for discovered in sorted(GALLERY_DIR.glob("*.png"), reverse=True)[:40]:
         try:
-            data = _b64.b64encode(f.read_bytes()).decode()
-            prompt_text = ""
+            f, payload, mime_type, prompt_text = await asyncio.to_thread(
+                _load_gallery_image_payload,
+                discovered.name,
+            )
+            data = _b64.b64encode(payload).decode()
             model_name = f.stem.split("_")[0] if f.stem else "unknown"
-            try:
-                from PIL import Image
-                with Image.open(f) as img:
-                    if img.info and "Prompt" in img.info:
-                        prompt_text = img.info["Prompt"]
-            except Exception:
-                pass
             items.append({
                 "filename": f.name,
-                "data": f"data:image/png;base64,{data}",
+                "data": f"data:{mime_type};base64,{data}",
                 "prompt": prompt_text,
                 "model": model_name,
                 "created_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(f.stat().st_mtime)),
@@ -3011,7 +5237,7 @@ async def check_network_status():
     async def _test_one(name, url, need_proxy):
         try:
             start = time.time()
-            _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
+            _verify_ssl = verify_ssl_enabled()
             async with _httpx.AsyncClient(
                 timeout=_httpx.Timeout(5.0),
                 verify=_verify_ssl,
@@ -3030,7 +5256,7 @@ async def check_network_status():
             if need_proxy and proxy_url:
                 try:
                     start = time.time()
-                    _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
+                    _verify_ssl = verify_ssl_enabled()
                     async with _httpx.AsyncClient(timeout=_httpx.Timeout(5.0), verify=_verify_ssl, follow_redirects=True) as client:
                         r = await client.head(url)
                         elapsed = round((time.time() - start) * 1000)
@@ -3056,7 +5282,7 @@ async def get_ip_info():
     """获取本机 IP 深度质检报告（来自 testisp.info）"""
     import httpx as _httpx
     try:
-        _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
+        _verify_ssl = verify_ssl_enabled()
         async with _httpx.AsyncClient(timeout=15.0, verify=_verify_ssl, follow_redirects=True) as client:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -3198,47 +5424,63 @@ async def server_control(action: str = "status"):
 # ──────────────────────────────────────────────────────────────
 # 自动更新系统
 # ──────────────────────────────────────────────────────────────
+class UpdateApplyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 @app.get("/api/update/check")
-async def check_for_updates(mirror: str = ""):
-    """检查是否有可用更新"""
+async def check_for_updates(request: Request):
+    """Read the canonical release state without browser-selected routing."""
+    if request.query_params:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "update_check_parameters_forbidden",
+                "message": "update checks do not accept browser-supplied URLs or mirrors",
+            },
+        )
     from updater import check_update
-    info = await check_update(mirror)
+    info = await check_update()
     return {
         "available": info.available,
         "current_version": info.current_version,
         "latest_version": info.latest_version,
         "release_notes": info.release_notes,
-        "download_url": info.download_url,
         "update_type": info.update_type,
+        "automatic_apply_available": info.automatic_apply_available,
+        "manual_install_required": info.manual_install_required,
     }
 
 
 @app.get("/api/update/mirrors")
 async def test_update_mirrors():
-    """测试所有 GitHub 代理线路的连通性和延迟"""
-    from updater import test_all_mirrors
-    results = await test_all_mirrors()
-    return {
-        "mirrors": [
-            {
-                "name": r.name,
-                "url": r.url,
-                "latency_ms": r.latency_ms,
-                "available": r.available,
-                "error": r.error,
-            }
-            for r in results
-        ],
-        "recommended": results[0].name if results and results[0].available else None,
-    }
+    """Retire browser-selectable update mirrors."""
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "code": "update_mirror_check_unavailable",
+            "message": "update mirror selection is unavailable",
+        },
+    )
 
 
 @app.post("/api/update/apply")
-async def apply_update(mirror: str = "", download_url: str = ""):
-    """执行更新"""
-    from updater import apply_update
-    result = await apply_update(mirror, download_url)
-    return result
+async def apply_software_update(body: UpdateApplyRequest, request: Request):
+    """Fail closed before any automatic update side effect can begin."""
+    del body
+    if request.query_params:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "update_apply_parameters_forbidden",
+                "message": "update apply does not accept URLs or mirrors",
+            },
+        )
+    from updater import update_apply_unavailable_detail
+    raise HTTPException(
+        status_code=503,
+        detail=update_apply_unavailable_detail(),
+    )
 
 
 @app.get("/api/update/info")
@@ -3253,6 +5495,8 @@ async def get_update_info():
         "app_dir": str(app_dir),
         "platform": sys.platform,
         "is_frozen": getattr(sys, 'frozen', False),
+        "automatic_apply_available": False,
+        "manual_install_required": True,
     }
 
 

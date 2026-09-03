@@ -8,9 +8,31 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  PYTHON_VERSION: '3.12'
 
 jobs:
+  release-contract:
+    name: Validate release identity
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Require tag to match packaged version
+        if: github.ref_type == 'tag'
+        run: >-
+          python scripts/package_release.py
+          --validate-release-tag "${{ github.ref_name }}"
+
   build:
+    needs: release-contract
     runs-on: ubuntu-latest
 
     permissions:
@@ -42,12 +64,65 @@ jobs:
             type=ref,event=branch
             type=sha,prefix=
 
-      - name: Build and push Docker image
+      - name: Build Docker image once for smoke and publish
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          load: true
+          push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Smoke test exact built image runtime imports
+        env:
+          RELEASE_IMAGE_ID: ${{ steps.build.outputs.imageid }}
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_IMAGE_ID"
+          docker image inspect "$RELEASE_IMAGE_ID" >/dev/null
+          docker run --rm --entrypoint python "$RELEASE_IMAGE_ID" -c \
+            "import aiofiles, asyncssh, cryptography, dotenv, fastapi, httpx, multipart, numpy, onnxruntime, PIL, psutil, pydantic, pydantic_settings, requests, typing_extensions, tzdata, uvicorn; assert numpy.__version__ == '2.4.3'; assert onnxruntime.__version__ == '1.24.3'; import main; print('docker runtime import smoke passed')"
+
+      - name: Smoke test exact built image over HTTP
+        env:
+          RELEASE_IMAGE_ID: ${{ steps.build.outputs.imageid }}
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_IMAGE_ID"
+          container_name="genbox-release-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker rm -f "$container_name" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          admin_key="$(openssl rand -hex 32)"
+          docker run --detach --name "$container_name" \
+            --env APP_MODE=prod \
+            --env GENBOX_PORT=8891 \
+            --env ADMIN_KEY="$admin_key" \
+            --publish 127.0.0.1::8891 \
+            "$RELEASE_IMAGE_ID" >/dev/null
+          test "$(docker inspect --format '{{.Image}}' "$container_name")" = "$RELEASE_IMAGE_ID"
+          host_port="$(docker port "$container_name" 8891/tcp | sed -n 's/^127\.0\.0\.1:\([0-9][0-9]*\)$/\1/p' | head -n 1)"
+          test -n "$host_port"
+          curl --fail --silent --show-error \
+            --retry 30 --retry-connrefused --retry-delay 1 --max-time 5 \
+            "http://127.0.0.1:${host_port}/api/setup/status" >/dev/null
+
+      - name: Push smoke-tested Docker image without rebuilding
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          RELEASE_IMAGE_ID: ${{ steps.build.outputs.imageid }}
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_IMAGE_ID"
+          pushed=0
+          while IFS= read -r tag; do
+            test -n "$tag" || continue
+            test "$(docker image inspect --format '{{.Id}}' "$tag")" = "$RELEASE_IMAGE_ID"
+            docker push "$tag"
+            pushed=$((pushed + 1))
+          done <<< "$IMAGE_TAGS"
+          test "$pushed" -gt 0

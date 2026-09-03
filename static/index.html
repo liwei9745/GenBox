@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GenBox</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=31">
+  <link rel="stylesheet" href="/static/css/app.css?v=35">
   <link rel="stylesheet" href="/static/css/pages.css?v=17">
 </head>
 <body>
@@ -23,7 +23,7 @@
     <button class="btn-secondary" onclick="zoomReset(event)"><span data-i18n="common.reset">重置</span></button>
     <a id="lightbox-dl" href="" download class="btn-secondary"><span data-i18n="common.download_original">⬇ 下载原图</span></a>
     <button class="btn-secondary" onclick="openCompareFromLightbox(event)"><span data-i18n="common.compare">🔀 对比</span></button>
-    <button class="btn-secondary btn-action-i2i" onclick="sendToImageToImage(event)"><span data-i18n="common.image_to_image">🎯 图生图</span></button>
+    <button class="btn-secondary btn-action-i2i" onclick="sendToPrecisionEdit(event)"><span data-i18n="common.precision_edit">🎯 精准改图</span></button>
     <button class="btn-secondary btn-action-i2v" onclick="sendToVideo(event)"><span data-i18n="common.create_video">🎬 生视频</span></button>
     <button class="btn-secondary" onclick="closeLightbox(event)"><span data-i18n="common.close_icon">✕ 关闭</span></button>
   </div>
@@ -160,7 +160,7 @@
       <div class="update-modal-actions">
         <button class="btn-ghost" onclick="closeUpdateModal()"><span data-i18n="update.later">稍后</span></button>
         <a class="btn-secondary" id="updateDownloadLink" href="https://github.com/liwei9745/GenBox/releases" target="_blank" rel="noopener noreferrer"><span data-i18n="update.download">前往下载</span></a>
-        <button class="btn-primary" id="updateApplyBtn" onclick="applyGlobalUpdate()"><span data-i18n="update.apply">立即更新</span></button>
+        <button class="btn-primary" id="updateApplyBtn" onclick="applyGlobalUpdate()" disabled aria-disabled="true"><span data-i18n="update.auto_apply_unavailable">自动更新暂不可用</span></button>
       </div>
     </div>
   </div>
@@ -303,7 +303,7 @@
 
     <!-- ════════════════ PAGE: Generate ════════════════ -->
     <div id="pageGenerate" class="page-content hidden">
-      <div class="creator-mode-bar"><div class="page-heading creator-heading"><div class="page-heading-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m5 17 5-5 4 4 2-2 3 3M17 7v4m-2-2h4"/></svg></div><div class="page-heading-copy"><span class="page-heading-kicker">GENBOX IMAGE STUDIO</span><strong id="imageWorkbenchTitle"><span data-i18n="creator.image_multi_title">多模型生图对比</span></strong><span id="imageWorkbenchHint"><span data-i18n="creator.image_multi_hint">同一提示词同时调用多个模型，快速比较结果。</span></span></div></div><label class="creator-single-picker"><span><span data-i18n="creator.current_model">当前模型</span></span><select id="imageSingleProvider" onchange="selectSingleCreatorProvider('image',this.value)"></select></label><div class="creator-mode-switch"><button id="imageModeMulti" class="active" onclick="setCreatorWorkbenchMode('image','multi')"><span data-i18n="creator.multi_mode">多模型对比</span></button><button id="imageModeSingle" onclick="setCreatorWorkbenchMode('image','single')"><span data-i18n="creator.single_mode">单模型工作台</span></button></div></div>
+      <div class="creator-mode-bar"><div class="page-heading creator-heading"><div class="page-heading-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m5 17 5-5 4 4 2-2 3 3M17 7v4m-2-2h4"/></svg></div><div class="page-heading-copy"><span class="page-heading-kicker">GENBOX IMAGE STUDIO</span><strong id="imageWorkbenchTitle"><span data-i18n="creator.image_multi_title">多模型生图对比</span></strong><span id="imageWorkbenchHint"><span data-i18n="creator.image_multi_hint">同一提示词同时调用多个模型，快速比较结果。</span></span></div></div><label class="creator-single-picker"><span><span data-i18n="creator.current_model">当前模型</span></span><select id="imageSingleProvider" onchange="selectSingleCreatorProvider('image',this.value)"></select></label><div class="creator-mode-switch"><button id="imageModeMulti" class="active" onclick="setCreatorWorkbenchMode('image','multi')"><span data-i18n="creator.multi_mode">多模型对比</span></button><button id="imageModeSingle" onclick="setCreatorWorkbenchMode('image','single')"><span data-i18n="creator.single_mode">单模型工作台</span></button><button id="imageModePrecision" onclick="setCreatorWorkbenchMode('image','precision')"><span data-i18n="creator.precision_edit">🎯 精准改图</span></button></div></div>
       <div class="generate-layout">
 
         <!-- Left: Models + Settings -->
@@ -357,6 +357,10 @@
                 <button class="ratio-btn" data-ratio="auto" onclick="setRatio(this,'auto')" style="grid-column:span 2;">auto</button>
               </div>
               <input type="hidden" id="selRatio" value="1:1">
+              <label class="flex items-start gap-6 mt-6 text-xs text-muted">
+                <input type="checkbox" id="chkExactRatioCrop" disabled style="margin-top:2px;accent-color:var(--accent);">
+                <span data-i18n="creator.exact_ratio_crop">精确裁切到所选比例（可能裁掉画面边缘，默认关闭）</span>
+              </label>
             </div>
             <div class="mb-10">
               <div class="param-label"><span data-i18n="creator.quantity">生成数量</span></div>
@@ -424,7 +428,7 @@
                   <button id="progressCloseBtn" onclick="document.getElementById('progressBox').classList.add('hidden')" class="hidden text-xs p-4 rounded" style="border:1px solid var(--border);background:var(--bg-surface);color:var(--text-muted);cursor:pointer;"><span data-i18n="common.close_icon">✕ 关闭</span></button>
                 </div>
               </div>
-              <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+              <div id="generationProgressBar" class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0%"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
             </div>
           </div>
 
@@ -438,9 +442,11 @@
                   <div class="sub-tabs">
                     <button class="sub-tab active" id="subTabT2I" onclick="switchSubTab('t2i')"><span data-i18n="creator.t2i">📝 文生图</span></button>
                     <button class="sub-tab" id="subTabI2I" onclick="switchSubTab('i2i')"><span data-i18n="creator.i2i">🖼 图生图</span></button>
-                    <button class="sub-tab" id="subTabVAR" onclick="switchSubTab('variation')"><span data-i18n="creator.variation">🔄 变形</span></button>
+                    <button class="sub-tab" id="subTabVAR" onclick="switchSubTab('inpaint')" style="display:none" aria-hidden="true" tabindex="-1"><span data-i18n="creator.inpaint">🖌 局部重绘</span></button>
+                    <button class="sub-tab" id="subTabPrecisionEdit" onclick="setCreatorWorkbenchMode('image','precision')" aria-controls="panelPrecisionEdit" aria-selected="false"><span data-i18n="creator.precision_edit">🎯 精准改图</span></button>
                   </div>
-                  <button class="btn-primary" id="btnGen" onclick="doGenerate()"><span data-i18n="creator.generate_image">🚀 生成图片</span></button>
+                  <button type="button" class="btn-primary" id="btnGen" onclick="doGenerate()"><span data-i18n="creator.generate_image">🚀 生成图片</span></button>
+                  <button type="button" class="btn-secondary hidden" id="btnStopGen" onclick="cancelCurrentGeneration()"><span data-i18n="creator.stop_generation">⏹ 停止生成</span></button>
                 </div>
               </div>
 
@@ -533,12 +539,13 @@
                     <div class="param-label mb-8"><span data-i18n="creator.reference_image">参考图片</span></div>
                     <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()" style="height:100%;min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;">
                       <img id="uploadPreview" class="upload-preview-img hidden" src="" style="max-height:60px;object-fit:contain;">
+                      <div id="uploadPreviewStrip" class="upload-preview-strip"></div>
                       <div id="uploadPlaceholder" style="text-align:center;">
                         <div class="text-base mb-4">🖼</div>
                         <div class="text-xs text-muted"><span data-i18n="creator.upload_reference">点击或拖拽上传</span></div>
                       </div>
                     </div>
-                    <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
+                    <input type="file" id="fileInput" accept="image/*" multiple class="hidden" onchange="handleFileSelect(event)">
                   </div>
                   <!-- 右侧：修改提示词 (80%) -->
                   <div style="flex:1;display:flex;flex-direction:column;">
@@ -548,18 +555,289 @@
                 </div>
               </div>
 
-              <!-- VAR Panel -->
-              <div class="glass-card hidden" id="panelVAR">
-                <div class="param-label mb-8"><span data-i18n="creator.source_image">源图片</span></div>
-                <div class="upload-zone" id="uploadZoneVar" onclick="document.getElementById('fileInputVar').click()">
-                  <div class="text-lg mb-6">🔄</div>
-                  <div class="text-sm text-muted"><span data-i18n="creator.upload_source">点击或拖拽上传源图片</span></div>
-                  <img id="uploadPreviewVar" class="upload-preview-img hidden" src="">
+              <!-- Precision Edit Panel: annotation-driven image editing. -->
+              <div class="glass-card hidden precision-edit-panel" id="panelPrecisionEdit" role="tabpanel" aria-labelledby="subTabPrecisionEdit">
+                <div class="precision-edit-workspace">
+                  <div class="precision-edit-stage-column">
+                    <div class="precision-edit-stage-heading">
+                      <div>
+                        <div class="precision-canvas-title-row">
+                          <div class="precision-canvas-title"><span class="param-label" data-i18n="creator.precision_edit_canvas">批注画布</span><div class="precision-workbench-help hidden" id="precisionWorkbenchHelp"><button type="button" class="precision-workbench-help-trigger" id="precisionWorkbenchHelpTrigger" aria-label="查看精准改图帮助" data-i18n-aria-label="creator.precision_help_label" aria-controls="precisionWorkbenchHelpPopover" aria-expanded="false">?</button><div class="precision-workbench-help-popover hidden" id="precisionWorkbenchHelpPopover" role="dialog" aria-modal="false" aria-labelledby="precisionWorkbenchHelpTitle"><strong id="precisionWorkbenchHelpTitle" data-i18n="creator.precision_help_title">精准改图操作说明</strong><p data-i18n="creator.precision_help_steps">选择图片，在画布上标注位置，为每处写明修改要求，再提交给编辑模型。</p><p data-i18n="creator.precision_help_send_result">生成结果也可以通过“精准改图”操作直接发送到这里。</p><a href="https://github.com/liwei9745/GenBox/blob/main/docs/CLIENT-QUICKSTART.md#start--启动" target="_blank" rel="noopener noreferrer" data-i18n="creator.precision_config_docs">打开项目内配置说明</a></div></div><span id="precisionCanvasDimensions" class="text-xs text-muted" aria-live="polite"></span></div>
+                          <div class="precision-stage-actions"><div class="precision-source-actions hidden" id="precisionSourceActions"><button type="button" class="btn-ghost precision-source-action" id="btnPrecisionReplaceSource" onclick="requestPrecisionLocalSource()"><span aria-hidden="true">↻</span><span data-i18n="creator.precision_replace_image">更换图片</span></button><button type="button" class="btn-ghost precision-source-action" id="btnPrecisionReplaceFromGallery" onclick="openPrecisionGalleryPicker()"><span aria-hidden="true">▦</span><span data-i18n="creator.precision_edit_from_gallery">从图库选择</span></button><span id="precisionReplaceDisabledHint" class="sr-only" data-i18n="creator.precision_replace_task_active">请先停止当前精准改图任务，再更换图片。</span></div><button type="button" class="btn-ghost precision-docs-trigger" id="btnPrecisionDocs" onclick="openPrecisionDocsDialog()" aria-haspopup="dialog" aria-controls="precisionDocsDialog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H19v17H7.5A2.5 2.5 0 0 0 5 21.5z"/><path d="M5 4.5v17M9 7h6m-6 4h6"/></svg><span data-i18n="creator.precision_docs_open">文档说明</span></button></div>
+                        </div>
+                        <div class="precision-canvas-meta"><div class="precision-zoom-control"><label for="precisionViewZoom" data-i18n="creator.precision_zoom">查看缩放</label><input id="precisionViewZoom" type="range" min="50" max="200" step="10" value="100" aria-label="查看缩放" data-i18n-aria-label="creator.precision_zoom"><output id="precisionViewZoomValue" for="precisionViewZoom">100%</output><button type="button" class="btn-ghost" id="btnPrecisionZoomFit" data-i18n="creator.precision_zoom_fit">适合窗口</button></div><small data-i18n="creator.precision_zoom_hint">只调整查看大小，不改变图片尺寸。</small></div>
+                      </div>
+                      <section id="precisionSessionPanel" class="precision-session-panel precision-canvas-session" aria-label="精准改图版本" data-i18n-aria-label="creator.precision_versions">
+                        <div class="precision-version-control-groups">
+                          <div class="precision-version-group precision-shortcut-group" role="group" aria-label="版本快捷按钮" data-i18n-aria-label="creator.precision_version_shortcuts">
+                            <span class="precision-version-group-label" data-i18n="creator.precision_version_shortcuts">版本</span>
+                            <div id="precisionVersionRail" class="precision-version-rail" aria-label="版本快捷栏" data-i18n-aria-label="creator.precision_version_shortcuts"></div>
+                          </div>
+                          <div class="precision-version-group precision-display-mode-group" role="group" aria-label="显示模式" data-i18n-aria-label="creator.precision_display_mode">
+                            <span class="precision-version-group-label" data-i18n="creator.precision_display_mode">显示模式</span>
+                            <div class="precision-compare-modes" role="group" aria-label="版本视图" data-i18n-aria-label="creator.precision_version_view">
+                              <button type="button" class="btn-ghost" data-precision-view="before" onclick="setPrecisionVersionView('before')" data-i18n="creator.precision_before">修改前</button>
+                              <button type="button" class="btn-secondary" data-precision-view="after" onclick="setPrecisionVersionView('after')" data-i18n="creator.precision_after">修改后</button>
+                              <button type="button" class="btn-ghost" data-precision-view="compare" onclick="setPrecisionVersionView('compare')" data-i18n="creator.precision_compare">对比</button>
+                            </div>
+                          </div>
+                        </div>
+                        <button type="button" id="btnPrecisionFullscreen" class="btn-ghost precision-version-fullscreen" onclick="togglePrecisionCompareFullscreen()" title="全屏" data-i18n-title="creator.precision_fullscreen"><span aria-hidden="true">⛶</span><span data-i18n="creator.precision_fullscreen">全屏</span></button>
+                      </section>
+                    </div>
+
+                    <div class="precision-canvas-shell is-empty" id="precisionCanvasShell">
+                      <div id="precisionCanvasSurface" class="precision-canvas-surface hidden">
+                      <img id="precisionBaseImage" class="precision-base-image hidden" src="" alt="">
+                      <canvas id="precisionAnnotationCanvas" class="precision-annotation-canvas" tabindex="0" aria-label="精准改图批注画布" data-i18n-aria-label="creator.precision_edit_canvas_label"></canvas>
+                      <input id="precisionTextEditor" class="precision-text-editor hidden" type="text" maxlength="160" autocomplete="off" placeholder="输入批注文字" data-i18n-placeholder="creator.precision_edit_text_placeholder">
+                      <div id="precisionCompareStage" class="precision-compare-stage" tabindex="0">
+                        <img id="precisionCompareBefore" alt="修改前" data-i18n-alt="creator.precision_before">
+                        <div id="precisionCompareAfterWrap" class="precision-compare-after-wrap"><img id="precisionCompareAfter" alt="修改后" data-i18n-alt="creator.precision_after"></div>
+                        <input id="precisionCompareSlider" type="range" min="0" max="100" value="50" aria-label="对比滑块" data-i18n-aria-label="creator.precision_compare_slider" oninput="updatePrecisionCompareSlider(this.value)">
+                      </div>
+                      </div>
+                      <button type="button" id="precisionCanvasResizeHandle" class="precision-canvas-resize-handle" aria-label="调整画布显示大小" aria-controls="precisionCanvasShell" title="拖动调整画布显示大小"></button>
+                      <div class="precision-canvas-empty" id="precisionUploadZone">
+                        <span class="precision-empty-icon" aria-hidden="true">＋</span>
+                        <strong data-i18n="creator.precision_edit_upload">选择一张要修改的图片</strong>
+                        <small data-i18n="creator.precision_edit_upload_hint">也可以从文生图结果直接发送到这里</small>
+                        <div class="precision-empty-actions">
+                          <button type="button" class="btn-primary" id="btnPrecisionUpload" onclick="requestPrecisionLocalSource()"><span data-i18n="creator.precision_edit_local_upload">本地上传</span></button>
+                          <button type="button" class="btn-secondary" id="btnPrecisionGallery" onclick="openPrecisionGalleryPicker()"><span data-i18n="creator.precision_edit_from_gallery">从图库选择</span></button>
+                        </div>
+                      </div>
+                    </div>
+                    <input type="file" id="precisionFileInput" accept="image/*" class="hidden" aria-label="上传精准改图图片" data-i18n-aria-label="creator.precision_edit_local_upload">
+
+                    <div class="precision-toolbar" role="toolbar" aria-label="精准改图批注工具" data-i18n-aria-label="creator.precision_edit_toolbar">
+                      <div class="precision-toolbar-row">
+                         <div class="precision-tool-group" role="group" aria-label="批注类型" data-i18n-aria-label="creator.precision_edit_annotation_group">
+                        <button type="button" class="btn-secondary precision-tool active" id="precisionToolSelect" data-precision-tool="select" aria-pressed="true" title="选择和移动" data-i18n-title="creator.precision_edit_select"><span aria-hidden="true">↖</span><span data-i18n="creator.precision_edit_select">选择/移动</span></button>
+                        <button type="button" class="btn-ghost precision-tool" id="precisionToolEllipse" data-precision-tool="ellipse" aria-pressed="false" title="椭圆"><span aria-hidden="true">○</span><span data-i18n="creator.precision_edit_ellipse">椭圆</span></button>
+                        <button type="button" class="btn-ghost precision-tool" id="precisionToolArrow" data-precision-tool="arrow" aria-pressed="false" title="箭头"><span aria-hidden="true">↗</span><span data-i18n="creator.precision_edit_arrow">箭头</span></button>
+                        <button type="button" class="btn-ghost precision-tool" id="precisionToolRect" data-precision-tool="rectangle" aria-pressed="false" title="矩形"><span aria-hidden="true">□</span><span data-i18n="creator.precision_edit_rectangle">矩形</span></button>
+                        <button type="button" class="btn-ghost precision-tool" id="precisionToolBrush" data-precision-tool="brush" aria-pressed="false" title="画笔"><span aria-hidden="true">✎</span><span data-i18n="creator.precision_edit_brush">画笔</span></button>
+                        <button type="button" class="btn-ghost precision-tool" id="precisionToolText" data-precision-tool="text" aria-pressed="false" title="文字"><span aria-hidden="true">T</span><span data-i18n="creator.precision_edit_text">文字</span></button>
+                        </div>
+                        <div class="precision-style-controls" aria-label="批注样式" data-i18n-aria-label="creator.precision_edit_style_group">
+                          <label class="precision-color-control" for="precisionAnnotationColor"><span data-i18n="creator.precision_edit_color_short">颜色</span><input type="color" id="precisionAnnotationColor" value="#ef4444" title="批注颜色" data-i18n-title="creator.precision_edit_color"></label>
+                          <label class="precision-width-control" for="precisionStrokeWidth"><span data-i18n="creator.precision_edit_stroke">线宽</span><input type="range" id="precisionStrokeWidth" min="2" max="16" step="1" value="5"><output id="precisionStrokeWidthValue" for="precisionStrokeWidth">5</output></label>
+                          <label class="precision-width-control precision-text-size-control" for="precisionTextSize"><span data-i18n="creator.precision_edit_text_size">文字大小</span><input type="range" id="precisionTextSize" min="12" max="96" step="1" value="24"><output id="precisionTextSizeValue" for="precisionTextSize">24</output></label>
+                        </div>
+                      </div>
+                      <div class="precision-toolbar-row precision-toolbar-history">
+                        <div class="precision-manual-tool-group" role="group" aria-label="手动编辑" data-i18n-aria-label="creator.precision_manual_edit">
+                          <span class="precision-toolbar-group-label" data-i18n="creator.precision_manual_edit">手动编辑</span>
+                          <button type="button" class="btn-ghost precision-tool" id="precisionToolEraser" data-precision-tool="eraser" aria-pressed="false" title="橡皮擦：点击选中标注可删除，涂过画笔轨迹可擦除"><span aria-hidden="true">⌫</span><span data-i18n="creator.precision_edit_eraser">橡皮擦</span></button>
+                          <small class="precision-eraser-hint" data-i18n="creator.precision_edit_eraser_hint">橡皮擦：点击删除选中标注；拖过画笔轨迹擦除，可撤销。</small>
+                        </div>
+                        <div class="precision-history-actions" role="group" aria-label="批注历史" data-i18n-aria-label="creator.precision_edit_history_group">
+                          <button type="button" class="btn-ghost precision-history-button" id="btnPrecisionUndo" disabled title="撤销" data-i18n-title="creator.precision_edit_undo"><span aria-hidden="true">↶</span><span data-i18n="creator.precision_edit_undo">撤销</span></button>
+                          <button type="button" class="btn-ghost precision-history-button" id="btnPrecisionRedo" disabled title="重做" data-i18n-title="creator.precision_edit_redo"><span aria-hidden="true">↷</span><span data-i18n="creator.precision_edit_redo">重做</span></button>
+                        <button type="button" class="btn-ghost precision-visibility-button" id="btnPrecisionToggleAnnotations" aria-pressed="true" title="隐藏批注"><span aria-hidden="true">◉</span><span data-i18n="creator.precision_edit_annotations">批注</span></button>
+                        <button type="button" class="btn-ghost precision-clear-button" id="btnPrecisionClear" disabled><span data-i18n="creator.precision_edit_clear">清除</span></button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <aside class="precision-edit-inspector" aria-label="精准改图设置" data-i18n-aria-label="creator.precision_edit">
+                    <section class="precision-edit-actions" aria-label="主体处理" data-i18n-aria-label="creator.precision_subject_actions">
+                      <section class="precision-quick-tools" aria-labelledby="precisionQuickToolsTitle">
+                        <div class="precision-quick-heading"><span class="param-label" id="precisionQuickToolsTitle" data-i18n="creator.precision_quick_tools">常用处理</span><small data-i18n="creator.precision_quick_hint">先选功能，再在画布上圈出位置。</small></div>
+                        <div class="precision-action-group"><span data-i18n="creator.precision_ai_remove">AI 消除</span><div><button type="button" class="btn-ghost" onclick="startPrecisionAiErase('people')" data-i18n="creator.precision_remove_people">消除路人</button><button type="button" class="btn-ghost" onclick="startPrecisionAiErase('watermark')" data-i18n="creator.precision_remove_watermark">消除水印</button></div></div>
+                        <div class="precision-action-group"><span data-i18n="creator.precision_manual_selection">手动选区</span><div><button type="button" class="btn-ghost" onclick="setPrecisionEditTool('brush')" data-i18n="creator.precision_edit_brush">涂抹</button></div></div>
+                        <div class="precision-cutout-tool" aria-labelledby="precisionCutoutTitle">
+                          <div class="precision-cutout-heading"><span id="precisionCutoutTitle" data-i18n="creator.cutout_person">一键抠出人物</span><span class="precision-help-tip"><button type="button" class="precision-help-trigger" aria-describedby="precisionCutoutHelp" aria-label="查看抠图说明" data-i18n-aria-label="creator.cutout_help_label">?</button><span id="precisionCutoutHelp" class="precision-help-content" role="tooltip" data-i18n="creator.cutout_person_hint">需要安装本地透明背景抠图组件；未安装时按钮会保持不可用。</span></span></div>
+                          <div class="precision-cutout-model-install" id="precisionCutoutModelInstall" data-state="checking" aria-labelledby="precisionCutoutModelTitle" aria-busy="true">
+                            <div class="precision-cutout-model-state">
+                              <span class="precision-cutout-model-indicator" aria-hidden="true"></span>
+                              <div><strong id="precisionCutoutModelTitle" data-i18n="creator.cutout_model_title">本地抠图模型</strong><span id="precisionCutoutModelStatus" role="status" aria-live="polite" data-i18n="creator.cutout_model_checking">正在检查模型状态…</span></div>
+                            </div>
+                            <dl class="precision-cutout-model-facts">
+                              <div><dt data-i18n="creator.cutout_model_source">来源</dt><dd id="precisionCutoutModelSource">rembg-u2net-human-seg-v0.0.0</dd></div>
+                              <div><dt data-i18n="creator.cutout_model_size">大小</dt><dd id="precisionCutoutModelSize" data-i18n="creator.cutout_model_size_approx">约 176 MB</dd></div>
+                              <div><dt data-i18n="creator.cutout_model_path">本地路径</dt><dd><code id="precisionCutoutModelPath">storage/models/cutout/u2net_human_seg.onnx</code></dd></div>
+                            </dl>
+                            <p class="precision-cutout-model-note" data-i18n="creator.cutout_model_not_bundled">模型不随 GenBox 安装包内嵌；只有你主动确认后，GenBox 才会从固定的 rembg 托管资产下载并核验指纹。</p>
+                            <p class="precision-cutout-model-warning" id="precisionCutoutModelWarning" data-i18n="creator.cutout_model_license_warning">注意：模型转换链、训练数据来源及商业使用权利均为 UNVERIFIED。请在确认权利和使用场景后再下载。</p>
+                            <div class="precision-cutout-model-progress hidden" id="precisionCutoutModelProgress">
+                              <progress id="precisionCutoutModelProgressBar" max="100" value="0" aria-label="模型下载进度" data-i18n-aria-label="creator.cutout_model_progress_label"></progress>
+                              <span id="precisionCutoutModelProgressText">0%</span>
+                            </div>
+                            <div class="precision-cutout-model-actions">
+                              <button type="button" class="btn-secondary" id="btnPrecisionCutoutModelInstall" data-i18n="creator.cutout_model_install">下载并安装</button>
+                              <button type="button" class="btn-ghost hidden" id="btnPrecisionCutoutModelCancel" data-i18n="creator.cutout_model_cancel">取消下载</button>
+                              <button type="button" class="btn-secondary hidden" id="btnPrecisionCutoutModelRetry" data-i18n="creator.cutout_model_retry">重试</button>
+                              <button type="button" class="btn-ghost hidden" id="btnPrecisionCutoutModelRemoveCorrupt" data-i18n="creator.cutout_model_remove_corrupt">删除损坏文件</button>
+                              <button type="button" class="btn-ghost hidden" id="btnPrecisionCutoutModelDelete" data-i18n="creator.cutout_model_delete">删除模型</button>
+                            </div>
+                          </div>
+                          <div class="precision-cutout-actions">
+                            <button type="button" id="btnPrecisionCutout" class="btn-secondary" disabled data-i18n="creator.cutout_person_start">抠出人物</button>
+                            <button type="button" id="btnPrecisionCutoutRefine" class="btn-secondary" disabled aria-describedby="precisionCutoutSelectionHint" data-i18n="creator.cutout_refine">精修透明边缘</button>
+                            <button type="button" id="btnPrecisionCutoutCancel" class="btn-ghost hidden" disabled data-i18n="creator.cutout_cancel_wait">取消等待</button>
+                          </div>
+                          <div class="precision-cutout-refine-controls">
+                            <label class="precision-cutout-feather" for="precisionCutoutFeather"><span data-i18n="creator.cutout_refine_feather">羽化</span><input id="precisionCutoutFeather" type="range" min="0" max="64" step="1" value="0"><output id="precisionCutoutFeatherValue" for="precisionCutoutFeather">0</output><span>px</span></label>
+                            <label class="precision-cutout-selection"><input id="precisionCutoutUseSelection" type="checkbox" disabled><span data-i18n="creator.cutout_refine_use_selection">仅精修画布选区</span></label>
+                            <label class="precision-cutout-restore" for="precisionCutoutRestoreMode"><input id="precisionCutoutRestoreMode" type="checkbox" disabled aria-describedby="precisionCutoutRestoreHint"><span data-i18n="creator.cutout_restore_foreground">还原前景</span></label>
+                            <label class="precision-cutout-restore-alpha" for="precisionCutoutRestoreMinAlpha"><span data-i18n="creator.cutout_restore_min_alpha">最低不透明度</span><input id="precisionCutoutRestoreMinAlpha" type="range" min="0" max="255" step="1" value="255" disabled><output id="precisionCutoutRestoreMinAlphaValue" for="precisionCutoutRestoreMinAlpha">255</output><span>alpha</span></label>
+                            <small id="precisionCutoutRestoreHint" data-i18n="creator.cutout_restore_hint">需要已有透明抠图版本和画布选区，系统会用原始底图在所选区域内恢复前景。</small>
+                            <small id="precisionCutoutSelectionHint" data-i18n="creator.cutout_refine_selection_empty">用画笔、矩形或椭圆标出选区后可启用。</small>
+                          </div>
+                          <span id="precisionCutoutStatus" role="status" aria-live="polite" data-i18n="creator.cutout_unconfigured_clear">当前未安装透明背景抠图组件，可先用画笔圈选后交给编辑模型处理。</span>
+                        </div>
+                      </section>
+                      <section class="precision-size-tool" aria-labelledby="precisionSizeTitle">
+                        <div class="precision-size-heading">
+                          <div><span class="param-label" id="precisionSizeTitle" data-i18n="creator.precision_size_title">画布尺寸</span><small id="precisionSizeHint" data-i18n="creator.precision_size_preserve_hint">默认保持原图尺寸和比例，不会套用文生图设置。</small></div>
+                          <div class="precision-size-modes" role="group" aria-label="画布尺寸模式" data-i18n-aria-label="creator.precision_size_title">
+                            <button type="button" id="btnPrecisionSizePreserve" class="btn-secondary" aria-pressed="true" onclick="setPrecisionSizeMode('preserve')" data-i18n="creator.precision_size_preserve">保持原图</button>
+                            <button type="button" id="btnPrecisionSizeResize" class="btn-ghost" aria-pressed="false" onclick="setPrecisionSizeMode('resize')" data-i18n="creator.precision_size_resize">改变尺寸</button>
+                          </div>
+                        </div>
+                        <div id="precisionResizeFields" class="precision-resize-fields hidden">
+                          <label id="precisionSizePreset" for="precisionResizePreset"><span data-i18n="creator.precision_size_preset">常用尺寸</span><select id="precisionResizePreset"><option value="custom" data-i18n="creator.precision_size_custom">自定义</option><option value="1024x1024">1:1 · 1024 × 1024</option><option value="1536x1024">3:2 · 1536 × 1024</option><option value="1024x1536">2:3 · 1024 × 1536</option><option value="1536x864">16:9 · 1536 × 864</option><option value="1792x768">21:9 · 1792 × 768</option></select></label>
+                          <div class="precision-size-inputs"><label for="precisionResizeWidth"><span data-i18n="creator.precision_size_width">宽度 (px)</span><input id="precisionResizeWidth" type="number" min="64" max="8192" step="8" value="1024" oninput="markPrecisionResizeCustom()"></label><span aria-hidden="true">×</span><label for="precisionResizeHeight"><span data-i18n="creator.precision_size_height">高度 (px)</span><input id="precisionResizeHeight" type="number" min="64" max="8192" step="8" value="1024" oninput="markPrecisionResizeCustom()"></label></div>
+                          <small id="precisionAspectRatioHint" class="precision-aspect-ratio-hint" aria-live="polite" data-i18n="creator.precision_aspect_ratio_hint_empty">选择目标尺寸后，GenBox 会发送像素尺寸；后端会由尺寸推导构图比例约束。</small>
+                          <div id="precisionResizeCapability" class="precision-size-capability" role="group" aria-label="当前尺寸模型支持状态" data-i18n-aria-label="creator.precision_size_capability_label">
+                            <small id="precisionResizeCapabilityStatus" role="status" aria-live="polite" data-i18n="creator.precision_size_capability_model_required">先选择并确认一个精准改图模型，再确认当前目标尺寸。</small>
+                            <div class="precision-size-capability-actions">
+                              <button type="button" id="btnPrecisionConfirmResizeSize" class="btn-secondary hidden" onclick="confirmPrecisionResizeCapability()" disabled data-i18n="creator.precision_size_confirm_action_empty">确认当前尺寸</button>
+                              <button type="button" id="btnPrecisionRevokeResizeSize" class="btn-ghost hidden" onclick="revokePrecisionResizeCapability()" disabled data-i18n="creator.precision_size_revoke_action_empty">撤销当前尺寸确认</button>
+                            </div>
+                          </div>
+                          <div class="precision-output-size-policy" role="radiogroup" aria-labelledby="precisionOutputSizePolicyLabel" aria-describedby="precisionOutputSizePolicyHint precisionAspectRatioHint">
+                            <span id="precisionOutputSizePolicyLabel" data-i18n="creator.precision_output_size_policy">输出尺寸策略</span>
+                            <div class="precision-output-size-policy-options">
+                              <label><input type="radio" id="precisionOutputPolicyStrict" name="precisionOutputSizePolicy" value="strict" checked><span data-i18n="creator.precision_output_size_policy_strict">严格匹配</span></label>
+                              <label><input type="radio" id="precisionOutputPolicyFitCrop" name="precisionOutputSizePolicy" value="fit_crop"><span data-i18n="creator.precision_output_size_policy_fit_crop">本地适配</span></label>
+                            </div>
+                            <small id="precisionOutputSizePolicyHint" data-i18n="creator.precision_output_size_policy_strict_hint">默认严格匹配；上游返回尺寸不一致时失败，不会自动重试付费请求。</small>
+                          </div>
+                          <div class="precision-size-preset-editor">
+                            <label for="precisionResizePresetName"><span data-i18n="creator.precision_size_preset_name">预设名称</span><input id="precisionResizePresetName" type="text" maxlength="40" autocomplete="off" placeholder="例如：横版封面" data-i18n-placeholder="creator.precision_size_preset_name_placeholder"></label>
+                            <div class="precision-size-preset-actions" role="group" aria-label="已保存尺寸预设" data-i18n-aria-label="creator.precision_size_saved_actions">
+                              <button type="button" id="btnPrecisionSaveResizePreset" class="btn-secondary" data-i18n="creator.precision_size_save_preset">保存当前尺寸</button>
+                              <button type="button" id="btnPrecisionDeleteResizePreset" class="btn-ghost" disabled data-i18n="creator.precision_size_delete_preset">删除所选</button>
+                              <button type="button" id="btnPrecisionResetResizePresets" class="btn-ghost" disabled data-i18n="creator.precision_size_reset_presets">重置已保存</button>
+                            </div>
+                            <small id="precisionResizePresetStatus" class="precision-size-preset-status" role="status" aria-live="polite"></small>
+                          </div>
+                          <label for="precisionResizePromptPreset"><span data-i18n="creator.precision_size_prompt_preset">构图说明预设</span><select id="precisionResizePromptPreset" aria-describedby="precisionResizePromptPresetHint"><option value="" data-i18n="creator.precision_size_prompt_preset_choose">选择后追加到构图说明</option><option value="creator.precision_size_prompt_preset_keep_style_subject" data-i18n="creator.precision_size_prompt_preset_keep_style_subject">保持原有画面风格与主体元素，向四周自然扩展</option><option value="creator.precision_size_prompt_preset_keep_person" data-i18n="creator.precision_size_prompt_preset_keep_person">保持人物大小和位置，补全背景</option><option value="creator.precision_size_prompt_preset_center_subject" data-i18n="creator.precision_size_prompt_preset_center_subject">主体居中，扩展环境并保持光影一致</option><option value="creator.precision_size_prompt_preset_extend_left" data-i18n="creator.precision_size_prompt_preset_extend_left">向左延展场景并保持透视</option><option value="creator.precision_size_prompt_preset_extend_right" data-i18n="creator.precision_size_prompt_preset_extend_right">向右延展场景并保持透视</option><option value="creator.precision_size_prompt_preset_banner" data-i18n="creator.precision_size_prompt_preset_banner">扩展为横幅构图并保留关键元素</option></select></label>
+                          <small id="precisionResizePromptPresetHint" data-i18n="creator.precision_size_prompt_preset_append_hint">选择预设会追加到已有说明，不会覆盖；之后仍可自由编辑。</small>
+                          <label for="precisionResizePrompt"><span data-i18n="creator.precision_size_instruction">构图调整说明</span><textarea id="precisionResizePrompt" rows="2" maxlength="500" required aria-required="true" placeholder="例如：向左右扩展背景，人物大小和位置保持不变" data-i18n-placeholder="creator.precision_size_instruction_placeholder"></textarea></label>
+                          <small data-i18n="creator.precision_size_resize_hint">只有开启改变尺寸时才会把目标尺寸交给模型；模型不支持时会明确报错，不会偷偷裁切或拉伸。</small>
+                        </div>
+                      </section>
+                    <section class="precision-edit-list" aria-labelledby="precisionEditListTitle">
+                      <div class="precision-preview-heading">
+                        <span class="param-label" id="precisionEditListTitle" data-i18n="creator.precision_edit_changes">修改列表</span>
+                        <span id="precisionAnnotationCount" class="precision-annotation-count">0</span>
+                      </div>
+                      <div id="precisionEditObjectList" class="precision-object-list" aria-live="polite"></div>
+                    </section>
+                    </section>
+                    <!-- Kept hidden for the existing annotation update chain; the main canvas is the only visible annotation surface. -->
+                    <div class="precision-edit-preview precision-annotation-compat" hidden aria-hidden="true">
+                      <div id="precisionPreviewFrame"><img id="precisionAnnotationPreview" class="hidden" src="" alt="" data-i18n-alt="creator.precision_edit_annotation_preview"><span id="precisionPreviewEmpty"></span></div>
+                    </div>
+                    <section id="precisionTaskMonitor" class="precision-task-monitor precision-task-log-panel precision-task-idle" aria-label="处理进度" data-i18n-aria-label="creator.precision_processing_progress" aria-live="polite">
+                      <div class="precision-preview-heading"><span class="param-label" data-i18n="creator.precision_processing_progress">处理进度</span><span id="precisionTaskStatus"></span></div>
+                      <div class="precision-task-progress"><div id="precisionTaskProgressBar" class="precision-task-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="precisionTaskProgressFill" class="precision-task-progress-fill"></span></div><span id="precisionTaskProgress"></span><span id="precisionTaskElapsed"></span></div>
+                      <pre id="precisionTaskLog" class="precision-task-log"></pre>
+                      <p class="precision-task-empty" data-i18n="creator.precision_processing_empty">提交改图后，这里会显示当前阶段、结果和可恢复的错误信息。</p>
+                    </section>
+                    <section class="precision-model-picker" aria-labelledby="precisionModelPickerTitle">
+                      <div class="precision-picker-heading">
+                        <div class="precision-picker-title-row"><span class="param-label" id="precisionModelPickerTitle" data-i18n="creator.precision_edit_model_picker">选择编辑模型</span><span class="precision-help-tip"><button type="button" class="precision-help-trigger" aria-describedby="precisionModelHelp" aria-label="查看模型选择说明" data-i18n-aria-label="creator.precision_model_help_label">?</button><span id="precisionModelHelp" class="precision-help-content" role="tooltip" data-i18n="creator.precision_edit_model_picker_hint">先选端点，再选该端点提供的图片编辑模型。</span></span></div>
+                      </div>
+                      <label for="precisionEditProviderEndpoint">
+                        <span class="precision-picker-label" data-i18n="creator.precision_edit_endpoint_select">服务端点</span>
+                        <select id="precisionEditProviderEndpoint" onchange="selectPrecisionEditEndpoint()" disabled><option value="" data-i18n="creator.precision_edit_no_endpoint">暂无可用端点</option></select>
+                      </label>
+                      <label for="precisionEditProviderModel">
+                        <span class="precision-picker-label" data-i18n="creator.precision_edit_model_select">图片编辑模型</span>
+                      <select id="precisionEditProviderModel" onchange="selectPrecisionEditModel(this.value)" disabled>
+                        <option value="" data-i18n="creator.precision_edit_no_model">暂无已验证的精准改图模型</option>
+                      </select>
+                      </label>
+                      <div id="precisionEditModelVisibility" class="precision-model-visibility" aria-live="polite"></div>
+                      <small id="precisionProviderStatus" role="status" aria-live="polite" data-i18n="creator.precision_edit_model_hint">这里只显示已确认支持图片编辑的模型；自定义模型需要手动确认一次。</small>
+                      <button type="button" id="btnPrecisionAuthorizeModel" class="btn-secondary" onclick="authorizePrecisionEditModel()" data-i18n="creator.precision_edit_authorize" disabled>确认支持并启用</button>
+                      <small id="precisionModelAuthorizationHint" data-i18n="creator.precision_edit_authorize_hint">仅在你确认该端点和模型支持 OpenAI 兼容图片编辑时启用。</small>
+                    </section>
+                  </aside>
                 </div>
-                <input type="file" id="fileInputVar" accept="image/*" class="hidden" onchange="handleFileSelectVar(event)">
-                <div class="mt-12 flex gap-12">
-                  <div style="flex:1;"><div class="param-label"><span data-i18n="creator.output_size">输出尺寸</span></div><select id="varSize" class="w-full"><option value="1024x1024">1024×1024</option><option value="512x512">512×512</option><option value="256x256">256×256</option></select></div>
-                  <div style="flex:1;"><div class="param-label"><span data-i18n="creator.count">数量</span></div><select id="varCount" class="w-full"><option value="1">1</option><option value="2">2</option><option value="4">4</option></select></div>
+
+                <canvas id="precisionCompositeCanvas" class="hidden" aria-hidden="true"></canvas>
+                <input type="hidden" id="precisionSourceData" value="">
+                <input type="hidden" id="precisionAnnotationData" value="">
+                <input type="hidden" id="precisionCompositeData" value="">
+                <input type="hidden" id="precisionSourceMediaId" value="">
+              </div>
+
+              <!-- Inpaint Panel -->
+              <div class="glass-card hidden" id="panelVAR">
+                <div class="inpaint-panel">
+                  <div class="inpaint-explainer">
+                    <div>
+                      <div class="param-label"><span data-i18n="creator.inpaint_base_image">底图</span></div>
+                      <p><span data-i18n="creator.inpaint_mask_hint">在需要修改的区域涂白；黑色区域会保持不变。</span></p>
+                    </div>
+                    <div class="inpaint-mask-key" aria-hidden="true"><span class="inpaint-key-edit"></span><span data-i18n="creator.inpaint_edit_area">白色：编辑</span><span class="inpaint-key-keep"></span><span data-i18n="creator.inpaint_keep_area">黑色：保留</span></div>
+                  </div>
+
+                  <div class="inpaint-editor-grid">
+                    <div class="inpaint-source-column">
+                      <div class="param-label mb-8"><span data-i18n="creator.inpaint_base_image">底图</span></div>
+                      <div class="upload-zone inpaint-upload-zone" id="inpaintUploadZone" role="button" tabindex="0" onclick="openInpaintFilePicker(event)" onkeydown="openInpaintFilePicker(event)" aria-label="上传局部重绘底图" data-i18n-aria-label="creator.inpaint_upload" title="上传局部重绘底图" data-i18n-title="creator.inpaint_upload">
+                        <div id="inpaintUploadPlaceholder" style="text-align:center;">
+                          <div class="text-base mb-4">🖼</div>
+                          <div class="text-xs text-muted"><span data-i18n="creator.inpaint_upload">点击或拖拽上传一张底图</span></div>
+                        </div>
+                        <img id="inpaintUploadPreview" class="upload-preview-img hidden" src="" alt="">
+                      </div>
+                      <input type="file" id="fileInputInpaint" accept="image/*" class="hidden" onchange="handleInpaintFileSelect(event)">
+                    </div>
+
+                    <div class="inpaint-editor-column">
+                      <div class="inpaint-canvas-heading">
+                        <div class="param-label"><span data-i18n="creator.inpaint_mask">编辑遮罩</span></div>
+                        <span id="inpaintCanvasDimensions" class="text-xs text-muted"></span>
+                      </div>
+                      <div class="inpaint-canvas-shell is-empty" id="inpaintCanvasShell">
+                        <img id="inpaintBaseImage" class="inpaint-base-image hidden" src="" alt="">
+                        <canvas id="inpaintMaskCanvas" class="inpaint-mask-canvas" aria-label="编辑遮罩" data-i18n-aria-label="creator.inpaint_canvas_label" title="编辑遮罩" data-i18n-title="creator.inpaint_canvas_label"></canvas>
+                        <div class="inpaint-canvas-empty" id="inpaintCanvasEmpty"><span data-i18n="creator.inpaint_canvas_empty">上传底图后即可涂抹需要修改的区域</span></div>
+                      </div>
+                      <div class="inpaint-toolbar" role="toolbar" aria-label="局部重绘工具" data-i18n-aria-label="creator.inpaint_toolbar_label">
+                        <div class="inpaint-tool-group" role="group" aria-label="遮罩工具" data-i18n-aria-label="creator.inpaint_tool_group_label">
+                          <button type="button" class="btn-secondary inpaint-tool active" id="inpaintToolBrush" onclick="setInpaintTool('brush')" title="画笔" data-i18n-title="creator.inpaint_brush" aria-pressed="true"><span data-i18n="creator.inpaint_brush">画笔</span></button>
+                          <button type="button" class="btn-ghost inpaint-tool" id="inpaintToolEraser" onclick="setInpaintTool('eraser')" title="橡皮" data-i18n-title="creator.inpaint_eraser" aria-pressed="false"><span data-i18n="creator.inpaint_eraser">橡皮</span></button>
+                        </div>
+                        <label class="inpaint-brush-size" for="inpaintBrushSize"><span data-i18n="creator.inpaint_brush_size">笔刷</span><input id="inpaintBrushSize" type="range" min="8" max="240" step="1" value="48" oninput="setInpaintBrushSize(this.value)" aria-label="笔刷尺寸" data-i18n-aria-label="creator.inpaint_brush_size" title="笔刷尺寸" data-i18n-title="creator.inpaint_brush_size"><output id="inpaintBrushSizeValue" for="inpaintBrushSize">48</output></label>
+                        <div class="inpaint-tool-group inpaint-history-actions" role="group" aria-label="遮罩历史" data-i18n-aria-label="creator.inpaint_history_group_label">
+                          <button type="button" class="btn-ghost inpaint-icon-button" id="btnInpaintUndo" onclick="undoInpaintMask()" title="撤销" data-i18n-title="creator.inpaint_undo" disabled><span aria-hidden="true">↶</span><span class="sr-only" data-i18n="creator.inpaint_undo">撤销</span></button>
+                          <button type="button" class="btn-ghost inpaint-icon-button" id="btnInpaintRedo" onclick="redoInpaintMask()" title="重做" data-i18n-title="creator.inpaint_redo" disabled><span aria-hidden="true">↷</span><span class="sr-only" data-i18n="creator.inpaint_redo">重做</span></button>
+                          <button type="button" class="btn-ghost inpaint-clear-button" id="btnInpaintClear" onclick="clearInpaintMask()" title="清空遮罩" data-i18n-title="creator.inpaint_clear_mask" disabled><span data-i18n="creator.inpaint_clear">清空</span></button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="inpaint-prompt-field">
+                    <div class="param-label mb-8"><span data-i18n="creator.inpaint_prompt">修改提示词</span></div>
+                    <textarea id="txtPromptInpaint" rows="3" placeholder="描述希望如何修改已涂抹的区域..." data-i18n-placeholder="creator.inpaint_prompt_placeholder"></textarea>
+                  </div>
+                  <div id="inpaintProviderStatus" class="inpaint-provider-status" role="status" aria-live="polite"></div>
+                  <div id="generationModelHelp" class="generation-model-help" role="note" aria-live="polite"></div>
+                  <label class="inpaint-manual-choice">
+                    <input type="checkbox" id="inpaintManualChoice" onchange="setInpaintManualChoice(this.checked)">
+                    <span data-i18n="creator.inpaint_manual_choice">允许手动选择未确认支持的模型（提交时仍会检查）</span>
+                  </label>
                 </div>
               </div>
             </div>
@@ -1260,6 +1538,27 @@
   </div>
 </nav>
 
+<!-- Precision edit documentation dialog -->
+<div id="precisionDocsDialog" class="precision-docs-dialog hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="precisionDocsTitle" aria-describedby="precisionDocsIntro">
+  <div class="precision-docs-panel" id="precisionDocsPanel" tabindex="-1">
+    <header class="precision-docs-header">
+      <div><span class="precision-docs-kicker" data-i18n="creator.precision_docs_kicker">操作文档</span><h2 id="precisionDocsTitle" data-i18n="creator.precision_docs_title">精准改图</h2></div>
+      <button type="button" class="btn-ghost precision-docs-close" id="btnPrecisionDocsClose" onclick="closePrecisionDocsDialog()" aria-label="关闭精准改图文档" data-i18n-aria-label="creator.precision_docs_close"><span aria-hidden="true">×</span></button>
+    </header>
+    <div class="precision-docs-body">
+      <p id="precisionDocsIntro" class="precision-docs-intro" data-i18n="creator.precision_docs_intro">在一个工作台中完成轻量批注、透明抠图、纯尺寸扩图和版本比较；这里不会提供图层栈或全局滤镜。</p>
+      <section aria-labelledby="precisionDocsShapes"><h3 id="precisionDocsShapes" data-i18n="creator.precision_docs_shapes_title">形状与二次编辑</h3><p data-i18n="creator.precision_docs_shapes_body">用椭圆、矩形、箭头或画笔标出修改位置。切换到“选择/移动”后可拖动已有批注；形状使用控制点缩放，箭头直接拖动起点或终点。按住 Alt 再绘制可避免误选已有形状。</p></section>
+      <section aria-labelledby="precisionDocsEraser"><h3 id="precisionDocsEraser" data-i18n="creator.precision_docs_eraser_title">橡皮擦与历史</h3><p data-i18n="creator.precision_docs_eraser_body">橡皮擦可点击删除选中的对象，也可在画笔轨迹上拖动擦除；移动、缩放、擦除和清除都可撤销/重做。</p></section>
+      <section aria-labelledby="precisionDocsText"><h3 id="precisionDocsText" data-i18n="creator.precision_docs_text_title">文字批注</h3><p data-i18n="creator.precision_docs_text_body">文字工具单击画布添加文字；切到“选择/移动”后可拖动移动，双击已有文字可再次编辑，选中后可调整字号和颜色。</p></section>
+      <section aria-labelledby="precisionDocsCutout"><h3 id="precisionDocsCutout" data-i18n="creator.precision_docs_cutout_title">抠图、羽化与选区</h3><p data-i18n="creator.precision_docs_cutout_body">一键抠图会追加真实透明 PNG 版本。选择透明版本后可用 0–64 px 羽化精修 alpha 边缘；勾选“仅精修画布选区”时，画笔、矩形或椭圆会作为局部选区。棋盘格只用于预览，不会改变文件透明度。</p></section>
+      <section aria-labelledby="precisionDocsResize"><h3 id="precisionDocsResize" data-i18n="creator.precision_docs_resize_title">纯尺寸扩图</h3><p data-i18n="creator.precision_docs_resize_body">无需批注也可开启“改变尺寸”，填写目标宽高和构图说明后提交。请求只携带底图、目标尺寸与构图说明；模型必须明确声明支持该尺寸。</p></section>
+      <section aria-labelledby="precisionDocsVersions"><h3 id="precisionDocsVersions" data-i18n="creator.precision_docs_versions_title">版本与对比</h3><p data-i18n="creator.precision_docs_versions_body">版本栏只切换浏览结果，不会自动替换底图。“修改前”显示当前版本的父版本，“修改后”显示所选版本，“对比”可拖动分隔线。只有“设为下一次底图”会改变后续编辑基准。</p></section>
+      <section aria-labelledby="precisionDocsModels"><h3 id="precisionDocsModels" data-i18n="creator.precision_docs_models_title">模型筛选</h3><p data-i18n="creator.precision_docs_models_body">显示模型菜单只控制列表可见性并保存在本机；取消会还原打开前选择。别名仅用于显示，提交始终使用真实模型 ID；精准改图能力与尺寸能力必须由端点明确声明或由你确认，不会从名称猜测。</p></section>
+    </div>
+    <footer class="precision-docs-footer"><button type="button" class="btn-primary" onclick="closePrecisionDocsDialog()" data-i18n="common.done">完成</button></footer>
+  </div>
+</div>
+
 <!-- ══════════════════ 远程同步弹窗 ══════════════════ -->
 <div id="syncModal" class="modal-overlay sync-modal" role="dialog" aria-modal="true" aria-labelledby="syncModalTitle">
   <div class="glass-panel modal-card sync-modal-card">
@@ -1389,8 +1688,8 @@
       };
     })();
   </script>
-  <script src="/static/js/i18n.js?v=24"></script>
-<script src="/static/js/app-all.js?v=37"></script>
+  <script src="/static/js/i18n.js?v=32"></script>
+<script src="/static/js/app-all.js?v=45"></script>
 <script src="/static/js/sync.js?v=7"></script>
   <script src="/static/js/extensions.js?v=38"></script>
 </body>
