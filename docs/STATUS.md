@@ -5,7 +5,7 @@
 **Current phase:** Phase 9 Sender Push Source Cleanup (User-Selected) - **In Progress (receiver-grant shipped in v2.6.1 2026-08-21; sender PR #26 OPEN/MERGEABLE/UNSTABLE; no maintainer review; Vercel authorization failure is external state and cannot be handled automatically; clean E2E gates passed for receiver)**
 **Previous phase:** Phase 8 Upstream Delivery - **In Progress (proposal PRs open, awaiting upstream response)**
 
-## v2.6.6 local release preparation (updated 2026-09-03)
+## v2.6.6 release evidence (updated 2026-09-03)
 
 - **VERIFIED / HISTORICAL V2.6.5 TAG FAILURE 2026-09-03:** the annotated
   `v2.6.5` tag points to commit `aa8b5ecda13384ad5734dc077ea73c674c1e02cd`
@@ -13,12 +13,45 @@
   runtime smokes because `pydantic_settings` was absent from each frozen
   executable. Docker Image run `33715658700` failed its HTTP startup smoke.
   No v2.6.5 GitHub Release, release assets, or GHCR image were created.
-- **LOCAL / V2.6.6 SUCCESSOR CANDIDATE 2026-09-03:** the application version,
-  Docker Compose defaults, packaging tests, changelog, rolling notes, and
-  bilingual versioned notes identify `2.6.6`. This candidate carries Precision
-  Edit V4 plus the desktop dependency-collection and Docker readiness fixes.
-  It is a repair release candidate; no `v2.6.6` tag, Release, release asset, or
-  GHCR image exists, and hosted release CI remains unverified.
+- **VERIFIED / V2.6.6 RELEASE IDENTITY 2026-09-03:** release commit
+  `1f7bdb1058c7492d00cf74575fc5ecb83cbc6cb9` was pushed by fast-forward to
+  `codex/phase7-campaign-20260820`. The annotated `v2.6.6` tag was created once
+  and its remote dereference points exactly to that commit. No force push,
+  retag, tag deletion, or tag-history rewrite was performed.
+- **VERIFIED / HOSTED DESKTOP CI 2026-09-03:** natural tag-push run
+  `33726318721` (`https://github.com/liwei9745/GenBox/actions/runs/33726318721`)
+  started at `2026-09-03T07:05:03Z` and completed successfully at
+  `2026-09-03T07:10:28Z`. The release identity and source-test jobs passed;
+  Windows, macOS, and Linux each passed the packaged empty-directory runtime
+  smoke and packaged-client smoke; the automatic Create Release job passed.
+  The run was not manually dispatched or rerun.
+- **VERIFIED / HOSTED DOCKER CI 2026-09-03:** natural tag-push run
+  `33726318653` (`https://github.com/liwei9745/GenBox/actions/runs/33726318653`)
+  started at `2026-09-03T07:05:03Z` and completed successfully at
+  `2026-09-03T07:10:54Z`. The release identity gate passed, the exact Buildx
+  image passed runtime-import and bounded HTTP readiness smokes, and the saved
+  smoke-tested image was reloaded, identity-checked, and pushed without a
+  rebuild. The run was not manually dispatched or rerun.
+- **VERIFIED / GITHUB RELEASE 2026-09-03:** automatic Release
+  `https://github.com/liwei9745/GenBox/releases/tag/v2.6.6` was published at
+  `2026-09-03T07:10:18Z` as non-draft and non-prerelease. Its nine uploaded
+  assets are the raw Windows, macOS, and Linux clients; the three corresponding
+  platform ZIPs; `GenBox-Source-v2.6.6.zip`;
+  `GenBox-Docker-Compose-v2.6.6.zip`; and `SHA256SUMS.txt`.
+- **VERIFIED / RELEASE ASSET INTEGRITY 2026-09-03:** every one of the eight
+  artifact lines in the published `SHA256SUMS.txt` matches the corresponding
+  GitHub Release asset API SHA-256 digest. The checksum asset itself has API
+  digest `sha256:c6b5fec2790e11ba24e167c06d456edd36f45861cdd157c3003840e62c5e93d5`.
+  A fresh published Docker Compose ZIP download also matched
+  `sha256:9ce22f428cf39f1ec6fc2799705ae4cbe6427339b955e0633d34184e87e833c6`
+  and contained exactly the Compose/environment/quick-start files, public
+  license and notices, and validated bcrypt 5.0.0, NumPy 2.4.3, and ONNX
+  Runtime 1.24.3 license sidecars.
+- **VERIFIED / GHCR V2.6.6 2026-09-03:** container package version ID
+  `1203664665` was created at `2026-09-03T07:10:47Z`. Its immutable manifest
+  digest is
+  `sha256:8a4ec98e0dc274e546417996bd4a4f610e5364718080e38cde635dfe348b6fe6`
+  and it carries tags `1f7bdb1`, `2.6.6`, `2.6`, and `latest`.
 - **VERIFIED / SOURCE-EXPORT PRIVACY REMEDIATION:** the source export policy now
   excludes internal
   `.planning`, handoff/review, Phase 10 evidence, and the historical Phase 7
@@ -27,8 +60,8 @@
   or release documentation. Packaging regression coverage builds a real Git
   archive and rejects unexpected local-user paths, credential shapes, runtime
   vault/media data, ONNX/compiled/archive binaries, and non-minimal image
-  metadata. This remediation must be committed, independently reviewed, and
-  reproduced from a clean clone before any push, tag, or Release.
+  metadata. The remediation was committed in the frozen release commit and
+  reproduced from a fresh clean clone before the branch and tag were pushed.
 - **VERIFIED / LOCAL EXPORT-POLICY REGRESSION 2026-09-03:** the packaging suite
   passed `33`; the full repository suite passed `1293`. Tests use a real Git
   fixture and controlled synthetic path/credential sentinels, confirm internal
@@ -76,10 +109,10 @@
   still requires exactly one matching file, and writes the fixed public path
   `THIRD_PARTY_LICENSES/bcrypt/LICENSE`. No real key or passphrase is used or
   persisted.
-- **BOUNDARY / DESKTOP:** this local Windows result does not establish hosted
-  Windows, macOS, or Linux success and does not create artifacts suitable for
-  publication. Require all three hosted desktop empty-directory checks before
-  creating a Release.
+- **VERIFIED / HOSTED DESKTOP FOLLOW-UP:** the later natural v2.6.6 run recorded
+  above established Windows, macOS, and Linux hosted success and created the
+  published platform artifacts. The earlier local Windows result remains local
+  evidence and is not presented as the hosted result.
 - **VERIFIED / CI HTTP-SMOKE ROOT CAUSE 2026-09-03:** GitHub Actions run
   `33715658700` built image ID
   `sha256:e518cb38b5caefa5299a6d1b0fd0744fe57a8981f25eca412bd576de0020e972`
@@ -146,10 +179,10 @@
   the Windows block passed PowerShell parsing, and the working-tree diff passed
   whitespace validation. The pull-request evidence heredoc now has an explicit
   terminator and emits no end-of-file syntax warning.
-- **BOUNDARY / RESUME:** this workflow correction does not prove a new hosted
-  run and does not push an image, change a version, tag, Release, or deployment.
-  Resume by committing the reviewed candidate and observing the same-image
-  hosted smoke before making any publication claim.
+- **VERIFIED / HOSTED WORKFLOW FOLLOW-UP:** the later natural v2.6.6 runs
+  recorded above proved the corrected hosted desktop and same-image Docker
+  paths. The Docker publish job pushed only the saved smoke-tested image after
+  reloading and identity verification; no manual publication bypass was used.
 
 - **VERIFIED / LOCAL UPDATER FAIL-CLOSED GATE 2026-09-03:** automatic source,
   executable, and Docker update application now terminates with structured
@@ -197,9 +230,10 @@
 - **VERIFIED / RELEASE AND INSTALLER GATES 2026-09-03:** the combined targeted
   release-packaging and cutout suite passed `89`; both cutout installer and
   precision-edit MJS suites passed; Python/JavaScript syntax checks, workflow
-  YAML parsing (`6` jobs), and `git diff HEAD --check` passed. No public model
-  download, Provider request, VPS, release, tag, push, or cleanup was performed.
-- **VERIFIED / RELEASE-CANDIDATE AND DOCKER WORKFLOW CONTRACT 2026-09-03:**
+  YAML parsing (`6` jobs), and `git diff HEAD --check` passed. That local gate
+  performed no public model download, Provider request, VPS, release, tag,
+  push, or cleanup action.
+- **VERIFIED / RELEASE AND DOCKER WORKFLOW CONTRACT 2026-09-03:**
   changelog, rolling notes, bilingual v2.6.6 notes, and third-party notices are
   aligned to version `2.6.6`. The public notes contain stable release content;
   this status is the source for transient publication and hosted-CI state. The
@@ -211,9 +245,8 @@
   Docker workflow requires a tag to match the packaged version before build,
   uses the single `steps.build.outputs.imageid` for runtime-import and HTTP
   smoke checks, and verifies each publish tag resolves to that same image ID
-  before push. This is local workflow-contract evidence only; hosted v2.6.6
-  GitHub Actions remains unverified, and no tag, Release, or GHCR artifact is
-  claimed.
+  before push. The later natural hosted runs recorded above passed this
+  contract and published the v2.6.6 Release and GHCR image.
 - **VERIFIED / LOCAL V2.6.6 RELEASE CONTRACT 2026-09-03:**
   `python -m pytest -q tests/test_release_packaging.py` passed `42`;
   `python -m pytest -q` passed `1302`;
@@ -244,18 +277,17 @@
   packaged, but the ONNX model file remains external and operator-provided. It
   is not bundled, must pass the fixed size and hash checks, and the capability
   fails closed until the model is installed and validated.
-- **BOUNDARY:** this is local v2.6.6 release preparation only. No VPS,
-  production, source-cleanup, remote-deployment, clean-redeployment, or
-  cross-project acceptance is established. No v2.6.6 tag, Release, release
-  asset, or GHCR image exists, and no hosted CI result is inferred from local
-  verification. Public v2.6.6 notes intentionally omit these transient facts.
-  The pushed v2.6.5 tag remains an immutable historical failed candidate and
-  was not moved or deleted.
-- **RESUME:** after the sanitized candidate commit is independently reviewed,
-  run source packaging only from that clean checked-out commit with
-  `--source-commit <sha>`. Keep public-model download disabled until source
-  provenance and authorization receive a separate accepted decision and
-  evidence gate.
+- **BOUNDARY:** v2.6.6 hosted CI, Release assets, checksums, and GHCR publication
+  are verified. No VPS, production deployment, source cleanup, Provider call,
+  cutout-model download/inference, clean-redeployment acceptance, or new
+  cross-project acceptance was performed by this release operation. Automatic
+  update application remains disabled under ADR-027, and cutout-model
+  provenance and commercial-use rights remain **UNVERIFIED**. The historical
+  `v2.6.5` tag was not moved or deleted.
+- **RESUME:** preserve the immutable v2.6.6 tag and published assets. Treat VPS
+  deployment, source cleanup, real Provider validation, cutout-model rights,
+  and signed automatic-update work as separately authorized gates with fresh
+  evidence; do not infer them from this successful publication.
 
 ## Current bounded development strategy (2026-09-02)
 
