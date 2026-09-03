@@ -53,6 +53,7 @@ expect(js.includes("type: object.type === 'rect' ? 'rectangle' : 'ellipse'") && 
 expect(html.includes('precisionEditProviderEndpoint'), 'Precision edit needs an endpoint selector.');
 expect(js.includes('data-cap="precision_edit"'), 'Provider settings need an explicit precision capability control.');
 expect(html.includes('btnPrecisionAuthorizeModel'), 'Precision edit needs an explicit model authorization action.');
+expect(html.includes('precisionEditGptImage2Compatibility') && html.includes('btnPrecisionRevokeModel'), 'Precision edit needs an explicit GPT Image 2 compatibility choice and revoke action.');
 expect(html.includes('btnPrecisionConfirmResizeSize') && html.includes('btnPrecisionRevokeResizeSize'), 'Precision resize needs explicit confirm and revoke actions for the current target size.');
 expect(js.includes('/precision-capability'), 'Precision model authorization must use the backend capability endpoint.');
 expect(/id="btnPrecisionAuthorizeModel"[^>]*disabled/.test(html), 'Precision authorization must start disabled before provider data is ready.');
@@ -61,13 +62,40 @@ const authorizationState = js.slice(js.indexOf('function getPrecisionEditModelAu
 const authorizationFlow = js.slice(js.indexOf('function authorizePrecisionEditModel'), js.indexOf('// ═══════════════════════════════════════════════════════════════════', js.indexOf('function authorizePrecisionEditModel')));
 expect(authorizationState.includes('precisionEditModelPickerReady') && authorizationState.includes('endpointOptionCurrent') && authorizationState.includes('modelOptionCurrent'), 'Authorization readiness must validate the current rendered endpoint and model options.');
 expect(authorizationState.includes("valueProviderId === providerId") && authorizationState.includes("provider.endpoint_type === 'openai'"), 'Authorization readiness must reject stale provider/model pairs and non-OpenAI endpoints.');
+expect(authorizationState.includes('compatibilityResolution.sizeDeclarationValid') && authorizationState.includes('compatibilityActive'), 'Compatibility authorization must require an explicit canonical capability and expose persisted mapping state.');
+expect(extractFunction('precisionProviderModelRecords').includes('hasCapabilityRecord && !resolution.structureValid'), 'Newly discovered models without capability metadata must remain visible for explicit user confirmation, while malformed persisted records fail closed.');
 expect(authorizationFlow.indexOf('if (!state.canAuthorize) return;') < authorizationFlow.indexOf('confirm(') && authorizationFlow.indexOf('confirm(') < authorizationFlow.indexOf("_authFetch('/api/providers/"), 'Authorization must fail closed before confirmation and provider submission.');
+expect(authorizationFlow.includes('payload.compatibility_profile = PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE') && authorizationFlow.includes('function revokePrecisionEditModel'), 'Compatibility confirmation and revocation must use the persisted backend capability route.');
 expect(js.includes('precisionEditAuthorizationPending = true;') && js.includes("authorize.setAttribute('aria-busy', precisionEditAuthorizationPending ? 'true' : 'false')"), 'Authorization controls must stay disabled while confirmation is being saved.');
 expect(!js.includes("document.getElementById('precisionEditCanvas')"), 'Legacy precision canvas bindings must not remain.');
 expect(js.includes("switchSubTab('precision_edit')"), 'Transfer must enter precision_edit mode.');
 expect(js.includes("setCreatorWorkbenchMode('image', 'precision')"), 'Precision entry must atomically activate its workbench.');
 expect(js.includes("precision-preview-collapsed"), 'Collapsed preview must participate in the layout state model.');
 expect(!js.includes("function sendToImageToImage(e) { return sendToPrecisionEdit(e); }"), 'I2I must remain a separate workflow.');
+
+const optionalAuthorizationNodes = {
+  btnPrecisionAuthorizeModel: { style: {} },
+  btnPrecisionRevokeModel: { style: {}, focus() {} },
+  precisionEditCompatibilityOption: { style: {} },
+  precisionEditGptImage2Compatibility: { checked: false },
+};
+const optionalAuthorizationContext = vm.createContext({
+  document: { getElementById: (id) => optionalAuthorizationNodes[id] || null },
+});
+vm.runInContext([
+  'var allProviders = [];',
+  'var precisionEditModelPickerReady = false;',
+  'var precisionEditAuthorizationPending = false;',
+  extractFunction('getPrecisionEditModelAuthorizationState'),
+  extractFunction('updatePrecisionEditAuthorizationControl'),
+].join('\n'), optionalAuthorizationContext);
+assert.doesNotThrow(
+  () => optionalAuthorizationContext.updatePrecisionEditAuthorizationControl(),
+  'Authorization controls must no-op safely when the Precision Edit panel is absent or exposes only partial DOM nodes.',
+);
+assert.equal(optionalAuthorizationNodes.btnPrecisionAuthorizeModel.disabled, true);
+assert.equal(optionalAuthorizationNodes.btnPrecisionRevokeModel.disabled, true);
+assert.equal(optionalAuthorizationNodes.precisionEditGptImage2Compatibility.disabled, true);
 
 for (const id of ['precisionToolSelect', 'precisionToolEllipse', 'precisionToolArrow', 'precisionToolRect', 'precisionToolBrush', 'precisionToolEraser', 'precisionToolText', 'btnPrecisionUndo', 'btnPrecisionRedo', 'btnPrecisionClear']) {
   expect(html.includes('id="' + id + '"') || js.includes('id="' + id + '"'), 'Missing annotation control: ' + id);
@@ -1041,6 +1069,10 @@ const readinessNodes = {
   precisionResizeCapabilityStatus: resizeControlNode(),
   btnPrecisionConfirmResizeSize: resizeControlNode(),
   btnPrecisionRevokeResizeSize: resizeControlNode(),
+  btnPrecisionAuthorizeModel: resizeControlNode(),
+  btnPrecisionRevokeModel: resizeControlNode({ classList: classListRecorder(['hidden']) }),
+  precisionEditCompatibilityOption: resizeControlNode({ classList: classListRecorder(['hidden']) }),
+  precisionEditGptImage2Compatibility: resizeControlNode({ checked: false }),
   precisionEditStatus: resizeControlNode(),
   btnGen: resizeControlNode({ disabled: true }),
   btnStopGen: resizeControlNode(),
@@ -1053,6 +1085,7 @@ const readinessProvider = {
 };
 let resizeCapabilityCalls = [];
 let resizeCapabilityDeferred = null;
+let authorizationConfirmResult = true;
 const readinessContext = vm.createContext({
   document: {
     getElementById: (id) => readinessNodes[id] || null,
@@ -1064,6 +1097,7 @@ const readinessContext = vm.createContext({
   Event: class Event { constructor(type, options) { this.type = type; this.options = options; } },
   INPAINT_MAX_PIXELS: 24000000,
   PRECISION_MAX_OUTPUT_PIXELS: 64 * 1024 * 1024,
+  PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE: 'gpt-image-2',
   allProviders: [readinessProvider],
   selectedProviders: ['provider-a'],
   precisionEditSelectedModel: { providerId: 'provider-a', model: 'image-edit' },
@@ -1077,7 +1111,7 @@ const readinessContext = vm.createContext({
   precisionEditObjects: [], precisionEditHistory: [], precisionEditRedo: [],
   currentMode: 'precision_edit', genCurrentGenId: null, genCancelRequested: false,
   precisionGenerationControlState: 'idle', precisionSourceTaskEpoch: 0, precisionPendingSourceIntent: null,
-  confirm: () => true,
+  confirm: () => authorizationConfirmResult,
   encodeURIComponent,
   i18nText: (key, params) => key === 'creator.precision_size_prompt_preset_banner'
     ? 'Expand to a banner.'
@@ -1098,6 +1132,14 @@ const readinessContext = vm.createContext({
   findProvider: (id) => id === readinessProvider.id ? readinessProvider : null,
   loadProviders: async () => {
     const body = resizeCapabilityCalls.at(-1).body;
+    if (body.compatibility_profile) {
+      readinessProvider.model_capabilities[body.model] = { alias_of: body.compatibility_profile };
+      return;
+    }
+    if (!Object.prototype.hasOwnProperty.call(body, 'size')) {
+      readinessProvider.model_capabilities[body.model] = {};
+      return;
+    }
     const sizes = readinessProvider.model_capabilities['image-edit'].supported_sizes || [];
     readinessProvider.model_capabilities['image-edit'].supported_sizes = body.enabled
       ? Array.from(new Set(sizes.concat(body.size)))
@@ -1108,6 +1150,7 @@ const readinessContext = vm.createContext({
     if (resizeCapabilityDeferred) return resizeCapabilityDeferred.promise;
     return { ok: true, status: 200, json: async () => ({ ok: true }) };
   },
+  renderPrecisionEditModelPicker() {},
 });
 vm.runInContext([
   'precisionResizeDimensionKey', 'precisionResizeDimensions', 'precisionCapabilitySizeDeclaration', 'resolvePrecisionModelCapability', 'precisionProviderModelRecords', 'getPrecisionResizeCapability',
@@ -1117,10 +1160,44 @@ vm.runInContext([
   'precisionGreatestCommonDivisor', 'precisionResizeAspectConstraint', 'syncPrecisionAspectRatioHint',
   'bindPrecisionResizeControls', 'setPrecisionSizeMode', 'applyPrecisionResizePreset', 'applyPrecisionResizePromptPreset',
   'markPrecisionResizeCustom', 'getPrecisionSizeRequest', 'getPrecisionEditReadiness', 'updatePrecisionEditControls',
-  'getPrecisionEditModelAuthorizationState', 'submitPrecisionResizeCapability', 'confirmPrecisionResizeCapability', 'revokePrecisionResizeCapability',
+  'getPrecisionEditModelAuthorizationState', 'updatePrecisionEditAuthorizationControl', 'authorizePrecisionEditModel', 'revokePrecisionEditModel',
+  'submitPrecisionResizeCapability', 'confirmPrecisionResizeCapability', 'revokePrecisionResizeCapability',
   'setGenerationControls',
 ].map(extractFunction).join('\n'), readinessContext);
 readinessContext.bindPrecisionResizeControls();
+
+readinessProvider.model_capabilities = {
+  'gpt-image-2': { precision_edit: true, supported_sizes: ['1024x1024'] },
+};
+readinessContext.updatePrecisionEditAuthorizationControl();
+assert.equal(readinessContext.getPrecisionEditModelAuthorizationState().authorized, false);
+assert.equal(readinessContext.getPrecisionEditModelAuthorizationState().canUseCompatibility, true, 'Any selected upstream model may opt into an explicit canonical compatibility mapping.');
+assert.equal(readinessNodes.precisionEditCompatibilityOption.classList.contains('hidden'), false);
+readinessNodes.precisionEditGptImage2Compatibility.checked = true;
+authorizationConfirmResult = false;
+const callsBeforeCancelledAuthorization = resizeCapabilityCalls.length;
+readinessContext.authorizePrecisionEditModel();
+assert.equal(resizeCapabilityCalls.length, callsBeforeCancelledAuthorization, 'Cancelling compatibility confirmation must not persist or authorize anything.');
+assert.equal(readinessProvider.model_capabilities['image-edit'], undefined);
+
+authorizationConfirmResult = true;
+readinessContext.authorizePrecisionEditModel();
+await new Promise((resolve) => setImmediate(resolve));
+assert.deepEqual(resizeCapabilityCalls.at(-1).body, {
+  model: 'image-edit', enabled: true, confirmed: true, compatibility_profile: 'gpt-image-2',
+});
+assert.deepEqual(readinessProvider.model_capabilities['image-edit'], { alias_of: 'gpt-image-2' });
+assert.equal(readinessContext.getPrecisionEditModelAuthorizationState().authorized, true);
+assert.equal(readinessContext.precisionEditSelectedModel.model, 'image-edit', 'Compatibility mapping must not rewrite the real outbound model ID.');
+
+readinessContext.revokePrecisionEditModel();
+await new Promise((resolve) => setImmediate(resolve));
+assert.deepEqual(resizeCapabilityCalls.at(-1).body, { model: 'image-edit', enabled: false, confirmed: true });
+assert.equal(readinessContext.getPrecisionEditModelAuthorizationState().authorized, false, 'Revoking confirmation must fail closed until the user confirms again.');
+assert.equal(readinessNodes.precisionEditGptImage2Compatibility.checked, false, 'Revoking a compatibility mapping must clear its UI choice.');
+
+readinessProvider.model_capabilities = { 'image-edit': { precision_edit: true } };
+resizeCapabilityCalls = [];
 readinessNodes.btnPrecisionSizeResize.click = () => readinessContext.setPrecisionSizeMode('resize');
 readinessNodes.btnPrecisionSizeResize.click();
 assert.ok(readinessNodes.precisionAspectRatioHint.textContent.includes('1024x1024'), 'Entering resize mode must render the read-only backend-derived aspect-ratio hint immediately.');
@@ -2226,6 +2303,12 @@ const sourceActionsIndex = html.indexOf('id="precisionSourceActions"', stageActi
 const docsTriggerIndex = html.indexOf('id="btnPrecisionDocs"', stageActionsIndex);
 expect(canvasTitleIndex !== -1 && compactHelpIndex > canvasTitleIndex && dimensionsIndex > compactHelpIndex, 'Precision canvas title row must order label, compact help trigger, then dimensions.');
 expect(stageActionsIndex > dimensionsIndex && sourceActionsIndex > stageActionsIndex && docsTriggerIndex > stageActionsIndex, 'Precision source actions and the docs trigger must live in the right-side stage actions.');
+expect(/id="precisionReplaceDisabledHint" class="sr-only precision-source-action-status"/.test(html), 'The replacement status must start as a screen-reader-only hint with a dedicated component class.');
+const srOnlyUtilityIndex = css.lastIndexOf('[class~="sr-only"]');
+const srOnlyUtility = css.slice(srOnlyUtilityIndex);
+expect(srOnlyUtilityIndex > css.lastIndexOf('.precision-source-action-status.is-visible'), 'The screen-reader-only utility must remain after precision component layout rules.');
+expect(/\[class~="sr-only"\]\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?width:\s*1px;[\s\S]*?height:\s*1px;[\s\S]*?overflow:\s*hidden;[\s\S]*?clip:\s*rect\(0, 0, 0, 0\);[\s\S]*?clip-path:\s*inset\(50%\);[\s\S]*?white-space:\s*nowrap;[\s\S]*?\}\s*$/.test(srOnlyUtility), 'The loaded stylesheet must end with the complete screen-reader-only clipping contract.');
+expect(!/display:\s*none|visibility:\s*hidden/.test(srOnlyUtility), 'Screen-reader-only content must stay in the accessibility tree.');
 expect(/\.precision-workbench-help-trigger\s*\{[\s\S]*?position:\s*relative;[\s\S]*?z-index:\s*81;[\s\S]*?width:\s*44px;[\s\S]*?height:\s*44px;[\s\S]*?min-width:\s*44px;[\s\S]*?min-height:\s*44px;/.test(css), 'Precision help must retain its focus-ring stacking and 44px touch target.');
 expect(/\.precision-workbench-help-trigger\s*\{[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;[\s\S]*?color:\s*var\(--text-muted\);[\s\S]*?font-size:\s*0;/.test(css), 'The 44px help target must not render as an oversized visible circle.');
 expect(/\.precision-workbench-help-trigger::before\s*\{[\s\S]*?content:\s*"";[\s\S]*?width:\s*26px;[\s\S]*?height:\s*26px;[\s\S]*?border:\s*1px solid var\(--border-strong\);[\s\S]*?border-radius:\s*50%;[\s\S]*?background:\s*var\(--bg-surface\);/.test(css), 'Precision help must render a compact inner circle using the established help-icon styling.');
@@ -2460,6 +2543,7 @@ const replacementNodes = {
   precisionSourceActions: simpleElement(),
   btnPrecisionReplaceSource: simpleElement(),
   btnPrecisionReplaceFromGallery: simpleElement(),
+  precisionReplaceDisabledHint: simpleElement(),
   precisionFileInput: simpleElement(),
   precisionResizeWidth: simpleElement('1200'),
   precisionResizeHeight: simpleElement('800'),
@@ -2511,6 +2595,8 @@ vm.runInContext([
 ].map(extractFunction).join('\n'), replacementContext);
 vm.runInContext('updatePrecisionSourceActions()', replacementContext);
 assert.equal(replacementNodes.precisionSourceActions.classList.contains('hidden'), true, 'Replace actions must stay hidden before a source has loaded.');
+assert.equal(replacementNodes.precisionReplaceDisabledHint.classList.contains('sr-only'), true, 'The inactive replacement status must remain visually hidden.');
+assert.equal(replacementNodes.precisionReplaceDisabledHint.classList.contains('is-visible'), false, 'The inactive replacement status must not use the visible state class.');
 vm.runInContext("precisionEditSourceImageData = 'data:image/png;base64,source'; updatePrecisionSourceActions()", replacementContext);
 assert.equal(replacementNodes.precisionSourceActions.classList.contains('hidden'), false, 'Replace actions must appear after a source image loads.');
 assert.equal(replacementNodes.btnPrecisionReplaceSource.disabled, false);
@@ -2519,12 +2605,17 @@ vm.runInContext("genIsPrecisionTask = true; genCurrentGenId = 'active-task'; upd
 assert.equal(replacementNodes.btnPrecisionReplaceSource.disabled, true, 'An active precision task must disable local replacement in the UI.');
 assert.equal(replacementNodes.btnPrecisionReplaceFromGallery.disabled, true, 'An active precision task must disable gallery replacement in the UI.');
 assert.equal(replacementNodes.btnPrecisionReplaceSource.attributes['aria-disabled'], 'true');
+assert.equal(replacementNodes.precisionReplaceDisabledHint.classList.contains('sr-only'), false, 'An active precision task must expose the replacement status visually.');
+assert.equal(replacementNodes.precisionReplaceDisabledHint.classList.contains('is-visible'), true, 'An active precision task must use the explicit visible status class.');
 assert.equal(vm.runInContext('requestPrecisionLocalSource()', replacementContext), false, 'Local source handler must fail closed while a precision task is active.');
 assert.equal(replacementNodes.precisionFileInput.clickCount, 0, 'Active-task local replacement must not open the file picker.');
 assert.equal(vm.runInContext('openPrecisionGalleryPicker()', replacementContext), false, 'Gallery handler must fail closed while a precision task is active.');
 assert.equal(replacementFetches, 0, 'Active-task gallery replacement must not fetch gallery data.');
 
 vm.runInContext("genIsPrecisionTask = false; genCurrentGenId = null; precisionEditObjects = [{ id: 'dirty' }]; precisionEditSession = { source: { id: 'original' }, versions: [{ id: 'version-1' }], selectedVersionId: 'version-1', baseVersionId: 'version-1', taskBaseVersionId: 'version-1', view: 'compare', taskId: 'old-task' }; precisionEditSizeMode = 'resize';", replacementContext);
+vm.runInContext('updatePrecisionSourceActions()', replacementContext);
+assert.equal(replacementNodes.precisionReplaceDisabledHint.classList.contains('sr-only'), true, 'The replacement status must return to screen-reader-only presentation when the task becomes idle.');
+assert.equal(replacementNodes.precisionReplaceDisabledHint.classList.contains('is-visible'), false, 'The visible status class must clear when the task becomes idle.');
 replacementConfirm = false;
 const beforeCancelledReplacement = vm.runInContext('JSON.stringify({ precisionEditObjects, precisionEditSession, precisionEditSizeMode, precisionEditSourceImageData, precisionEditTool, precisionEditSelectedModel, precisionViewZoom })', replacementContext);
 assert.equal(vm.runInContext('preparePrecisionSourceReplacement()', replacementContext), false, 'Cancelling dirty-source confirmation must stop replacement.');

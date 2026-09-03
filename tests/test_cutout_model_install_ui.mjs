@@ -56,6 +56,8 @@ function classList(initial = []) {
   };
 }
 
+let activeElement = null;
+
 function node(initialClasses = []) {
   return {
     classList: classList(initialClasses),
@@ -64,14 +66,21 @@ function node(initialClasses = []) {
     textContent: '',
     value: 0,
     attributes: {},
+    listeners: {},
+    containedNodes: new Set(),
     setAttribute(name, value) { this.attributes[name] = String(value); },
     getAttribute(name) { return this.attributes[name]; },
+    addEventListener(name, callback) { this.listeners[name] = callback; },
+    contains(candidate) { return candidate === this || this.containedNodes.has(candidate); },
+    focus() { activeElement = this; },
   };
 }
 
 const elements = {
   precisionCutoutModelInstall: node(),
   precisionCutoutModelStatus: node(),
+  btnPrecisionCutoutModelDetails: node(),
+  precisionCutoutModelDetails: node(),
   precisionCutoutModelSource: node(),
   precisionCutoutModelSize: node(),
   precisionCutoutModelPath: node(),
@@ -84,6 +93,13 @@ const elements = {
   btnPrecisionCutoutModelRemoveCorrupt: node(['hidden']),
   btnPrecisionCutoutModelDelete: node(['hidden']),
 };
+elements.precisionCutoutModelDetails.containedNodes = new Set([
+  elements.btnPrecisionCutoutModelInstall,
+  elements.btnPrecisionCutoutModelCancel,
+  elements.btnPrecisionCutoutModelRetry,
+  elements.btnPrecisionCutoutModelRemoveCorrupt,
+  elements.btnPrecisionCutoutModelDelete,
+]);
 
 let fetchImpl = async () => { throw new Error('unexpected fetch'); };
 let calls = [];
@@ -109,7 +125,11 @@ const context = vm.createContext({
   precisionCutoutModelTaskId: '',
   precisionCutoutModelPollTimer: null,
   precisionCutoutModelMutationPending: false,
-  document: { getElementById: (id) => elements[id] || null },
+  precisionCutoutModelDetailsPreference: null,
+  document: {
+    get activeElement() { return activeElement; },
+    getElementById: (id) => elements[id] || null,
+  },
   _authFetch: (...args) => fetchImpl(...args),
   confirm: (message) => { confirmations.push(message); return confirmResult; },
   encodeURIComponent,
@@ -144,6 +164,9 @@ for (const name of [
   'precisionCutoutModelState',
   'formatPrecisionCutoutModelBytes',
   'precisionCutoutModelPhaseKey',
+  'setPrecisionCutoutModelDetailsExpanded',
+  'syncPrecisionCutoutModelDetails',
+  'togglePrecisionCutoutModelDetails',
   'renderPrecisionCutoutModelInstaller',
   'stopPrecisionCutoutModelPolling',
   'disablePrecisionCutoutForModel',
@@ -213,7 +236,11 @@ function renderedState(modelValue, taskValue = null, overrideState) {
   return vm.runInContext('renderPrecisionCutoutModelInstaller(precisionCutoutModel, precisionCutoutModelTask, ' + (overrideState ? JSON.stringify(overrideState) : 'undefined') + ')', context);
 }
 
+assert.equal(renderedState(null, null, 'checking'), 'checking');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true', 'Status checks should expose the detail region until readiness is known.');
 assert.equal(renderedState(model()), 'missing');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true', 'Missing models should reveal install guidance and actions by default.');
+assert.equal(elements.precisionCutoutModelDetails.classList.contains('hidden'), false);
 assert.equal(elements.btnPrecisionCutoutModelInstall.classList.contains('hidden'), false);
 assert.equal(elements.btnPrecisionCutoutModelInstall.disabled, false);
 assert.equal(elements.precisionCutoutModelPath.textContent, 'storage/models/cutout/u2net_human_seg.onnx');
@@ -234,20 +261,47 @@ assert.equal(calls.length, 0);
 assert.equal(confirmations.length, 0);
 
 assert.equal(renderedState(model({ state: 'downloading' }), task('downloading')), 'downloading');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true', 'Active downloads should expose progress and cancellation by default.');
 assert.equal(elements.precisionCutoutModelProgress.classList.contains('hidden'), false);
 assert.equal(elements.precisionCutoutModelProgressBar.value, 35);
 assert.equal(elements.btnPrecisionCutoutModelCancel.classList.contains('hidden'), false);
 
 assert.equal(renderedState(model({ installed: true, state: 'hash_mismatch', reason: 'model_hash_mismatch' })), 'hash_mismatch');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true', 'Fingerprint failures should expose recovery actions by default.');
 assert.equal(elements.btnPrecisionCutoutModelRetry.classList.contains('hidden'), false);
 assert.equal(elements.btnPrecisionCutoutModelRemoveCorrupt.classList.contains('hidden'), false);
 
 assert.equal(renderedState(model({ state: 'error', reason: 'download_failed' })), 'error');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true', 'Installer errors should expose recovery actions by default.');
 assert.equal(elements.btnPrecisionCutoutModelRetry.classList.contains('hidden'), false);
 
 const readyModel = model({ installed: true, valid: true, state: 'ready', reason: '', download_supported: true });
+elements.btnPrecisionCutoutModelRetry.focus();
+assert.equal(activeElement, elements.btnPrecisionCutoutModelRetry);
 assert.equal(renderedState(readyModel), 'ready');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'false', 'Ready models should use the compact summary by default.');
+assert.equal(elements.precisionCutoutModelDetails.classList.contains('hidden'), true);
+assert.equal(elements.precisionCutoutModelDetails.getAttribute('aria-hidden'), 'true');
+assert.equal(activeElement, elements.btnPrecisionCutoutModelDetails, 'Collapsing details must return focus to the toggle when focus was inside.');
 assert.equal(elements.btnPrecisionCutoutModelDelete.classList.contains('hidden'), false);
+
+assert.equal(vm.runInContext('togglePrecisionCutoutModelDetails()', context), true, 'The details control should expand a compact ready card.');
+assert.equal(context.precisionCutoutModelDetailsPreference, true);
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true');
+assert.equal(elements.precisionCutoutModelDetails.classList.contains('hidden'), false);
+assert.equal(renderedState(readyModel), 'ready');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true', 'Refresh renders must preserve a user expansion.');
+assert.equal(vm.runInContext('togglePrecisionCutoutModelDetails()', context), false);
+assert.equal(context.precisionCutoutModelDetailsPreference, false);
+assert.equal(renderedState(model({ state: 'error', reason: 'download_failed' })), 'error');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true', 'Attention states must override a remembered ready-state collapse.');
+assert.equal(vm.runInContext('togglePrecisionCutoutModelDetails()', context), true, 'Attention states must not be manually collapsed.');
+assert.equal(context.precisionCutoutModelDetailsPreference, false, 'Forced expansion must not overwrite the remembered ready-state preference.');
+assert.equal(renderedState(readyModel), 'ready');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'false', 'Returning to ready should restore the remembered collapse.');
+context.precisionCutoutModelDetailsPreference = null;
+assert.equal(renderedState(readyModel), 'ready');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'false');
 
 confirmResult = false;
 confirmations.length = 0;
@@ -372,17 +426,21 @@ await new Promise((resolve) => setImmediate(resolve));
 assert.ok(calls.includes('/api/image-tools/cutout/model/download/cutout-model-task-1'), 'Refresh must resume polling the backend-reported active task.');
 
 for (const id of [
-  'precisionCutoutModelInstall', 'precisionCutoutModelStatus', 'precisionCutoutModelProgress',
+  'precisionCutoutModelInstall', 'precisionCutoutModelStatus', 'btnPrecisionCutoutModelDetails',
+  'precisionCutoutModelDetails', 'precisionCutoutModelProgress',
   'btnPrecisionCutoutModelInstall', 'btnPrecisionCutoutModelCancel', 'btnPrecisionCutoutModelRetry',
   'btnPrecisionCutoutModelRemoveCorrupt', 'btnPrecisionCutoutModelDelete',
 ]) expect(html.includes('id="' + id + '"'), 'Missing cutout model installer element: ' + id);
+expect(html.includes('aria-controls="precisionCutoutModelDetails"'), 'The details toggle must name its controlled region.');
+expect(html.includes('aria-expanded="true"'), 'The initial checking state must expose its details accessibly.');
+expect(js.includes("cutoutModelDetailsToggle.addEventListener('click', togglePrecisionCutoutModelDetails)"), 'The details control must be bound once with the other Precision Edit controls.');
 expect(html.includes('storage/models/cutout/u2net_human_seg.onnx'), 'The UI must show the fixed relative model path.');
 expect(html.includes('rembg-u2net-human-seg-v0.0.0'), 'The UI must show the fixed source identity.');
 expect(!/precisionCutoutModel[^>]*(?:input|type="url")/i.test(html), 'The installer must not expose a remote URL input.');
 expect(js.includes("_authFetch('/api/image-tools/cutout/model/download/' + encodeURIComponent(taskId), { method: 'DELETE' })"), 'Cancellation must use DELETE download/{task_id}.');
 expect(!js.includes('/api/image-tools/cutout/model/tasks/'), 'The obsolete model task path must not be used.');
 expect(!js.includes('localStorage') || !js.slice(js.indexOf('function precisionCutoutModelRecord'), js.indexOf('function precisionCutoutFeatherRadius')).includes('localStorage'), 'Installer task state must not be persisted in browser storage.');
-for (const selector of ['.precision-cutout-model-install', '.precision-cutout-model-facts', '.precision-cutout-model-progress', '.precision-cutout-model-actions']) {
+for (const selector of ['.precision-cutout-model-install', '.precision-cutout-model-summary', '.precision-cutout-model-toggle', '.precision-cutout-model-details', '.precision-cutout-model-facts', '.precision-cutout-model-progress', '.precision-cutout-model-actions']) {
   expect(css.includes(selector), 'Missing compact installer CSS: ' + selector);
 }
 expect(css.includes('overflow-wrap: anywhere;') && css.includes('word-break: break-all;'), 'Long model facts must not overflow narrow layouts.');
@@ -390,7 +448,7 @@ for (const key of [
   'cutout_model_title', 'cutout_model_checking', 'cutout_model_missing', 'cutout_model_downloading',
   'cutout_model_hash_mismatch', 'cutout_model_error', 'cutout_model_ready', 'cutout_model_install_confirm',
   'cutout_model_remove_retry_confirm', 'cutout_model_delete_confirm', 'cutout_model_license_warning',
-  'cutout_model_download_unavailable', 'cutout_model_install_unavailable',
+  'cutout_model_download_unavailable', 'cutout_model_install_unavailable', 'cutout_model_details',
 ]) expect(i18n.includes("MESSAGES['creator." + key + "']"), 'Missing bilingual installer translation: ' + key);
 
 console.log('cutout model installer UI assertions passed');

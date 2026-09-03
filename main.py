@@ -88,6 +88,7 @@ from providers import (
     enhance_prompt_with_llm_detailed,
     fetch_models_from_upstream,
     generate_multi,
+    resolve_provider_precision_model_capability,
     translate_upstream_error,
 )
 
@@ -330,6 +331,7 @@ MAX_PRECISION_ANNOTATION_TEXT = 500
 MAX_PRECISION_ANNOTATION_TEXT_TOTAL = 4000
 MAX_PRECISION_PROMPT_TEXT = 2000
 MAX_PRECISION_RESIZE_PROMPT_TEXT = 500
+PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE = "gpt-image-2"
 MAX_PRECISION_OUTPUT_PIXELS = int(
     os.getenv("GENBOX_PRECISION_MAX_OUTPUT_PIXELS", str(64 * 1024 * 1024))
 )
@@ -1382,12 +1384,9 @@ def _provider_precision_model_capability(provider, selected_model: str) -> bool:
 
 
 def _provider_precision_model_resolution(provider, selected_model: str):
-    extra = getattr(provider, "extra", None)
-    model_capabilities = extra.get("model_capabilities") if isinstance(extra, dict) else None
-    return resolve_precision_model_capability(
-        model_capabilities,
+    return resolve_provider_precision_model_capability(
+        provider,
         selected_model,
-        max_output_pixels=MAX_PRECISION_OUTPUT_PIXELS,
     )
 
 
@@ -1569,6 +1568,7 @@ class PrecisionCapabilityReq(BaseModel):
     enabled: bool
     confirmed: bool = False
     size: Optional[str] = None
+    compatibility_profile: Optional[str] = None
 
 
 def _is_masked_secret(value: str) -> bool:
@@ -1600,6 +1600,14 @@ def _merge_provider_secrets(existing: ProviderConfig, req: ProviderCreateReq) ->
         payload["endpoints"] = list(existing_endpoints)
     if "precision_edit_profile" not in req.model_fields_set:
         payload["precision_edit_profile"] = existing.precision_edit_profile
+    incoming_extra = payload.get("extra")
+    existing_extra = existing.extra if isinstance(existing.extra, dict) else {}
+    if isinstance(incoming_extra, dict) and "model_capabilities" not in incoming_extra:
+        existing_model_capabilities = existing_extra.get("model_capabilities")
+        if isinstance(existing_model_capabilities, dict):
+            incoming_extra = dict(incoming_extra)
+            incoming_extra["model_capabilities"] = existing_model_capabilities
+            payload["extra"] = incoming_extra
     return payload
 
 
@@ -2113,6 +2121,23 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
     """Persist an explicit, per-model user confirmation for precision editing."""
     model = str(req.model or "").strip()
     size_requested = "size" in req.model_fields_set
+    compatibility_profile = req.compatibility_profile
+    if compatibility_profile is not None and compatibility_profile != PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "precision_compatibility_profile_invalid",
+                "message": "Compatibility profile is not supported",
+            },
+        )
+    if compatibility_profile is not None and (size_requested or not req.enabled):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "precision_compatibility_request_invalid",
+                "message": "Compatibility profile is accepted only when enabling a model capability",
+            },
+        )
     normalized_size = None
     if size_requested:
         normalized_size = _normalize_precision_size(req.size)
@@ -2130,7 +2155,7 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
     known_models = {str(item).strip() for item in (provider.models or [provider.model]) if str(item).strip()}
     if not model or model not in known_models:
         raise HTTPException(status_code=400, detail={"code": "precision_model_invalid", "message": "Model must belong to the selected provider"})
-    if (req.enabled or size_requested) and not req.confirmed:
+    if (req.enabled or size_requested or compatibility_profile is not None) and not req.confirmed:
         raise HTTPException(status_code=400, detail={"code": "precision_confirmation_required", "message": "Explicit user confirmation is required"})
     capabilities = dict(provider.capabilities or {})
     extra = dict(provider.extra or {})
@@ -2186,7 +2211,48 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
             capability_record.pop(legacy_field, None)
         capability_record["supported_sizes"] = supported_sizes
         model_capabilities[capability_model] = capability_record
+    elif req.enabled and compatibility_profile is not None:
+        canonical_resolution = resolve_precision_model_capability(
+            model_capabilities,
+            compatibility_profile,
+            max_output_pixels=MAX_PRECISION_OUTPUT_PIXELS,
+        )
+        if (
+            model == compatibility_profile
+            or not canonical_resolution.structure_valid
+            or not canonical_resolution.precision_edit_confirmed
+            or not canonical_resolution.size_declaration_valid
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "precision_compatibility_target_unavailable",
+                    "message": "The selected compatibility profile requires an explicit canonical capability and supported sizes",
+                },
+            )
+        selected_record = dict(selected)
+        for field_name in (
+            "precision_edit",
+            "supported_sizes",
+            "supportedSizes",
+            "sizes",
+            "dimensions",
+            "alias_of",
+            "canonical_model",
+        ):
+            selected_record.pop(field_name, None)
+        selected_record["alias_of"] = compatibility_profile
+        model_capabilities[model] = selected_record
+        capabilities[PRECISION_EDIT_CAPABILITY] = True
+        provider.endpoint_type = "openai"
+        provider.precision_edit_profile = (
+            PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE
+        )
+        capability_model = model
+        capability_record = selected_record
     elif req.enabled:
+        for alias_field in ("alias_of", "canonical_model"):
+            capability_record.pop(alias_field, None)
         capabilities[PRECISION_EDIT_CAPABILITY] = True
         capability_record[PRECISION_EDIT_CAPABILITY] = True
         provider.endpoint_type = "openai"
@@ -2195,7 +2261,11 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
                 PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_REPEATED_IMAGE
             )
     else:
+        capability_model = model
+        capability_record = dict(selected)
         capability_record.pop(PRECISION_EDIT_CAPABILITY, None)
+        capability_record.pop("alias_of", None)
+        capability_record.pop("canonical_model", None)
     model_capabilities[capability_model] = capability_record
     extra["model_capabilities"] = model_capabilities
     provider.capabilities = capabilities
@@ -2211,7 +2281,10 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
             "size": normalized_size,
             "supported_sizes": supported_sizes,
         }
-    return {"ok": True, "provider_id": provider_id, "model": model, "enabled": req.enabled}
+    result = {"ok": True, "provider_id": provider_id, "model": model, "enabled": req.enabled}
+    if compatibility_profile is not None:
+        result["compatibility_profile"] = compatibility_profile
+    return result
 
 
 @app.delete("/api/providers/{provider_id}")

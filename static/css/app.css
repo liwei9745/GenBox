@@ -4917,6 +4917,35 @@ body.dock-auto-hide.dock-pinned .dock-reveal-handle span {
   background: color-mix(in srgb, #16a34a 8%, var(--bg-surface));
 }
 
+.precision-model-compatibility {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.precision-model-compatibility input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.precision-model-authorization-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.precision-model-authorization-actions > button:only-child,
+.precision-model-authorization-actions > button.hidden + button:not(.hidden),
+.precision-model-authorization-actions > button:not(.hidden):has(+ button.hidden) {
+  grid-column: 1 / -1;
+}
+
 .precision-mode-hidden { display: none !important; }
 
 .precision-object-list { display: grid; gap: 7px; max-height: 280px; overflow: auto; }
@@ -4968,7 +4997,8 @@ body.dock-auto-hide.dock-pinned .dock-reveal-handle span {
 .precision-compare-stage input[type="range"] { position: absolute; inset: auto 8px 8px; width: calc(100% - 16px); accent-color: var(--accent); }
 .precision-cutout-tool { display: grid; min-width: 0; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
 .precision-cutout-heading { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.precision-cutout-model-install { display: grid; min-width: 0; gap: 7px; padding: 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-surface); }
+.precision-cutout-model-install { display: grid; min-width: 0; gap: 7px; padding: 8px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-surface); }
+.precision-cutout-model-summary { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 7px; }
 .precision-cutout-model-state { display: grid; grid-template-columns: 9px minmax(0, 1fr); align-items: start; gap: 7px; }
 .precision-cutout-model-state > div { display: grid; min-width: 0; gap: 2px; }
 .precision-cutout-model-state strong { color: var(--text-primary); font-size: 12px; line-height: 1.35; }
@@ -4979,6 +5009,13 @@ body.dock-auto-hide.dock-pinned .dock-reveal-handle span {
 .precision-cutout-model-install[data-state="ready"] .precision-cutout-model-indicator { background: #15803d; }
 .precision-cutout-model-install[data-state="hash_mismatch"] .precision-cutout-model-indicator { background: #b45309; }
 .precision-cutout-model-install[data-state="error"] .precision-cutout-model-indicator { background: #b91c1c; }
+.precision-cutout-model-toggle { display: inline-flex; min-width: 0; min-height: 28px; align-items: center; justify-content: center; gap: 3px; padding: 3px 6px; color: var(--text-secondary); font-size: 10px; white-space: nowrap; }
+.precision-cutout-model-toggle-icon { display: inline-block; font-size: 12px; line-height: 1; transition: transform 0.16s ease; }
+.precision-cutout-model-toggle[aria-expanded="true"] .precision-cutout-model-toggle-icon { transform: rotate(180deg); }
+.precision-cutout-model-install[data-state="hash_mismatch"][data-details-expanded="false"] .precision-cutout-model-toggle,
+.precision-cutout-model-install[data-state="error"][data-details-expanded="false"] .precision-cutout-model-toggle { color: #b45309; }
+.precision-cutout-model-details { display: grid; min-width: 0; gap: 7px; padding-top: 7px; border-top: 1px solid var(--border); }
+.precision-cutout-model-details.hidden { display: none; }
 .precision-cutout-model-facts { display: grid; min-width: 0; gap: 3px; margin: 0; }
 .precision-cutout-model-facts > div { display: grid; min-width: 0; grid-template-columns: 56px minmax(0, 1fr); gap: 6px; align-items: baseline; }
 .precision-cutout-model-facts dt { color: var(--text-muted); font-size: 10px; }
@@ -6238,6 +6275,14 @@ body.dock-auto-hide.dock-pinned .dock-reveal-handle span {
   justify-content: flex-end;
 }
 
+.precision-source-action-status.is-visible {
+  flex: 1 0 100%;
+  color: var(--warning);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: end;
+}
+
 .precision-source-action {
   display: inline-flex;
   min-height: 30px;
@@ -6450,6 +6495,10 @@ body.precision-docs-open {
   .precision-cutout-model-actions button {
     width: 100%;
   }
+
+  .precision-cutout-model-summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
 }
 
 #pageGenerate.precision-workbench .precision-canvas-session {
@@ -6565,4 +6614,18 @@ body.precision-docs-open {
   #pageGenerate.precision-workbench .precision-size-preset-actions {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Keep this accessibility utility after component layout rules. */
+[class~="sr-only"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }

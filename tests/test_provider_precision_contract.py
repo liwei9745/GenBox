@@ -546,9 +546,9 @@ def test_precision_explicit_image_array_profile_uses_fixed_field_and_alias_model
     assert [name for name, _ in request["files"]] == ["image[]", "image[]"]
 
 
-def test_precision_single_source_image_profile_uses_source_and_source_size(monkeypatch):
+def test_precision_single_source_image_profile_uses_explicit_alias_mapping_and_real_model_name(monkeypatch):
     calls = []
-    alias = "relay-defined-image-alias"
+    alias = "gpt-image2-b"
     source_image = _data_url(size=(64, 64), color=(8, 16, 24))
     annotation_image = _data_url(size=(64, 64), color=(220, 32, 48))
     source_bytes = base64.b64decode(source_image.split(",", 1)[1])
@@ -562,14 +562,19 @@ def test_precision_single_source_image_profile_uses_source_and_source_size(monke
     monkeypatch.setattr(providers.httpx, "AsyncClient", lambda **kwargs: Client())
     monkeypatch.setattr(providers, "_save_image", lambda *args, **kwargs: "gallery/result.png")
 
+    provider = _provider(
+        model="gpt-image-2",
+        precision_edit_profile=(
+            PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE
+        ),
+    )
+    provider.model = alias
+    provider.models = [alias]
+    provider.extra["model_capabilities"][alias] = {"alias_of": "gpt-image-2"}
+
     result = asyncio.run(
         providers._dispatch_generate(
-            _provider(
-                model=alias,
-                precision_edit_profile=(
-                    PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE
-                ),
-            ),
+            provider,
             "strict edit",
             "openai",
             **_v2_kwargs(
@@ -591,7 +596,55 @@ def test_precision_single_source_image_profile_uses_source_and_source_size(monke
     assert [name for name, _ in request["files"]] == ["image"]
     assert request["files"][0][1][0] == "source.png"
     assert request["files"][0][1][1] == source_bytes
+    assert request["files"][0][1][2] == "image/png"
     assert request["files"][0][1][1] != base64.b64decode(annotation_image.split(",", 1)[1])
+
+
+@pytest.mark.parametrize(
+    "unconfirmed_model",
+    [
+        "custom-image-model",
+        "gpt-image2-preview",
+        "gpt-image2-unrelated",
+        "gpt-image2-c",
+        "gpt-image2-d",
+    ],
+)
+def test_precision_unconfirmed_catalog_model_never_inherits_gpt_image_2_before_http(
+    monkeypatch,
+    unconfirmed_model,
+):
+    provider = _provider(
+        model="gpt-image-2",
+        precision_edit_profile=(
+            PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE
+        ),
+    )
+    provider.model = unconfirmed_model
+    provider.models = [unconfirmed_model]
+    client_constructions = []
+    monkeypatch.setattr(
+        providers.httpx,
+        "AsyncClient",
+        lambda **kwargs: client_constructions.append(kwargs),
+    )
+
+    result = asyncio.run(
+        providers._dispatch_generate(
+            provider,
+            "strict edit",
+            "openai",
+            **_v2_kwargs(
+                model=unconfirmed_model,
+                image_data=_data_url(size=(64, 64)),
+                annotation_image_data=_data_url(size=(64, 64), color=(220, 32, 48)),
+            ),
+        )
+    )
+
+    assert result.success is False
+    assert "precision_edit_capability_not_authorized" in result.error
+    assert client_constructions == []
 
 
 def test_precision_single_source_image_profile_resize_uses_explicit_target(monkeypatch):

@@ -182,6 +182,13 @@
     "creator.precision_edit_authorize_hint":{"zh-CN":"仅在你确认该端点和模型支持 OpenAI 兼容图片编辑时启用。","en":"Enable only after confirming this endpoint and model support OpenAI-compatible image editing."},
     "creator.precision_edit_authorize_confirm":{"zh-CN":"我确认已验证该端点和模型支持 OpenAI 兼容图片编辑。启用后仍会在提交时校验。","en":"I confirm this endpoint and model support OpenAI-compatible image editing. Submission remains validated."},
     "creator.precision_edit_authorize_saved":{"zh-CN":"已保存用户确认，可以提交精准改图。","en":"User confirmation saved. Precise edit can now be submitted."},
+    "creator.precision_edit_compatibility_label":{"zh-CN":"按 GPT Image 2 精准改图方式调用","en":"Use the GPT Image 2 precision-edit contract"},
+    "creator.precision_edit_compatibility_help_label":{"zh-CN":"查看兼容方式说明","en":"View compatibility guidance"},
+    "creator.precision_edit_compatibility_help":{"zh-CN":"仅在你已验证当前模型是 GPT Image 2 的上游别名时选择；真实模型 ID 仍会原样提交。","en":"Select only after verifying that this model is an upstream alias of GPT Image 2. The real model ID is still submitted unchanged."},
+    "creator.precision_edit_compatibility_confirm":{"zh-CN":"我确认当前模型是 GPT Image 2 的上游别名，并同意保存兼容映射、继承已确认尺寸及单源图片调用合约。继续吗？","en":"I confirm this model is an upstream GPT Image 2 alias and agree to save the compatibility mapping, confirmed sizes, and single-source image contract. Continue?"},
+    "creator.precision_edit_revoke":{"zh-CN":"撤销确认","en":"Revoke confirmation"},
+    "creator.precision_edit_revoke_confirm":{"zh-CN":"撤销当前模型的精准改图确认和兼容映射？撤销后将不能提交，直到再次确认。","en":"Revoke this model's precision-edit confirmation and compatibility mapping? Submission will be blocked until it is confirmed again."},
+    "creator.precision_edit_revoked":{"zh-CN":"已撤销当前模型的精准改图确认。","en":"Precision-edit confirmation revoked for the current model."},
     "creator.precision_edit_authorized":{"zh-CN":"已启用","en":"Enabled"},
     "creator.precision_edit_unconfirmed":{"zh-CN":"待确认","en":"Unconfirmed"},
     "creator.precision_edit_tools":{"zh-CN":"批注工具","en":"Annotation tools"},
@@ -1952,7 +1959,7 @@
   MESSAGES['creator.precision_docs_versions_title'] = {"zh-CN":"版本与对比","en":"Versions and comparison"};
   MESSAGES['creator.precision_docs_versions_body'] = {"zh-CN":"版本栏只切换浏览结果，不会自动替换底图。“修改前”显示当前版本的父版本，“修改后”显示所选版本，“对比”可拖动分隔线。只有“设为下一次底图”会改变后续编辑基准。","en":"The version rail only browses results and never replaces the base image automatically. Before shows the current version parent, After shows the selected version, and Compare exposes a draggable divider. Only Use as next base changes the base for later edits."};
   MESSAGES['creator.precision_docs_models_title'] = {"zh-CN":"模型筛选","en":"Model filtering"};
-  MESSAGES['creator.precision_docs_models_body'] = {"zh-CN":"显示模型菜单只控制列表可见性并保存在本机；取消会还原打开前选择。别名仅用于显示，提交始终使用真实模型 ID；精准改图能力与尺寸能力必须由端点明确声明或由你确认，不会从名称猜测。","en":"The displayed-model menu only controls local list visibility; Cancel restores the selection from before opening. Aliases are display-only, while submissions always use the real model ID; precise-edit and size capabilities must be declared by the endpoint or explicitly confirmed by you, never inferred from names."};
+  MESSAGES['creator.precision_docs_models_body'] = {"zh-CN":"显示模型菜单只控制列表可见性并保存在本机；取消会还原打开前选择。提交始终使用真实模型 ID；精准改图能力与尺寸能力必须由端点明确声明或由你确认，别名仅通过显式配置或你确认的受限兼容映射继承合约。","en":"The displayed-model menu only controls local list visibility; Cancel restores the selection from before opening. Submissions always use the real model ID; precise-edit and size capabilities must be endpoint-declared or explicitly confirmed, and aliases inherit a contract only through explicit configuration or a limited compatibility mapping you confirm."};
   MESSAGES['creator.precision_replace_image'] = {"zh-CN":"更换图片","en":"Replace image"};
   MESSAGES['creator.precision_replace_task_active'] = {"zh-CN":"请先停止当前精准改图任务，再更换图片。","en":"Stop the current precise edit task before replacing the image."};
   MESSAGES['creator.precision_replace_confirm'] = {"zh-CN":"更换图片会清除当前提示词与修改说明、批注、版本、尺寸调整和任务记录。继续吗？","en":"Replacing the image clears the current prompt and instructions, annotations, versions, size changes, and task details. Continue?"};
@@ -2130,6 +2137,7 @@
   MESSAGES['creator.cutout_cancel_wait'] = {"zh-CN":"取消等待","en":"Cancel waiting"};
   MESSAGES['creator.cutout_cancelled'] = {"zh-CN":"已取消等待；本地处理可能仍在收尾，结果不会添加到当前会话。","en":"Waiting was cancelled. Local processing may still finish, but its result will not be added to this session."};
   MESSAGES['creator.cutout_model_title'] = {"zh-CN":"本地抠图模型","en":"Local cutout model"};
+  MESSAGES['creator.cutout_model_details'] = {"zh-CN":"详情","en":"Details"};
   MESSAGES['creator.cutout_model_checking'] = {"zh-CN":"正在检查模型状态…","en":"Checking model status…"};
   MESSAGES['creator.cutout_model_source'] = {"zh-CN":"来源","en":"Source"};
   MESSAGES['creator.cutout_model_size'] = {"zh-CN":"大小","en":"Size"};

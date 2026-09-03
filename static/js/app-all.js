@@ -23,6 +23,7 @@ var PRECISION_CUTOUT_MODEL_INSTALL_CONTRACT = 'genbox-cutout-model-install-v1';
 var PRECISION_CUTOUT_MODEL_SOURCE_ID = 'rembg-u2net-human-seg-v0.0.0';
 var PRECISION_CUTOUT_MODEL_RELATIVE_PATH = 'storage/models/cutout/u2net_human_seg.onnx';
 var PRECISION_CUTOUT_MODEL_POLL_INTERVAL_MS = 800;
+var PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE = 'gpt-image-2';
 var PRECISION_CUTOUT_MAX_FEATHER = 64;
 var PRECISION_MAX_OUTPUT_PIXELS = 64 * 1024 * 1024;
 var PRECISION_HISTORY_LIMIT = 30;
@@ -104,6 +105,7 @@ var precisionCutoutModelTaskToken = 0;
 var precisionCutoutModelTaskId = '';
 var precisionCutoutModelPollTimer = null;
 var precisionCutoutModelMutationPending = false;
+var precisionCutoutModelDetailsPreference = null;
 
 // 生图数量: {provider_id: int}
 var providerQuantities = {};
@@ -859,6 +861,7 @@ function ensurePrecisionEditPanel() {
   var cutoutFeather = cutoutControls.feather;
   var cutoutUseSelection = cutoutControls.useSelection;
   var cutoutModelInstall = cutoutControls.modelInstallButton;
+  var cutoutModelDetailsToggle = cutoutControls.modelDetailsToggle;
   var cutoutModelCancel = cutoutControls.modelCancelButton;
   var cutoutModelRetry = cutoutControls.modelRetryButton;
   var cutoutModelRemoveCorrupt = cutoutControls.modelRemoveCorruptButton;
@@ -901,6 +904,10 @@ function ensurePrecisionEditPanel() {
   if (cutoutModelInstall && cutoutModelInstall.dataset.precisionBound !== 'true') {
     cutoutModelInstall.dataset.precisionBound = 'true';
     cutoutModelInstall.addEventListener('click', requestPrecisionCutoutModelInstall);
+  }
+  if (cutoutModelDetailsToggle && cutoutModelDetailsToggle.dataset.precisionBound !== 'true') {
+    cutoutModelDetailsToggle.dataset.precisionBound = 'true';
+    cutoutModelDetailsToggle.addEventListener('click', togglePrecisionCutoutModelDetails);
   }
   if (cutoutModelCancel && cutoutModelCancel.dataset.precisionBound !== 'true') {
     cutoutModelCancel.dataset.precisionBound = 'true';
@@ -1967,6 +1974,8 @@ function getPrecisionCutoutControls() {
     status: document.getElementById('precisionCutoutStatus'),
     modelPanel: document.getElementById('precisionCutoutModelInstall'),
     modelStatus: document.getElementById('precisionCutoutModelStatus'),
+    modelDetailsToggle: document.getElementById('btnPrecisionCutoutModelDetails'),
+    modelDetails: document.getElementById('precisionCutoutModelDetails'),
     modelSource: document.getElementById('precisionCutoutModelSource'),
     modelSize: document.getElementById('precisionCutoutModelSize'),
     modelPath: document.getElementById('precisionCutoutModelPath'),
@@ -2009,9 +2018,14 @@ function updatePrecisionSourceActions() {
   var actions = document.getElementById('precisionSourceActions');
   var replace = document.getElementById('btnPrecisionReplaceSource');
   var gallery = document.getElementById('btnPrecisionReplaceFromGallery');
+  var hint = document.getElementById('precisionReplaceDisabledHint');
   var hasSource = !!precisionEditSourceImageData;
   var blocked = precisionSourceTaskIsActive();
   if (actions) actions.classList.toggle('hidden', !hasSource);
+  if (hint) {
+    hint.classList.toggle('sr-only', !blocked);
+    hint.classList.toggle('is-visible', blocked);
+  }
   [replace, gallery].forEach(function(button) {
     if (!button) return;
     button.disabled = blocked;
@@ -3950,6 +3964,39 @@ function precisionCutoutModelPhaseKey(task) {
   return 'creator.cutout_model_downloading';
 }
 
+function setPrecisionCutoutModelDetailsExpanded(expanded, remember) {
+  var controls = getPrecisionCutoutControls();
+  var panel = controls.modelPanel;
+  var toggle = controls.modelDetailsToggle;
+  var details = controls.modelDetails;
+  if (!panel || !toggle || !details) return false;
+  var nextExpanded = expanded === true;
+  if (remember !== false) precisionCutoutModelDetailsPreference = nextExpanded;
+  if (!nextExpanded && typeof document !== 'undefined' && details.contains &&
+      details.contains(document.activeElement) && typeof toggle.focus === 'function') {
+    toggle.focus();
+  }
+  panel.dataset.detailsExpanded = nextExpanded ? 'true' : 'false';
+  toggle.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+  details.classList.toggle('hidden', !nextExpanded);
+  details.setAttribute('aria-hidden', nextExpanded ? 'false' : 'true');
+  return nextExpanded;
+}
+
+function syncPrecisionCutoutModelDetails(state) {
+  var expanded = state !== 'ready' || precisionCutoutModelDetailsPreference === true;
+  return setPrecisionCutoutModelDetailsExpanded(expanded, false);
+}
+
+function togglePrecisionCutoutModelDetails() {
+  var controls = getPrecisionCutoutControls();
+  var panel = controls.modelPanel;
+  var toggle = controls.modelDetailsToggle;
+  if (!panel || !toggle) return false;
+  if (panel.dataset.state !== 'ready') return setPrecisionCutoutModelDetailsExpanded(true, false);
+  return setPrecisionCutoutModelDetailsExpanded(toggle.getAttribute('aria-expanded') !== 'true', true);
+}
+
 function renderPrecisionCutoutModelInstaller(model, task, overrideState) {
   var controls = getPrecisionCutoutControls();
   var panel = controls.modelPanel;
@@ -3968,6 +4015,7 @@ function renderPrecisionCutoutModelInstaller(model, task, overrideState) {
 
   panel.dataset.state = state;
   panel.setAttribute('aria-busy', (state === 'checking' || state === 'downloading' || precisionCutoutModelMutationPending) ? 'true' : 'false');
+  syncPrecisionCutoutModelDetails(state);
   controls.modelStatus.textContent = i18nText(statusKey, { progress: String(Math.round(progress)) });
   if (controls.modelSource) controls.modelSource.textContent = PRECISION_CUTOUT_MODEL_SOURCE_ID;
   if (controls.modelSize) controls.modelSize.textContent = formatPrecisionCutoutModelBytes(model && model.size_bytes);
@@ -4740,23 +4788,65 @@ function getPrecisionEditModelAuthorizationState() {
   var resolution = valid ? resolvePrecisionModelCapability(provider, model) : null;
   var authorized = !!(valid && provider.endpoint_type === 'openai' && provider.capabilities &&
     provider.capabilities.precision_edit === true && resolution && resolution.structureValid && resolution.precisionEditConfirmed);
+  var compatibilityResolution = valid
+    ? resolvePrecisionModelCapability(provider, PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE)
+    : null;
+  var compatibilityActive = !!(authorized && resolution.aliasDepth === 1 &&
+    resolution.canonicalModel === PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE);
+  var canUseCompatibility = !!(valid && !authorized && model !== PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE &&
+    compatibilityResolution && compatibilityResolution.structureValid &&
+    compatibilityResolution.precisionEditConfirmed && compatibilityResolution.sizeDeclarationValid);
   return {
     valid: valid,
     provider: valid ? provider : null,
     providerId: valid ? providerId : '',
     model: valid ? model : '',
     authorized: authorized,
-    canAuthorize: !!(valid && !authorized && provider.endpoint_type === 'openai' && !precisionEditAuthorizationPending)
+    compatibilityActive: compatibilityActive,
+    canUseCompatibility: canUseCompatibility,
+    canAuthorize: !!(valid && !authorized && provider.endpoint_type === 'openai' && !precisionEditAuthorizationPending),
+    canRevoke: !!(valid && authorized && !precisionEditAuthorizationPending)
   };
 }
 
 function updatePrecisionEditAuthorizationControl() {
   var state = getPrecisionEditModelAuthorizationState();
   var authorize = document.getElementById('btnPrecisionAuthorizeModel');
+  var revoke = document.getElementById('btnPrecisionRevokeModel');
+  var compatibilityRow = document.getElementById('precisionEditCompatibilityOption');
+  var compatibility = document.getElementById('precisionEditGptImage2Compatibility');
+  var selectionKey = state.valid ? state.providerId + '::' + state.model : '';
+  if (compatibility) {
+    var previousSelectionKey = compatibility.dataset ? compatibility.dataset.selectionKey : '';
+    if (previousSelectionKey !== selectionKey) {
+      if (compatibility.dataset) compatibility.dataset.selectionKey = selectionKey;
+      compatibility.checked = state.compatibilityActive;
+    } else if (state.authorized) {
+      compatibility.checked = state.compatibilityActive;
+    }
+    if (!state.canUseCompatibility && !state.compatibilityActive) compatibility.checked = false;
+    compatibility.disabled = precisionEditAuthorizationPending || state.authorized || !state.canUseCompatibility;
+  }
+  if (compatibilityRow && compatibilityRow.classList && typeof compatibilityRow.classList.toggle === 'function') {
+    compatibilityRow.classList.toggle('hidden', !state.canUseCompatibility && !state.compatibilityActive);
+  }
   if (authorize) {
     authorize.disabled = !state.canAuthorize;
-    authorize.classList.toggle('hidden', state.valid && state.authorized);
-    authorize.setAttribute('aria-busy', precisionEditAuthorizationPending ? 'true' : 'false');
+    if (authorize.classList && typeof authorize.classList.toggle === 'function') {
+      authorize.classList.toggle('hidden', state.valid && state.authorized);
+    }
+    if (typeof authorize.setAttribute === 'function') {
+      authorize.setAttribute('aria-busy', precisionEditAuthorizationPending ? 'true' : 'false');
+    }
+  }
+  if (revoke) {
+    revoke.disabled = !state.canRevoke;
+    if (revoke.classList && typeof revoke.classList.toggle === 'function') {
+      revoke.classList.toggle('hidden', !state.authorized);
+    }
+    if (typeof revoke.setAttribute === 'function') {
+      revoke.setAttribute('aria-busy', precisionEditAuthorizationPending ? 'true' : 'false');
+    }
   }
   return state;
 }
@@ -4810,7 +4900,9 @@ function precisionProviderModelRecords(provider) {
     var cap = record.capabilities && typeof record.capabilities === 'object' ? record.capabilities : caps[id];
     var resolution = resolvePrecisionModelCapability(provider, id);
     var explicitlyUnavailable = resolution.capability && Object.prototype.hasOwnProperty.call(resolution.capability, 'precision_edit') && resolution.capability.precision_edit === false;
-    var unavailable = !resolution.structureValid || explicitlyUnavailable || (provider.capabilities && provider.capabilities.precision_edit === false);
+    var hasCapabilityRecord = Object.prototype.hasOwnProperty.call(caps, id);
+    var unavailable = (hasCapabilityRecord && !resolution.structureValid) || explicitlyUnavailable ||
+      (provider.capabilities && provider.capabilities.precision_edit === false);
     var alias = String(record.alias || record.display_name || record.label || '').trim();
     return { id: id, alias: alias, capability: cap || null, unavailable: unavailable, authorized: resolution.structureValid && resolution.precisionEditConfirmed && provider.endpoint_type === 'openai' && provider.capabilities && provider.capabilities.precision_edit === true };
   }).filter(Boolean);
@@ -5206,13 +5298,40 @@ function selectPrecisionEditModel(value, fromRender) {
 function authorizePrecisionEditModel() {
   var state = updatePrecisionEditAuthorizationControl();
   if (!state.canAuthorize) return;
-  if (!confirm(i18nText('creator.precision_edit_authorize_confirm'))) return;
+  var compatibility = document.getElementById('precisionEditGptImage2Compatibility');
+  var useCompatibility = !!(compatibility && compatibility.checked && state.canUseCompatibility);
+  var confirmKey = useCompatibility
+    ? 'creator.precision_edit_compatibility_confirm'
+    : 'creator.precision_edit_authorize_confirm';
+  if (!confirm(i18nText(confirmKey))) return;
   precisionEditAuthorizationPending = true;
   updatePrecisionEditAuthorizationControl();
-  _authFetch('/api/providers/' + encodeURIComponent(state.providerId) + '/precision-capability', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:state.model,enabled:true,confirmed:true})})
+  var payload = {model:state.model,enabled:true,confirmed:true};
+  if (useCompatibility) payload.compatibility_profile = PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE;
+  _authFetch('/api/providers/' + encodeURIComponent(state.providerId) + '/precision-capability', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){if(!r.ok)return r.json().then(function(body){throw new Error((body.detail&&body.detail.message)||('HTTP '+r.status));});return r.json();})
     .then(function(){return loadProviders();})
     .then(function(){precisionEditAuthorizationPending=false;renderPrecisionEditModelPicker();updatePrecisionEditControls();setStatus(i18nText('creator.precision_edit_authorize_saved'));})
+    .catch(function(error){precisionEditAuthorizationPending=false;updatePrecisionEditAuthorizationControl();updatePrecisionEditControls();setStatus(i18nText('common.save_failed_colon')+error.message);});
+}
+
+function revokePrecisionEditModel() {
+  var state = updatePrecisionEditAuthorizationControl();
+  if (!state.canRevoke) return;
+  if (!confirm(i18nText('creator.precision_edit_revoke_confirm'))) return;
+  precisionEditAuthorizationPending = true;
+  updatePrecisionEditAuthorizationControl();
+  _authFetch('/api/providers/' + encodeURIComponent(state.providerId) + '/precision-capability', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:state.model,enabled:false,confirmed:true})})
+    .then(function(r){if(!r.ok)return r.json().then(function(body){throw new Error((body.detail&&body.detail.message)||('HTTP '+r.status));});return r.json();})
+    .then(function(){return loadProviders();})
+    .then(function(){
+      var compatibility = document.getElementById('precisionEditGptImage2Compatibility');
+      if (compatibility) {
+        compatibility.checked = false;
+        if (compatibility.dataset) compatibility.dataset.selectionKey = '';
+      }
+      precisionEditAuthorizationPending=false;renderPrecisionEditModelPicker();updatePrecisionEditControls();setStatus(i18nText('creator.precision_edit_revoked'));
+    })
     .catch(function(error){precisionEditAuthorizationPending=false;updatePrecisionEditAuthorizationControl();updatePrecisionEditControls();setStatus(i18nText('common.save_failed_colon')+error.message);});
 }
 

@@ -2,79 +2,77 @@
 
 ## Purpose
 
-Keep product documentation useful without turning README or release notes into
-an unlimited development diary. Each fact belongs to one document class.
+Keep documentation useful without turning README or release notes into an
+unlimited development diary. The audience-facing hub is
+[`docs/README.md`](README.md); this file defines ownership and update rules.
 
-The user-facing navigation hub is [`docs/README.md`](README.md). This file owns
-maintenance policy; the hub owns discoverability by audience and task.
+## Documentation Classes
 
-## Pinned Documents
+| Class | Audience | Source-of-truth rule | Examples |
+|---|---|---|---|
+| User guide | People installing or operating GenBox | Describe shipped workflows and current limitations in task language | [README](../README.md), [client quick start](CLIENT-QUICKSTART.md), [Docker quick start](DOCKER-QUICKSTART.md) |
+| Release-frozen record | People installing or reviewing one exact release | Freeze after publication except for factual corrections | [v2.6.6 Chinese notes](../release-notes-v2.6.6-zh.md), [English notes](../release-notes-v2.6.6.md) |
+| Pinned product or developer contract | Maintainers, contributors, and integrators | Change only when a durable product, architecture, protocol, or safety boundary changes | [product](PRODUCT.md), [architecture](ARCHITECTURE.md), [decisions](DECISIONS.md), [integration](INTEGRATION.md) |
+| Rolling current state | Maintainers and auditors | Replace stale claims with dated evidence; do not infer live state from a plan | [status](STATUS.md), [roadmap](ROADMAP.md), [changelog](../CHANGELOG.md) |
+| Historical evidence | Auditors and people resuming earlier work | Preserve the original scope and evidence label; never use it as the current product claim | Dated `PHASE*`, preflight, review, and handoff documents |
 
-These documents are primary entry points and should stay concise, accurate, and
-easy to discover.
+## User And Release Documents
 
 | Document | Owns | Update trigger |
 |---|---|---|
-| `README.md` / `README_EN.md` | Product positioning, major current release, installation, documentation links | A user-visible capability, installation path, or stable release changes |
-| `docs/PRODUCT.md` | Product goals, users, journeys, scope | Product direction changes |
-| `docs/ARCHITECTURE.md` | System boundaries and technical architecture | A durable architecture boundary changes |
-| `docs/DECISIONS.md` | Accepted technical and security decisions | Add or supersede an ADR; never silently rewrite history |
-| `docs/INTEGRATION.md` | Cross-project protocol contract | GenBox/chatgpt2api protocol changes |
-| `docs/DEVELOPMENT-LIFECYCLE.md` | Environment, sanitization, and release gates | Delivery or safety policy changes |
+| [`README.md`](../README.md) / [`README_EN.md`](../README_EN.md) | Product positioning, stable release, installation choices, documentation links | A shipped capability, installation path, or stable release changes |
+| [`docs/CLIENT-QUICKSTART.md`](CLIENT-QUICKSTART.md) | Windows, macOS, and Linux client startup and local data handling | Client names, startup, first-run flow, or storage location changes |
+| [`docs/DOCKER-QUICKSTART.md`](DOCKER-QUICKSTART.md) | Compose configuration, administrator key handling, startup, status, and update | Docker defaults, required environment, image name, or operator commands change |
+| [`docs/CUTOUT-MODEL-GUIDE.md`](CUTOUT-MODEL-GUIDE.md) | Manual cutout-model installation, fixed fingerprint, upstream sources, and conservative use boundary | Model identity, supported installation paths, verification contract, or rights evidence changes |
+| [`RELEASE_NOTES.md`](../RELEASE_NOTES.md) | Rolling pointer to the latest stable bilingual release notes | A stable release is published or a failed candidate is superseded |
+| [`release-notes-v2.6.6-zh.md`](../release-notes-v2.6.6-zh.md) / [`release-notes-v2.6.6.md`](../release-notes-v2.6.6.md) | Frozen v2.6.6 changes, verification scope, packaging, and limitations | Factual correction only after publication |
+| In-app Precision Edit `文档说明` | Task-oriented Precision Edit operation help | Workbench interaction or user terminology changes; keep release scope in the current release notes |
 
-Pinned documents must not contain transient IPs, credentials, task logs, or
-unverified environment claims.
+Precision Edit documentation must not imply that the ONNX checkpoint is
+bundled or available for production network installation. Its provenance and
+commercial-use rights remain **UNVERIFIED**, production download/install is
+disabled, and local UI or fixture tests do not establish real Provider or
+cutout-model E2E.
 
-## Rolling Development Documents
+## Pinned Contracts
 
-These documents change as implementation progresses.
+| Document | Owns | Update trigger |
+|---|---|---|
+| [`docs/PRODUCT.md`](PRODUCT.md) | Product goals, users, journeys, scope, and non-goals | Product direction changes |
+| [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) | Repository boundaries and system architecture | A durable architecture boundary changes |
+| [`docs/DECISIONS.md`](DECISIONS.md) | Accepted and superseded technical or security decisions | Add or supersede an ADR; never silently rewrite history |
+| [`docs/INTEGRATION.md`](INTEGRATION.md) | GenBox/chatgpt2api protocol and responsibility contract | Identity, request, receipt, cleanup, or cross-project acceptance changes |
+| [`docs/chatgpt2api-push-integration.md`](chatgpt2api-push-integration.md) | Push v1 sender/receiver design | Push transport, retry, scheduling, or cleanup design changes |
+| [`docs/extensions-deployment-contract.md`](extensions-deployment-contract.md) | Extension deployment acceptance and delivery behavior | Deployment workflow or adapter contract changes |
+| [`docs/deployment-invariants.md`](deployment-invariants.md) | Deployment field, evidence, ownership, and side-effect rules | A deployment safety invariant changes |
+| [`docs/DEVELOPMENT-LIFECYCLE.md`](DEVELOPMENT-LIFECYCLE.md) | Isolation, sanitization, clean deployment, release, and upstream gates | Delivery authority, environment, release, or safety policy changes |
+| [`docs/precision-edit-v4-research.md`](precision-edit-v4-research.md) | Precision Edit submit semantics, interaction contract, capability gates, and tests | Precision Edit request, authorization, interaction, or acceptance rules change |
+| [`docs/RELEASE-PACKAGING.md`](RELEASE-PACKAGING.md) | Immutable source packaging, exact-image Docker publication, licenses, and workflow checks | Release build, package contents, provenance, or CI contract changes |
+
+## Rolling And Historical Documents
 
 | Document | Owns | Maintenance rule |
 |---|---|---|
-| `docs/STATUS.md` | Verified current state, blockers, commands, resume point | Replace stale state; keep evidence dated and concise |
-| `docs/ROADMAP.md` | Phase order, deliverables, acceptance criteria | Change status only when evidence satisfies a gate |
-| `HANDOFF.md` | Immediate objective and short resume context | Rewrite at the end of substantial work |
-| `CHANGELOG.md` | Version-level changes and `Unreleased` | Add user-visible changes; avoid session-level narration |
+| [`docs/STATUS.md`](STATUS.md) | Dated current evidence, blockers, boundaries, and resume point | Compare claims with code/tests; label external facts `VERIFIED`, `UNVERIFIED`, or `USER-CONFIRMED` |
+| [`docs/ROADMAP.md`](ROADMAP.md) | Phase order, topic contracts, deliverables, and acceptance criteria | Change phase status only when evidence satisfies its gate |
+| [`CHANGELOG.md`](../CHANGELOG.md) | Version-level user-visible changes and `Unreleased` | Add product changes; avoid session narration |
+| [`HANDOFF.md`](../HANDOFF.md) | Immediate objective and short resume context | Rewrite after substantial work; never treat it as product truth |
 
-## Release-Frozen Documents
-
-`release-notes-vX.Y.Z.md` and `release-notes-vX.Y.Z-zh.md` are immutable after
-the corresponding GitHub Release is published, except for factual corrections.
-They should contain:
-
-- The release's major user-visible value.
-- Installation and upgrade notes.
-- Security and compatibility notes.
-- Honest available/planned boundaries.
-- Verification summary and known limitations.
-
-The root `RELEASE_NOTES.md` is a rolling pointer to the current release
-candidate or latest stable release. It may be replaced for each release.
-
-## Topic Contracts
-
-Topic contracts such as `docs/ONBOARDING-UI-CONTRACT.md`,
-`docs/extensions-deployment-contract.md`, and
-`docs/chatgpt2api-push-integration.md` define acceptance details for one area.
-Keep them while the area is active; archive or mark them historical when a
-newer contract supersedes them.
-
-## Historical And Generated Material
-
-- `.planning/` is historical project input and does not override `docs/`.
-- UI labs and generated reviews are development aids, not completion evidence.
-- Raw screenshots, runtime media, logs, local memory, and generated knowledge
-  bases must not enter release packages.
-- Only sanitized screenshots under `screenshots/sanitized/` may be referenced
-  by public documentation.
+Dated `PHASE*` documents, preflight reports, review matrices, campaign notes,
+handoffs, and `.planning/` are historical inputs. They prove only their stated
+scope. Local or mocked tests do not establish a real Provider, VPS, source
+cleanup, or cross-project E2E result. When historical evidence conflicts with
+current sources, use [`PRODUCT.md`](PRODUCT.md),
+[`ARCHITECTURE.md`](ARCHITECTURE.md), [`ROADMAP.md`](ROADMAP.md), and especially
+[`STATUS.md`](STATUS.md).
 
 ## Release Documentation Checklist
 
-1. Update the shared version source in `genbox_version.py`.
-2. Move completed `CHANGELOG.md` items from `Unreleased` into the version.
-3. Create Chinese and English versioned release notes.
-4. Update README's highlighted release and available/planned boundaries.
-5. Update `docs/STATUS.md` with tests, builds, package hashes, and blockers.
-6. Update `HANDOFF.md` with the next primary objective.
-7. Run secret, personal-data, link, package-content, and clean-install checks.
+1. Update `genbox_version.py` and move completed changelog items into the version.
+2. Create Chinese and English versioned release notes.
+3. Update README and [`docs/README.md`](README.md) with the stable release and honest capability boundaries.
+4. Confirm client and Docker quick starts match the packaged files.
+5. Update `docs/STATUS.md` with tests, builds, hosted runs, hashes, and blockers.
+6. Update `HANDOFF.md` with the next objective.
+7. Run secret, personal-data, link, package-content, license, and clean-install checks.
 8. Freeze versioned release notes after publication.

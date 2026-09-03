@@ -1069,6 +1069,228 @@ def test_precision_route_accepts_canonical_only_alias_and_preserves_selected_mod
         main.image_task_handles.pop(generation_id, None)
 
 
+def test_precision_model_refresh_preserves_user_confirmed_compatibility_mapping(monkeypatch):
+    refreshed_model = "relay-defined-image-alias"
+    canonical_capabilities = {
+        "gpt-image-2": {
+            "precision_edit": True,
+            "supported_sizes": ["64x64"],
+        }
+    }
+    provider = ProviderConfig(
+        id="precision-provider",
+        name="Precision Mock",
+        type="image",
+        api_key="test-key",
+        base_url="https://provider.example.test/v1",
+        model="gpt-image-2",
+        models=["gpt-image-2", refreshed_model],
+        enabled=True,
+        endpoint_type="openai",
+        capabilities={"precision_edit": True},
+        precision_edit_profile=(
+            PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE
+        ),
+        extra={"model_capabilities": copy.deepcopy(canonical_capabilities)},
+    )
+    config = SimpleNamespace(providers=[provider])
+    saved = []
+    process_calls = []
+
+    async def fake_fetch_models(_provider):
+        return [refreshed_model]
+
+    async def fake_process(generation_id):
+        process_calls.append(generation_id)
+
+    monkeypatch.setattr(
+        main,
+        "cfg_mgr",
+        SimpleNamespace(
+            config=config,
+            get_image_providers=lambda: [provider],
+            save=lambda value: saved.append(value),
+        ),
+    )
+    monkeypatch.setattr(main, "fetch_models_from_upstream", fake_fetch_models)
+    monkeypatch.setattr(main, "_check_rate_limit", lambda *_args: True)
+    monkeypatch.setattr(main, "_process_image_gen", fake_process)
+
+    confirmation = asyncio.run(
+        main.set_precision_capability(
+            "precision-provider",
+            main.PrecisionCapabilityReq(
+                model=refreshed_model,
+                enabled=True,
+                confirmed=True,
+                compatibility_profile="gpt-image-2",
+            ),
+        )
+    )
+    assert confirmation["compatibility_profile"] == "gpt-image-2"
+    assert provider.extra["model_capabilities"][refreshed_model] == {"alias_of": "gpt-image-2"}
+    assert provider.precision_edit_profile == (
+        PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE
+    )
+
+    refresh = asyncio.run(main.fetch_models("precision-provider"))
+    assert refresh["models"] == [refreshed_model]
+    assert provider.extra["model_capabilities"] == {
+        **canonical_capabilities,
+        refreshed_model: {"alias_of": "gpt-image-2"},
+    }
+    assert saved == [config, config]
+
+    request = _precision_resize_only_request(
+        image_data=_image_data(size=(64, 64)),
+        provider_settings={"precision-provider": {"model": refreshed_model}},
+    )
+    response = asyncio.run(main.generate(request, _route_request()))
+    generation_id = response["generation_id"]
+    try:
+        task = main.image_tasks[generation_id]
+        assert task["provider_kwargs_map"]["precision-provider"]["model"] == refreshed_model
+        assert process_calls == [generation_id]
+    finally:
+        main.image_tasks.pop(generation_id, None)
+        main.image_task_handles.pop(generation_id, None)
+
+
+@pytest.mark.parametrize(
+    "unconfirmed_model",
+    ["custom-image-model", "gpt-image2-preview", "gpt-image2-c", "gpt-image2-d"],
+)
+def test_precision_model_refresh_does_not_authorize_unconfirmed_model_name(
+    monkeypatch,
+    unconfirmed_model,
+):
+    provider = ProviderConfig(
+        id="precision-provider",
+        name="Precision Mock",
+        type="image",
+        api_key="test-key",
+        base_url="https://provider.example.test/v1",
+        model="gpt-image-2",
+        models=["gpt-image-2"],
+        enabled=True,
+        endpoint_type="openai",
+        capabilities={"precision_edit": True},
+        extra={
+            "model_capabilities": {
+                "gpt-image-2": {"precision_edit": True, "supported_sizes": ["64x64"]},
+            }
+        },
+    )
+    config = SimpleNamespace(providers=[provider])
+    process_calls = []
+
+    async def fake_fetch_models(_provider):
+        return [unconfirmed_model]
+
+    async def fake_process(generation_id):
+        process_calls.append(generation_id)
+
+    monkeypatch.setattr(
+        main,
+        "cfg_mgr",
+        SimpleNamespace(config=config, get_image_providers=lambda: [provider], save=lambda _value: None),
+    )
+    monkeypatch.setattr(main, "fetch_models_from_upstream", fake_fetch_models)
+    monkeypatch.setattr(main, "_check_rate_limit", lambda *_args: True)
+    monkeypatch.setattr(main, "_process_image_gen", fake_process)
+
+    refresh = asyncio.run(main.fetch_models("precision-provider"))
+    assert refresh.get("success") is True, refresh
+    assert refresh["models"] == [unconfirmed_model]
+    assert unconfirmed_model not in provider.extra["model_capabilities"]
+
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(
+            main.generate(
+                _precision_resize_only_request(
+                    image_data=_image_data(size=(64, 64)),
+                    provider_settings={"precision-provider": {"model": unconfirmed_model}},
+                ),
+                _route_request(),
+            )
+        )
+    assert caught.value.detail["code"] == "precision_edit_provider_unsupported"
+    assert process_calls == []
+
+
+def test_precision_compatibility_confirmation_requires_consent_and_revoke_fails_closed(monkeypatch):
+    alias = "any-upstream-model-name"
+    provider = _provider(supported_sizes=None)
+    provider.model = alias
+    provider.models = [alias]
+    provider.precision_edit_profile = None
+    provider.extra = {
+        "model_capabilities": {
+            "gpt-image-2": {"precision_edit": True, "supported_sizes": ["64x64"]},
+        }
+    }
+    config = SimpleNamespace(providers=[provider])
+    saved = []
+    monkeypatch.setattr(
+        main,
+        "cfg_mgr",
+        SimpleNamespace(config=config, get_image_providers=lambda: [provider], save=lambda value: saved.append(value)),
+    )
+    monkeypatch.setattr(main, "_check_rate_limit", lambda *_args: True)
+
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(
+            main.set_precision_capability(
+                "precision-provider",
+                main.PrecisionCapabilityReq(
+                    model=alias,
+                    enabled=True,
+                    compatibility_profile="gpt-image-2",
+                ),
+            )
+        )
+    assert caught.value.detail["code"] == "precision_confirmation_required"
+    assert saved == []
+    assert alias not in provider.extra["model_capabilities"]
+
+    asyncio.run(
+        main.set_precision_capability(
+            "precision-provider",
+            main.PrecisionCapabilityReq(
+                model=alias,
+                enabled=True,
+                confirmed=True,
+                compatibility_profile="gpt-image-2",
+            ),
+        )
+    )
+    assert main._provider_precision_model_capability(provider, alias) is True
+    assert provider.extra["model_capabilities"][alias] == {"alias_of": "gpt-image-2"}
+
+    revoked = asyncio.run(
+        main.set_precision_capability(
+            "precision-provider",
+            main.PrecisionCapabilityReq(model=alias, enabled=False, confirmed=True),
+        )
+    )
+    assert revoked["enabled"] is False
+    assert main._provider_precision_model_capability(provider, alias) is False
+    assert provider.extra["model_capabilities"][alias] == {}
+    assert provider.extra["model_capabilities"]["gpt-image-2"]["precision_edit"] is True
+
+    with pytest.raises(HTTPException) as rejected:
+        asyncio.run(
+            main.generate(
+                _precision_resize_only_request(
+                    image_data=_image_data(size=(64, 64)),
+                    provider_settings={"precision-provider": {"model": alias}},
+                ),
+                _route_request(),
+            )
+        )
+    assert rejected.value.detail["code"] == "precision_edit_provider_unsupported"
+
+
 @pytest.mark.parametrize(
     "records",
     [
@@ -1903,17 +2125,23 @@ def test_precision_resize_generation_uses_size_confirmed_through_capability_api(
     ],
 )
 def test_provider_update_without_profile_preserves_explicit_profile(profile):
+    model_capabilities = {
+        "relay-model": {"alias_of": "gpt-image-2"},
+        "gpt-image-2": {"precision_edit": True, "supported_sizes": ["64x64"]},
+    }
     existing = ProviderConfig(
         id="custom",
         name="Custom",
         type="image",
         precision_edit_profile=profile,
+        extra={"model_capabilities": model_capabilities},
     )
-    request = main.ProviderCreateReq(id="custom", name="Custom", type="image")
+    request = main.ProviderCreateReq(id="custom", name="Custom", type="image", extra={})
 
     payload = main._merge_provider_secrets(existing, request)
 
     assert payload["precision_edit_profile"] == profile
+    assert payload["extra"]["model_capabilities"] == model_capabilities
 
 
 def test_cutout_capabilities_fail_closed_without_adapters(monkeypatch):

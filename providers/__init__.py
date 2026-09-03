@@ -1463,7 +1463,8 @@ def _precision_model_is_authorized(cfg: ProviderConfig, model_id: str) -> bool:
     return resolution.structure_valid and resolution.precision_edit_confirmed
 
 
-def _precision_model_capability_resolution(cfg: ProviderConfig, model_id: str):
+def resolve_provider_precision_model_capability(cfg: ProviderConfig, model_id: str):
+    """Resolve only persisted model capability or alias metadata."""
     extra = getattr(cfg, "extra", None)
     model_capabilities = extra.get("model_capabilities") if isinstance(extra, dict) else None
     return resolve_precision_model_capability(
@@ -1471,6 +1472,10 @@ def _precision_model_capability_resolution(cfg: ProviderConfig, model_id: str):
         model_id,
         max_output_pixels=PRECISION_MAX_OUTPUT_PIXELS,
     )
+
+
+def _precision_model_capability_resolution(cfg: ProviderConfig, model_id: str):
+    return resolve_provider_precision_model_capability(cfg, model_id)
 
 
 def _precision_edit_transport_profile(

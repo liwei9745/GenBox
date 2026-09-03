@@ -563,7 +563,7 @@
                       <div>
                         <div class="precision-canvas-title-row">
                           <div class="precision-canvas-title"><span class="param-label" data-i18n="creator.precision_edit_canvas">批注画布</span><div class="precision-workbench-help hidden" id="precisionWorkbenchHelp"><button type="button" class="precision-workbench-help-trigger" id="precisionWorkbenchHelpTrigger" aria-label="查看精准改图帮助" data-i18n-aria-label="creator.precision_help_label" aria-controls="precisionWorkbenchHelpPopover" aria-expanded="false">?</button><div class="precision-workbench-help-popover hidden" id="precisionWorkbenchHelpPopover" role="dialog" aria-modal="false" aria-labelledby="precisionWorkbenchHelpTitle"><strong id="precisionWorkbenchHelpTitle" data-i18n="creator.precision_help_title">精准改图操作说明</strong><p data-i18n="creator.precision_help_steps">选择图片，在画布上标注位置，为每处写明修改要求，再提交给编辑模型。</p><p data-i18n="creator.precision_help_send_result">生成结果也可以通过“精准改图”操作直接发送到这里。</p><a href="https://github.com/liwei9745/GenBox/blob/main/docs/CLIENT-QUICKSTART.md#start--启动" target="_blank" rel="noopener noreferrer" data-i18n="creator.precision_config_docs">打开项目内配置说明</a></div></div><span id="precisionCanvasDimensions" class="text-xs text-muted" aria-live="polite"></span></div>
-                          <div class="precision-stage-actions"><div class="precision-source-actions hidden" id="precisionSourceActions"><button type="button" class="btn-ghost precision-source-action" id="btnPrecisionReplaceSource" onclick="requestPrecisionLocalSource()"><span aria-hidden="true">↻</span><span data-i18n="creator.precision_replace_image">更换图片</span></button><button type="button" class="btn-ghost precision-source-action" id="btnPrecisionReplaceFromGallery" onclick="openPrecisionGalleryPicker()"><span aria-hidden="true">▦</span><span data-i18n="creator.precision_edit_from_gallery">从图库选择</span></button><span id="precisionReplaceDisabledHint" class="sr-only" data-i18n="creator.precision_replace_task_active">请先停止当前精准改图任务，再更换图片。</span></div><button type="button" class="btn-ghost precision-docs-trigger" id="btnPrecisionDocs" onclick="openPrecisionDocsDialog()" aria-haspopup="dialog" aria-controls="precisionDocsDialog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H19v17H7.5A2.5 2.5 0 0 0 5 21.5z"/><path d="M5 4.5v17M9 7h6m-6 4h6"/></svg><span data-i18n="creator.precision_docs_open">文档说明</span></button></div>
+                          <div class="precision-stage-actions"><div class="precision-source-actions hidden" id="precisionSourceActions"><button type="button" class="btn-ghost precision-source-action" id="btnPrecisionReplaceSource" onclick="requestPrecisionLocalSource()"><span aria-hidden="true">↻</span><span data-i18n="creator.precision_replace_image">更换图片</span></button><button type="button" class="btn-ghost precision-source-action" id="btnPrecisionReplaceFromGallery" onclick="openPrecisionGalleryPicker()"><span aria-hidden="true">▦</span><span data-i18n="creator.precision_edit_from_gallery">从图库选择</span></button><span id="precisionReplaceDisabledHint" class="sr-only precision-source-action-status" data-i18n="creator.precision_replace_task_active">请先停止当前精准改图任务，再更换图片。</span></div><button type="button" class="btn-ghost precision-docs-trigger" id="btnPrecisionDocs" onclick="openPrecisionDocsDialog()" aria-haspopup="dialog" aria-controls="precisionDocsDialog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H19v17H7.5A2.5 2.5 0 0 0 5 21.5z"/><path d="M5 4.5v17M9 7h6m-6 4h6"/></svg><span data-i18n="creator.precision_docs_open">文档说明</span></button></div>
                         </div>
                         <div class="precision-canvas-meta"><div class="precision-zoom-control"><label for="precisionViewZoom" data-i18n="creator.precision_zoom">查看缩放</label><input id="precisionViewZoom" type="range" min="50" max="200" step="10" value="100" aria-label="查看缩放" data-i18n-aria-label="creator.precision_zoom"><output id="precisionViewZoomValue" for="precisionViewZoom">100%</output><button type="button" class="btn-ghost" id="btnPrecisionZoomFit" data-i18n="creator.precision_zoom_fit">适合窗口</button></div><small data-i18n="creator.precision_zoom_hint">只调整查看大小，不改变图片尺寸。</small></div>
                       </div>
@@ -650,28 +650,35 @@
                         <div class="precision-action-group"><span data-i18n="creator.precision_manual_selection">手动选区</span><div><button type="button" class="btn-ghost" onclick="setPrecisionEditTool('brush')" data-i18n="creator.precision_edit_brush">涂抹</button></div></div>
                         <div class="precision-cutout-tool" aria-labelledby="precisionCutoutTitle">
                           <div class="precision-cutout-heading"><span id="precisionCutoutTitle" data-i18n="creator.cutout_person">一键抠出人物</span><span class="precision-help-tip"><button type="button" class="precision-help-trigger" aria-describedby="precisionCutoutHelp" aria-label="查看抠图说明" data-i18n-aria-label="creator.cutout_help_label">?</button><span id="precisionCutoutHelp" class="precision-help-content" role="tooltip" data-i18n="creator.cutout_person_hint">需要安装本地透明背景抠图组件；未安装时按钮会保持不可用。</span></span></div>
-                          <div class="precision-cutout-model-install" id="precisionCutoutModelInstall" data-state="checking" aria-labelledby="precisionCutoutModelTitle" aria-busy="true">
-                            <div class="precision-cutout-model-state">
-                              <span class="precision-cutout-model-indicator" aria-hidden="true"></span>
-                              <div><strong id="precisionCutoutModelTitle" data-i18n="creator.cutout_model_title">本地抠图模型</strong><span id="precisionCutoutModelStatus" role="status" aria-live="polite" data-i18n="creator.cutout_model_checking">正在检查模型状态…</span></div>
+                          <div class="precision-cutout-model-install" id="precisionCutoutModelInstall" data-state="checking" data-details-expanded="true" aria-labelledby="precisionCutoutModelTitle" aria-busy="true">
+                            <div class="precision-cutout-model-summary">
+                              <div class="precision-cutout-model-state">
+                                <span class="precision-cutout-model-indicator" aria-hidden="true"></span>
+                                <div><strong id="precisionCutoutModelTitle" data-i18n="creator.cutout_model_title">本地抠图模型</strong><span id="precisionCutoutModelStatus" role="status" aria-live="polite" data-i18n="creator.cutout_model_checking">正在检查模型状态…</span></div>
+                              </div>
+                              <button type="button" class="btn-ghost precision-cutout-model-toggle" id="btnPrecisionCutoutModelDetails" aria-expanded="true" aria-controls="precisionCutoutModelDetails">
+                                <span data-i18n="creator.cutout_model_details">详情</span><span class="precision-cutout-model-toggle-icon" aria-hidden="true">⌄</span>
+                              </button>
                             </div>
-                            <dl class="precision-cutout-model-facts">
-                              <div><dt data-i18n="creator.cutout_model_source">来源</dt><dd id="precisionCutoutModelSource">rembg-u2net-human-seg-v0.0.0</dd></div>
-                              <div><dt data-i18n="creator.cutout_model_size">大小</dt><dd id="precisionCutoutModelSize" data-i18n="creator.cutout_model_size_approx">约 176 MB</dd></div>
-                              <div><dt data-i18n="creator.cutout_model_path">本地路径</dt><dd><code id="precisionCutoutModelPath">storage/models/cutout/u2net_human_seg.onnx</code></dd></div>
-                            </dl>
-                            <p class="precision-cutout-model-note" data-i18n="creator.cutout_model_not_bundled">模型不随 GenBox 安装包内嵌；只有你主动确认后，GenBox 才会从固定的 rembg 托管资产下载并核验指纹。</p>
-                            <p class="precision-cutout-model-warning" id="precisionCutoutModelWarning" data-i18n="creator.cutout_model_license_warning">注意：模型转换链、训练数据来源及商业使用权利均为 UNVERIFIED。请在确认权利和使用场景后再下载。</p>
-                            <div class="precision-cutout-model-progress hidden" id="precisionCutoutModelProgress">
-                              <progress id="precisionCutoutModelProgressBar" max="100" value="0" aria-label="模型下载进度" data-i18n-aria-label="creator.cutout_model_progress_label"></progress>
-                              <span id="precisionCutoutModelProgressText">0%</span>
-                            </div>
-                            <div class="precision-cutout-model-actions">
-                              <button type="button" class="btn-secondary" id="btnPrecisionCutoutModelInstall" data-i18n="creator.cutout_model_install">下载并安装</button>
-                              <button type="button" class="btn-ghost hidden" id="btnPrecisionCutoutModelCancel" data-i18n="creator.cutout_model_cancel">取消下载</button>
-                              <button type="button" class="btn-secondary hidden" id="btnPrecisionCutoutModelRetry" data-i18n="creator.cutout_model_retry">重试</button>
-                              <button type="button" class="btn-ghost hidden" id="btnPrecisionCutoutModelRemoveCorrupt" data-i18n="creator.cutout_model_remove_corrupt">删除损坏文件</button>
-                              <button type="button" class="btn-ghost hidden" id="btnPrecisionCutoutModelDelete" data-i18n="creator.cutout_model_delete">删除模型</button>
+                            <div class="precision-cutout-model-details" id="precisionCutoutModelDetails">
+                              <dl class="precision-cutout-model-facts">
+                                <div><dt data-i18n="creator.cutout_model_source">来源</dt><dd id="precisionCutoutModelSource">rembg-u2net-human-seg-v0.0.0</dd></div>
+                                <div><dt data-i18n="creator.cutout_model_size">大小</dt><dd id="precisionCutoutModelSize" data-i18n="creator.cutout_model_size_approx">约 176 MB</dd></div>
+                                <div><dt data-i18n="creator.cutout_model_path">本地路径</dt><dd><code id="precisionCutoutModelPath">storage/models/cutout/u2net_human_seg.onnx</code></dd></div>
+                              </dl>
+                              <p class="precision-cutout-model-note" data-i18n="creator.cutout_model_not_bundled">模型不随 GenBox 安装包内嵌。当前版本保留固定来源与许可证信息页，但自动下载保持禁用。</p>
+                              <p class="precision-cutout-model-warning" id="precisionCutoutModelWarning" data-i18n="creator.cutout_model_license_warning">注意：模型转换链、训练数据来源及商业使用权利均为 UNVERIFIED，因此当前版本禁用自动下载。</p>
+                              <div class="precision-cutout-model-progress hidden" id="precisionCutoutModelProgress">
+                                <progress id="precisionCutoutModelProgressBar" max="100" value="0" aria-label="模型下载进度" data-i18n-aria-label="creator.cutout_model_progress_label"></progress>
+                                <span id="precisionCutoutModelProgressText">0%</span>
+                              </div>
+                              <div class="precision-cutout-model-actions">
+                                <button type="button" class="btn-secondary" id="btnPrecisionCutoutModelInstall" data-i18n="creator.cutout_model_install">下载并安装</button>
+                                <button type="button" class="btn-ghost hidden" id="btnPrecisionCutoutModelCancel" data-i18n="creator.cutout_model_cancel">取消下载</button>
+                                <button type="button" class="btn-secondary hidden" id="btnPrecisionCutoutModelRetry" data-i18n="creator.cutout_model_retry">重试</button>
+                                <button type="button" class="btn-ghost hidden" id="btnPrecisionCutoutModelRemoveCorrupt" data-i18n="creator.cutout_model_remove_corrupt">删除损坏文件</button>
+                                <button type="button" class="btn-ghost hidden" id="btnPrecisionCutoutModelDelete" data-i18n="creator.cutout_model_delete">删除模型</button>
+                              </div>
                             </div>
                           </div>
                           <div class="precision-cutout-actions">
@@ -766,7 +773,15 @@
                       </label>
                       <div id="precisionEditModelVisibility" class="precision-model-visibility" aria-live="polite"></div>
                       <small id="precisionProviderStatus" role="status" aria-live="polite" data-i18n="creator.precision_edit_model_hint">这里只显示已确认支持图片编辑的模型；自定义模型需要手动确认一次。</small>
-                      <button type="button" id="btnPrecisionAuthorizeModel" class="btn-secondary" onclick="authorizePrecisionEditModel()" data-i18n="creator.precision_edit_authorize" disabled>确认支持并启用</button>
+                      <div id="precisionEditCompatibilityOption" class="precision-model-compatibility hidden">
+                        <input type="checkbox" id="precisionEditGptImage2Compatibility">
+                        <label for="precisionEditGptImage2Compatibility" data-i18n="creator.precision_edit_compatibility_label">按 GPT Image 2 精准改图方式调用</label>
+                        <span class="precision-help-tip"><button type="button" class="precision-help-trigger" aria-describedby="precisionEditCompatibilityHelp" aria-label="查看兼容方式说明" data-i18n-aria-label="creator.precision_edit_compatibility_help_label">?</button><span id="precisionEditCompatibilityHelp" class="precision-help-content" role="tooltip" data-i18n="creator.precision_edit_compatibility_help">仅在你已验证当前模型是 GPT Image 2 的上游别名时选择；真实模型 ID 仍会原样提交。</span></span>
+                      </div>
+                      <div class="precision-model-authorization-actions">
+                        <button type="button" id="btnPrecisionAuthorizeModel" class="btn-secondary" onclick="authorizePrecisionEditModel()" data-i18n="creator.precision_edit_authorize" disabled>确认支持并启用</button>
+                        <button type="button" id="btnPrecisionRevokeModel" class="btn-ghost hidden" onclick="revokePrecisionEditModel()" data-i18n="creator.precision_edit_revoke" disabled>撤销确认</button>
+                      </div>
                       <small id="precisionModelAuthorizationHint" data-i18n="creator.precision_edit_authorize_hint">仅在你确认该端点和模型支持 OpenAI 兼容图片编辑时启用。</small>
                     </section>
                   </aside>
