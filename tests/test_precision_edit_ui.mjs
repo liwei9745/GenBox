@@ -2821,6 +2821,13 @@ vm.runInContext("genIsPrecisionTask = false; genCurrentGenId = null; precisionEd
 vm.runInContext('updatePrecisionSourceActions()', replacementContext);
 assert.equal(replacementNodes.precisionReplaceDisabledHint.classList.contains('sr-only'), true, 'The replacement status must return to screen-reader-only presentation when the task becomes idle.');
 assert.equal(replacementNodes.precisionReplaceDisabledHint.classList.contains('is-visible'), false, 'The visible status class must clear when the task becomes idle.');
+vm.runInContext('precisionBaseVersionSwitchPending = true; updatePrecisionSourceActions()', replacementContext);
+assert.equal(replacementNodes.btnPrecisionReplaceSource.disabled, true, 'A pending next-base image load must disable new source replacement controls.');
+assert.equal(vm.runInContext('requestPrecisionLocalSource()', replacementContext), false, 'A pending next-base image load must reject a new local-source flow before the file picker opens.');
+assert.equal(vm.runInContext('openPrecisionGalleryPicker()', replacementContext), false, 'A pending next-base image load must reject a new gallery-source flow before it fetches data.');
+assert.equal(replacementNodes.precisionFileInput.clickCount, 0, 'A pending next-base image load must not open the local file picker.');
+assert.equal(replacementFetches, 0, 'A pending next-base image load must not fetch gallery data.');
+vm.runInContext('precisionBaseVersionSwitchPending = false; updatePrecisionSourceActions()', replacementContext);
 replacementConfirm = false;
 const beforeCancelledReplacement = vm.runInContext('JSON.stringify({ precisionEditObjects, precisionEditSession, precisionEditSizeMode, precisionEditSourceImageData, precisionEditTool, precisionEditSelectedModel, precisionViewZoom })', replacementContext);
 assert.equal(vm.runInContext('preparePrecisionSourceReplacement()', replacementContext), false, 'Cancelling dirty-source confirmation must stop replacement.');
@@ -2940,6 +2947,44 @@ await new Promise((resolve) => setImmediate(resolve));
 assert.equal(galleryJsonCalls, 1, 'The stale gallery harness must parse a successful HTTP response before the source-generation guard runs.');
 assert.equal(galleryCreated, 0, 'The source-generation guard must prevent a parsed stale gallery response from rendering a picker.');
 
+const galleryFocusTrigger = eventNode();
+const galleryFocusClose = eventNode();
+const galleryFocusGrid = eventNode();
+const galleryFocusDialog = eventNode();
+const galleryFocusOverlay = eventNode();
+const galleryFocusDocument = {
+  activeElement: null,
+  body: { appendChild: () => {} },
+  createElement: () => galleryFocusOverlay,
+  getElementById(id) {
+    return ({ precisionGalleryClose: galleryFocusClose, precisionGalleryGrid: galleryFocusGrid })[id] || null;
+  },
+};
+galleryFocusTrigger.focus = function focusGalleryTrigger() {
+  this.focusCount += 1;
+  galleryFocusDocument.activeElement = this;
+};
+galleryFocusDialog.querySelectorAll = () => [galleryFocusClose];
+galleryFocusOverlay.querySelector = (selector) => selector === '.precision-gallery-dialog' ? galleryFocusDialog : null;
+galleryFocusOverlay.remove = () => { galleryFocusOverlay.removed = true; };
+galleryFocusGrid.appendChild = () => {};
+const galleryFocusContext = vm.createContext({
+  document: galleryFocusDocument,
+  precisionEditSourceImageData: 'data:image/png;base64,source', precisionSourceLoadGeneration: 4,
+  precisionSourceHasDirtyState: () => false, preparePrecisionSourceReplacement: () => true, precisionSourceTaskIsActive: () => false,
+  _authFetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [{ data: 'data:image/png;base64,choice' }] }) }),
+  setStatus: () => {}, i18nText: (key) => key, alert: () => {}, escHtml: (value) => value, escAttr: (value) => value,
+  setCreatorWorkbenchMode: () => {}, loadPrecisionEditSourceImage: () => {},
+});
+vm.runInContext(extractFunction('openPrecisionGalleryPicker'), galleryFocusContext);
+assert.equal(vm.runInContext('openPrecisionGalleryPicker', galleryFocusContext)(galleryFocusTrigger), true, 'Opening the gallery with an explicit source-menu trigger must begin the picker flow.');
+await new Promise((resolve) => setImmediate(resolve));
+await new Promise((resolve) => setImmediate(resolve));
+galleryFocusClose.onclick();
+assert.equal(galleryFocusOverlay.removed, true, 'Closing the gallery picker must remove its overlay.');
+assert.equal(galleryFocusDocument.activeElement, galleryFocusTrigger, 'Closing the gallery picker must restore focus to the visible Replace image trigger.');
+expect(extractFunction('choosePrecisionGallerySource').includes('setPrecisionSourceMenuOpen(false, true)') && extractFunction('choosePrecisionGallerySource').includes('openPrecisionGalleryPicker(trigger)'), 'Choosing the gallery from the source menu must hand the visible trigger to the picker as its return focus.');
+
 const versionContext = vm.createContext({
   precisionSourceLoadGeneration: 2,
   precisionEditSession: { source: { id: 'original' }, versions: [] },
@@ -3031,6 +3076,108 @@ assert.equal(vm.runInContext('precisionEditSession.view', failedBaseVersionConte
 assert.equal(vm.runInContext('precisionEditSourceImageData', failedBaseVersionContext), 'data:image/png;base64,b2xkLWNhbnZhcw==', 'A failed image load must retain the old canvas/request source.');
 assert.equal(vm.runInContext('precisionBaseVersionSwitchPending', failedBaseVersionContext), false, 'A failed image load must release the switch lock.');
 assert.deepEqual(failedBaseVersionStatuses, ['common.loading', 'image.load_failed'], 'A failed image load must report an error after retaining the prior state.');
+
+const staleBaseVersionLoads = [];
+const staleBaseVersionStatuses = [];
+const staleBaseVersionContext = vm.createContext({
+  document: { getElementById: (id) => id === 'txtPromptPrecision' ? { value: 'Retain the prior base.' } : null },
+  precisionEditSession: {
+    source: { id: 'original', data: 'data:image/png;base64,b2xkLWNhbnZhcw==' },
+    versions: [{ id: 'version-1', data: 'data:image/png;base64,bmV3LWNhbnZhcw==' }],
+    selectedVersionId: 'version-1', baseVersionId: 'original', view: 'compare'
+  },
+  precisionSourceLoadGeneration: 12,
+  precisionVersionLoadToken: 0,
+  precisionBaseVersionSwitchPending: false,
+  precisionSourceTaskIsActive: () => false,
+  renderPrecisionEditSession: () => {}, updatePrecisionEditControls: () => {},
+  loadPrecisionEditSourceImage: (...args) => staleBaseVersionLoads.push(args),
+  setStatus: (value) => staleBaseVersionStatuses.push(value),
+  i18nText: (key) => key,
+  String,
+});
+vm.runInContext(baseVersionSwitchSource, staleBaseVersionContext);
+assert.equal(vm.runInContext("setPrecisionBaseVersion('version-1')", staleBaseVersionContext), true);
+vm.runInContext('precisionSourceLoadGeneration += 1', staleBaseVersionContext);
+staleBaseVersionLoads[0][2].onError();
+assert.equal(vm.runInContext('precisionBaseVersionSwitchPending', staleBaseVersionContext), false, 'An invalidated base-load callback must release its own pending lock without committing the stale base.');
+assert.equal(vm.runInContext('precisionEditSession.baseVersionId', staleBaseVersionContext), 'original', 'An invalidated base-load callback must retain the prior base version.');
+assert.deepEqual(staleBaseVersionStatuses, ['common.loading'], 'An invalidated base-load callback must not overwrite newer source status with a stale load failure.');
+
+let blockedLightboxFetches = 0;
+const blockedLightboxStatuses = [];
+const blockedLightboxContext = vm.createContext({
+  lightboxCurrentSrc: '/api/gallery/image/current.png', lightboxCurrentPrompt: 'Use this image.',
+  precisionBaseVersionSwitchPending: true, precisionSourceLoadGeneration: 31,
+  precisionEditSourceImageData: 'data:image/png;base64,source', precisionSourceTaskIsActive: () => false,
+  precisionSourceHasDirtyState: () => false, setStatus: (value) => blockedLightboxStatuses.push(value),
+  i18nText: (key) => key, alert: () => {}, _authFetch: () => { blockedLightboxFetches += 1; return Promise.resolve(); },
+});
+vm.runInContext([extractFunction('preparePrecisionSourceReplacement'), extractFunction('sendToPrecisionEdit')].join('\n'), blockedLightboxContext);
+assert.equal(vm.runInContext('sendToPrecisionEdit()', blockedLightboxContext), false, 'The lightbox send flow must reject while a next-base image load is pending.');
+assert.equal(vm.runInContext('precisionSourceLoadGeneration', blockedLightboxContext), 31, 'The rejected lightbox flow must not invalidate the in-flight base switch generation.');
+assert.equal(blockedLightboxFetches, 0, 'The rejected lightbox flow must not begin a replacement image request.');
+assert.deepEqual(blockedLightboxStatuses, ['common.loading'], 'The rejected lightbox flow must leave the existing base-switch loading state coherent.');
+
+const calendarDocument = { activeElement: null };
+function calendarDay(key) {
+  return {
+    dataset: { date: key },
+    getAttribute(name) { return name === 'data-date' ? key : null; },
+    focus() { calendarDocument.activeElement = this; },
+  };
+}
+const calendar = {
+  _days: [],
+  set innerHTML(markup) {
+    this._days = Array.from(markup.matchAll(/data-date="([^"]+)"/g), (match) => calendarDay(match[1]));
+  },
+  querySelectorAll(selector) { return selector === 'button[data-date]' ? this._days : []; },
+};
+const previousMonth = { focus() { calendarDocument.activeElement = this; } };
+const nextMonth = { focus() { calendarDocument.activeElement = this; } };
+const calendarToolbar = { querySelectorAll: (selector) => selector === 'button' ? [previousMonth, nextMonth] : [] };
+const calendarNodes = {
+  precisionSessionCalendar: calendar,
+  precisionSessionCalendarLabel: { textContent: '' },
+  precisionSessionDateFrom: { value: '' },
+  precisionSessionDateTo: { value: '' },
+};
+calendarDocument.getElementById = (id) => calendarNodes[id] || null;
+calendarDocument.querySelector = (selector) => selector === '.precision-session-calendar-toolbar' ? calendarToolbar : null;
+const calendarContext = vm.createContext({
+  document: calendarDocument,
+  window: { precisionSessionCalendarState: { anchor: new Date(2026, 8, 1), start: '', end: '' }, precisionSessionCalendarEntries: [] },
+  Date, Number, String,
+  precisionCalendarDateIndex: () => ({}), applyPrecisionSessionDateFilter: () => {}, updatePrecisionSessionDateSummary: () => {},
+});
+vm.runInContext([
+  extractFunction('precisionCalendarDateKey'), extractFunction('renderPrecisionSessionCalendar'),
+  extractFunction('focusPrecisionSessionCalendarDate'), extractFunction('focusPrecisionSessionCalendarMonthButton'),
+  extractFunction('shiftPrecisionSessionCalendar'), extractFunction('selectPrecisionSessionCalendarDate'),
+  extractFunction('handlePrecisionSessionCalendarKeydown'),
+].join('\n'), calendarContext);
+vm.runInContext('renderPrecisionSessionCalendar()', calendarContext);
+calendarDocument.activeElement = calendar._days.find((day) => day.dataset.date === '2026-09-15');
+const enterDate = calendarDocument.activeElement;
+const enterEvent = { key: 'Enter', preventDefault() { this.defaultPrevented = true; } };
+vm.runInContext('handlePrecisionSessionCalendarKeydown', calendarContext)(enterEvent);
+assert.equal(enterEvent.defaultPrevented, true, 'Enter must be handled as a calendar date selection rather than leaving focus on a removed button.');
+assert.equal(calendarNodes.precisionSessionDateFrom.value, '2026-09-15');
+assert.notEqual(calendarDocument.activeElement, enterDate, 'Enter selection must not leave focus on the date button removed by the calendar rerender.');
+assert.equal(calendarDocument.activeElement, calendar._days.find((day) => day.dataset.date === '2026-09-15'), 'Enter selection must restore focus to the selected date after the calendar rerenders.');
+calendarDocument.activeElement = calendar._days.find((day) => day.dataset.date === '2026-09-16');
+const spaceDate = calendarDocument.activeElement;
+const spaceEvent = { key: ' ', preventDefault() { this.defaultPrevented = true; } };
+vm.runInContext('handlePrecisionSessionCalendarKeydown', calendarContext)(spaceEvent);
+assert.equal(spaceEvent.defaultPrevented, true, 'Space must be handled as a calendar date selection.');
+assert.equal(calendarNodes.precisionSessionDateTo.value, '2026-09-16');
+assert.notEqual(calendarDocument.activeElement, spaceDate, 'Space selection must not leave focus on the date button removed by the calendar rerender.');
+assert.equal(calendarDocument.activeElement, calendar._days.find((day) => day.dataset.date === '2026-09-16'), 'Space selection must restore focus to the selected date after the calendar rerenders.');
+vm.runInContext('shiftPrecisionSessionCalendar(-1)', calendarContext);
+assert.equal(calendarDocument.activeElement, previousMonth, 'Previous-month rerendering must restore focus to the previous-month button.');
+vm.runInContext('shiftPrecisionSessionCalendar(1)', calendarContext);
+assert.equal(calendarDocument.activeElement, nextMonth, 'Next-month rerendering must restore focus to the next-month button.');
 
 const terminalAppends = [];
 const terminalContext = vm.createContext({

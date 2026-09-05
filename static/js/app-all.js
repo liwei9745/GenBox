@@ -2240,8 +2240,9 @@ function choosePrecisionLocalSource() {
 }
 
 function choosePrecisionGallerySource() {
-  setPrecisionSourceMenuOpen(false);
-  return openPrecisionGalleryPicker();
+  var trigger = document.getElementById('btnPrecisionReplaceSource');
+  setPrecisionSourceMenuOpen(false, true);
+  return openPrecisionGalleryPicker(trigger);
 }
 
 function handlePrecisionSourceMenuKeydown(event) {
@@ -2310,6 +2311,10 @@ function precisionSourceHasDirtyState() {
 }
 
 function preparePrecisionSourceReplacement() {
+  if (typeof precisionBaseVersionSwitchPending !== 'undefined' && precisionBaseVersionSwitchPending) {
+    setStatus(i18nText('common.loading'));
+    return false;
+  }
   if (precisionSourceTaskIsActive()) {
     setStatus(i18nText('creator.precision_replace_task_active'));
     return false;
@@ -2402,6 +2407,12 @@ function resetPrecisionSourceSpecificState(generation) {
 
 function loadPrecisionEditLocalFile(event) {
   var input = event && event.currentTarget;
+  if (typeof precisionBaseVersionSwitchPending !== 'undefined' && precisionBaseVersionSwitchPending) {
+    precisionPendingSourceIntent = null;
+    if (input) input.value = '';
+    if (typeof setStatus === 'function') setStatus(i18nText('common.loading'));
+    return false;
+  }
   if (typeof precisionSourceTaskIsActive === 'function' && precisionSourceTaskIsActive()) {
     precisionPendingSourceIntent = null;
     if (input) input.value = '';
@@ -2445,15 +2456,20 @@ function loadPrecisionEditLocalFile(event) {
 }
 
 function loadPrecisionEditSourceImage(dataUrl, prompt, options) {
-  ensurePrecisionEditPanel();
   options = options || {};
+  var baseVersionLoadToken = Number.isFinite(options.baseVersionLoadToken) ? options.baseVersionLoadToken : null;
+  if (typeof precisionBaseVersionSwitchPending !== 'undefined' && precisionBaseVersionSwitchPending && baseVersionLoadToken !== precisionVersionLoadToken) return false;
+  ensurePrecisionEditPanel();
   var generation = Number.isFinite(options.generation)
     ? options.generation
     : ++precisionSourceLoadGeneration;
   if (generation !== precisionSourceLoadGeneration) return generation;
   var source = new Image();
   source.onload = function() {
-    if (generation !== precisionSourceLoadGeneration) return;
+    if (generation !== precisionSourceLoadGeneration) {
+      if (typeof options.onError === 'function') options.onError();
+      return;
+    }
     var width = source.naturalWidth || source.width;
     var height = source.naturalHeight || source.height;
     if (!width || !height || width * height > INPAINT_MAX_PIXELS) {
@@ -2461,7 +2477,10 @@ function loadPrecisionEditSourceImage(dataUrl, prompt, options) {
       else alert(i18nText('creator.inpaint_image_too_large'));
       return;
     }
-    if (typeof options.beforeCommit === 'function' && options.beforeCommit() === false) return;
+    if (typeof options.beforeCommit === 'function' && options.beforeCommit() === false) {
+      if (typeof options.onError === 'function') options.onError();
+      return;
+    }
     if (!options.preserveSession) resetPrecisionSourceSpecificState(generation);
     precisionEditSourceImageData = dataUrl;
     precisionEditSourceWidth = width;
@@ -2518,7 +2537,10 @@ function loadPrecisionEditSourceImage(dataUrl, prompt, options) {
     if (typeof options.onLoaded === 'function') options.onLoaded();
   };
   source.onerror = function() {
-    if (generation !== precisionSourceLoadGeneration) return;
+    if (generation !== precisionSourceLoadGeneration) {
+      if (typeof options.onError === 'function') options.onError();
+      return;
+    }
     if (typeof options.onError === 'function') options.onError();
     else alert(i18nText('image.load_failed') + i18nText('image.unavailable'));
   };
@@ -4029,6 +4051,7 @@ function shiftPrecisionSessionCalendar(offset) {
   var state = window.precisionSessionCalendarState || (window.precisionSessionCalendarState = { anchor: new Date(), start: '', end: '' });
   state.anchor = new Date(state.anchor.getFullYear(), state.anchor.getMonth() + Number(offset || 0), 1);
   renderPrecisionSessionCalendar();
+  focusPrecisionSessionCalendarMonthButton(offset);
 }
 
 function setPrecisionSessionDateRange(range) {
@@ -4065,6 +4088,7 @@ function selectPrecisionSessionCalendarDate(key) {
   applyPrecisionSessionDateFilter();
   updatePrecisionSessionDateSummary();
   renderPrecisionSessionCalendar();
+  focusPrecisionSessionCalendarDate(key);
 }
 
 function precisionSessionEntryTime(entry) {
@@ -4111,13 +4135,43 @@ function clearPrecisionSessionDateFilter() {
   updatePrecisionSessionDateSummary();
 }
 
+function focusPrecisionSessionCalendarDate(key) {
+  var calendar = document.getElementById('precisionSessionCalendar');
+  if (!calendar) return false;
+  var days = Array.prototype.slice.call(calendar.querySelectorAll('button[data-date]'));
+  var day = days.find(function(button) {
+    return (button.dataset && button.dataset.date) === key || (button.getAttribute && button.getAttribute('data-date') === key);
+  });
+  if (!day || typeof day.focus !== 'function') return false;
+  day.focus();
+  return true;
+}
+
+function focusPrecisionSessionCalendarMonthButton(offset) {
+  var toolbar = document.querySelector('.precision-session-calendar-toolbar');
+  if (!toolbar) return false;
+  var buttons = Array.prototype.slice.call(toolbar.querySelectorAll('button'));
+  var button = buttons[Number(offset) < 0 ? 0 : buttons.length - 1];
+  if (!button || typeof button.focus !== 'function') return false;
+  button.focus();
+  return true;
+}
+
 function handlePrecisionSessionCalendarKeydown(event) {
-  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].indexOf(event.key) === -1) return;
   var calendar = document.getElementById('precisionSessionCalendar');
   if (!calendar) return;
   var days = Array.prototype.slice.call(calendar.querySelectorAll('button[data-date]'));
   if (!days.length) return;
   var index = days.indexOf(document.activeElement);
+  if (['Enter', ' ', 'Spacebar'].indexOf(event.key) !== -1) {
+    if (index < 0) return;
+    var key = (days[index].dataset && days[index].dataset.date) || (days[index].getAttribute && days[index].getAttribute('data-date'));
+    if (!key) return;
+    event.preventDefault();
+    selectPrecisionSessionCalendarDate(key);
+    return;
+  }
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].indexOf(event.key) === -1) return;
   if (index < 0) index = 0;
   if (event.key === 'Home') index = 0;
   else if (event.key === 'End') index = days.length - 1;
@@ -4450,11 +4504,13 @@ function setPrecisionBaseVersion(id) {
     return sourceGeneration === precisionSourceLoadGeneration && loadToken === precisionVersionLoadToken && precisionBaseVersionSwitchPending;
   }
   function finishFailedSwitch() {
-    if (!isCurrentSwitch()) return;
+    if (loadToken !== precisionVersionLoadToken || !precisionBaseVersionSwitchPending) return false;
     precisionBaseVersionSwitchPending = false;
+    if (sourceGeneration !== precisionSourceLoadGeneration) return false;
     renderPrecisionEditSession();
     if (typeof updatePrecisionEditControls === 'function') updatePrecisionEditControls();
     setStatus(i18nText('image.load_failed'));
+    return true;
   }
   function activateVersion(dataUrl) {
     if (!isCurrentSwitch() || typeof dataUrl !== 'string' || dataUrl.indexOf('data:') !== 0) {
@@ -4465,6 +4521,7 @@ function setPrecisionBaseVersion(id) {
       loadPrecisionEditSourceImage(dataUrl, prompt, {
         preserveSession: true,
         generation: sourceGeneration,
+        baseVersionLoadToken: loadToken,
         beforeCommit: function() {
           if (!isCurrentSwitch()) return false;
           precisionEditSession.baseVersionId = id;
@@ -4488,18 +4545,27 @@ function setPrecisionBaseVersion(id) {
     return true;
   }
   _authFetch(source).then(function(response) {
-    if (sourceGeneration !== precisionSourceLoadGeneration || loadToken !== precisionVersionLoadToken) return null;
+    if (sourceGeneration !== precisionSourceLoadGeneration || loadToken !== precisionVersionLoadToken) {
+      finishFailedSwitch();
+      return null;
+    }
     if (!response.ok) throw new Error('HTTP ' + response.status);
     return response.blob();
   }).then(function(blob) {
-    if (sourceGeneration !== precisionSourceLoadGeneration || loadToken !== precisionVersionLoadToken) return;
+    if (sourceGeneration !== precisionSourceLoadGeneration || loadToken !== precisionVersionLoadToken) {
+      finishFailedSwitch();
+      return;
+    }
     if (!blob) {
       finishFailedSwitch();
       return;
     }
     var reader = new FileReader();
     reader.onload = function() {
-      if (sourceGeneration !== precisionSourceLoadGeneration || loadToken !== precisionVersionLoadToken) return;
+      if (sourceGeneration !== precisionSourceLoadGeneration || loadToken !== precisionVersionLoadToken) {
+        finishFailedSwitch();
+        return;
+      }
       activateVersion(String(reader.result || ''));
     };
     reader.onerror = function() {
@@ -12445,12 +12511,12 @@ function mountCreatorGenerateAction(mode){
   }
 }
 
-function openPrecisionGalleryPicker(){
+function openPrecisionGalleryPicker(returnFocus){
   if (typeof closePrecisionDocsDialog === 'function') closePrecisionDocsDialog(false);
   var hadDirty=precisionEditSourceImageData&&precisionSourceHasDirtyState();
   if(!preparePrecisionSourceReplacement())return false;
   var requestGeneration=++precisionSourceLoadGeneration;
-  var opener=document.activeElement;
+  var opener=returnFocus&&typeof returnFocus.focus==='function'?returnFocus:document.activeElement;
   setStatus(i18nText('creator.precision_edit_loading_gallery'));
   _authFetch('/api/preview/images').then(function(r){
     if(requestGeneration!==precisionSourceLoadGeneration)return null;
