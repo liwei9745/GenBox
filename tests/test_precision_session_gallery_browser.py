@@ -340,6 +340,70 @@ def test_loaded_precision_canvas_real_pointer_fullscreen_and_mobile_menu_contrac
                 page.keyboard.press("Escape")
                 page.wait_for_function("document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
 
+                def double_click_with_small_drift():
+                    page.mouse.move(point["x"], point["y"])
+                    page.mouse.down(button="left")
+                    page.mouse.move(point["x"] + 2, point["y"] + 1, steps=2)
+                    page.mouse.up(button="left")
+                    page.mouse.move(point["x"] + 1, point["y"] + 2)
+                    page.mouse.down(button="left")
+                    page.mouse.move(point["x"] + 3, point["y"] + 2, steps=2)
+                    page.mouse.up(button="left")
+
+                page.evaluate(
+                    """() => {
+                        precisionEditObjects = [];
+                        precisionEditHistory = [];
+                        precisionEditRedo = [];
+                        precisionEditSelectedId = null;
+                        setPrecisionEditTool('text');
+                        renderPrecisionEditCanvas();
+                    }"""
+                )
+                double_click_with_small_drift()
+                page.wait_for_function("!document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
+                assert page.evaluate("window.precisionEditObjects.length") == 0
+                assert page.locator("#precisionTextEditor").evaluate("node => node.classList.contains('hidden')")
+                page.keyboard.press("Escape")
+                page.wait_for_function("document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
+
+                page.evaluate(
+                    """() => {
+                        precisionEditObjects = [{
+                            id: 'double-click-eraser-brush', type: 'brush', label: 1,
+                            color: '#ef4444', strokeWidth: 5,
+                            points: [{ x: 0.35, y: 0.5 }, { x: 0.65, y: 0.5 }]
+                        }];
+                        precisionEditHistory = [];
+                        precisionEditRedo = [];
+                        precisionEditSelectedId = 'double-click-eraser-brush';
+                        setPrecisionEditTool('eraser');
+                        renderPrecisionEditCanvas();
+                    }"""
+                )
+                eraser_before = page.evaluate("JSON.stringify(window.precisionEditObjects)")
+                double_click_with_small_drift()
+                page.wait_for_function("!document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
+                assert page.evaluate("JSON.stringify(window.precisionEditObjects)") == eraser_before
+                page.keyboard.press("Escape")
+                page.wait_for_function("document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
+
+                page.evaluate(
+                    """() => {
+                        precisionEditObjects = [];
+                        precisionEditHistory = [];
+                        precisionEditRedo = [];
+                        precisionEditSelectedId = null;
+                        setPrecisionEditTool('brush');
+                        renderPrecisionEditCanvas();
+                    }"""
+                )
+                double_click_with_small_drift()
+                page.wait_for_function("!document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
+                assert page.evaluate("window.precisionEditObjects.length") == 0
+                page.keyboard.press("Escape")
+                page.wait_for_function("document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
+
                 trigger = page.locator("#btnPrecisionReplaceSource")
                 trigger.scroll_into_view_if_needed()
                 trigger.click()
@@ -384,6 +448,66 @@ def test_loaded_precision_canvas_real_pointer_fullscreen_and_mobile_menu_contrac
                 trigger.click()
                 page.locator("#precisionCanvasDimensions").click()
                 assert not page.locator("#precisionSourceMenu").is_visible()
+
+            page.evaluate(
+                """() => {
+                    const image = (color) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+                        '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480"><rect width="640" height="480" fill="' + color + '"/></svg>'
+                    );
+                    window.__precisionVisibleVersions = {
+                        original: image('#2463eb'),
+                        before: image('#d97706'),
+                        after: image('#15803d'),
+                    };
+                    precisionEditSession = {
+                        source: { id: 'original', label: '原图', data: window.__precisionVisibleVersions.original },
+                        versions: [
+                            { id: 'version-1', label: '第一版', data: window.__precisionVisibleVersions.before, parentId: 'original' },
+                            { id: 'version-2', label: '第二版', data: window.__precisionVisibleVersions.after, parentId: 'version-1' },
+                        ],
+                        selectedVersionId: 'version-2',
+                        baseVersionId: 'original',
+                        taskBaseVersionId: null,
+                        view: 'before',
+                        taskId: null,
+                    };
+                    renderPrecisionEditSession();
+                }"""
+            )
+            compare_stage = page.locator("#precisionCompareStage")
+            compare_stage.scroll_into_view_if_needed()
+            compare_box = compare_stage.bounding_box()
+            assert compare_box
+
+            def dispatch_visible_version_double_click(view, ratio, expected_key):
+                page.evaluate("(view) => setPrecisionVersionView(view)", view)
+                page.evaluate(
+                    """({ x, y }) => document.querySelector('#precisionCompareStage').dispatchEvent(
+                        new MouseEvent('dblclick', { bubbles: true, cancelable: true, clientX: x, clientY: y })
+                    )""",
+                    {"x": compare_box["x"] + compare_box["width"] * ratio, "y": compare_box["y"] + compare_box["height"] / 2},
+                )
+                page.wait_for_function("!document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
+                assert page.evaluate("([key]) => document.querySelector('#precisionImageFullscreenImg').getAttribute('src') === window.__precisionVisibleVersions[key]", [expected_key])
+                page.keyboard.press("Escape")
+                page.wait_for_function("document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
+
+            dispatch_visible_version_double_click("before", 0.5, "before")
+            dispatch_visible_version_double_click("after", 0.5, "after")
+            page.evaluate("updatePrecisionCompareSlider(50)")
+            dispatch_visible_version_double_click("compare", 0.25, "after")
+            dispatch_visible_version_double_click("compare", 0.75, "before")
+
+            page.evaluate(
+                """({ x, y }) => document.querySelector('#precisionAnnotationCanvas').dispatchEvent(
+                    new MouseEvent('dblclick', { bubbles: true, cancelable: true, clientX: x, clientY: y })
+                )""",
+                {"x": point["x"], "y": point["y"]},
+            )
+            page.wait_for_function("!document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
+            assert page.evaluate("document.querySelector('#precisionImageFullscreenImg').getAttribute('src') === window.__precisionVisibleVersions.original")
+            page.keyboard.press("Escape")
+            page.wait_for_function("document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
 
             page.set_viewport_size({"width": 390, "height": 844})
             fullscreen = page.locator("#btnPrecisionFullscreen")

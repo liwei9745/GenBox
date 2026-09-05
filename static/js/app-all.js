@@ -72,6 +72,9 @@ var precisionEditPointerFinishing = false;
 var precisionEditDragOrigin = null;
 var precisionEditDragMoved = false;
 var precisionEditGestureCheckpoint = null;
+var precisionEditDoubleClickCheckpoint = null;
+var PRECISION_DOUBLE_CLICK_ROLLBACK_WINDOW_MS = 1500;
+var PRECISION_DOUBLE_CLICK_ROLLBACK_DISTANCE_PX = 8;
 var precisionEditAnnotationsVisible = true;
 var precisionEditIdCounter = 0;
 var precisionEditLabelCounter = 0;
@@ -104,6 +107,8 @@ if (typeof window !== 'undefined' && typeof window.__genboxPrecisionCompareResiz
   window.__genboxPrecisionCompareResizeCleanup();
 }
 var precisionCompareResizeCleanup = null;
+var precisionImageFullscreenRestore = null;
+var PRECISION_FULLSCREEN_EXIT_WAIT_MS = 500;
 var precisionVersionLoadToken = 0;
 var precisionBaseVersionSwitchPending = false;
 var precisionSourceLoadGeneration = 0;
@@ -858,6 +863,11 @@ function ensurePrecisionEditPanel() {
 
   var existing = document.getElementById('panelPrecisionEdit');
   if (!existing) return null;
+  var surface = document.getElementById('precisionCanvasSurface');
+  if (surface && surface.dataset.precisionFullscreenBound !== 'true') {
+    surface.dataset.precisionFullscreenBound = 'true';
+    surface.addEventListener('pointerdown', handlePrecisionCanvasSurfacePointerdown, true);
+  }
   var canvas = document.getElementById('precisionAnnotationCanvas');
   if (canvas && canvas.dataset.precisionBound !== 'true') {
     canvas.dataset.precisionBound = 'true';
@@ -866,11 +876,7 @@ function ensurePrecisionEditPanel() {
     canvas.addEventListener('pointerup', endPrecisionEditPointer);
     canvas.addEventListener('pointercancel', endPrecisionEditPointer);
     canvas.addEventListener('lostpointercapture', endPrecisionEditPointer);
-    canvas.addEventListener('dblclick', function(event) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPrecisionCanvasImageFullscreen();
-    });
+    canvas.addEventListener('dblclick', handlePrecisionCanvasDoubleClick);
     canvas.addEventListener('keydown', handlePrecisionEditCanvasKeydown);
     canvas.addEventListener('keyup', handlePrecisionEditCanvasKeyup);
     canvas.addEventListener('blur', resetPrecisionCanvasKeyboardState);
@@ -907,6 +913,12 @@ function ensurePrecisionEditPanel() {
   var strokeWidth = document.getElementById('precisionStrokeWidth');
   var textSize = document.getElementById('precisionTextSize');
   var textEditor = document.getElementById('precisionTextEditor');
+  if (textEditor && textEditor.dataset.precisionFullscreenBound !== 'true') {
+    textEditor.dataset.precisionFullscreenBound = 'true';
+    textEditor.addEventListener('dblclick', handlePrecisionCanvasDoubleClick);
+    textEditor.addEventListener('pointerdown', handlePrecisionTextEditorPointerdown);
+    textEditor.addEventListener('pointerup', handlePrecisionTextEditorPointerup);
+  }
   var zoom = document.getElementById('precisionViewZoom');
   var zoomFit = document.getElementById('btnPrecisionZoomFit');
   if (undo && !undo.onclick) undo.onclick = undoPrecisionEdit;
@@ -3152,6 +3164,112 @@ function beginPrecisionEditTransform(point, object, mode, handle) {
   precisionEditDraftObject = null;
 }
 
+function precisionEditCreateGestureCheckpoint() {
+  return {
+    objects: precisionEditClone(precisionEditObjects),
+    history: precisionEditClone(precisionEditHistory),
+    redo: precisionEditClone(precisionEditRedo),
+    selectedId: precisionEditSelectedId,
+    sourceGeneration: precisionSourceLoadGeneration,
+    sourceData: precisionEditSourceImageData
+  };
+}
+
+function precisionEditDoubleClickMatches(checkpoint, event) {
+  if (!checkpoint || !event || checkpoint.target !== 'canvas') return false;
+  if (Date.now() - checkpoint.createdAt > PRECISION_DOUBLE_CLICK_ROLLBACK_WINDOW_MS) return false;
+  var clientX = Number(event.clientX);
+  var clientY = Number(event.clientY);
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return false;
+  return Math.hypot(clientX - checkpoint.clientX, clientY - checkpoint.clientY) <= PRECISION_DOUBLE_CLICK_ROLLBACK_DISTANCE_PX;
+}
+
+function rememberPrecisionEditDoubleClickCheckpoint(event, checkpoint) {
+  if (!checkpoint || !event) return;
+  if (precisionEditDoubleClickMatches(precisionEditDoubleClickCheckpoint, event)) return;
+  var clientX = Number(event.clientX);
+  var clientY = Number(event.clientY);
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return;
+  var candidate = {
+    target: 'canvas',
+    clientX: clientX,
+    clientY: clientY,
+    createdAt: Date.now(),
+    checkpoint: checkpoint,
+    focusId: precisionEditSelectedId
+  };
+  precisionEditDoubleClickCheckpoint = candidate;
+  if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+    window.setTimeout(function() {
+      if (precisionEditDoubleClickCheckpoint !== candidate) return;
+      precisionEditDoubleClickCheckpoint = null;
+      if (candidate.focusId && precisionEditSelectedId === candidate.focusId) focusPrecisionEditInstruction(candidate.focusId);
+    }, PRECISION_DOUBLE_CLICK_ROLLBACK_WINDOW_MS);
+  }
+}
+
+function rollbackPrecisionEditDoubleClickCheckpoint(checkpoint) {
+  if (!checkpoint || checkpoint.sourceGeneration !== precisionSourceLoadGeneration || checkpoint.sourceData !== precisionEditSourceImageData) return false;
+  precisionEditObjects = precisionEditClone(checkpoint.objects || []);
+  precisionEditHistory = precisionEditClone(checkpoint.history || []);
+  precisionEditRedo = precisionEditClone(checkpoint.redo || []);
+  precisionEditSelectedId = checkpoint.selectedId || null;
+  precisionEditPointerId = null;
+  precisionEditPointerTarget = null;
+  precisionEditDraftObject = null;
+  precisionEditDragOrigin = null;
+  precisionEditDragMoved = false;
+  precisionEditGestureCheckpoint = null;
+  precisionEditEraserSnapshot = null;
+  precisionEditEraserChanged = false;
+  cancelPrecisionEditText();
+  renderPrecisionEditCanvas();
+  updatePrecisionEditControls();
+  return true;
+}
+
+function handlePrecisionCanvasDoubleClick(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  var checkpoint = precisionEditDoubleClickCheckpoint;
+  if (precisionEditDoubleClickMatches(checkpoint, event)) rollbackPrecisionEditDoubleClickCheckpoint(checkpoint.checkpoint);
+  precisionEditDoubleClickCheckpoint = null;
+  return openPrecisionCanvasImageFullscreen(event);
+}
+
+function handlePrecisionTextEditorPointerup(event) {
+  var checkpoint = precisionEditDoubleClickCheckpoint;
+  if (precisionEditDoubleClickMatches(checkpoint, event)) {
+    precisionEditDoubleClickCheckpoint = null;
+    rollbackPrecisionEditDoubleClickCheckpoint(checkpoint.checkpoint);
+    return openPrecisionCanvasImageFullscreen(event);
+  }
+  rememberPrecisionEditDoubleClickCheckpoint(event, precisionEditGestureCheckpoint);
+  return false;
+}
+
+function handlePrecisionTextEditorPointerdown(event) {
+  var checkpoint = precisionEditDoubleClickCheckpoint;
+  if (!precisionEditDoubleClickMatches(checkpoint, event)) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  precisionEditDoubleClickCheckpoint = null;
+  rollbackPrecisionEditDoubleClickCheckpoint(checkpoint.checkpoint);
+  return openPrecisionCanvasImageFullscreen(event);
+}
+
+function handlePrecisionCanvasSurfacePointerdown(event) {
+  var checkpoint = precisionEditDoubleClickCheckpoint;
+  if (!precisionEditDoubleClickMatches(checkpoint, event)) return false;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  precisionEditDoubleClickCheckpoint = null;
+  rollbackPrecisionEditDoubleClickCheckpoint(checkpoint.checkpoint);
+  return openPrecisionCanvasImageFullscreen({ currentTarget: { id: 'precisionAnnotationCanvas' }, clientX: event.clientX, clientY: event.clientY });
+}
+
 function beginPrecisionEditPointer(event) {
   if (!precisionEditSourceImageData || precisionEditPointerId !== null) return;
   if (precisionCanvasPanRequested(event)) {
@@ -3163,6 +3281,13 @@ function beginPrecisionEditPointer(event) {
   if (!point) return;
   event.preventDefault();
   var canvas = event.currentTarget;
+  var doubleClickCheckpoint = precisionEditDoubleClickCheckpoint;
+  if (precisionEditDoubleClickMatches(doubleClickCheckpoint, event)) {
+    precisionEditDoubleClickCheckpoint = null;
+    rollbackPrecisionEditDoubleClickCheckpoint(doubleClickCheckpoint.checkpoint);
+    openPrecisionCanvasImageFullscreen(event);
+    return;
+  }
 
   if (precisionEditTool === 'text' && !event.altKey) {
     var textHit = findPrecisionEditObject(point, event);
@@ -3178,6 +3303,7 @@ function beginPrecisionEditPointer(event) {
       updatePrecisionEditControls();
       return;
     }
+    precisionEditGestureCheckpoint = precisionEditCreateGestureCheckpoint();
     openPrecisionEditTextEditor(point);
     return;
   }
@@ -3197,12 +3323,7 @@ function beginPrecisionEditPointer(event) {
       }
     }
     if (shape) {
-      precisionEditGestureCheckpoint = {
-        objects: precisionEditClone(precisionEditObjects),
-        history: precisionEditClone(precisionEditHistory),
-        redo: precisionEditClone(precisionEditRedo),
-        selectedId: precisionEditSelectedId
-      };
+      precisionEditGestureCheckpoint = precisionEditCreateGestureCheckpoint();
       precisionEditPointerId = event.pointerId;
       precisionEditPointerTarget = canvas;
       precisionEditPointerFinishing = false;
@@ -3223,12 +3344,7 @@ function beginPrecisionEditPointer(event) {
     return;
   }
 
-  precisionEditGestureCheckpoint = {
-    objects: precisionEditClone(precisionEditObjects),
-    history: precisionEditClone(precisionEditHistory),
-    redo: precisionEditClone(precisionEditRedo),
-    selectedId: precisionEditSelectedId
-  };
+  precisionEditGestureCheckpoint = precisionEditCreateGestureCheckpoint();
   precisionEditPointerId = event.pointerId;
   precisionEditPointerTarget = canvas;
   precisionEditPointerFinishing = false;
@@ -3451,6 +3567,8 @@ function endPrecisionEditPointer(event) {
   precisionEditPointerFinishing = true;
   var pointerId = precisionEditPointerId;
   var canvas = precisionEditPointerTarget || event.currentTarget;
+  var gestureCheckpoint = precisionEditGestureCheckpoint;
+  var doubleClickCheckpoint = precisionEditDoubleClickMatches(precisionEditDoubleClickCheckpoint, event) ? precisionEditDoubleClickCheckpoint : null;
   try {
     // pointerup can be the last event outside the move stream; apply it before
     // copying the draft so the persisted geometry matches the visible endpoint.
@@ -3484,7 +3602,14 @@ function endPrecisionEditPointer(event) {
     renderPrecisionEditCanvas();
     updatePrecisionEditControls();
     updatePrecisionEditCanvasCursor(event, canvas);
-    if (precisionEditSelectedId) focusPrecisionEditInstruction(precisionEditSelectedId);
+    if (doubleClickCheckpoint) {
+      precisionEditDoubleClickCheckpoint = null;
+      rollbackPrecisionEditDoubleClickCheckpoint(doubleClickCheckpoint.checkpoint);
+      openPrecisionCanvasImageFullscreen(event);
+      return;
+    }
+    rememberPrecisionEditDoubleClickCheckpoint(event, gestureCheckpoint);
+    if (!precisionEditDoubleClickCheckpoint && precisionEditSelectedId) focusPrecisionEditInstruction(precisionEditSelectedId);
   } finally {
     // Clear state before releasing capture: browsers may synchronously dispatch
     // lostpointercapture, which must not commit the same gesture twice.
@@ -3871,7 +3996,7 @@ function bindPrecisionCompareEvents(stage) {
     stage.addEventListener('dblclick', function(event) {
       event.preventDefault();
       event.stopPropagation();
-      openPrecisionCanvasImageFullscreen();
+      openPrecisionCanvasImageFullscreen(event);
     });
   }
   if (stage.dataset.precisionResizeBound === 'true') return;
@@ -3902,9 +4027,60 @@ function bindPrecisionCompareEvents(stage) {
   window.addEventListener('pagehide', cleanup, { once: true });
 }
 
-function openPrecisionCanvasImageFullscreen() {
-  var entries = [precisionEditSession.source].concat(precisionEditSession.versions || []).filter(Boolean);
-  var current = entries.find(function(entry) { return entry.id === precisionEditSession.selectedVersionId; }) || entries[entries.length - 1];
+function precisionEditSessionEntries() {
+  return [precisionEditSession.source].concat(precisionEditSession.versions || []).filter(Boolean);
+}
+
+function precisionEditSessionEntry(entries, id, fallback) {
+  return entries.find(function(entry) { return entry && entry.id === id; }) || fallback || null;
+}
+
+function precisionFullscreenVisibleEntry(event) {
+  var entries = precisionEditSessionEntries();
+  var source = precisionEditSessionEntry(entries, 'original', entries[0]);
+  var current = precisionEditSessionEntry(entries, precisionEditSession.selectedVersionId, source);
+  var comparisonBase = precisionEditSessionEntry(entries, current && current.parentId || 'original', source);
+  var target = event && event.currentTarget;
+  if (target && (target.id === 'precisionAnnotationCanvas' || target.id === 'precisionTextEditor')) {
+    return precisionEditSessionEntry(entries, precisionEditSession.baseVersionId, source);
+  }
+  if (precisionEditSession.view === 'before') return comparisonBase;
+  if (precisionEditSession.view === 'compare') {
+    var stage = document.getElementById('precisionCompareStage');
+    var slider = document.getElementById('precisionCompareSlider');
+    var divider = Math.max(0, Math.min(100, Number(slider && slider.value) || 50));
+    var pointerValue = precisionCompareValueFromPointer(event, stage);
+    return pointerValue !== null && pointerValue <= divider ? current : comparisonBase;
+  }
+  return current;
+}
+
+function movePrecisionImageFullscreenIntoCurrentRoot() {
+  var overlay = document.getElementById('precisionImageFullscreen');
+  var root = document.fullscreenElement;
+  if (!overlay || !root || (root.contains && root.contains(overlay))) return false;
+  precisionImageFullscreenRestore = { parent: overlay.parentNode, nextSibling: overlay.nextSibling };
+  if (!precisionImageFullscreenRestore.parent || !root.appendChild) {
+    precisionImageFullscreenRestore = null;
+    return false;
+  }
+  root.appendChild(overlay);
+  return true;
+}
+
+function restorePrecisionImageFullscreenRoot() {
+  if (!precisionImageFullscreenRestore) return;
+  var overlay = document.getElementById('precisionImageFullscreen');
+  var restore = precisionImageFullscreenRestore;
+  precisionImageFullscreenRestore = null;
+  if (!overlay || !restore.parent) return;
+  if (restore.nextSibling && restore.nextSibling.parentNode === restore.parent && restore.parent.insertBefore) restore.parent.insertBefore(overlay, restore.nextSibling);
+  else if (restore.parent.appendChild) restore.parent.appendChild(overlay);
+}
+
+function openPrecisionCanvasImageFullscreen(event) {
+  var entries = precisionEditSessionEntries();
+  var current = precisionFullscreenVisibleEntry(event);
   if (!current || !current.data) return false;
   var openViewer = function() {
     return openPrecisionImageFullscreen(current.data, current.label || '', {
@@ -3914,13 +4090,49 @@ function openPrecisionCanvasImageFullscreen() {
     });
   };
   if (document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+    var settled = false;
+    var timeoutId = null;
+    var cleanup = function() {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      if (timeoutId !== null && typeof clearTimeout === 'function') clearTimeout(timeoutId);
+      timeoutId = null;
+    };
+    var finish = function(fallback) {
+      if (settled) return false;
+      settled = true;
+      cleanup();
+      if (fallback) {
+        setStatus('无法退出工作台全屏，已在当前工作台中打开图片查看。');
+        movePrecisionImageFullscreenIntoCurrentRoot();
+      }
+      return openViewer();
+    };
+    var onFullscreenChange = function() {
+      if (!document.fullscreenElement) finish(false);
+    };
+    var scheduleFallback = function() {
+      if (settled) return;
+      if (typeof setTimeout !== 'function') { finish(true); return; }
+      timeoutId = setTimeout(function() {
+        if (!settled) finish(true);
+      }, PRECISION_FULLSCREEN_EXIT_WAIT_MS);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
     try {
       var exitResult = document.exitFullscreen();
       if (exitResult && typeof exitResult.then === 'function') {
-        exitResult.then(openViewer).catch(function() {});
+        exitResult.then(function() {
+          if (!document.fullscreenElement) finish(false);
+          else scheduleFallback();
+        }).catch(function() { finish(true); });
         return true;
       }
-    } catch (error) {}
+      if (!document.fullscreenElement) return finish(false);
+      scheduleFallback();
+      return true;
+    } catch (error) {
+      return finish(true);
+    }
   }
   return openViewer();
 }
@@ -9503,6 +9715,7 @@ function closePrecisionImageFullscreen() {
   if (overlay) { overlay.classList.add('hidden'); overlay.classList.remove('show'); overlay.dataset.zoom = '1'; overlay._precisionReturnFocus = null; }
   if (overlay) { overlay._precisionPromptEntries = []; overlay._precisionPromptText = ''; }
   document.body.classList.remove('precision-image-viewing');
+  restorePrecisionImageFullscreenRoot();
   if (restore && typeof restore.focus === 'function') restore.focus();
 }
 

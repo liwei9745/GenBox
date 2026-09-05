@@ -1411,11 +1411,16 @@ function createPrecisionPointerHarness(objects, tool = 'rect', selectedId = null
     var precisionEditPointerFinishing = false;
     var precisionEditDragOrigin = null;
     var precisionEditDragMoved = false;
+    var precisionEditGestureCheckpoint = null;
+    var precisionEditDoubleClickCheckpoint = null;
+    var PRECISION_DOUBLE_CLICK_ROLLBACK_WINDOW_MS = 1500;
+    var PRECISION_DOUBLE_CLICK_ROLLBACK_DISTANCE_PX = 8;
     var precisionEditIdCounter = 0;
     var precisionEditLabelCounter = 20;
     var precisionEditPendingInstruction = '';
     var precisionEditEraserSnapshot = null;
     var precisionEditEraserChanged = false;
+    var precisionSourceLoadGeneration = 1;
     var precisionEditSession = { source: { id: 'original' }, versions: [{ id: 'version-1' }], selectedVersionId: 'version-1', baseVersionId: 'original', taskBaseVersionId: 'original', view: 'after', taskId: 'task-1' };
     function precisionEditStyle() { return { color: '#ef4444', strokeWidth: 5 }; }
     function renderPrecisionEditCanvas() { globalThis.__renderCount += 1; }
@@ -1424,6 +1429,7 @@ function createPrecisionPointerHarness(objects, tool = 'rect', selectedId = null
     function updatePrecisionEditCanvasCursor() {}
     function setStatus() {}
     function openPrecisionEditTextEditor(point) { globalThis.__textPoints.push({ x: point.x, y: point.y }); }
+    function cancelPrecisionEditText() {}
     function erasePrecisionBrushAt(point) { globalThis.__erasePoints.push({ x: point.x, y: point.y }); return true; }
     function precisionCanvasPanRequested() { return false; }
     function beginPrecisionCanvasPan() { return false; }
@@ -1438,6 +1444,7 @@ function createPrecisionPointerHarness(objects, tool = 'rect', selectedId = null
       'precisionEditObjectBounds', 'precisionEditIsBoxShape', 'precisionEditIsTransformable', 'precisionEditApplyBounds', 'precisionEditPointerTolerance',
       'precisionEditShapeHit', 'findPrecisionEditShape', 'findPrecisionEditObject',
       'precisionEditHandlePoints', 'findPrecisionEditHandle', 'precisionEditBrushSegmentIndex', 'beginPrecisionEditBrushNode', 'beginPrecisionEditTransform',
+      'precisionEditCreateGestureCheckpoint', 'precisionEditDoubleClickMatches', 'rememberPrecisionEditDoubleClickCheckpoint',
       'precisionEditObjectById', 'beginPrecisionEditPointer', 'applyPrecisionEditPointerPoint',
       'continuePrecisionEditPointer', 'endPrecisionEditPointer', 'precisionEditObjectName',
       'renderPrecisionEditObjectList', 'buildPrecisionEditAnnotationData',
@@ -3316,5 +3323,64 @@ assert.ok(cutoutStatus.textContent.includes('creator.cutout_completed_fallback')
 assert.ok(cutoutStatuses.some((status) => status.includes('creator.cutout_completed_fallback')));
 
 expect(/@media \(max-width: 400px\)\s*\{[\s\S]*?\.precision-workbench-help-popover\s*\{[\s\S]*?right:\s*auto;[\s\S]*?left:\s*12px;[\s\S]*?width:\s*min\(320px, calc\(100vw - 114px\)\);[\s\S]*?max-width:\s*calc\(100vw - 114px\);[\s\S]*?margin:\s*0;[\s\S]*?\}[\s\S]*?\}/.test(css), 'The narrow-mobile contract must tolerate fractional viewport widths while keeping the help popover inside viewport bounds.');
+
+const fullscreenOverlay = { parentNode: null, nextSibling: null };
+const fullscreenOriginalParent = {
+  appendChild(node) { node.parentNode = this; },
+  insertBefore(node) { node.parentNode = this; },
+};
+fullscreenOverlay.parentNode = fullscreenOriginalParent;
+const fullscreenRoot = {
+  contains() { return false; },
+  appendChild(node) { node.parentNode = this; },
+};
+const fullscreenStatuses = [];
+const fullscreenOpenCalls = [];
+const fullscreenListeners = {};
+const fullscreenNodes = {
+  precisionImageFullscreen: fullscreenOverlay,
+  precisionCompareStage: { getBoundingClientRect: () => ({ left: 0, width: 100 }) },
+  precisionCompareSlider: { value: '50' },
+};
+const fullscreenFallbackContext = vm.createContext({
+  document: {
+    fullscreenElement: fullscreenRoot,
+    getElementById: (id) => fullscreenNodes[id] || null,
+    addEventListener: (name, listener) => { fullscreenListeners[name] = listener; },
+    removeEventListener: (name, listener) => { if (fullscreenListeners[name] === listener) delete fullscreenListeners[name]; },
+    exitFullscreen: () => Promise.reject(new Error('fullscreen denied')),
+  },
+  precisionEditSession: {
+    source: { id: 'original', data: 'original-image', label: 'Original' },
+    versions: [{ id: 'version-1', data: 'after-image', label: 'After', parentId: 'original' }],
+    selectedVersionId: 'version-1',
+    baseVersionId: 'original',
+    view: 'after',
+  },
+  precisionImageFullscreenRestore: null,
+  PRECISION_FULLSCREEN_EXIT_WAIT_MS: 500,
+  setStatus: (message) => fullscreenStatuses.push(message),
+  openPrecisionImageFullscreen: (src) => { fullscreenOpenCalls.push(src); return true; },
+  setTimeout,
+  clearTimeout,
+  Math,
+  Number,
+  Array,
+});
+vm.runInContext([
+  extractFunction('precisionCompareValueFromPointer'),
+  extractFunction('precisionEditSessionEntries'),
+  extractFunction('precisionEditSessionEntry'),
+  extractFunction('precisionFullscreenVisibleEntry'),
+  extractFunction('movePrecisionImageFullscreenIntoCurrentRoot'),
+  extractFunction('restorePrecisionImageFullscreenRoot'),
+  extractFunction('openPrecisionCanvasImageFullscreen'),
+].join('\n'), fullscreenFallbackContext);
+assert.equal(vm.runInContext("openPrecisionCanvasImageFullscreen({ currentTarget: { id: 'precisionCompareStage' }, clientX: 25, clientY: 10 })", fullscreenFallbackContext), true, 'A fullscreen viewer request must remain accepted while workbench exit is pending.');
+await new Promise((resolve) => setImmediate(resolve));
+await new Promise((resolve) => setImmediate(resolve));
+assert.deepEqual(fullscreenOpenCalls, ['after-image'], 'A rejected workbench exit must still open the actually visible image.');
+assert.equal(fullscreenOverlay.parentNode, fullscreenRoot, 'A rejected workbench exit must move the viewer under the active fullscreen root so it remains visible.');
+assert.ok(fullscreenStatuses.some((message) => message.includes('无法退出工作台全屏')), 'A rejected workbench exit must report the fallback instead of silently succeeding.');
 
 console.log('precision-edit UI static assertions passed');
