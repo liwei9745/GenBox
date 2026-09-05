@@ -231,6 +231,76 @@ class ModNetModelImportManager:
                 Path(temp_name).unlink(missing_ok=True)
             raise ModNetImportError("modnet_upload_failed", "MODNet 模型上传失败", status_code=500) from None
 
+    def _publish_pair(self, model_tmp: Path, manifest_tmp: Path) -> None:
+        targets = (self.model_path, self.manifest_path)
+        backups: dict[Path, Path] = {}
+        published: set[Path] = set()
+        try:
+            for target in targets:
+                if not target.exists():
+                    continue
+                if target.is_symlink() or not target.is_file():
+                    raise ModNetImportError("modnet_target_invalid", "拒绝覆盖异常模型目标", status_code=409)
+                backup = self.model_dir / f".{target.name}.{uuid.uuid4().hex}.bak"
+                os.replace(str(target), str(backup))
+                backups[target] = backup
+
+            os.replace(str(model_tmp), str(self.model_path))
+            published.add(self.model_path)
+            os.replace(str(manifest_tmp), str(self.manifest_path))
+            published.add(self.manifest_path)
+        except ModNetImportError:
+            if not self._rollback_pair(targets, backups, published):
+                raise ModNetImportError(
+                    "modnet_import_rollback_failed",
+                    "MODNet 模型导入失败，旧模型备份已保留以便恢复",
+                    status_code=500,
+                ) from None
+            raise
+        except (OSError, ValueError):
+            rollback_ok = self._rollback_pair(targets, backups, published)
+            if not rollback_ok:
+                raise ModNetImportError(
+                    "modnet_import_rollback_failed",
+                    "MODNet 模型导入失败，旧模型备份已保留以便恢复",
+                    status_code=500,
+                ) from None
+            raise ModNetImportError("modnet_import_failed", "MODNet 模型导入失败", status_code=500) from None
+        else:
+            for backup in backups.values():
+                try:
+                    backup.unlink(missing_ok=True)
+                except OSError:
+                    # The new pair is already committed; a stale hidden backup
+                    # must not turn a successful import into a false failure.
+                    pass
+
+    @staticmethod
+    def _rollback_pair(
+        targets: tuple[Path, Path],
+        backups: Mapping[Path, Path],
+        published: set[Path],
+    ) -> bool:
+        rollback_ok = True
+        for target in reversed(targets):
+            if target not in published:
+                continue
+            try:
+                if target.is_symlink() or (target.exists() and not target.is_file()):
+                    raise OSError
+                target.unlink(missing_ok=True)
+            except OSError:
+                rollback_ok = False
+        for target in targets:
+            backup = backups.get(target)
+            if backup is None:
+                continue
+            try:
+                os.replace(str(backup), str(target))
+            except OSError:
+                rollback_ok = False
+        return rollback_ok
+
     def import_content(self, content: object, *, filename: str = DEFAULT_MODEL_FILENAME,
                        license_confirmed: object = False, license_source: object = "",
                        expected: Optional[Mapping[str, Any]] = None) -> ModNetImportResult:
@@ -257,8 +327,7 @@ class ModNetModelImportManager:
                     json.dump(manifest, handle, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
                     handle.flush()
                     os.fsync(handle.fileno())
-                os.replace(str(temp_path), str(self.model_path))
-                os.replace(str(manifest_tmp), str(self.manifest_path))
+                self._publish_pair(temp_path, manifest_tmp)
                 return ModNetImportResult(self.model_path, self.manifest_path, safe_name, size, sha256, md5, confirmed, source)
             except ModNetImportError:
                 raise

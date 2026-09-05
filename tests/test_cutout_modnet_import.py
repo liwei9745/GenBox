@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import image_tools.cutout_modnet_import as modnet_import
 from image_tools.cutout_modnet_import import (
     DEFAULT_MODEL_FILENAME,
     MODNET_IMPORT_DIR,
@@ -105,3 +106,51 @@ def test_import_upload_reads_starlette_style_content(tmp_path):
     ))
     assert result.filename == "from-browser.onnx"
     assert result.model_path.read_bytes() == b"abc123"
+
+
+def test_failed_second_publish_restores_previous_model_and_manifest(tmp_path, monkeypatch):
+    instance = manager(tmp_path)
+    previous = instance.import_bytes(
+        b"working-checkpoint",
+        filename="working.onnx",
+        license_confirmed=True,
+        license_source="previous user-confirmed license",
+    )
+    previous_model = previous.model_path.read_bytes()
+    previous_manifest = previous.manifest_path.read_bytes()
+    previous_status = instance.status()
+
+    real_replace = modnet_import.os.replace
+    manifest_publish_failed = False
+
+    def fail_manifest_publish_once(source, target):
+        nonlocal manifest_publish_failed
+        source_path = Path(source)
+        target_path = Path(target)
+        if (
+            not manifest_publish_failed
+            and target_path == instance.manifest_path
+            and source_path.name.startswith(f".{instance.manifest_path.name}.")
+            and source_path.suffix == ".tmp"
+        ):
+            manifest_publish_failed = True
+            raise OSError("simulated manifest publish failure")
+        return real_replace(source, target)
+
+    monkeypatch.setattr(modnet_import.os, "replace", fail_manifest_publish_once)
+
+    with pytest.raises(ModNetImportError) as exc:
+        instance.import_bytes(
+            b"replacement-checkpoint",
+            filename="replacement.onnx",
+            license_confirmed=True,
+            license_source="replacement user-confirmed license",
+        )
+
+    assert exc.value.code == "modnet_import_failed"
+    assert manifest_publish_failed is True
+    assert instance.model_path.read_bytes() == previous_model
+    assert instance.manifest_path.read_bytes() == previous_manifest
+    assert instance.status() == previous_status
+    assert not list(instance.model_dir.glob(".*.tmp"))
+    assert not list(instance.model_dir.glob(".*.bak"))
