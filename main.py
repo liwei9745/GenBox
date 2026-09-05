@@ -90,6 +90,7 @@ from providers import (
     enhance_prompt_with_llm_detailed,
     fetch_models_from_upstream,
     generate_multi,
+    precision_model_uses_gpt_image_2_size_contract,
     resolve_provider_precision_model_capability,
     translate_upstream_error,
 )
@@ -1567,17 +1568,9 @@ def _validate_precision_edit_size_authorization(
         provider = all_providers.get(provider_id)
         setting = settings.get(provider_id) if isinstance(settings.get(provider_id), dict) else {}
         model = str(setting.get("model") or "").strip()
-        resolution = _provider_precision_model_resolution(provider, model) if provider else None
         protocol_model = bool(
-            resolution is not None
-            and (
-                model == PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE
-                or (
-                    resolution.canonical_model == PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE
-                    and bool(resolution.supported_sizes)
-                    and all(gpt_image_2_size_error(size) is None for size in resolution.supported_sizes)
-                )
-            )
+            provider
+            and precision_model_uses_gpt_image_2_size_contract(provider, model)
         )
         if protocol_model:
             protocol_error = gpt_image_2_size_error(target)

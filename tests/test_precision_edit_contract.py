@@ -1161,7 +1161,7 @@ def test_precision_model_refresh_preserves_user_confirmed_compatibility_mapping(
     canonical_capabilities = {
         "gpt-image-2": {
             "precision_edit": True,
-            "supported_sizes": ["64x64"],
+            "supported_sizes": ["1024x1024"],
         }
     }
     provider = ProviderConfig(
@@ -1229,7 +1229,8 @@ def test_precision_model_refresh_preserves_user_confirmed_compatibility_mapping(
     assert saved == [config, config]
 
     request = _precision_resize_only_request(
-        image_data=_image_data(size=(64, 64)),
+        image_data=_image_data(size=(1024, 1024)),
+        precision_target_size="1024x1024",
         provider_settings={"precision-provider": {"model": refreshed_model}},
     )
     response = asyncio.run(main.generate(request, _route_request()))
@@ -1417,6 +1418,82 @@ def test_precision_route_rejects_alias_cycle_or_collision_before_task(monkeypatc
         )
 
     assert caught.value.detail["code"] == "precision_edit_provider_unsupported"
+    assert process_calls == []
+
+
+@pytest.mark.parametrize("alias_field", ["alias_of", "canonical_model"])
+def test_precision_gpt_image_2_alias_rejects_illegal_declared_target_before_task(
+    monkeypatch,
+    alias_field,
+):
+    alias = "gpt-image2-b"
+    provider = ProviderConfig(
+        id="precision-provider",
+        name="Precision Mock",
+        type="image",
+        api_key="test-key",
+        base_url="https://provider.example.test/v1",
+        model=alias,
+        models=[alias],
+        enabled=True,
+        endpoint_type="openai",
+        precision_edit_profile=(
+            PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE
+        ),
+        capabilities={"precision_edit": True},
+        extra={
+            "model_capabilities": {
+                alias: {alias_field: "gpt-image-2"},
+                "gpt-image-2": {
+                    "precision_edit": True,
+                    "supported_sizes": ["1792x768", "1920x1080"],
+                },
+            }
+        },
+    )
+    process_calls = []
+
+    async def forbidden_process(generation_id):
+        process_calls.append(generation_id)
+
+    monkeypatch.setattr(
+        main,
+        "cfg_mgr",
+        SimpleNamespace(
+            config=SimpleNamespace(providers=[provider]),
+            get_image_providers=lambda: [provider],
+        ),
+    )
+    monkeypatch.setattr(main, "_check_rate_limit", lambda *_args: True)
+    monkeypatch.setattr(main, "_process_image_gen", forbidden_process)
+    before_counter = main.generation_counter
+    before_task_ids = set(main.image_tasks)
+
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(
+            main.generate(
+                _precision_resize_only_request(
+                    precision_target_size="1920x1080",
+                    provider_settings={
+                        "precision-provider": {"model": alias},
+                    },
+                ),
+                _route_request(),
+            )
+        )
+
+    assert caught.value.status_code == 422
+    assert caught.value.detail["code"] == "precision_edit_size_unsupported"
+    assert caught.value.detail["providers"] == [
+        {
+            "id": "precision-provider",
+            "model": alias,
+            "reason": "precision_target_size_alignment_invalid",
+            "target_size": "1920x1080",
+        }
+    ]
+    assert main.generation_counter == before_counter
+    assert set(main.image_tasks) == before_task_ids
     assert process_calls == []
 
 

@@ -221,8 +221,12 @@ def test_precision_canonical_only_alias_supports_declared_strict_sizes_and_keeps
 
 
 def test_precision_alias_resize_enforces_canonical_protocol_even_when_declared():
-    provider = _alias_provider(canonical_sizes=["1920x1080"])
+    provider = _alias_provider(canonical_sizes=["1792x768", "1920x1080"])
 
+    assert providers.precision_model_uses_gpt_image_2_size_contract(
+        provider,
+        "gpt-image2-b",
+    ) is True
     assert providers._precision_size_error(
         provider,
         "gpt-image2-b",

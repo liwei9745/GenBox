@@ -1681,11 +1681,11 @@ def _precision_model_has_size_declaration(cfg: ProviderConfig, model_id: str) ->
     return resolution.structure_valid and resolution.size_declaration_present
 
 
-def _precision_model_uses_gpt_image_2_size_contract(
+def precision_model_uses_gpt_image_2_size_contract(
     cfg: ProviderConfig,
     model_id: str,
 ) -> bool:
-    """Apply the protocol only to the exact model or an explicit one-hop alias."""
+    """Identify the exact model or an explicit one-hop canonical alias."""
     if model_id == "gpt-image-2":
         return True
     resolution = _precision_model_capability_resolution(cfg, model_id)
@@ -1711,7 +1711,7 @@ def _precision_preserve_source_size_error(
             "per side and within the configured pixel limit",
         )
     source_size = f"{width}x{height}"
-    if _precision_model_uses_gpt_image_2_size_contract(cfg, model_id):
+    if precision_model_uses_gpt_image_2_size_contract(cfg, model_id):
         protocol_error = gpt_image_2_size_error(source_size)
         if protocol_error:
             return protocol_error
@@ -1773,7 +1773,7 @@ def _precision_size_error(
         return "precision_size_mode_invalid", "unsupported precision size mode"
     if _normalize_precision_size(target) is None:
         return "precision_target_size_invalid", "resize mode requires a valid WIDTHxHEIGHT target"
-    if _precision_model_uses_gpt_image_2_size_contract(cfg, model_id):
+    if precision_model_uses_gpt_image_2_size_contract(cfg, model_id):
         protocol_error = gpt_image_2_size_error(target)
         if protocol_error:
             return protocol_error
