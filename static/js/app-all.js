@@ -3817,6 +3817,7 @@ function renderPrecisionEditSession() {
   var before = document.getElementById('precisionCompareBefore');
   var after = document.getElementById('precisionCompareAfter');
   var stage = document.getElementById('precisionCompareStage');
+  var useAsBase = document.getElementById('btnPrecisionUseSelectedAsBase');
   if (!rail || !before || !after || !stage || !precisionEditSession.source) return;
   var selected = precisionEditSession.selectedVersionId;
   var entries = [precisionEditSession.source].concat(precisionEditSession.versions);
@@ -3827,6 +3828,11 @@ function renderPrecisionEditSession() {
   var base = entries.find(function(entry) { return entry.id === (current.parentId || 'original'); }) || precisionEditSession.source;
   var hasComparison = current.id !== base.id;
   var isEditingBase = current.id === precisionEditSession.baseVersionId;
+  var canUseSelectedAsBase = current.id !== precisionEditSession.baseVersionId && !precisionSourceTaskIsActive();
+  if (useAsBase) {
+    useAsBase.disabled = !canUseSelectedAsBase;
+    useAsBase.setAttribute('aria-disabled', canUseSelectedAsBase ? 'false' : 'true');
+  }
   before.src = base.data;
   after.src = current.data;
   stage.dataset.afterTransparent = current.transparent === true ? 'true' : 'false';
@@ -4042,6 +4048,10 @@ function selectPrecisionVersion(id) {
   precisionEditSession.selectedVersionId = id;
   precisionEditSession.view = 'after';
   renderPrecisionEditSession();
+}
+
+function useSelectedPrecisionVersionAsBase() {
+  return setPrecisionBaseVersion(precisionEditSession.selectedVersionId);
 }
 
 function setPrecisionVersionView(view) {
@@ -4317,7 +4327,7 @@ function getPrecisionSizeRequest() {
 function setPrecisionBaseVersion(id) {
   var entries = [precisionEditSession.source].concat(precisionEditSession.versions);
   var version = entries.find(function(entry) { return entry.id === id; });
-  if (!version) return;
+  if (!version || version.id === precisionEditSession.baseVersionId || precisionSourceTaskIsActive()) return false;
   precisionEditSession.baseVersionId = id;
   precisionEditSession.selectedVersionId = id;
   precisionEditSession.view = 'after';
@@ -4333,7 +4343,7 @@ function setPrecisionBaseVersion(id) {
   }
   if (String(source).indexOf('data:') === 0) {
     activateVersion(source);
-    return;
+    return true;
   }
   _authFetch(source).then(function(response) {
     if (sourceGeneration !== precisionSourceLoadGeneration || loadToken !== precisionVersionLoadToken) return null;
@@ -4353,6 +4363,7 @@ function setPrecisionBaseVersion(id) {
   }).catch(function() {
     if (sourceGeneration === precisionSourceLoadGeneration && loadToken === precisionVersionLoadToken) setStatus(i18nText('image.load_failed'));
   });
+  return true;
 }
 
 function appendPrecisionEditVersion(result, expectedGeneration) {

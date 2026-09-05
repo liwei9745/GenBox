@@ -483,6 +483,7 @@ expect(js.includes('detail.message') && js.includes('detail.code'), 'Structured 
 expect(js.includes("('HTTP ' + response.status)"), 'Generation errors must retain HTTP status as fallback.');
 expect(html.includes('id="precisionVersionRail"') && js.includes('function appendPrecisionEditVersion'), 'Successful precision results need a version rail.');
 expect(js.includes("precisionEditSession.selectedVersionId = id;\n  precisionEditSession.view = 'after';") && !js.includes("function selectPrecisionVersion(id) {\n  setPrecisionBaseVersion(id);"), 'Version shortcuts must browse without replacing the annotation base.');
+expect(html.includes('id="btnPrecisionUseSelectedAsBase"') && js.includes('function useSelectedPrecisionVersionAsBase()') && js.includes('return setPrecisionBaseVersion(precisionEditSession.selectedVersionId);'), 'Only an explicit version command may replace the editable base.');
 expect(js.includes('result.success || !result.local_path') && js.includes('precisionEditSession.versions.push'), 'Only successful results with local_path may create versions.');
 expect(html.includes('id="precisionCompareSlider"') && js.includes('function updatePrecisionCompareSlider'), 'Precision versions need an accessible compare slider.');
 for (const eventName of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'lostpointercapture']) {
@@ -2927,6 +2928,35 @@ vm.runInContext("appendPrecisionEditVersion({ success: true, local_path: 'old.pn
 assert.deepEqual(versionContext.appended, [], 'An old generation must not append a precision result version.');
 vm.runInContext("appendPrecisionEditVersion({ success: true, local_path: 'current.png' }, 2)", versionContext);
 assert.deepEqual(versionContext.appended, ['/api/gallery/image/current.png']);
+
+const baseVersionLoads = [];
+const baseVersionStatuses = [];
+const baseVersionContext = vm.createContext({
+  document: { getElementById: (id) => id === 'txtPromptPrecision' ? { value: 'Continue the selected result.' } : null },
+  precisionEditSession: {
+    source: { id: 'original', data: 'data:image/png;base64,b3JpZ2luYWw=' },
+    versions: [{ id: 'version-1', data: 'data:image/png;base64,c2Vjb25kLXJvdW5k' }],
+    selectedVersionId: 'version-1', baseVersionId: 'original', view: 'compare'
+  },
+  precisionSourceLoadGeneration: 12,
+  precisionVersionLoadToken: 0,
+  precisionSourceTaskIsActive: () => false,
+  renderPrecisionEditSession: () => {},
+  loadPrecisionEditSourceImage: (...args) => baseVersionLoads.push(args),
+  setStatus: (value) => baseVersionStatuses.push(value),
+  i18nText: (key) => key,
+  String,
+});
+vm.runInContext(extractFunction('setPrecisionBaseVersion'), baseVersionContext);
+assert.equal(vm.runInContext("setPrecisionBaseVersion('version-1')", baseVersionContext), true, 'An explicitly selected result must be eligible as the next edit base.');
+assert.equal(vm.runInContext('precisionEditSession.baseVersionId', baseVersionContext), 'version-1');
+assert.equal(vm.runInContext('precisionEditSession.selectedVersionId', baseVersionContext), 'version-1');
+assert.equal(vm.runInContext('precisionEditSession.view', baseVersionContext), 'after');
+assert.equal(baseVersionLoads.length, 1, 'The explicit base action must begin one replacement load.');
+assert.equal(baseVersionLoads[0][0], 'data:image/png;base64,c2Vjb25kLXJvdW5k', 'The second edit round must load the explicitly chosen version image instead of retaining the preview-only original.');
+assert.equal(baseVersionLoads[0][1], 'Continue the selected result.');
+assert.deepEqual(JSON.parse(JSON.stringify(baseVersionLoads[0][2])), { preserveSession: true, generation: 12 });
+assert.deepEqual(baseVersionStatuses, ['creator.precision_base_updated']);
 
 const terminalAppends = [];
 const terminalContext = vm.createContext({

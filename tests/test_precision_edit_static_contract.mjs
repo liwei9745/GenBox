@@ -31,6 +31,12 @@ assert.match(html, /id="precisionImageFullscreen"[^>]+tabindex="-1"/, 'Image-onl
 assert.ok(html.includes('toggleLightboxImageFullscreen(event)'), 'Lightbox must expose current-image-only fullscreen.');
 assert.ok(html.includes('id="precisionSessionGallery"'), 'Precision workbench must expose a current-session result gallery.');
 assert.ok(html.includes('id="precisionPromptStrip"'), 'Precision workbench must expose split prompt history.');
+assert.match(html, /id="btnPrecisionUseSelectedAsBase"[^>]+onclick="useSelectedPrecisionVersionAsBase\(\)"[^>]+disabled[^>]+aria-disabled="true"/,
+  'Selecting a version must expose a separate, initially disabled use-as-next-base command.');
+assert.ok(js.includes('function useSelectedPrecisionVersionAsBase()') && js.includes('return setPrecisionBaseVersion(precisionEditSession.selectedVersionId);'),
+  'Only the explicit use-as-next-base command may invoke the existing base-version loader.');
+assert.match(css, /precision-version-base-action\s*\{[\s\S]*?grid-column:\s*2;[\s\S]*?grid-row:\s*2;[\s\S]*?max-width:\s*100%;[\s\S]*?text-overflow:\s*ellipsis;/,
+  'The base-version command must occupy a bounded second row instead of overflowing the version rail.');
 const precisionCanvasShellIndex = html.indexOf('id="precisionCanvasShell"');
 const precisionSessionShowcaseIndex = html.indexOf('class="precision-session-showcase"');
 assert.ok(precisionCanvasShellIndex !== -1 && precisionSessionShowcaseIndex > precisionCanvasShellIndex, 'Current-session results must render below the precision canvas.');

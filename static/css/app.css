@@ -6832,11 +6832,16 @@ body.precision-docs-open {
 }
 
 #pageGenerate.precision-workbench .precision-shortcut-group {
+  display: grid;
   min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
   overflow: hidden;
 }
 
 #pageGenerate.precision-workbench .precision-version-rail {
+  grid-column: 2;
+  grid-row: 1;
   flex: 1 1 auto;
   width: auto;
   max-width: 100%;
@@ -6845,6 +6850,17 @@ body.precision-docs-open {
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: 2px;
+}
+
+#pageGenerate.precision-workbench .precision-version-base-action {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: start;
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #pageGenerate.precision-workbench .precision-version-fullscreen {
