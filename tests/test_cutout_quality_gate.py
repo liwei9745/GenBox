@@ -87,16 +87,28 @@ def test_gate_rejects_adapter_without_explicit_cpu_only_capability():
     assert report["code"] == "cpu_provider_unverified"
 
 
-def test_quality_gate_reports_missing_optional_model_without_local_paths(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        "image_tools.cutout_quality_gate._build_adapter",
-        lambda _adapter_id, _base_path: (_ for _ in ()).throw(
-            CutoutQualityGateError("model_missing", "model missing")
-        ),
-    )
-
+def test_quality_gate_reports_unknown_optional_model_without_local_paths(tmp_path):
     report = run_quality_gate(base_path=tmp_path, adapter_ids=("missing",))
 
     assert report["passed"] is False
-    assert report["results"][0]["code"] == "model_missing"
+    assert report["results"][0]["code"] == "adapter_unknown"
     assert str(tmp_path) not in str(report)
+
+
+def test_quality_gate_routes_each_adapter_through_isolated_worker(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_worker(adapter_id, base_path):
+        calls.append((adapter_id, base_path))
+        return {"adapter": adapter_id, "passed": True}
+
+    monkeypatch.setattr(
+        "image_tools.cutout_quality_gate._isolated_adapter_gate_report",
+        fake_worker,
+    )
+
+    report = run_quality_gate(base_path=tmp_path, adapter_ids=("first", "second"))
+
+    assert report["passed"] is True
+    assert [item[0] for item in calls] == ["first", "second"]
+    assert all(item[1] == tmp_path.resolve() for item in calls)

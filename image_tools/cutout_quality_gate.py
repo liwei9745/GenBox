@@ -11,6 +11,7 @@ import argparse
 import base64
 import io
 import json
+import multiprocessing
 import os
 import socket
 import time
@@ -30,6 +31,7 @@ QUALITY_GATE_CONTRACT = "genbox-cutout-quality-gate-v1"
 SYNTHETIC_SAMPLE_ID = "synthetic-full-body-v1"
 SYNTHETIC_SAMPLE_SIZE = (96, 128)
 SUPPORTED_ADAPTERS = (U2NET_ADAPTER_ID, MODNET_ADAPTER_ID)
+QUALITY_GATE_TIMEOUT_SECONDS = 120
 _OFFLINE_ENV = {
     "HF_HUB_OFFLINE": "1",
     "TRANSFORMERS_OFFLINE": "1",
@@ -166,7 +168,12 @@ def _alpha_evidence(image_bytes: bytes) -> dict[str, int | list[int]]:
 
 
 def run_adapter_gate(adapter: Any) -> dict[str, Any]:
-    """Run one adapter behind the offline guard and return bounded evidence."""
+    """Run one adapter behind the offline guard and return bounded evidence.
+
+    This helper is intentionally used only by the isolated worker below.  The
+    socket guard replaces process-global Python networking entry points, so it
+    must never run in the FastAPI process or another shared application worker.
+    """
 
     adapter_id = str(getattr(adapter, "adapter_id", "") or "unknown")
     started = time.perf_counter()
@@ -245,6 +252,84 @@ def run_adapter_gate(adapter: Any) -> dict[str, Any]:
     }
 
 
+def _adapter_gate_worker(adapter_id: str, base_path: str, result_queue: Any) -> None:
+    """Execute a guarded adapter probe in a disposable interpreter process."""
+
+    try:
+        adapter = _build_adapter(adapter_id, Path(base_path))
+        result_queue.put(run_adapter_gate(adapter))
+    except CutoutQualityGateError as exc:
+        result_queue.put({
+            "contract": QUALITY_GATE_CONTRACT,
+            "adapter": adapter_id,
+            "passed": False,
+            "code": exc.code,
+            "message": exc.message,
+            "quality_scope": {
+                "synthetic_structure": "UNVERIFIED",
+                "authorized_human_legs_hair_soft_edges": "UNVERIFIED",
+            },
+        })
+    except Exception:
+        result_queue.put({
+            "contract": QUALITY_GATE_CONTRACT,
+            "adapter": adapter_id,
+            "passed": False,
+            "code": "quality_gate_worker_failed",
+            "message": "本地抠图质量门禁子进程执行失败",
+            "quality_scope": {
+                "synthetic_structure": "UNVERIFIED",
+                "authorized_human_legs_hair_soft_edges": "UNVERIFIED",
+            },
+        })
+
+
+def _isolated_adapter_gate_report(adapter_id: str, base_path: Path) -> dict[str, Any]:
+    """Return one report without mutating the caller's networking globals."""
+
+    context = multiprocessing.get_context("spawn")
+    result_queue = context.Queue(maxsize=1)
+    process = context.Process(
+        target=_adapter_gate_worker,
+        args=(adapter_id, str(base_path), result_queue),
+        daemon=True,
+    )
+    process.start()
+    process.join(QUALITY_GATE_TIMEOUT_SECONDS)
+    try:
+        if process.is_alive():
+            process.terminate()
+            process.join()
+            return {
+                "contract": QUALITY_GATE_CONTRACT,
+                "adapter": adapter_id,
+                "passed": False,
+                "code": "quality_gate_timeout",
+                "message": "本地抠图质量门禁超时",
+                "quality_scope": {
+                    "synthetic_structure": "UNVERIFIED",
+                    "authorized_human_legs_hair_soft_edges": "UNVERIFIED",
+                },
+            }
+        try:
+            return result_queue.get_nowait()
+        except Exception:
+            return {
+                "contract": QUALITY_GATE_CONTRACT,
+                "adapter": adapter_id,
+                "passed": False,
+                "code": "quality_gate_worker_no_report",
+                "message": "本地抠图质量门禁未返回结果",
+                "quality_scope": {
+                    "synthetic_structure": "UNVERIFIED",
+                    "authorized_human_legs_hair_soft_edges": "UNVERIFIED",
+                },
+            }
+    finally:
+        result_queue.close()
+        result_queue.join_thread()
+
+
 def run_quality_gate(
     *,
     base_path: os.PathLike[str] | str,
@@ -253,24 +338,7 @@ def run_quality_gate(
     root = Path(base_path).resolve()
     results = []
     for adapter_id in adapter_ids:
-        try:
-            adapter = _build_adapter(str(adapter_id), root)
-        except CutoutQualityGateError as exc:
-            results.append(
-                {
-                    "contract": QUALITY_GATE_CONTRACT,
-                    "adapter": str(adapter_id),
-                    "passed": False,
-                    "code": exc.code,
-                    "message": exc.message,
-                    "quality_scope": {
-                        "synthetic_structure": "UNVERIFIED",
-                        "authorized_human_legs_hair_soft_edges": "UNVERIFIED",
-                    },
-                }
-            )
-            continue
-        results.append(run_adapter_gate(adapter))
+        results.append(_isolated_adapter_gate_report(str(adapter_id), root))
     return {
         "contract": QUALITY_GATE_CONTRACT,
         "passed": bool(results) and all(item.get("passed") is True for item in results),
