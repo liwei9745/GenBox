@@ -532,7 +532,7 @@ for (const key of ['keep_style_subject', 'keep_person', 'center_subject', 'exten
   expect(html.includes('creator.precision_size_prompt_preset_' + key), 'Missing composition prompt preset: ' + key);
 }
 expect(html.includes('creator.precision_size_prompt_preset_append_hint'), 'The UI must explain that prompt presets append without overwriting free-form guidance.');
-expect(js.includes("creator.precision_size_instruction_required") && js.includes('if (!resizePrompt)'), 'Resize mode must block submission without composition guidance.');
+expect(js.includes("creator.precision_size_prompt_preset_keep_style_subject") && js.includes('if (!resizePrompt) resizePrompt'), 'Pure resize must fall back to safe composition guidance when the optional input is empty.');
 expect(extractFunction('precisionCapabilitySizeDeclaration').includes("var fields = ['supported_sizes', 'supportedSizes', 'sizes', 'dimensions']"), 'Resize capability parsing must use only explicit model size declaration fields.');
 expect(js.includes('function resolvePrecisionModelCapability'), 'Precision aliases need one explicit canonical capability resolver in the UI.');
 const resizeDeclarationSource = extractFunction('precisionResizeDimensions');
@@ -982,6 +982,7 @@ const resizeContext = vm.createContext({
   updatePrecisionEditControls: () => {},
   Event: class Event { constructor(type, options) { this.type = type; this.options = options; } },
   i18nText: (key, params) => ({
+    'creator.precision_size_prompt_preset_keep_style_subject': 'Preserve the original style and main elements, extending naturally.',
     'creator.precision_size_prompt_preset_keep_person': 'Keep the person fixed.',
     'creator.precision_size_prompt_preset_banner': 'Expand to a banner.',
     'creator.precision_size_prompt_preset_too_long': 'Too long.',
@@ -1003,7 +1004,15 @@ assert.ok(resizeOptions.every((option) => option.disabled === false), 'Every bui
 vm.runInContext("applyPrecisionResizePreset('1536x864')", resizeContext);
 assert.equal(resizeNodes.precisionResizeWidth.value, '1536');
 assert.equal(resizeNodes.precisionResizeHeight.value, '864');
+resizeNodes.precisionResizePrompt.value = '';
+resizeProvider.model_capabilities['image-edit'] = { supported_sizes: ['1536x864'] };
 let resizeRequest = vm.runInContext('getPrecisionSizeRequest()', resizeContext);
+assert.equal(resizeRequest.mode, 'resize', 'Pure resize must submit even when the optional composition field is empty.');
+assert.equal(resizeRequest.prompt, 'Preserve the original style and main elements, extending naturally.', 'Pure resize must send the safe default composition guidance without mutating the text field.');
+assert.equal(resizeNodes.precisionResizePrompt.value, '', 'The default pure-resize guidance must not overwrite a deliberately empty input.');
+resizeNodes.precisionResizePrompt.value = 'Extend the background.';
+resizeProvider.model_capabilities['image-edit'] = {};
+resizeRequest = vm.runInContext('getPrecisionSizeRequest()', resizeContext);
 assert.equal(resizeRequest.rejection.code, 'precision_edit_size_capability_unknown', 'Selecting a local preset must not weaken the unknown-capability submission gate.');
 resizeProvider.model_capabilities['image-edit'] = { supported_sizes: ['1024x1024'] };
 resizeRequest = vm.runInContext('getPrecisionSizeRequest()', resizeContext);
@@ -1878,7 +1887,7 @@ const readyCapability = {
       descriptor: { source_page: 'gated source', license_name: 'bria-rmbg-2.0', license_status: 'NON_COMMERCIAL_ONLY_UNVERIFIED', dependencies: ['torch', 'transformers'] },
     },
     {
-      adapter: 'modnet-photographic-portrait', algorithm: 'MODNet photographic portrait matting',
+      adapter: 'modnet-portrait-onnx', algorithm: 'MODNet photographic portrait matting ONNX',
       available: false, executable: false, state: 'unavailable', needs_model: true, needs_dependency: true,
       descriptor: { source_page: 'MODNet source', license_name: 'Apache-2.0 code; checkpoint terms unverified', license_status: 'UNVERIFIED', dependencies: ['onnxruntime', 'Pillow', 'numpy'] },
     },
@@ -2052,7 +2061,7 @@ assert.equal(cutoutButton.disabled, true, 'A timed-out capability probe must not
 vm.runInContext('PRECISION_CUTOUT_CAPABILITY_TIMEOUT_MS = 1000', cutoutContext);
 
 const multiReadyCapability = JSON.parse(JSON.stringify(readyCapability));
-multiReadyCapability.adapters.push('modnet-photographic-portrait');
+multiReadyCapability.adapters.push('modnet-portrait-onnx');
 multiReadyCapability.adapter_capabilities[2].available = true;
 multiReadyCapability.adapter_capabilities[2].executable = true;
 multiReadyCapability.adapter_capabilities[2].state = 'ready';
@@ -2065,7 +2074,9 @@ cutoutFetch = async (url, options) => {
 };
 await vm.runInContext('updatePrecisionCutoutAvailability()', cutoutContext);
 assert.equal(vm.runInContext('precisionCutoutCapability.adapters.length', cutoutContext), 2);
-assert.equal(vm.runInContext("setPrecisionCutoutSelectedAdapter('modnet-photographic-portrait')", cutoutContext), true, 'A second executable adapter must be selectable before submission.');
+assert.equal(vm.runInContext("setPrecisionCutoutSelectedAdapter('modnet-portrait-onnx')", cutoutContext), true, 'A second executable adapter must be selectable before submission.');
+assert.ok(vm.runInContext("precisionCutoutAdapterDisplayName({ adapter: 'modnet-portrait-onnx', algorithm: 'MODNet photographic portrait matting ONNX' })", cutoutContext).includes('creator.cutout_algorithm_modnet_lab_notice'), 'The runtime MODNet id must carry the experimental laboratory notice.');
+assert.ok(vm.runInContext("precisionCutoutAdapterDisplayName({ adapter: 'modnet-photographic-portrait', algorithm: 'Legacy MODNet descriptor' })", cutoutContext).includes('creator.cutout_algorithm_modnet_lab_notice'), 'The legacy MODNet descriptor must remain display-compatible.');
 
 cutoutCalls.length = 0;
 const postDeferred = deferred();
@@ -2083,7 +2094,7 @@ assert.equal(cutoutCalls[1].url, '/api/image-tools/cutout');
 assert.equal(cutoutCalls[1].options.method, 'POST');
 assert.deepEqual(JSON.parse(cutoutCalls[1].options.body), {
   contract: 'genbox-cutout-v1', image_data: 'data:image/png;base64,c291cmNl',
-  adapter: 'modnet-photographic-portrait', algorithm: 'MODNet photographic portrait matting',
+  adapter: 'modnet-portrait-onnx', algorithm: 'MODNet photographic portrait matting ONNX',
 });
 assert.equal(cutoutStatus.dataset.state, 'processing');
 assert.equal(cutoutButton.disabled, true);
@@ -2092,7 +2103,7 @@ postDeferred.resolve(cutoutResponse(200, {
   contract: 'genbox-cutout-v1', success: true, status: 'completed', width: 4, height: 3,
   source_preserved: true, transparent: true, preview_background: 'checkerboard',
   image_data: 'data:image/png;base64,iVBORw0KGgoAAAAA',
-  adapter: 'modnet-photographic-portrait',
+  adapter: 'modnet-portrait-onnx',
   gallery_url: '/api/gallery/image/cutout.png', filename: 'cutout.png',
   restore_mode: false, restore_applied: false, restore_min_alpha: null,
 }));
@@ -2101,7 +2112,7 @@ let cutoutState = vm.runInContext('({ precisionEditSourceImageData, precisionEdi
 assert.equal(cutoutState.precisionEditSession.versions.length, 1);
 assert.equal(cutoutState.precisionEditSession.versions[0].data, '/api/gallery/image/cutout.png');
 assert.equal(cutoutState.precisionEditSession.versions[0].parentId, 'original');
-assert.equal(cutoutState.precisionEditSession.versions[0].adapter, 'modnet-photographic-portrait');
+assert.equal(cutoutState.precisionEditSession.versions[0].adapter, 'modnet-portrait-onnx');
 assert.equal(cutoutState.precisionEditSession.versions[0].fallbackFrom, '');
 assert.equal(cutoutState.precisionEditSession.selectedVersionId, 'version-1');
 assert.equal(cutoutState.precisionEditSession.baseVersionId, 'original', 'Cutout must not replace the editable base.');

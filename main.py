@@ -383,8 +383,23 @@ def _refresh_modnet_registry(manager: ModNetModelImportManager) -> dict[str, Any
     capability = dict(adapter.capabilities())
     if capability.get("available") is not True or capability.get("executable") is not True:
         return capability
+    runtime_adapter_id = str(getattr(adapter, "adapter_id", "")).strip()
+    if not runtime_adapter_id:
+        return capability
+    registered_ids = set(CUTOUT_REGISTRY.ids())
+    # The first successful probe replaces the descriptive placeholder with the
+    # runtime adapter id. Later capability checks must replace that runtime
+    # entry in place instead of trying to replace a placeholder that no longer
+    # exists.
+    replace_id = (
+        runtime_adapter_id
+        if runtime_adapter_id in registered_ids
+        else "modnet-photographic-portrait"
+    )
+    if replace_id not in registered_ids:
+        return capability
     CUTOUT_REGISTRY.replace(
-        "modnet-photographic-portrait",
+        replace_id,
         adapter,
         verified=True,
         algorithm=capability.get("algorithm") or "MODNet photographic portrait matting ONNX",

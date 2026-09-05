@@ -4266,7 +4266,12 @@ function getPrecisionSizeRequest() {
     return { error: i18nText('creator.precision_size_invalid') };
   }
   var resizePrompt = (document.getElementById('precisionResizePrompt') || { value: '' }).value.trim();
-  if (!resizePrompt) {
+  // Pure resize/outpaint must remain usable when the user has already picked a
+  // target size but has no special composition request. Keep the field empty
+  // for an uncluttered UI, while sending the same safe baseline as the first
+  // composition preset.
+  if (!resizePrompt) resizePrompt = i18nText('creator.precision_size_prompt_preset_keep_style_subject').trim();
+  if (!resizePrompt || resizePrompt === 'creator.precision_size_prompt_preset_keep_style_subject') {
     return { error: i18nText('creator.precision_size_instruction_required') };
   }
   var capability = getPrecisionResizeCapability();
@@ -4721,7 +4726,9 @@ function precisionCutoutSelectedAdapterRecord(capability) {
 
 function precisionCutoutAdapterDisplayName(record) {
   var algorithm = precisionCutoutAdapterText(record && record.algorithm, '');
-  if (record && record.adapter === 'modnet-photographic-portrait') {
+  // Keep the legacy descriptor as a compatibility alias, but key the label
+  // off the adapter id emitted by the runtime registry.
+  if (record && (record.adapter === 'modnet-portrait-onnx' || record.adapter === 'modnet-photographic-portrait')) {
     return algorithm + ' - ' + i18nText('creator.cutout_algorithm_modnet_lab_notice');
   }
   return algorithm;
@@ -9465,6 +9472,19 @@ function renderGalleryItems(items) {
   var searchVal = searchInput ? searchInput.value.trim().toLowerCase() : '';
   if (searchVal) {
     filtered = filtered.filter(function(it) { return (it.prompt || '').toLowerCase().indexOf(searchVal) !== -1; });
+  }
+  var dateFrom = document.getElementById('galleryDateFrom');
+  var dateTo = document.getElementById('galleryDateTo');
+  var fromValue = dateFrom ? dateFrom.value : '';
+  var toValue = dateTo ? dateTo.value : '';
+  if (fromValue || toValue) {
+    var fromTime = fromValue ? Date.parse(fromValue + 'T00:00:00') : -Infinity;
+    var toTime = toValue ? Date.parse(toValue + 'T23:59:59.999') : Infinity;
+    filtered = filtered.filter(function(it) {
+      var raw = it.created_at || it.createdAt || '';
+      var time = Date.parse(raw);
+      return Number.isFinite(time) && time >= fromTime && time <= toTime;
+    });
   }
   if (!filtered.length) {
     var emptyMsg = activeMediaTab === 'video' ? '\u6682\u65E0\u89C6\u9891' : '\u6682\u65E0\u56FE\u7247';

@@ -1426,6 +1426,8 @@ textarea {
 
 .lightbox-prompt-chunks { display: grid; gap: 6px; margin-top: 8px; max-height: 34vh; overflow: auto; }
 .lightbox-prompt-chunk { padding: 7px 8px; border: 1px solid rgba(255,255,255,.14); border-radius: 5px; background: rgba(0,0,0,.16); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.media-date-filter { display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); font-size: 11px; }
+.media-date-filter input { width: 132px; min-height: 30px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-surface); color: var(--text-primary); }
 .precision-session-showcase { display: grid; gap: 6px; min-width: 0; max-width: 100%; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border); }
 .precision-session-showcase-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .precision-session-showcase-heading { flex-wrap: wrap; }
@@ -1488,6 +1490,8 @@ textarea {
 .precision-image-fullscreen-close { position: absolute; top: 14px; right: 16px; z-index: 1; width: 36px; height: 36px; border: 1px solid rgba(255,255,255,.25); border-radius: 50%; background: rgba(255,255,255,.1); color: #fff; font-size: 24px; line-height: 1; cursor: pointer; }
 
 @media (max-width: 640px) {
+  .media-date-filter { width: 100%; flex-wrap: wrap; }
+  .media-date-filter input { flex: 1 1 120px; min-width: 0; }
   #lightbox-prompt-box { left: 10px; right: 10px; top: auto; bottom: 78px; width: auto; max-width: none; }
   .precision-session-gallery { grid-auto-columns: 62px; min-height: 58px; }
   .precision-session-showcase-heading { align-items: flex-start; flex-wrap: wrap; }

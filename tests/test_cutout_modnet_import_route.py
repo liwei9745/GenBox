@@ -131,6 +131,15 @@ def test_modnet_import_refreshes_registry_after_runtime_probe(tmp_path, monkeypa
         assert response.json()["runtime"]["executable"] is True
         assert "modnet-portrait-onnx" in registry.ids()
         assert "modnet-photographic-portrait" not in registry.ids()
+        # Capability refreshes are invoked again by the browser-facing
+        # endpoint. Once the placeholder has been replaced, they must update
+        # the runtime entry in place instead of failing on the old id.
+        first_refresh = main._refresh_modnet_registry(manager)
+        second_refresh = main._refresh_modnet_registry(manager)
+        assert first_refresh["executable"] is True
+        assert second_refresh["executable"] is True
+        assert registry.ids().count("modnet-portrait-onnx") == 1
+        assert "modnet-photographic-portrait" not in registry.ids()
         capability = registry.probe()
         assert "modnet-portrait-onnx" in capability["adapters"]
     finally:

@@ -48,7 +48,7 @@ assert.match(css, /precision-manual-tool-group > \.precision-style-controls\s*\{
 assert.match(css, /precision-manual-tool-group\s*\{[\s\S]*?grid-template-rows:\s*auto auto/, 'Manual-edit controls must reserve two rows even when the inspector is narrow on a wide viewport.');
 assert.ok(html.includes('id="btnPrecisionCutoutCapabilityRefresh"'), 'Cutout model/algorithm recovery must expose a recheck action outside collapsed details.');
 assert.ok(js.includes('function refreshPrecisionCutoutSetup()') && js.includes('return updatePrecisionCutoutAvailability()'), 'A failed model refresh must recover through the independent capability probe.');
-assert.ok(js.includes("record.adapter === 'u2net-human-seg-onnx'") && js.includes("record.adapter === 'modnet-photographic-portrait'"), 'U2-Net must be the explicit default while MODNet is labeled separately.');
+assert.ok(js.includes("record.adapter === 'u2net-human-seg-onnx'") && js.includes("record.adapter === 'modnet-portrait-onnx'"), 'U2-Net must be the explicit default while the runtime MODNet adapter is labeled separately.');
 assert.ok(i18n.includes('creator.cutout_algorithm_modnet_lab_notice'), 'MODNet experimental local-lab guidance must be translated.');
 assert.ok(/function filterPrecisionSessionEntries\(entries\)/.test(fs.readFileSync(path.join(root, 'static/js/app-all.js'), 'utf8')), 'Session date filtering must stay local to precision session entries.');
 assert.ok(/function bindPrecisionImageFullscreenLifecycle\(\)/.test(fs.readFileSync(path.join(root, 'static/js/app-all.js'), 'utf8')));
