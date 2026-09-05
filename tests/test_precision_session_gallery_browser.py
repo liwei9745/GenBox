@@ -145,6 +145,9 @@ def test_precision_session_calendar_filter_is_collapsed_and_highlights_result_da
             page.goto(f"http://127.0.0.1:{server.server_port}/static/index.html", wait_until="domcontentloaded")
             page.evaluate(
                 """() => {
+                    document.querySelector('#pageGenerate').classList.remove('hidden');
+                    document.querySelector('#pageGenerate').classList.add('precision-workbench');
+                    document.querySelector('#panelPrecisionEdit').classList.remove('hidden');
                     window.precisionEditSession = {
                         source: { id: 'original', data: 'data:image/png;base64,a' },
                         versions: [{ id: 'v1', data: 'data:image/png;base64,b', createdAt: '2026-09-03T10:00:00' }],
@@ -155,22 +158,119 @@ def test_precision_session_calendar_filter_is_collapsed_and_highlights_result_da
             )
             toggle = page.locator("#precisionSessionDateToggle")
             popover = page.locator("#precisionSessionDatePopover")
+            heading = page.locator(".precision-session-showcase-heading")
+            assert "精准改图图库" in heading.inner_text()
+            assert toggle.locator("xpath=ancestor::div[contains(@class, 'precision-session-showcase-heading')]").count() == 1
             assert toggle.get_attribute("aria-expanded") == "false"
+            assert toggle.get_attribute("aria-haspopup") == "dialog"
             assert popover.get_attribute("hidden") is not None
-            # The static fixture keeps the precision panel hidden; invoke the
-            # native handler without coupling this focused test to navigation
-            # shell visibility.
-            toggle.evaluate("el => el.click()")
+            toggle.click()
             assert toggle.get_attribute("aria-expanded") == "true"
             assert popover.get_attribute("hidden") is None
             assert page.locator("#precisionSessionCalendar .has-results").count() == 1
             assert page.locator("#precisionSessionCalendar .is-empty").count() >= 1
+            assert page.locator(".precision-session-date-presets").all_inner_texts()[0].split() == [
+                "近3日", "近5日", "周", "月", "季度", "半年", "年"
+            ]
+            result_day = page.locator("#precisionSessionCalendar .has-results")
+            result_day.focus()
+            original_date = result_day.get_attribute("data-date")
+            page.keyboard.press("ArrowRight")
+            assert page.locator(":focus").get_attribute("data-date") != original_date
+            page.keyboard.press("Escape")
+            assert toggle.get_attribute("aria-expanded") == "false"
+            assert page.evaluate("document.activeElement.id") == "precisionSessionDateToggle"
+            toggle.click()
             page.locator("[data-date-range='3d']").evaluate("el => el.click()")
             assert page.locator("#precisionSessionDateFrom").input_value()
             assert page.locator("#precisionSessionDateTo").input_value()
             page.locator("#btnPrecisionSessionDateClear").evaluate("el => el.click()")
             assert page.locator("#precisionSessionDateFrom").input_value() == ""
             assert page.locator("#precisionSessionDateTo").input_value() == ""
+            browser.close()
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_precision_source_menu_and_two_row_toolbar_fit_common_viewports():
+    class QuietStaticHandler(SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=str(ROOT), **kwargs)
+
+        def log_message(self, _format, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), QuietStaticHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            page = browser.new_page(viewport={"width": 1200, "height": 1000})
+            page.route("**/api/**", lambda route: route.fulfill(status=404, json={"detail": "test only"}))
+            page.goto(f"http://127.0.0.1:{server.server_port}/static/index.html", wait_until="domcontentloaded")
+            page.evaluate(
+                """() => {
+                    document.querySelector('#pageGenerate').classList.remove('hidden');
+                    document.querySelector('#pageGenerate').classList.add('precision-workbench');
+                    document.querySelector('#panelPrecisionEdit').classList.remove('hidden');
+                    window.precisionEditSourceImageData = 'data:image/png;base64,c291cmNl';
+                    updatePrecisionSourceActions();
+                }"""
+            )
+
+            trigger = page.locator("#btnPrecisionReplaceSource")
+            menu = page.locator("#precisionSourceMenu")
+            assert trigger.is_visible()
+            assert "更换图片" in trigger.inner_text()
+            trigger.click()
+            assert menu.is_visible()
+            assert "本地选择" in menu.inner_text()
+            assert "从图库选择" in menu.inner_text()
+            assert page.evaluate("document.activeElement.id") == "btnPrecisionReplaceLocal"
+            page.keyboard.press("ArrowDown")
+            assert page.evaluate("document.activeElement.id") == "btnPrecisionReplaceFromGallery"
+            page.keyboard.press("Escape")
+            assert not menu.is_visible()
+            assert page.evaluate("document.activeElement.id") == "btnPrecisionReplaceSource"
+
+            page.evaluate("window.genIsPrecisionTask = true; window.genCurrentGenId = 'active-task'; updatePrecisionSourceActions();")
+            assert trigger.is_disabled()
+            assert page.locator("#precisionReplaceDisabledHint").is_visible()
+            page.evaluate("window.genIsPrecisionTask = false; window.genCurrentGenId = null; updatePrecisionSourceActions();")
+
+            for width, height in [(1200, 1000), (760, 900), (390, 844)]:
+                page.set_viewport_size({"width": width, "height": height})
+                page.evaluate("window.dispatchEvent(new Event('resize'))")
+                metrics = page.evaluate(
+                    """() => {
+                        const toolbar = document.querySelector('.precision-toolbar');
+                        const primary = document.querySelector('.precision-toolbar-primary');
+                        const history = document.querySelector('.precision-toolbar-history');
+                        const bounds = (node) => {
+                            const box = node.getBoundingClientRect();
+                            return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width };
+                        };
+                        return {
+                            clientWidth: toolbar.clientWidth,
+                            scrollWidth: toolbar.scrollWidth,
+                            toolbar: bounds(toolbar),
+                            primary: bounds(primary),
+                            history: bounds(history),
+                            controls: Array.from(toolbar.querySelectorAll('button, input')).map(bounds),
+                        };
+                    }"""
+                )
+                assert metrics["clientWidth"] > 0
+                assert metrics["scrollWidth"] <= metrics["clientWidth"] + 1
+                assert metrics["history"]["top"] >= metrics["primary"]["bottom"] - 1
+                assert abs(metrics["history"]["left"] - metrics["toolbar"]["left"]) <= 1
+                assert metrics["history"]["right"] <= metrics["toolbar"]["right"] + 1
+                for control in metrics["controls"]:
+                    assert control["left"] >= metrics["toolbar"]["left"] - 1
+                    assert control["right"] <= metrics["toolbar"]["right"] + 1
             browser.close()
     finally:
         server.shutdown()

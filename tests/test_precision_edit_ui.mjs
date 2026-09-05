@@ -2711,10 +2711,13 @@ function simpleElement(value = '') {
   return {
     value,
     disabled: false,
+    hidden: false,
     clickCount: 0,
+    focusCount: 0,
     attributes: {},
     classList: classListRecorder(),
     click() { this.clickCount += 1; },
+    focus() { this.focusCount += 1; replacementDocument.activeElement = this; },
     setAttribute(name, next) { this.attributes[name] = String(next); },
     removeAttribute(name) { delete this.attributes[name]; },
   };
@@ -2723,7 +2726,9 @@ function simpleElement(value = '') {
 const replacementNodes = {
   precisionSourceActions: simpleElement(),
   btnPrecisionReplaceSource: simpleElement(),
+  btnPrecisionReplaceLocal: simpleElement(),
   btnPrecisionReplaceFromGallery: simpleElement(),
+  precisionSourceMenu: simpleElement(),
   precisionReplaceDisabledHint: simpleElement(),
   precisionFileInput: simpleElement(),
   precisionResizeWidth: simpleElement('1200'),
@@ -2740,13 +2745,18 @@ const replacementNodes = {
   precisionStrokeWidth: simpleElement('9'),
   precisionViewZoom: simpleElement('140'),
 };
+replacementNodes.precisionSourceMenu.hidden = true;
+replacementNodes.precisionSourceMenu.querySelector = () => replacementNodes.btnPrecisionReplaceLocal;
+replacementNodes.precisionSourceMenu.querySelectorAll = () => [replacementNodes.btnPrecisionReplaceLocal, replacementNodes.btnPrecisionReplaceFromGallery];
+const replacementDocument = {
+  activeElement: null,
+  getElementById: (id) => replacementNodes[id] || null,
+};
 const replacementStatuses = [];
 let replacementConfirm = true;
 let replacementFetches = 0;
 const replacementContext = vm.createContext({
-  document: {
-    getElementById: (id) => replacementNodes[id] || null,
-  },
+  document: replacementDocument,
   precisionEditSourceImageData: null,
   precisionEditSourceWidth: 1200,
   precisionEditSourceHeight: 800,
@@ -2771,7 +2781,8 @@ const replacementContext = vm.createContext({
   alert: () => {}, escHtml: (value) => value, escAttr: (value) => value, setCreatorWorkbenchMode: () => {}, loadPrecisionEditSourceImage: () => {},
 });
 vm.runInContext([
-  'precisionSourceTaskIsActive', 'updatePrecisionSourceActions', 'precisionSourceHasDirtyState', 'preparePrecisionSourceReplacement',
+  'precisionSourceTaskIsActive', 'setPrecisionSourceMenuOpen', 'togglePrecisionSourceMenu', 'choosePrecisionLocalSource',
+  'choosePrecisionGallerySource', 'handlePrecisionSourceMenuKeydown', 'updatePrecisionSourceActions', 'precisionSourceHasDirtyState', 'preparePrecisionSourceReplacement',
   'requestPrecisionLocalSource', 'resetPrecisionSourceSpecificState', 'openPrecisionGalleryPicker',
 ].map(extractFunction).join('\n'), replacementContext);
 vm.runInContext('updatePrecisionSourceActions()', replacementContext);
@@ -2781,9 +2792,22 @@ assert.equal(replacementNodes.precisionReplaceDisabledHint.classList.contains('i
 vm.runInContext("precisionEditSourceImageData = 'data:image/png;base64,source'; updatePrecisionSourceActions()", replacementContext);
 assert.equal(replacementNodes.precisionSourceActions.classList.contains('hidden'), false, 'Replace actions must appear after a source image loads.');
 assert.equal(replacementNodes.btnPrecisionReplaceSource.disabled, false);
+assert.equal(replacementNodes.btnPrecisionReplaceLocal.disabled, false);
 assert.equal(replacementNodes.btnPrecisionReplaceFromGallery.disabled, false);
+assert.equal(vm.runInContext('togglePrecisionSourceMenu()', replacementContext), true, 'The loaded-source action must open a source-choice menu.');
+assert.equal(replacementNodes.precisionSourceMenu.hidden, false);
+assert.equal(replacementNodes.btnPrecisionReplaceSource.attributes['aria-expanded'], 'true');
+assert.equal(replacementDocument.activeElement, replacementNodes.btnPrecisionReplaceLocal, 'Opening the source menu must focus its first available choice.');
+replacementContext.__sourceMenuEvent = { key: 'ArrowDown', prevented: false, preventDefault() { this.prevented = true; }, stopPropagation() {} };
+vm.runInContext('handlePrecisionSourceMenuKeydown(__sourceMenuEvent)', replacementContext);
+assert.equal(replacementDocument.activeElement, replacementNodes.btnPrecisionReplaceFromGallery, 'ArrowDown must move within the source-choice menu.');
+replacementContext.__sourceMenuEvent = { key: 'Escape', prevented: false, preventDefault() { this.prevented = true; }, stopPropagation() {} };
+vm.runInContext('handlePrecisionSourceMenuKeydown(__sourceMenuEvent)', replacementContext);
+assert.equal(replacementNodes.precisionSourceMenu.hidden, true, 'Escape must close the source-choice menu.');
+assert.equal(replacementDocument.activeElement, replacementNodes.btnPrecisionReplaceSource, 'Escape must restore focus to the source-choice trigger.');
 vm.runInContext("genIsPrecisionTask = true; genCurrentGenId = 'active-task'; updatePrecisionSourceActions()", replacementContext);
 assert.equal(replacementNodes.btnPrecisionReplaceSource.disabled, true, 'An active precision task must disable local replacement in the UI.');
+assert.equal(replacementNodes.btnPrecisionReplaceLocal.disabled, true, 'An active precision task must disable the local menu choice.');
 assert.equal(replacementNodes.btnPrecisionReplaceFromGallery.disabled, true, 'An active precision task must disable gallery replacement in the UI.');
 assert.equal(replacementNodes.btnPrecisionReplaceSource.attributes['aria-disabled'], 'true');
 assert.equal(replacementNodes.precisionReplaceDisabledHint.classList.contains('sr-only'), false, 'An active precision task must expose the replacement status visually.');

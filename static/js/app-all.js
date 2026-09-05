@@ -1047,6 +1047,16 @@ function ensurePrecisionEditPanel() {
   bindPrecisionHelpTooltips();
   bindPrecisionWorkbenchHelp();
   bindPrecisionDocsDialog();
+  var sourceMenu = document.getElementById('precisionSourceMenu');
+  if (sourceMenu && sourceMenu.dataset.precisionBound !== 'true') {
+    sourceMenu.dataset.precisionBound = 'true';
+    sourceMenu.addEventListener('keydown', handlePrecisionSourceMenuKeydown);
+  }
+  var sessionCalendar = document.getElementById('precisionSessionCalendar');
+  if (sessionCalendar && sessionCalendar.dataset.precisionBound !== 'true') {
+    sessionCalendar.dataset.precisionBound = 'true';
+    sessionCalendar.addEventListener('keydown', handlePrecisionSessionCalendarKeydown);
+  }
   var cutoutModelPanel = cutoutControls.modelPanel;
   if (cutoutModelPanel && cutoutModelPanel.dataset.precisionModelBound !== 'true') {
     cutoutModelPanel.dataset.precisionModelBound = 'true';
@@ -2199,9 +2209,66 @@ function precisionSourceTaskIsActive() {
   return !!(genIsPrecisionTask && (genCurrentGenId || genCancelRequested || ['submitting', 'generating', 'cancelling'].indexOf(precisionGenerationControlState) !== -1)) || monitorActive;
 }
 
+function setPrecisionSourceMenuOpen(open, restoreFocus) {
+  var menu = document.getElementById('precisionSourceMenu');
+  var trigger = document.getElementById('btnPrecisionReplaceSource');
+  if (!menu || !trigger) return false;
+  var wasOpen = !menu.hidden;
+  var nextOpen = !!open && !trigger.disabled && !!precisionEditSourceImageData;
+  menu.hidden = !nextOpen;
+  trigger.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+  if (nextOpen) {
+    var first = menu.querySelector && menu.querySelector('[role="menuitem"]:not(:disabled)');
+    if (first && typeof first.focus === 'function') first.focus();
+  } else if (restoreFocus && wasOpen && typeof trigger.focus === 'function') {
+    trigger.focus();
+  }
+  return wasOpen;
+}
+
+function togglePrecisionSourceMenu() {
+  var menu = document.getElementById('precisionSourceMenu');
+  var trigger = document.getElementById('btnPrecisionReplaceSource');
+  if (!menu || !trigger || trigger.disabled || !precisionEditSourceImageData) return false;
+  setPrecisionSourceMenuOpen(menu.hidden);
+  return !menu.hidden;
+}
+
+function choosePrecisionLocalSource() {
+  setPrecisionSourceMenuOpen(false);
+  return requestPrecisionLocalSource();
+}
+
+function choosePrecisionGallerySource() {
+  setPrecisionSourceMenuOpen(false);
+  return openPrecisionGalleryPicker();
+}
+
+function handlePrecisionSourceMenuKeydown(event) {
+  var menu = document.getElementById('precisionSourceMenu');
+  if (!menu || menu.hidden) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    setPrecisionSourceMenuOpen(false, true);
+    return;
+  }
+  if (['ArrowDown', 'ArrowUp', 'Home', 'End'].indexOf(event.key) === -1) return;
+  var items = Array.prototype.slice.call(menu.querySelectorAll('[role="menuitem"]:not(:disabled)'));
+  if (!items.length) return;
+  event.preventDefault();
+  var current = items.indexOf(document.activeElement);
+  if (event.key === 'Home') current = 0;
+  else if (event.key === 'End') current = items.length - 1;
+  else if (event.key === 'ArrowDown') current = (current + 1 + items.length) % items.length;
+  else current = (current - 1 + items.length) % items.length;
+  items[current].focus();
+}
+
 function updatePrecisionSourceActions() {
   var actions = document.getElementById('precisionSourceActions');
   var replace = document.getElementById('btnPrecisionReplaceSource');
+  var local = document.getElementById('btnPrecisionReplaceLocal');
   var gallery = document.getElementById('btnPrecisionReplaceFromGallery');
   var hint = document.getElementById('precisionReplaceDisabledHint');
   var hasSource = !!precisionEditSourceImageData;
@@ -2211,13 +2278,14 @@ function updatePrecisionSourceActions() {
     hint.classList.toggle('sr-only', !blocked);
     hint.classList.toggle('is-visible', blocked);
   }
-  [replace, gallery].forEach(function(button) {
+  [replace, local, gallery].forEach(function(button) {
     if (!button) return;
     button.disabled = blocked;
     button.setAttribute('aria-disabled', blocked ? 'true' : 'false');
     if (blocked) button.setAttribute('aria-describedby', 'precisionReplaceDisabledHint');
     else button.removeAttribute('aria-describedby');
   });
+  if (!hasSource || blocked) setPrecisionSourceMenuOpen(false);
 }
 
 function precisionSourceHasDirtyState() {
@@ -3926,7 +3994,7 @@ function renderPrecisionSessionCalendar() {
     var has = !!index[key];
     var selected = state.start && key >= state.start && (!state.end || key <= state.end);
     var classes = 'precision-session-calendar-day' + (has ? ' has-results' : ' is-empty') + (selected ? ' selected' : '') + (key === today ? ' today' : '');
-    html.push('<button type="button" class="' + classes + '" data-date="' + key + '" aria-pressed="' + (selected ? 'true' : 'false') + '" onclick="selectPrecisionSessionCalendarDate(\'' + key + '\')"><span>' + day + '</span>' + (has ? '<small>' + index[key] + '</small>' : '') + '</button>');
+    html.push('<button type="button" class="' + classes + '" data-date="' + key + '" aria-label="' + key + (has ? '，' + index[key] + ' 个结果' : '，无结果') + '" aria-pressed="' + (selected ? 'true' : 'false') + '" onclick="selectPrecisionSessionCalendarDate(\'' + key + '\')"><span>' + day + '</span>' + (has ? '<small>' + index[key] + '</small>' : '') + '</button>');
   }
   calendar.innerHTML = html.join('');
 }
@@ -3941,10 +4009,11 @@ function updatePrecisionSessionDateSummary() {
   else summary.textContent = from && from.value ? from.value : to.value;
 }
 
-function togglePrecisionSessionDatePopover(force) {
+function togglePrecisionSessionDatePopover(force, restoreFocus) {
   var popover = document.getElementById('precisionSessionDatePopover');
   var trigger = document.getElementById('precisionSessionDateToggle');
-  if (!popover || !trigger) return;
+  if (!popover || !trigger) return false;
+  var wasOpen = !popover.hidden;
   var open = typeof force === 'boolean' ? force : popover.hidden;
   popover.hidden = !open;
   trigger.setAttribute('aria-expanded', String(open));
@@ -3952,6 +4021,8 @@ function togglePrecisionSessionDatePopover(force) {
     if (!window.precisionSessionCalendarState) window.precisionSessionCalendarState = { anchor: new Date(), start: '', end: '' };
     renderPrecisionSessionCalendar();
   }
+  if (!open && restoreFocus && wasOpen && typeof trigger.focus === 'function') trigger.focus();
+  return wasOpen;
 }
 
 function shiftPrecisionSessionCalendar(offset) {
@@ -4040,12 +4111,44 @@ function clearPrecisionSessionDateFilter() {
   updatePrecisionSessionDateSummary();
 }
 
+function handlePrecisionSessionCalendarKeydown(event) {
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].indexOf(event.key) === -1) return;
+  var calendar = document.getElementById('precisionSessionCalendar');
+  if (!calendar) return;
+  var days = Array.prototype.slice.call(calendar.querySelectorAll('button[data-date]'));
+  if (!days.length) return;
+  var index = days.indexOf(document.activeElement);
+  if (index < 0) index = 0;
+  if (event.key === 'Home') index = 0;
+  else if (event.key === 'End') index = days.length - 1;
+  else if (event.key === 'ArrowLeft') index -= 1;
+  else if (event.key === 'ArrowRight') index += 1;
+  else if (event.key === 'ArrowUp') index -= 7;
+  else index += 7;
+  index = Math.max(0, Math.min(days.length - 1, index));
+  event.preventDefault();
+  days[index].focus();
+}
+
 document.addEventListener('click', function(event) {
   var wrap = document.querySelector('.precision-session-date-filter');
   if (wrap && !wrap.contains(event.target)) togglePrecisionSessionDatePopover(false);
+  var sourceActions = document.getElementById('precisionSourceActions');
+  if (sourceActions && !sourceActions.contains(event.target)) setPrecisionSourceMenuOpen(false);
 });
 document.addEventListener('keydown', function(event) {
-  if (event.key === 'Escape') togglePrecisionSessionDatePopover(false);
+  if (event.key !== 'Escape') return;
+  var sourceMenu = document.getElementById('precisionSourceMenu');
+  if (sourceMenu && !sourceMenu.hidden) {
+    event.preventDefault();
+    setPrecisionSourceMenuOpen(false, true);
+    return;
+  }
+  var datePopover = document.getElementById('precisionSessionDatePopover');
+  if (datePopover && !datePopover.hidden) {
+    event.preventDefault();
+    togglePrecisionSessionDatePopover(false, true);
+  }
 });
 
 function selectPrecisionVersion(id) {
