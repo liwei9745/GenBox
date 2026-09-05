@@ -1390,6 +1390,9 @@ function createPrecisionPointerHarness(objects, tool = 'rect', selectedId = null
     __focusedIds: [],
     __textPoints: [],
     __erasePoints: [],
+    __statuses: [],
+    __imageOpenEvents: [],
+    __timers: [],
   });
   vm.runInContext(`
     var PRECISION_HISTORY_LIMIT = 30;
@@ -1427,9 +1430,11 @@ function createPrecisionPointerHarness(objects, tool = 'rect', selectedId = null
     function updatePrecisionEditControls() { globalThis.__controlsCount += 1; }
     function focusPrecisionEditInstruction(id) { globalThis.__focusedIds.push(id); }
     function updatePrecisionEditCanvasCursor() {}
-    function setStatus() {}
+    function setStatus(message) { globalThis.__statuses.push(message); }
     function openPrecisionEditTextEditor(point) { globalThis.__textPoints.push({ x: point.x, y: point.y }); }
     function cancelPrecisionEditText() {}
+    function openPrecisionCanvasImageFullscreen(event) { globalThis.__imageOpenEvents.push(event); return true; }
+    var window = { setTimeout: function(callback) { globalThis.__timers.push(callback); return globalThis.__timers.length; } };
     function erasePrecisionBrushAt(point) { globalThis.__erasePoints.push({ x: point.x, y: point.y }); return true; }
     function precisionCanvasPanRequested() { return false; }
     function beginPrecisionCanvasPan() { return false; }
@@ -1444,7 +1449,7 @@ function createPrecisionPointerHarness(objects, tool = 'rect', selectedId = null
       'precisionEditObjectBounds', 'precisionEditIsBoxShape', 'precisionEditIsTransformable', 'precisionEditApplyBounds', 'precisionEditPointerTolerance',
       'precisionEditShapeHit', 'findPrecisionEditShape', 'findPrecisionEditObject',
       'precisionEditHandlePoints', 'findPrecisionEditHandle', 'precisionEditBrushSegmentIndex', 'beginPrecisionEditBrushNode', 'beginPrecisionEditTransform',
-      'precisionEditCreateGestureCheckpoint', 'precisionEditDoubleClickMatches', 'rememberPrecisionEditDoubleClickCheckpoint',
+      'precisionEditCreateGestureCheckpoint', 'precisionEditDoubleClickMatches', 'rememberPrecisionEditDoubleClickCheckpoint', 'rollbackPrecisionEditDoubleClickCheckpoint',
       'precisionEditObjectById', 'beginPrecisionEditPointer', 'applyPrecisionEditPointerPoint',
       'continuePrecisionEditPointer', 'endPrecisionEditPointer', 'precisionEditObjectName',
       'renderPrecisionEditObjectList', 'buildPrecisionEditAnnotationData',
@@ -1662,9 +1667,35 @@ assert.equal(eraserState.eraserSnapshot[0].id, 'brush-1', 'Eraser must retain it
 const selectedEraseObject = { id: 'erase-rect', type: 'rect', x: 0.2, y: 0.2, x2: 0.4, y2: 0.4, label: 8, instruction: 'delete me' };
 const selectedEraserHarness = createPrecisionPointerHarness([selectedEraseObject], 'eraser', 'erase-rect');
 selectedEraserHarness.context.beginPrecisionEditPointer(precisionPointer(selectedEraserHarness.canvas, 0.3, 0.3));
-const selectedEraserState = precisionPointerState(selectedEraserHarness.context);
+selectedEraserHarness.context.endPrecisionEditPointer(precisionPointer(selectedEraserHarness.canvas, 0.3, 0.3));
+let selectedEraserState = precisionPointerState(selectedEraserHarness.context);
 assert.equal(selectedEraserState.objects.length, 0, 'Eraser must delete a selected annotation when clicked.');
 assert.equal(selectedEraserState.history.length, 1, 'Selected annotation deletion must be undoable.');
+assert.deepEqual(selectedEraserHarness.context.__statuses, [], 'An eraser deletion status must wait until the double-click rollback window closes.');
+assert.equal(selectedEraserHarness.context.__timers.length, 1, 'An eraser deletion must schedule exactly one delayed status check.');
+selectedEraserHarness.context.__timers[0]();
+assert.deepEqual(selectedEraserHarness.context.__statuses, ['creator.precision_edit_eraser_deleted'], 'A real single-click eraser deletion must keep its success status after the rollback window closes.');
+
+const rollbackEraserHarness = createPrecisionPointerHarness([selectedEraseObject], 'eraser', 'erase-rect');
+rollbackEraserHarness.context.beginPrecisionEditPointer(precisionPointer(rollbackEraserHarness.canvas, 0.3, 0.3));
+rollbackEraserHarness.context.endPrecisionEditPointer(precisionPointer(rollbackEraserHarness.canvas, 0.3, 0.3));
+rollbackEraserHarness.context.beginPrecisionEditPointer(precisionPointer(rollbackEraserHarness.canvas, 0.304, 0.304, { pointerId: 2 }));
+selectedEraserState = precisionPointerState(rollbackEraserHarness.context);
+assert.deepEqual(selectedEraserState.objects, [selectedEraseObject], 'A small-drift eraser double-click must restore the deleted annotation.');
+assert.equal(selectedEraserState.history.length, 0, 'A rolled-back eraser double-click must restore the undo stack.');
+assert.equal(selectedEraserState.redo.length, 0, 'A rolled-back eraser double-click must preserve the redo stack.');
+assert.equal(rollbackEraserHarness.context.__imageOpenEvents.length, 1, 'A small-drift eraser double-click must still open the image viewer.');
+rollbackEraserHarness.context.__timers[0]();
+assert.deepEqual(rollbackEraserHarness.context.__statuses, [], 'A rolled-back eraser double-click must never show the deletion status.');
+
+const rollbackRectHarness = createPrecisionPointerHarness([movableRect], 'rect');
+rollbackRectHarness.context.beginPrecisionEditPointer(precisionPointer(rollbackRectHarness.canvas, 0.3, 0.35));
+rollbackRectHarness.context.endPrecisionEditPointer(precisionPointer(rollbackRectHarness.canvas, 0.5, 0.45));
+rollbackRectHarness.context.beginPrecisionEditPointer(precisionPointer(rollbackRectHarness.canvas, 0.504, 0.454, { pointerId: 2 }));
+const rollbackRectState = precisionPointerState(rollbackRectHarness.context);
+closeTo(rollbackRectState.objects[0].x, movableRect.x, 'A small-drift rectangle double-click must restore the original geometry.');
+assert.equal(rollbackRectState.history.length, 0, 'A rolled-back rectangle double-click must restore the undo stack.');
+assert.equal(rollbackRectState.redo.length, 0, 'A rolled-back rectangle double-click must preserve the redo stack.');
 
 const arrowObject = { id: 'arrow-1', type: 'arrow', x: 0.2, y: 0.2, x2: 0.4, y2: 0.4, label: 5, instruction: 'move arrow' };
 const arrowHarness = createPrecisionPointerHarness([arrowObject], 'arrow', 'arrow-1');

@@ -377,6 +377,7 @@ def test_loaded_precision_canvas_real_pointer_fullscreen_and_mobile_menu_contrac
                         precisionEditHistory = [];
                         precisionEditRedo = [];
                         precisionEditSelectedId = 'double-click-eraser-brush';
+                        setStatus('');
                         setPrecisionEditTool('eraser');
                         renderPrecisionEditCanvas();
                     }"""
@@ -385,6 +386,7 @@ def test_loaded_precision_canvas_real_pointer_fullscreen_and_mobile_menu_contrac
                 double_click_with_small_drift()
                 page.wait_for_function("!document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
                 assert page.evaluate("JSON.stringify(window.precisionEditObjects)") == eraser_before
+                assert page.locator("#statusLeft").text_content() != "已删除选中的标注"
                 page.keyboard.press("Escape")
                 page.wait_for_function("document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
 
