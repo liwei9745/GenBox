@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 import main
 from config import PrecisionEditProfile, ProviderConfig
+from image_tools.cutout_registry import CutoutAdapterRegistry
 
 
 @pytest.fixture(autouse=True)
@@ -238,6 +239,84 @@ def test_precision_edit_accepts_annotation_v1_and_normalizes_objects():
     assert normalized["precision_target_size"] is None
 
 
+def test_precision_edit_defaults_strategy_and_selection_contract():
+    normalized = main._validate_generation_request_inputs(_precision_request())
+
+    assert normalized["precision_strategy"] == "standard"
+    assert normalized["precision_selection_mode"] == "annotation"
+    assert normalized["precision_selection_feather"] == 0.0
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "code"),
+    [
+        ("precision_strategy", "deep", "precision_strategy_invalid"),
+        ("precision_selection_mode", "mask", "precision_selection_mode_invalid"),
+        ("precision_selection_feather", -1, "precision_selection_feather_invalid"),
+        ("precision_selection_feather", 65, "precision_selection_feather_invalid"),
+    ],
+)
+def test_precision_edit_rejects_invalid_strategy_selection_controls(field, value, code):
+    _expect_error(_precision_request(**{field: value}), code)
+
+
+def test_precision_edit_local_selection_requires_region_annotation():
+    _expect_error(
+        _precision_request(
+            annotation_contract="genbox-annotation-v3",
+            precision_selection_mode="local",
+            precision_selection_feather=12,
+            annotations=[_annotation("text", label=1, text="Keep the person.", x=0.2, y=0.2)],
+        ),
+        "precision_local_selection_required",
+    )
+
+
+def test_precision_edit_local_selection_accepts_region_and_normalizes_feather():
+    normalized = main._validate_generation_request_inputs(
+        _precision_request(
+            annotation_contract="genbox-annotation-v3",
+            precision_selection_mode="local",
+            precision_selection_feather=12,
+            annotations=[
+                _annotation(
+                    "ellipse",
+                    label=1,
+                    instruction="Repair the marked lower body.",
+                    x=0.2,
+                    y=0.2,
+                    width=0.4,
+                    height=0.6,
+                ),
+            ],
+        )
+    )
+
+    assert normalized["precision_selection_mode"] == "local"
+    assert normalized["precision_selection_feather"] == 12.0
+
+
+def test_precision_edit_local_selection_is_not_available_for_pure_resize():
+    _expect_error(
+        _precision_resize_only_request(
+            precision_selection_mode="local",
+            precision_selection_feather=8,
+        ),
+        "precision_local_selection_requires_annotations",
+    )
+
+
+def test_non_precision_mode_rejects_precision_strategy_fields():
+    _expect_error(
+        main.GenerateRequest(
+            prompt="A lighthouse",
+            mode="t2i",
+            precision_strategy="fine",
+        ),
+        "precision_fields_not_allowed",
+    )
+
+
 def test_precision_edit_preserve_rejects_generic_generation_size():
     _expect_error(_precision_request(size="1024x1024"), "precision_preserve_size_conflict")
     _expect_error(_precision_request(upscale_to="2048"), "precision_upscale_not_allowed")
@@ -256,10 +335,18 @@ def test_precision_edit_resize_requires_valid_explicit_target():
         _precision_request(precision_size_mode="resize", precision_target_size="0x900"),
         "precision_target_size_invalid",
     )
-    _expect_error(
-        _precision_request(precision_size_mode="resize", precision_target_size="1792x768"),
-        "precision_resize_prompt_required",
+
+
+def test_precision_edit_resize_defaults_blank_composition_guidance():
+    normalized = main._validate_generation_request_inputs(
+        _precision_request(
+            precision_size_mode="resize",
+            precision_target_size="1792x768",
+            precision_resize_prompt="   ",
+        )
     )
+
+    assert normalized["precision_resize_prompt"] == main.DEFAULT_PRECISION_RESIZE_GUIDANCE
 
 
 @pytest.mark.parametrize(
@@ -1373,6 +1460,41 @@ def test_precision_resize_only_creates_source_only_task_kwargs(monkeypatch):
         main.image_task_handles.pop(generation_id, None)
 
 
+def test_precision_resize_only_task_uses_default_guidance_when_blank(monkeypatch):
+    provider = _provider(supported_sizes=["64x64"])
+
+    async def fake_process(_generation_id):
+        return None
+
+    monkeypatch.setattr(
+        main,
+        "cfg_mgr",
+        SimpleNamespace(
+            config=SimpleNamespace(providers=[provider]),
+            get_image_providers=lambda: [provider],
+        ),
+    )
+    monkeypatch.setattr(main, "_check_rate_limit", lambda *_args: True)
+    monkeypatch.setattr(main, "_process_image_gen", fake_process)
+
+    response = asyncio.run(
+        main.generate(
+            _precision_resize_only_request(precision_resize_prompt=""),
+            _route_request(),
+        )
+    )
+    generation_id = response["generation_id"]
+    try:
+        task = main.image_tasks[generation_id]
+        assert (
+            task["kwargs"]["precision_resize_prompt"]
+            == main.DEFAULT_PRECISION_RESIZE_GUIDANCE
+        )
+    finally:
+        main.image_tasks.pop(generation_id, None)
+        main.image_task_handles.pop(generation_id, None)
+
+
 def test_precision_task_queued_contract_preserves_zero_progress():
     payload = _read_precision_status(
         "precision-queued",
@@ -2063,6 +2185,114 @@ def test_precision_capability_route_accepts_canonical_size(monkeypatch):
     assert saved == [config]
 
 
+@pytest.mark.parametrize(
+    ("model", "model_capabilities"),
+    [
+        (
+            "gpt-image-2",
+            {
+                "gpt-image-2": {
+                    "precision_edit": True,
+                    "supported_sizes": ["1024x1024"],
+                }
+            },
+        ),
+        (
+            "relay-gpt-image-2",
+            {
+                "relay-gpt-image-2": {"alias_of": "gpt-image-2"},
+                "gpt-image-2": {
+                    "precision_edit": True,
+                    "supported_sizes": ["1024x1024"],
+                },
+            },
+        ),
+    ],
+)
+def test_precision_capability_route_rejects_strict_gpt_image_2_size_without_persisting(
+    monkeypatch, model, model_capabilities
+):
+    provider = ProviderConfig(
+        id="custom",
+        name="Custom",
+        type="image",
+        api_key="test-key",
+        model=model,
+        models=[model],
+        enabled=True,
+        endpoint_type="openai",
+        capabilities={"precision_edit": True},
+        extra={"model_capabilities": model_capabilities},
+    )
+    config = SimpleNamespace(providers=[provider])
+    saved = []
+    before_extra = copy.deepcopy(provider.extra)
+    monkeypatch.setattr(main, "cfg_mgr", SimpleNamespace(config=config, save=lambda value: saved.append(value)))
+
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(
+            main.set_precision_capability(
+                "custom",
+                main.PrecisionCapabilityReq(
+                    model=model,
+                    enabled=True,
+                    confirmed=True,
+                    size="1920x1080",
+                ),
+            )
+        )
+
+    assert caught.value.status_code == 400
+    assert caught.value.detail["code"] == "precision_size_invalid"
+    assert caught.value.detail["reason_code"] == "precision_target_size_alignment_invalid"
+    assert saved == []
+    assert provider.extra == before_extra
+
+
+def test_precision_capability_route_accepts_legal_gpt_image_2_size(monkeypatch):
+    provider = ProviderConfig(
+        id="custom",
+        name="Custom",
+        type="image",
+        api_key="test-key",
+        model="gpt-image-2",
+        models=["gpt-image-2"],
+        enabled=True,
+        endpoint_type="openai",
+        capabilities={"precision_edit": True},
+        extra={
+            "model_capabilities": {
+                "gpt-image-2": {
+                    "precision_edit": True,
+                    "supported_sizes": ["1024x1024"],
+                }
+            }
+        },
+    )
+    config = SimpleNamespace(providers=[provider])
+    saved = []
+    monkeypatch.setattr(main, "cfg_mgr", SimpleNamespace(config=config, save=lambda value: saved.append(value)))
+
+    result = asyncio.run(
+        main.set_precision_capability(
+            "custom",
+            main.PrecisionCapabilityReq(
+                model="gpt-image-2",
+                enabled=True,
+                confirmed=True,
+                size="2048x1152",
+            ),
+        )
+    )
+
+    assert result["supported_sizes"] == ["1024x1024", "2048x1152"]
+    assert provider.extra["model_capabilities"]["gpt-image-2"]["supported_sizes"] == [
+        "1024x1024",
+        "2048x1152",
+    ]
+    assert saved == [config]
+
+
 def test_precision_resize_generation_uses_size_confirmed_through_capability_api(monkeypatch):
     provider = ProviderConfig(
         id="precision-provider",
@@ -2145,7 +2375,7 @@ def test_provider_update_without_profile_preserves_explicit_profile(profile):
 
 
 def test_cutout_capabilities_fail_closed_without_adapters(monkeypatch):
-    monkeypatch.setattr(main, "CUTOUT_ADAPTERS", ())
+    monkeypatch.setattr(main, "CUTOUT_REGISTRY", CutoutAdapterRegistry())
     client = TestClient(main.app, base_url="http://testserver")
     response = client.get("/api/image-tools/cutout/capabilities")
 
@@ -2157,8 +2387,38 @@ def test_cutout_capabilities_fail_closed_without_adapters(monkeypatch):
     assert detail["adapters"] == []
 
 
+def test_cutout_capabilities_refreshes_imported_optional_modnet(monkeypatch):
+    refreshed = []
+
+    class _ImportedModNet:
+        def status(self):
+            return {"installed": True, "valid": True}
+
+    class _Registry:
+        def probe(self):
+            return {
+                "contract": "genbox-cutout-v1",
+                "available": True,
+                "executable": True,
+                "adapters": ["u2net-human-seg-onnx", "modnet-portrait-onnx"],
+                "adapter_capabilities": [],
+                "state": "ready",
+            }
+
+    monkeypatch.setattr(main, "MODNET_IMPORT_MANAGER", _ImportedModNet())
+    monkeypatch.setattr(main, "_refresh_modnet_registry", lambda manager: refreshed.append(manager))
+    monkeypatch.setattr(main, "CUTOUT_REGISTRY", _Registry())
+    client = TestClient(main.app, base_url="http://testserver")
+
+    response = client.get("/api/image-tools/cutout/capabilities")
+
+    assert response.status_code == 200
+    assert refreshed and refreshed[0].__class__ is _ImportedModNet
+    assert response.json()["adapters"] == ["u2net-human-seg-onnx", "modnet-portrait-onnx"]
+
+
 def test_cutout_submission_fails_closed_without_adapters(monkeypatch):
-    monkeypatch.setattr(main, "CUTOUT_ADAPTERS", ())
+    monkeypatch.setattr(main, "CUTOUT_REGISTRY", CutoutAdapterRegistry())
     client = TestClient(main.app, base_url="http://testserver")
     response = client.post(
         "/api/image-tools/cutout",
@@ -2174,7 +2434,7 @@ def test_cutout_submission_fails_closed_without_adapters(monkeypatch):
 
 
 def test_cutout_submission_fails_closed_before_image_validation_without_adapters(monkeypatch):
-    monkeypatch.setattr(main, "CUTOUT_ADAPTERS", ())
+    monkeypatch.setattr(main, "CUTOUT_REGISTRY", CutoutAdapterRegistry())
     client = TestClient(main.app, base_url="http://testserver")
     response = client.post(
         "/api/image-tools/cutout",

@@ -50,8 +50,10 @@ def _provider() -> ProviderConfig:
 
 
 class _Response:
-    def __init__(self, payload):
+    def __init__(self, payload, *, status_code: int = 200, text: str = ""):
         self._payload = payload
+        self.status_code = status_code
+        self.text = text
 
     def json(self):
         return self._payload
@@ -97,6 +99,27 @@ class _DownloadClient:
 
     def stream(self, method, url, **kwargs):
         return _StreamResponse(self._headers, self._payload)
+
+
+def _install_generated_image_download(
+    monkeypatch,
+    *,
+    content_type: str | None,
+    payload: bytes,
+) -> None:
+    monkeypatch.setattr(
+        providers.socket,
+        "getaddrinfo",
+        lambda host, port, type=0: [
+            (providers.socket.AF_INET, type, 6, "", ("93.184.216.34", port))
+        ],
+    )
+    headers = {} if content_type is None else {"content-type": content_type}
+    monkeypatch.setattr(
+        providers,
+        "_generated_image_http_client",
+        lambda: _DownloadClient(headers, payload),
+    )
 
 
 def test_inline_base64_byte_cap_is_checked_before_decode(monkeypatch):
@@ -155,26 +178,21 @@ def test_decoded_format_must_match_declared_mime():
 
 
 @pytest.mark.parametrize(
-    ("content_type", "expect_success"),
-    [("image/png", True), ("image/jpeg", False)],
+    ("content_type", "payload"),
+    [
+        ("image/jpeg", _png_bytes()),
+        ("image/png; charset=binary", _jpeg_bytes()),
+    ],
 )
-def test_url_result_validates_decoded_format_against_content_type(
+def test_url_result_uses_decoded_format_when_allowed_content_type_is_inaccurate(
     monkeypatch,
     content_type,
-    expect_success,
+    payload,
 ):
-    payload = _png_bytes()
-    monkeypatch.setattr(
-        providers.socket,
-        "getaddrinfo",
-        lambda host, port, type=0: [
-            (providers.socket.AF_INET, type, 6, "", ("93.184.216.34", port))
-        ],
-    )
-    monkeypatch.setattr(
-        providers,
-        "_generated_image_http_client",
-        lambda: _DownloadClient({"content-type": content_type}, payload),
+    _install_generated_image_download(
+        monkeypatch,
+        content_type=content_type,
+        payload=payload,
     )
 
     data, error = asyncio.run(
@@ -185,12 +203,136 @@ def test_url_result_validates_decoded_format_against_content_type(
         )
     )
 
-    if expect_success:
-        assert data == payload
-        assert error is None
+    assert data == payload
+    assert error is None
+
+
+def test_url_result_still_requires_an_allowed_content_type(monkeypatch):
+    _install_generated_image_download(
+        monkeypatch,
+        content_type=None,
+        payload=_png_bytes(),
+    )
+
+    data, error = asyncio.run(
+        providers._download_generated_image(
+            object(),
+            "https://images.example.test/result.png",
+            max_pixels=providers.GENERATED_IMAGE_MAX_PIXELS,
+        )
+    )
+
+    assert data is None
+    assert error == "image URL response is not an allowed image Content-Type"
+
+
+def test_url_result_with_allowed_content_type_still_requires_decodable_image(monkeypatch):
+    _install_generated_image_download(
+        monkeypatch,
+        content_type="image/png",
+        payload=b"<html>not an image</html>",
+    )
+
+    data, error = asyncio.run(
+        providers._download_generated_image(
+            object(),
+            "https://images.example.test/result.png",
+            max_pixels=providers.GENERATED_IMAGE_MAX_PIXELS,
+        )
+    )
+
+    assert data is None
+    assert error.startswith("generated_image_unreadable:")
+
+
+@pytest.mark.parametrize("workflow", ["generation", "inpaint", "precision_edit"])
+def test_image_workflows_accept_url_result_with_inaccurate_allowed_content_type(
+    monkeypatch,
+    tmp_path,
+    workflow,
+):
+    output = _jpeg_bytes()
+    output_url = "https://images.example.test/result.png"
+    _install_generated_image_download(
+        monkeypatch,
+        content_type="image/png",
+        payload=output,
+    )
+    monkeypatch.setattr(providers, "GALLERY_DIR", tmp_path)
+
+    if workflow == "generation":
+        async def fake_post(*args, **kwargs):
+            return _Response({"data": [{"url": output_url}]}), object()
+
+        monkeypatch.setattr(providers, "_http_post_with_retry", fake_post)
+        result = asyncio.run(
+            providers._gen_openai(_provider(), "synthetic prompt")
+        )
+    elif workflow == "inpaint":
+        source = "data:image/png;base64," + base64.b64encode(_png_bytes()).decode("ascii")
+
+        class Client:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+        async def fake_provider_response(*args, **kwargs):
+            return _Response({"data": [{"url": output_url}]})
+
+        monkeypatch.setattr(providers.httpx, "AsyncClient", lambda **kwargs: Client())
+        monkeypatch.setattr(
+            providers,
+            "_stream_bounded_provider_response",
+            fake_provider_response,
+        )
+        result = asyncio.run(
+            providers._gen_openai_inpaint(
+                _provider(),
+                "replace the selected area",
+                source,
+                source,
+            )
+        )
     else:
-        assert data is None
-        assert "generated_image_mime_mismatch" in error
+        source = "data:image/png;base64," + base64.b64encode(_png_bytes()).decode("ascii")
+
+        class Client:
+            async def aclose(self):
+                return None
+
+        async def fake_post(*args, **kwargs):
+            return _Response({"data": [{"url": output_url}]}), Client()
+
+        monkeypatch.setattr(providers, "_http_post_with_retry", fake_post)
+        result = asyncio.run(
+            providers._gen_openai_precision_edit(
+                _provider(),
+                "replace the marked item",
+                source,
+                source,
+                [
+                    {
+                        "type": "arrow",
+                        "label": 1,
+                        "instruction": "Replace the marked item.",
+                        "x1": 0.1,
+                        "y1": 0.1,
+                        "x2": 0.8,
+                        "y2": 0.8,
+                    }
+                ],
+                annotation_contract=providers.PRECISION_ANNOTATION_CONTRACT_V2,
+                precision_size_mode="preserve",
+            )
+        )
+
+    assert result.success is True
+    assert result.image_data == output
+    with Image.open(result.local_path) as saved:
+        assert saved.format == "PNG"
+        assert saved.size == (2, 2)
 
 
 def test_common_save_accepts_valid_image_and_transcodes_to_png(monkeypatch, tmp_path):

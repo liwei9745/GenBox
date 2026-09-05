@@ -343,6 +343,47 @@ def _v3_kwargs(**overrides) -> dict:
     return values
 
 
+@pytest.mark.parametrize(
+    "size,expected_code",
+    [
+        ("1280x720", None),
+        ("1536x864", None),
+        ("1792x768", None),
+        ("2560x1440", None),
+        ("3840x2160", None),
+        ("1920x1080", "precision_target_size_alignment_invalid"),
+        ("640x640", "precision_target_size_pixels_too_small"),
+        ("64x10000", "precision_target_size_side_exceeded"),
+        ("16x4096", "precision_target_size_side_exceeded"),
+        ("64x2048", "precision_target_size_aspect_invalid"),
+        ("3840x3840", "precision_target_size_pixels_exceeded"),
+    ],
+)
+def test_gpt_image_2_exact_size_protocol(size, expected_code):
+    error = providers.gpt_image_2_size_error(size)
+    assert (None if error is None else error[0]) == expected_code
+
+
+def test_gpt_image_2_legal_size_still_requires_explicit_declaration():
+    provider = _provider(model="gpt-image-2", supported_sizes=["1280x720"])
+    assert providers._precision_size_error(
+        provider, "gpt-image-2", "resize", "1536x864", ""
+    ) == (
+        "precision_edit_target_size_not_declared",
+        "the selected model has not declared this target size",
+    )
+
+
+def test_gpt_image_2_rejects_illegal_size_even_when_declared():
+    provider = _provider(model="gpt-image-2", supported_sizes=["1920x1080"])
+    assert providers._precision_size_error(
+        provider, "gpt-image-2", "resize", "1920x1080", ""
+    ) == (
+        "precision_target_size_alignment_invalid",
+        "gpt-image-2 dimensions must be divisible by 16",
+    )
+
+
 def _resize_only_kwargs(**overrides) -> dict:
     values = {
         "mode": "precision_edit",
@@ -549,10 +590,10 @@ def test_precision_explicit_image_array_profile_uses_fixed_field_and_alias_model
 def test_precision_single_source_image_profile_uses_explicit_alias_mapping_and_real_model_name(monkeypatch):
     calls = []
     alias = "gpt-image2-b"
-    source_image = _data_url(size=(64, 64), color=(8, 16, 24))
-    annotation_image = _data_url(size=(64, 64), color=(220, 32, 48))
+    source_image = _data_url(size=(1024, 1024), color=(8, 16, 24))
+    annotation_image = _data_url(size=(1024, 1024), color=(220, 32, 48))
     source_bytes = base64.b64decode(source_image.split(",", 1)[1])
-    response_image = _data_url(size=(64, 64)).split(",", 1)[1]
+    response_image = _data_url(size=(1024, 1024)).split(",", 1)[1]
 
     class Client:
         async def post(self, url, **kwargs):
@@ -564,6 +605,7 @@ def test_precision_single_source_image_profile_uses_explicit_alias_mapping_and_r
 
     provider = _provider(
         model="gpt-image-2",
+        supported_sizes=["1024x1024"],
         precision_edit_profile=(
             PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE
         ),
@@ -590,7 +632,7 @@ def test_precision_single_source_image_profile_uses_explicit_alias_mapping_and_r
     url, request = calls[0]
     assert url == "https://provider.example.test/v1/images/edits"
     assert request["data"]["model"] == alias
-    assert request["data"]["size"] == "64x64"
+    assert request["data"]["size"] == "1024x1024"
     assert request["data"]["n"] == 1
     assert "prompt" in request["data"]
     assert [name for name, _ in request["files"]] == ["image"]
@@ -598,6 +640,55 @@ def test_precision_single_source_image_profile_uses_explicit_alias_mapping_and_r
     assert request["files"][0][1][1] == source_bytes
     assert request["files"][0][1][2] == "image/png"
     assert request["files"][0][1][1] != base64.b64decode(annotation_image.split(",", 1)[1])
+
+
+def test_precision_single_source_profile_repairs_allowed_stale_source_mime(monkeypatch):
+    calls = []
+    alias = "gpt-image2-b"
+    source_bytes = _image_bytes(image_format="JPEG", size=(1024, 1024))
+    source_image = "data:image/png;base64," + base64.b64encode(source_bytes).decode("ascii")
+    annotation_image = _data_url(size=(1024, 1024), color=(220, 32, 48))
+    response_image = _data_url(size=(1024, 1024)).split(",", 1)[1]
+
+    class Client:
+        async def post(self, url, **kwargs):
+            calls.append((url, kwargs))
+            return _Response(200, {"data": [{"b64_json": response_image}]})
+
+    monkeypatch.setattr(providers.httpx, "AsyncClient", lambda **kwargs: Client())
+    monkeypatch.setattr(providers, "_save_image", lambda *args, **kwargs: "gallery/result.png")
+
+    provider = _provider(
+        model="gpt-image-2",
+        supported_sizes=["1024x1024"],
+        precision_edit_profile=(
+            PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE
+        ),
+    )
+    provider.model = alias
+    provider.models = [alias]
+    provider.extra["model_capabilities"][alias] = {"alias_of": "gpt-image-2"}
+
+    result = asyncio.run(
+        providers._dispatch_generate(
+            provider,
+            "strict edit",
+            "openai",
+            **_v2_kwargs(
+                model=alias,
+                image_data=source_image,
+                annotation_image_data=annotation_image,
+            ),
+        )
+    )
+
+    assert result.success is True
+    assert len(calls) == 1
+    source_part = calls[0][1]["files"][0]
+    assert source_part[0] == "image"
+    assert source_part[1][0] == "source.jpg"
+    assert source_part[1][1] == source_bytes
+    assert source_part[1][2] == "image/jpeg"
 
 
 @pytest.mark.parametrize(
@@ -1607,22 +1698,136 @@ def test_precision_dispatch_sends_target_only_for_explicit_resize(monkeypatch):
 
 def test_precision_dispatch_rejects_resize_without_guidance_before_http(monkeypatch):
     client_constructions = []
-
-    def forbidden_client(**kwargs):
-        client_constructions.append(kwargs)
-        raise AssertionError("precision resize must not open HTTP without composition guidance")
-
-    monkeypatch.setattr(providers.httpx, "AsyncClient", forbidden_client)
+    monkeypatch.setattr(
+        providers.httpx,
+        "AsyncClient",
+        lambda **kwargs: client_constructions.append(kwargs),
+    )
     result = asyncio.run(
         providers._dispatch_generate(
             _provider(supported_sizes=["1792x768"]),
             "strict edit",
             "openai",
-            **_v2_kwargs(precision_size_mode="resize", precision_target_size="1792x768"),
+            **_v2_kwargs(
+                precision_size_mode="resize",
+                precision_target_size="1792x768",
+                precision_resize_prompt="",
+            ),
         )
     )
+
     assert result.success is False
-    assert "precision_resize_prompt_required" in result.error
+    assert result.error_code == "precision_resize_prompt_required"
+    assert client_constructions == []
+
+
+def test_precision_dispatch_adds_strategy_leg_protection_and_local_selection_guidance(monkeypatch):
+    calls = []
+    response_image = _data_url().split(",", 1)[1]
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, **kwargs):
+            calls.append(kwargs)
+            return _Response(200, {"data": [{"b64_json": response_image}]})
+
+    monkeypatch.setattr(providers.httpx, "AsyncClient", lambda **kwargs: Client())
+    monkeypatch.setattr(providers, "_save_image", lambda *args, **kwargs: "gallery/result.png")
+
+    result = asyncio.run(
+        providers._dispatch_generate(
+            _provider(supported_sizes=["64x64"]),
+            "Repair the lower body.",
+            "openai",
+            **_v3_kwargs(
+                precision_strategy="fine",
+                precision_selection_mode="local",
+                precision_selection_feather=14,
+            ),
+        )
+    )
+
+    assert result.success is True
+    prompt = calls[0]["data"]["prompt"]
+    assert "careful, high-fidelity edit pass" in prompt
+    assert "model guidance, not a verified pixel inpaint mask" in prompt
+    assert "approximately 14px soft transition" in prompt
+    assert "complete, continuous, anatomically separate legs" in prompt
+    assert "omit, merge, duplicate, shorten" in prompt
+
+
+def test_precision_dispatch_rejects_invalid_strategy_before_http(monkeypatch):
+    client_constructions = []
+
+    def forbidden_client(**kwargs):
+        client_constructions.append(kwargs)
+        raise AssertionError("invalid precision strategy must not open HTTP")
+
+    monkeypatch.setattr(providers.httpx, "AsyncClient", forbidden_client)
+    result = asyncio.run(
+        providers._dispatch_generate(
+            _provider(),
+            "strict edit",
+            "openai",
+            **_v2_kwargs(precision_strategy="deep"),
+        )
+    )
+
+    assert result.success is False
+    assert "precision_strategy_invalid" in result.error
+    assert client_constructions == []
+
+
+def test_precision_dispatch_rejects_local_selection_without_region_before_http(monkeypatch):
+    client_constructions = []
+
+    def forbidden_client(**kwargs):
+        client_constructions.append(kwargs)
+        raise AssertionError("invalid local selection must not open HTTP")
+
+    monkeypatch.setattr(providers.httpx, "AsyncClient", forbidden_client)
+    result = asyncio.run(
+        providers._dispatch_generate(
+            _provider(),
+            "strict edit",
+            "openai",
+            **_v2_kwargs(
+                precision_selection_mode="local",
+                precision_selection_feather=8,
+            ),
+        )
+    )
+
+    assert result.success is False
+    assert "precision_local_selection_required" in result.error
+    assert client_constructions == []
+
+
+@pytest.mark.parametrize("field", ["annotation_data", "annotation_objects"])
+def test_precision_resize_only_rejects_browser_local_annotation_state_before_http(monkeypatch, field):
+    client_constructions = []
+    monkeypatch.setattr(
+        providers.httpx,
+        "AsyncClient",
+        lambda **kwargs: client_constructions.append(kwargs),
+    )
+
+    result = asyncio.run(
+        providers._dispatch_generate(
+            _provider(supported_sizes=["64x64"]),
+            "expand the canvas",
+            "openai",
+            **_resize_only_kwargs(**{field: {} if field == "annotation_data" else []}),
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "precision_resize_annotation_fields_conflict"
     assert client_constructions == []
 
 
@@ -2248,6 +2453,36 @@ def test_precision_dispatch_redacts_upstream_error_detail(monkeypatch):
     assert "[REDACTED]" in result.error
     for secret in secrets:
         assert secret not in result.error
+
+
+def test_precision_upstream_error_exposes_only_structured_transport_facts(monkeypatch):
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, **kwargs):
+            return _Response(503, text="temporary unavailable")
+
+    monkeypatch.setattr(providers.httpx, "AsyncClient", lambda **kwargs: Client())
+    result = asyncio.run(
+        providers._dispatch_generate(
+            _provider(),
+            "strict edit",
+            "openai",
+            **_v2_kwargs(),
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "precision_edit_upstream_error"
+    assert result.error_details == {
+        "model": "mock-edit-1",
+        "profile": "/images/edits",
+        "status_code": 503,
+    }
 
 
 def test_precision_redacts_full_configured_key_before_error_excerpt(monkeypatch):

@@ -118,6 +118,9 @@ DEFAULT_PRECISION_RESIZE_GUIDANCE = (
     "target aspect ratio, extending the canvas as needed while preserving the full subject."
 )
 PROVIDER_ERROR_MAX_LENGTH = 2400
+# Keep upstream diagnostics useful for troubleshooting without echoing an
+# unbounded response body back to the browser or task/history surfaces.
+PROVIDER_ERROR_DETAIL_MAX_LENGTH = 200
 
 
 @dataclass(frozen=True)
@@ -765,28 +768,49 @@ def _crop_generated_size(image_data: bytes, requested_size: str) -> bytes | None
         source.close()
 
 
-def _friendly_generation_error(error: str) -> str:
-    """Explain common upstream failures without hiding technical evidence."""
-    text = _safe_text(error)
+def _friendly_generation_error(
+    error: Any,
+    cfg: ProviderConfig | None = None,
+    *,
+    detail_limit: int = PROVIDER_ERROR_DETAIL_MAX_LENGTH,
+) -> str:
+    """Explain common upstream failures with bounded, provider-aware detail."""
+    if cfg is not None:
+        text = _provider_error_text(error, cfg).strip()
+    else:
+        text = _safe_text(error).strip()
+    limit = max(0, int(detail_limit))
+    detail = text[:limit]
+    if "[REDACTED]" in text and "[REDACTED]" not in detail:
+        redaction_suffix = " ... [REDACTED]"
+        if limit <= 0:
+            detail = ""
+        elif limit <= len(redaction_suffix):
+            detail = redaction_suffix[:limit]
+        else:
+            detail = (
+                text[: limit - len(redaction_suffix)].rstrip()
+                + redaction_suffix
+            )
     if "503 Service Unavailable" in text or "provider_unavailable" in text:
         return (
             "上游生图服务暂时不可用（503）。这通常是模型服务繁忙或临时故障，"
             "不是提示词或本机尺寸设置错误。请稍后重试，或切换到其他可用端点/模型。"
-            f" 技术详情：{text}"
+            f" 技术详情：{detail}"
         )
     lower = text.lower()
     if "unsupported image model" in lower:
         return (
             "当前模型名称不被这个端点的图片编辑接口支持。请在“编辑模型”中改选端点明确支持的模型名称。"
-            f" 技术详情：{text}"
+            f" 技术详情：{detail}"
         )
     if "no available channel" in lower or "model_not_found" in lower:
         return (
             "这个端点当前没有可用的图片编辑通道。模型本身可能支持改图，但该中转服务暂时无法调用它。"
             "请稍后重试、切换端点，或联系端点服务商开通对应模型通道。"
-            f" 技术详情：{text}"
+            f" 技术详情：{detail}"
         )
-    return text
+    return detail
 
 
 def _get_proxy_url(cfg: ProviderConfig = None) -> str | None:
@@ -1085,7 +1109,10 @@ async def generate_for_provider(
             if precision_post_budget is not None and precision_post_budget.exhausted:
                 break
         failure_detail = _endpoint_failure_summary(cfg, endpoint_errors)
-        error = f"[{cfg.name}] 所有端点均失败: {_friendly_generation_error(failure_detail)}"
+        error = (
+            f"[{cfg.name}] 所有端点均失败: "
+            f"{_friendly_generation_error(failure_detail, cfg, detail_limit=2200)}"
+        )
         return ImageResult(
             success=False,
             error=_provider_error_text(error, cfg)[:PROVIDER_ERROR_MAX_LENGTH],
@@ -1176,6 +1203,9 @@ async def _dispatch_generate(cfg, prompt, protocol, **kwargs):
             "annotation_image_data",
             "annotation_contract",
             "annotations",
+            "precision_strategy",
+            "precision_selection_mode",
+            "precision_selection_feather",
             "precision_canvas_only",
             "precision_size_mode",
             "precision_target_size",
@@ -1312,6 +1342,24 @@ def _precision_edit_failure(
         error_code=code,
         error_details=details,
     )
+
+
+def _precision_transport_error_details(
+    cfg: ProviderConfig,
+    model_id: str,
+    transport_profile: PrecisionEditTransportProfile | None,
+    exc: BaseException,
+) -> dict[str, Any]:
+    """Expose bounded, non-secret transport facts for precision diagnostics."""
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    details: dict[str, Any] = {
+        "model": model_id or None,
+        "profile": transport_profile.path if transport_profile is not None else None,
+    }
+    if isinstance(status_code, int):
+        details["status_code"] = status_code
+    return details
 
 
 def _precision_annotation_text_is_safe(value: str) -> bool:
@@ -1633,6 +1681,17 @@ def _precision_model_has_size_declaration(cfg: ProviderConfig, model_id: str) ->
     return resolution.structure_valid and resolution.size_declaration_present
 
 
+def _precision_model_uses_gpt_image_2_size_contract(
+    cfg: ProviderConfig,
+    model_id: str,
+) -> bool:
+    """Apply the protocol only to the exact model or an explicit one-hop alias."""
+    if model_id == "gpt-image-2":
+        return True
+    resolution = _precision_model_capability_resolution(cfg, model_id)
+    return resolution.structure_valid and resolution.canonical_model == "gpt-image-2"
+
+
 def _precision_preserve_source_size_error(
     cfg: ProviderConfig,
     model_id: str,
@@ -1652,6 +1711,10 @@ def _precision_preserve_source_size_error(
             "per side and within the configured pixel limit",
         )
     source_size = f"{width}x{height}"
+    if _precision_model_uses_gpt_image_2_size_contract(cfg, model_id):
+        protocol_error = gpt_image_2_size_error(source_size)
+        if protocol_error:
+            return protocol_error
     resolution = _precision_model_capability_resolution(cfg, model_id)
     selected_record = None
     extra = getattr(cfg, "extra", None)
@@ -1710,6 +1773,10 @@ def _precision_size_error(
         return "precision_size_mode_invalid", "unsupported precision size mode"
     if _normalize_precision_size(target) is None:
         return "precision_target_size_invalid", "resize mode requires a valid WIDTHxHEIGHT target"
+    if _precision_model_uses_gpt_image_2_size_contract(cfg, model_id):
+        protocol_error = gpt_image_2_size_error(target)
+        if protocol_error:
+            return protocol_error
     declared = _precision_model_declared_sizes(cfg, model_id)
     if not declared:
         return "precision_edit_size_capability_unknown", "the selected model has no explicit supported size list"
@@ -1834,9 +1901,14 @@ async def _download_generated_image(
                 image_data = bytes(content)
                 if max_pixels is not None:
                     try:
+                        # The response Content-Type is a transport allowlist gate,
+                        # not an authoritative description of the encoded bytes.
+                        # Some OpenAI-compatible relays return a valid PNG with a
+                        # JPEG header (or vice versa); Pillow's decoded format is
+                        # the trusted format for the remaining safety checks and
+                        # the shared PNG normalization path.
                         _inspect_generated_image(
                             image_data,
-                            declared_mime=content_type,
                             max_pixels=max_pixels,
                             max_dimension=max_dimension,
                         )
@@ -1893,10 +1965,51 @@ async def _dispatch_precision_edit(
             "precision_output_size_policy is accepted only for precision_edit resize",
         )
     precision_canvas_only = kwargs.get("precision_canvas_only") is True
+    precision_strategy = str(kwargs.get("precision_strategy") or "standard").strip().lower()
+    if precision_strategy not in PRECISION_STRATEGIES:
+        return _precision_edit_failure(
+            cfg,
+            "precision_strategy_invalid",
+            "precision_strategy must be fine, standard, or fast",
+        )
+    precision_selection_mode = str(kwargs.get("precision_selection_mode") or "annotation").strip().lower()
+    if precision_selection_mode not in PRECISION_SELECTION_MODES:
+        return _precision_edit_failure(
+            cfg,
+            "precision_selection_mode_invalid",
+            "precision_selection_mode must be annotation or local",
+        )
+    raw_feather = kwargs.get("precision_selection_feather", 0)
+    try:
+        precision_selection_feather = float(raw_feather)
+    except (TypeError, ValueError):
+        precision_selection_feather = float("nan")
+    if not math.isfinite(precision_selection_feather) or not 0 <= precision_selection_feather <= MAX_PRECISION_SELECTION_FEATHER:
+        return _precision_edit_failure(
+            cfg,
+            "precision_selection_feather_invalid",
+            "precision_selection_feather must be a finite number between 0 and 64",
+        )
+    if precision_selection_mode != "local" and "precision_selection_feather" in kwargs:
+        return _precision_edit_failure(
+            cfg,
+            "precision_selection_feather_not_allowed",
+            "precision_selection_feather is accepted only for local selection mode",
+        )
+    if precision_canvas_only and precision_selection_mode == "local":
+        return _precision_edit_failure(
+            cfg,
+            "precision_local_selection_requires_annotations",
+            "local selection mode requires rectangle, ellipse, or brush annotations",
+        )
     annotation_field_names = {
         "annotation_image_data",
         "annotation_contract",
         "annotations",
+        # These are browser-local workbench state and must never reach the
+        # provider envelope, even when empty or null.
+        "annotation_data",
+        "annotation_objects",
     }
     if precision_canvas_only and any(key in kwargs for key in annotation_field_names):
         return _precision_edit_failure(
@@ -1966,6 +2079,14 @@ async def _dispatch_precision_edit(
                 kwargs.get("annotations"),
                 annotation_contract,
             )
+            if precision_selection_mode == "local" and not any(
+                item["type"] in PRECISION_SELECTION_TYPES for item in annotations
+            ):
+                return _precision_edit_failure(
+                    cfg,
+                    "precision_local_selection_required",
+                    "local selection mode requires at least one rectangle, ellipse, or brush annotation",
+                )
         except ValueError as exc:
             return _precision_edit_failure(
                 cfg,
@@ -1983,6 +2104,11 @@ async def _dispatch_precision_edit(
             "annotation_image_data",
             "annotation_contract",
             "annotations",
+            "annotation_data",
+            "annotation_objects",
+            "precision_strategy",
+            "precision_selection_mode",
+            "precision_selection_feather",
             "precision_canvas_only",
             "precision_edit_authorized",
             "precision_edit_transport_profile",
@@ -1997,6 +2123,9 @@ async def _dispatch_precision_edit(
         annotation_contract=annotation_contract,
         precision_canvas_only=precision_canvas_only,
         transport_profile=transport_profile,
+        precision_strategy=precision_strategy,
+        precision_selection_mode=precision_selection_mode,
+        precision_selection_feather=precision_selection_feather,
         **clean_kwargs,
     )
 
@@ -2496,13 +2625,14 @@ def _decode_inpaint_image_data(value: str, default_mime: str) -> tuple[bytes, st
 
     encoded = value.strip()
     mime_type = default_mime
-    mime_was_declared = False
-    if encoded.startswith("data:"):
+    # RFC 2397 schemes are case-insensitive.  The route-level image validator
+    # already accepts mixed-case prefixes, so normalize detection here before
+    # splitting the header; keep the original payload bytes unchanged.
+    if encoded.lower().startswith("data:"):
         header, separator, encoded = encoded.partition(",")
         if not separator or ";base64" not in header.lower():
             raise ValueError("image payload must be a base64 data URL")
         mime_type = header[5:].split(";", 1)[0].strip().lower()
-        mime_was_declared = True
 
     if mime_type == "image/jpg":
         mime_type = "image/jpeg"
@@ -2527,8 +2657,11 @@ def _decode_inpaint_image_data(value: str, default_mime: str) -> tuple[bytes, st
         raise ValueError("image payload is not a readable image") from exc
     if actual_mime not in {"image/png", "image/jpeg", "image/webp"}:
         raise ValueError("image payload uses an unsupported image format")
-    if mime_was_declared and mime_type != actual_mime:
-        raise ValueError("image MIME type does not match its image payload")
+    # Browser canvas exports, imported gallery items, and OpenAI-compatible
+    # relays can preserve a stale but still allowlisted image MIME label.  The
+    # decoded image is the authority after Pillow has fully loaded it; using
+    # the actual MIME below also keeps the outbound multipart filename and
+    # Content-Type consistent with the bytes sent to the provider.
     return decoded, actual_mime
 
 
@@ -2760,6 +2893,46 @@ def _precision_v2_provider_prompt(prompt: str, annotations: list[dict]) -> str:
     return "\n\n".join(sections)
 
 
+def _precision_strategy_prompt(
+    strategy: str,
+    selection_mode: str,
+    selection_feather: float,
+) -> str:
+    strategy_guidance = {
+        "fine": (
+            "Use a careful, high-fidelity edit pass. Inspect small visual details, "
+            "preserve identity and anatomy, and make only the requested changes."
+        ),
+        "standard": (
+            "Use a balanced edit pass. Follow the marked intent closely while "
+            "preserving the source subject, lighting, perspective, and unmarked detail."
+        ),
+        "fast": (
+            "Use a focused, efficient edit pass. Prioritize the marked change and "
+            "preserve the source subject and unmarked areas without adding unrelated detail."
+        ),
+    }
+    sections = [strategy_guidance.get(strategy, strategy_guidance["standard"])]
+    if selection_mode == "local":
+        feather = max(0.0, min(64.0, float(selection_feather)))
+        feather_label = str(int(feather)) if feather.is_integer() else f"{feather:g}"
+        sections.append(
+            "Local selection guidance: treat the rectangle, ellipse, and brush marks "
+            "as an approximate region of interest for the requested edit. This is "
+            "model guidance, not a verified pixel inpaint mask. Keep the edit inside "
+            f"that region where possible and use an approximately {feather_label}px "
+            "soft transition at its edge; do not blur or alter the whole image."
+        )
+    sections.append(
+        "Person and leg protection: when a person is present, preserve complete, "
+        "continuous, anatomically separate legs, knees, ankles, and feet. Do not "
+        "omit, merge, duplicate, shorten, or arbitrarily crop legs. If the source "
+        "already crops a limb, do not invent an extension beyond the source framing "
+        "unless the user explicitly requests it."
+    )
+    return "\n\n".join(sections)
+
+
 async def _gen_openai_precision_edit(
     cfg: ProviderConfig,
     prompt: str,
@@ -2769,6 +2942,9 @@ async def _gen_openai_precision_edit(
     annotation_contract: str = "",
     precision_canvas_only: bool = False,
     transport_profile: PrecisionEditTransportProfile | None = None,
+    precision_strategy: str = "standard",
+    precision_selection_mode: str = "annotation",
+    precision_selection_feather: float = 0,
     _precision_post_budget: PrecisionEditPostBudget | None = None,
     **kwargs,
 ) -> ImageResult:
@@ -2873,6 +3049,14 @@ async def _gen_openai_precision_edit(
             f"User instruction: {prompt}\n"
             f"Normalized annotations: {structured_annotations}"
         )
+    edit_prompt += (
+        "\n\nPrecision controls:\n"
+        + _precision_strategy_prompt(
+            precision_strategy,
+            precision_selection_mode,
+            precision_selection_feather,
+        )
+    )
     size_error = _precision_size_error(cfg, model_id, size_mode, target_size, generic_size)
     if size_error:
         return _precision_edit_failure(cfg, size_error[0], size_error[1])
@@ -2889,7 +3073,11 @@ async def _gen_openai_precision_edit(
     elif size_mode == "resize":
         request_size = target_size
         if not resize_prompt:
-            return _precision_edit_failure(cfg, "precision_resize_prompt_required", "resize mode requires composition guidance")
+            return _precision_edit_failure(
+                cfg,
+                "precision_resize_prompt_required",
+                "resize mode requires composition guidance",
+            )
         ratio_label = _precision_ratio_label(request_size)
         edit_prompt += (
             f"\n\nTarget canvas constraint: output exactly {request_size} ({ratio_label}). "
@@ -2931,13 +3119,15 @@ async def _gen_openai_precision_edit(
         return _precision_edit_failure(
             cfg,
             "precision_edit_upstream_error",
-            _friendly_generation_error(_provider_exception_text(exc, cfg)),
+            _friendly_generation_error(_provider_exception_text(exc, cfg), cfg),
+            details=_precision_transport_error_details(cfg, model_id, transport_profile, exc),
         )
     except httpx.HTTPError as exc:
         return _precision_edit_failure(
             cfg,
             "precision_edit_connection_error",
             f"无法完成图片编辑请求（{_provider_exception_text(exc, cfg)}）。请检查端点连通性后重试",
+            details=_precision_transport_error_details(cfg, model_id, transport_profile, exc),
         )
     except ProviderResponseValidationError as exc:
         return _precision_edit_failure(

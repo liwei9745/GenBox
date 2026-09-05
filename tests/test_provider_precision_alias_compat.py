@@ -97,6 +97,30 @@ def test_precision_preserve_rejects_explicit_alias_without_canonical_sizes():
     assert error[0] == "precision_edit_source_size_not_declared"
 
 
+@pytest.mark.parametrize(
+    ("source_size", "expected_code"),
+    [
+        ((64, 64), "precision_target_size_pixels_too_small"),
+        ((1920, 1080), "precision_target_size_alignment_invalid"),
+    ],
+)
+def test_precision_preserve_alias_enforces_canonical_protocol_even_when_declared(
+    source_size,
+    expected_code,
+):
+    declared_size = f"{source_size[0]}x{source_size[1]}"
+    provider = _alias_provider(canonical_sizes=[declared_size])
+
+    error = providers._precision_preserve_source_size_error(
+        provider,
+        "gpt-image2-b",
+        source_size,
+    )
+
+    assert error is not None
+    assert error[0] == expected_code
+
+
 def test_precision_preserve_rejects_unknown_model_before_http(monkeypatch):
     provider = _alias_provider(alias_of=None)
     provider.extra["model_capabilities"]["gpt-image2-b"].pop("supported_sizes")
@@ -140,11 +164,21 @@ def test_precision_preserve_rejects_unknown_model_before_http(monkeypatch):
 
 
 @pytest.mark.parametrize("alias_field", ["alias_of", "canonical_model"])
-def test_precision_canonical_only_alias_supports_preserve_and_resize_and_keeps_outbound_alias(monkeypatch, alias_field):
-    provider = _alias_provider(canonical_sizes=["64x64"])
+@pytest.mark.parametrize(
+    ("target_size", "ratio_label"),
+    [("1536x864", "16:9"), ("1792x768", "21:9")],
+)
+def test_precision_canonical_only_alias_supports_declared_strict_sizes_and_keeps_outbound_alias(
+    monkeypatch,
+    alias_field,
+    target_size,
+    ratio_label,
+):
+    provider = _alias_provider(canonical_sizes=["1024x1024", target_size])
     provider.extra["model_capabilities"]["gpt-image2-b"] = {alias_field: "gpt-image-2"}
     calls = []
-    response_image = _data_url(size=(64, 64)).split(",", 1)[1]
+    response_size = tuple(int(part) for part in target_size.split("x", 1))
+    response_image = _data_url(size=response_size).split(",", 1)[1]
 
     class Response:
         status_code = 200
@@ -159,10 +193,10 @@ def test_precision_canonical_only_alias_supports_preserve_and_resize_and_keeps_o
 
     monkeypatch.setattr(providers.httpx, "AsyncClient", lambda **kwargs: Client())
     monkeypatch.setattr(providers, "_save_image", lambda *args, **kwargs: "gallery/result.png")
-    source = _data_url(size=(64, 64))
+    source = _data_url(size=(1024, 1024))
 
     assert providers._precision_preserve_source_size_error(
-        provider, "gpt-image2-b", (64, 64)
+        provider, "gpt-image2-b", (1024, 1024)
     ) is None
     result = asyncio.run(
         providers._dispatch_generate(
@@ -174,15 +208,70 @@ def test_precision_canonical_only_alias_supports_preserve_and_resize_and_keeps_o
             precision_canvas_only=True,
             precision_edit_authorized=True,
             precision_size_mode="resize",
-            precision_target_size="64x64",
-            precision_resize_prompt="Extend the background naturally.",
+            precision_target_size=target_size,
+            precision_resize_prompt="Extend the background without cropping the subject.",
             model="gpt-image2-b",
         )
     )
 
     assert result.success is True
     assert calls[0][1]["data"]["model"] == "gpt-image2-b"
-    assert calls[0][1]["data"]["size"] == "64x64"
+    assert calls[0][1]["data"]["size"] == target_size
+    assert f"({ratio_label})" in calls[0][1]["data"]["prompt"]
+
+
+def test_precision_alias_resize_enforces_canonical_protocol_even_when_declared():
+    provider = _alias_provider(canonical_sizes=["1920x1080"])
+
+    assert providers._precision_size_error(
+        provider,
+        "gpt-image2-b",
+        "resize",
+        "1920x1080",
+        "",
+    ) == (
+        "precision_target_size_alignment_invalid",
+        "gpt-image-2 dimensions must be divisible by 16",
+    )
+
+
+def test_unconfirmed_alias_still_uses_normal_t2i_and_keeps_outbound_model(monkeypatch):
+    provider = _alias_provider(canonical_confirmed=False)
+    calls = []
+    response_image = _data_url().split(",", 1)[1]
+
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {"data": [{"b64_json": response_image}]}
+
+    class Client:
+        async def post(self, url, **kwargs):
+            calls.append((url, kwargs))
+            return Response()
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(providers.httpx, "AsyncClient", lambda **kwargs: Client())
+    monkeypatch.setattr(providers, "_save_image", lambda *args, **kwargs: "gallery/result.png")
+
+    result = asyncio.run(
+        providers._dispatch_generate(
+            provider,
+            "ordinary text to image",
+            "openai",
+            mode="t2i",
+            model="gpt-image2-b",
+            size="1024x1024",
+        )
+    )
+
+    assert result.success is True
+    assert len(calls) == 1
+    assert calls[0][0] == "https://provider.example.test/v1/images/generations"
+    assert calls[0][1]["json"]["model"] == "gpt-image2-b"
 
 
 @pytest.mark.parametrize(

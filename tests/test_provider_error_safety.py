@@ -105,6 +105,40 @@ def test_friendly_generation_error_redacts_upstream_credentials(technical, secre
         assert secret not in message
 
 
+def test_friendly_generation_error_bounds_redacted_technical_detail():
+    from providers import _friendly_generation_error
+
+    technical = (
+        'HTTP 503: {"code":"provider_unavailable","diagnostic":"'
+        + "x" * 280
+        + '","api_key":"syntheticLongCredential"}'
+    )
+
+    message = _friendly_generation_error(technical)
+
+    assert "syntheticLongCredential" not in message
+    assert "[REDACTED]" in message
+    assert "x" * 201 not in message
+
+
+def test_friendly_generation_error_uses_configured_key_redaction_before_excerpt():
+    from providers import _friendly_generation_error
+
+    secret = "syntheticConfiguredCredential"
+    provider = _provider(secret)
+    technical = (
+        'HTTP 503: {"code":"provider_unavailable","diagnostic":"'
+        + "x" * 120
+        + secret
+        + ' remains unavailable"}'
+    )
+
+    message = _friendly_generation_error(technical, provider)
+
+    assert secret not in message
+    assert "[REDACTED]" in message
+
+
 def test_redaction_consumes_complete_escaped_json_credential_value():
     from providers import _redact_sensitive_text
 

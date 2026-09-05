@@ -31,6 +31,45 @@ def _white_edit_mask() -> str:
     return _data_url(mask)
 
 
+@pytest.mark.parametrize("prefix", ["DATA:", "DaTa:", "dAtA:"])
+def test_inpaint_decoder_accepts_case_insensitive_data_url_prefix(prefix):
+    payload = _base_image()
+    mixed_case_payload = prefix + payload.split(":", 1)[1]
+
+    decoded, mime = providers._decode_inpaint_image_data(
+        mixed_case_payload,
+        "image/png",
+    )
+
+    assert decoded.startswith(b"\x89PNG\r\n\x1a\n")
+    assert mime == "image/png"
+
+
+def test_inpaint_decoder_preserves_bare_base64_and_uses_actual_allowed_mime():
+    payload = _base_image()
+    encoded = payload.split(",", 1)[1]
+
+    decoded, mime = providers._decode_inpaint_image_data(encoded, "image/png")
+
+    assert decoded.startswith(b"\x89PNG\r\n\x1a\n")
+    assert mime == "image/png"
+
+    decoded, mime = providers._decode_inpaint_image_data(
+        payload.replace("image/png", "image/jpeg", 1),
+        "image/png",
+    )
+
+    assert decoded.startswith(b"\x89PNG\r\n\x1a\n")
+    assert mime == "image/png"
+
+
+def test_inpaint_decoder_rejects_unsupported_declared_mime_even_for_image_bytes():
+    payload = _base_image().replace("image/png", "text/plain", 1)
+
+    with pytest.raises(ValueError, match="unsupported image MIME type"):
+        providers._decode_inpaint_image_data(payload, "image/png")
+
+
 def _provider(endpoint_type: str = "openai") -> ProviderConfig:
     return ProviderConfig(
         id="openai-inpaint",
@@ -120,6 +159,46 @@ def test_openai_inpaint_sends_exact_image_mask_multipart(monkeypatch):
     with Image.open(BytesIO(files[1][1][1])) as provider_mask:
         assert provider_mask.mode == "RGBA"
         assert list(provider_mask.getchannel("A").tobytes()) == [255, 0]
+
+
+def test_openai_inpaint_repairs_allowed_stale_source_mime_before_multipart(monkeypatch):
+    calls = []
+    source = _data_url(Image.new("RGB", (2, 1), (200, 20, 20)), "JPEG")
+    stale_source = source.replace("image/jpeg", "image/png", 1)
+    response_image = _base_image().split(",", 1)[1]
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, **kwargs):
+            calls.append((url, kwargs))
+            return _Response(200, {"data": [{"b64_json": response_image}]})
+
+    monkeypatch.setattr(providers.httpx, "AsyncClient", lambda **kwargs: Client())
+    monkeypatch.setattr(providers, "_save_image", lambda *args, **kwargs: "gallery/result.png")
+
+    kwargs = _inpaint_kwargs()
+    kwargs["image_data"] = stale_source
+    kwargs["image_data_list"] = [stale_source]
+    result = asyncio.run(
+        providers._dispatch_generate(
+            _provider(),
+            "replace the white-selected area",
+            "openai",
+            **kwargs,
+        )
+    )
+
+    assert result.success is True
+    source_part = calls[0][1]["files"][0]
+    assert source_part[0] == "image"
+    assert source_part[1][0] == "image.jpg"
+    assert source_part[1][2] == "image/jpeg"
+    assert source_part[1][1].startswith(b"\xff\xd8\xff")
 
 
 @pytest.mark.parametrize("status_code", [404, 422])
