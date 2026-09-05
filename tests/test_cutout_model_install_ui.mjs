@@ -22,6 +22,7 @@ function extractFunction(name) {
   let depth = 0;
   let quote = '';
   let escaped = false;
+  let regex = false;
   for (let index = bodyStart; index < js.length; index += 1) {
     const char = js[index];
     if (quote) {
@@ -30,9 +31,22 @@ function extractFunction(name) {
       else if (char === quote) quote = '';
       continue;
     }
+    if (regex) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '/') regex = false;
+      continue;
+    }
     if (char === '"' || char === "'" || char === String.fromCharCode(96)) {
       quote = char;
       continue;
+    }
+    if (char === '/' && js[index + 1] !== '/' && js[index + 1] !== '*') {
+      const prefix = js.slice(bodyStart, index);
+      if (/(?:\b(?:return|throw|case)|[({[=,:;!&|?])\s*$/.test(prefix)) {
+        regex = true;
+        continue;
+      }
     }
     if (char === '{') depth += 1;
     if (char === '}' && --depth === 0) return js.slice(start, index + 1);
@@ -77,6 +91,11 @@ function node(initialClasses = []) {
 }
 
 const elements = {
+  precisionCutoutAdapterPicker: node(),
+  precisionCutoutAlgorithm: node(),
+  precisionCutoutAlgorithmStatus: node(),
+  btnPrecisionCutoutAdapterDetails: node(),
+  precisionCutoutAdapterDetails: node(['hidden']),
   precisionCutoutModelInstall: node(),
   precisionCutoutModelStatus: node(),
   btnPrecisionCutoutModelDetails: node(),
@@ -116,6 +135,8 @@ const context = vm.createContext({
   PRECISION_CUTOUT_MODEL_RELATIVE_PATH: 'storage/models/cutout/u2net_human_seg.onnx',
   PRECISION_CUTOUT_MODEL_POLL_INTERVAL_MS: 800,
   precisionCutoutCapability: null,
+  precisionCutoutSelectedAdapter: '',
+  precisionCutoutAdapterDetailsExpanded: false,
   precisionCutoutPending: false,
   precisionCutoutProbeToken: 0,
   precisionCutoutModel: null,
@@ -155,7 +176,21 @@ const context = vm.createContext({
 
 for (const name of [
   'getPrecisionCutoutControls',
+  'precisionCutoutUiBusy',
   'precisionCutoutIsExecutable',
+  'precisionCutoutAdapterId',
+  'precisionCutoutAdapterText',
+  'precisionCutoutAdapterRecords',
+  'precisionCutoutExecutableAdapterRecords',
+  'precisionCutoutSelectedAdapterRecord',
+  'precisionCutoutAdapterDisplayName',
+  'precisionCutoutAdapterEscaped',
+  'precisionCutoutAdapterFact',
+  'setPrecisionCutoutAdapterDetailsExpanded',
+  'togglePrecisionCutoutAdapterDetails',
+  'renderPrecisionCutoutAdapterOptions',
+  'renderPrecisionCutoutAdapterPicker',
+  'setPrecisionCutoutSelectedAdapter',
   'readPrecisionCutoutResponse',
   'precisionCutoutResponseError',
   'precisionCutoutModelRecord',
@@ -173,6 +208,7 @@ for (const name of [
   'pollPrecisionCutoutModelTask',
   'monitorPrecisionCutoutModelTask',
   'refreshPrecisionCutoutModelStatus',
+  'refreshPrecisionCutoutSetup',
   'precisionCutoutModelMutationPayload',
   'submitPrecisionCutoutModelDownload',
   'requestPrecisionCutoutModelInstall',
@@ -180,6 +216,108 @@ for (const name of [
   'retryPrecisionCutoutModelDownload',
   'cancelPrecisionCutoutModelDownload',
 ]) vm.runInContext(extractFunction(name), context);
+
+const adapterCapability = {
+  contract: 'genbox-cutout-v1', available: true, executable: true,
+  adapters: ['u2net-human-seg-onnx'],
+  adapter_capabilities: [
+    {
+      adapter: 'u2net-human-seg-onnx', algorithm: 'U2Net human segmentation ONNX',
+      available: true, executable: true, state: 'ready', source_page: 'fixed-rembg-source',
+      license: { name: 'UNVERIFIED', status: 'UNVERIFIED' }, dependencies: ['onnxruntime'],
+    },
+    {
+      adapter: 'rmbg-2.0', algorithm: 'BRIA RMBG-2.0 (BiRefNet architecture)',
+      available: false, executable: false, state: 'unavailable', needs_model: true, needs_dependency: true,
+      descriptor: { source_page: 'gated-source', license_name: 'bria-rmbg-2.0', license_status: 'NON_COMMERCIAL_ONLY_UNVERIFIED', dependencies: ['torch', 'transformers'] },
+    },
+    {
+      adapter: 'modnet-photographic-portrait', algorithm: 'MODNet photographic portrait matting',
+      available: false, executable: false, state: 'unavailable', needs_model: true, needs_dependency: true,
+      descriptor: { source_page: 'MODNet source', license_name: 'Apache-2.0 code; checkpoint terms unverified', license_status: 'UNVERIFIED', dependencies: ['onnxruntime', 'Pillow', 'numpy'] },
+    },
+    {
+      adapter: 'birefnet-v1-lite', algorithm: 'BiRefNet v1 lite',
+      available: false, executable: false, state: 'unavailable', needs_model: true, needs_dependency: true,
+      descriptor: { source_page: 'BiRefNet source', license_name: 'Checkpoint license unverified', license_status: 'UNVERIFIED', dependencies: ['torch', 'Pillow', 'numpy'] },
+    },
+  ],
+};
+context.precisionCutoutCapability = adapterCapability;
+assert.equal(vm.runInContext('renderPrecisionCutoutAdapterPicker(precisionCutoutCapability).adapter', context), 'u2net-human-seg-onnx');
+assert.equal(context.precisionCutoutSelectedAdapter, 'u2net-human-seg-onnx', 'Only an executable adapter may become the default selection.');
+assert.equal(elements.precisionCutoutAlgorithm.disabled, false);
+assert.ok(elements.precisionCutoutAlgorithm.innerHTML.includes('u2net-human-seg-onnx'));
+assert.ok(!elements.precisionCutoutAlgorithm.innerHTML.includes('rmbg-2.0'), 'Unavailable candidates must not become selectable options.');
+assert.ok(!elements.precisionCutoutAlgorithm.innerHTML.includes('modnet-photographic-portrait'));
+assert.ok(!elements.precisionCutoutAlgorithm.innerHTML.includes('birefnet-v1-lite'));
+assert.ok(elements.precisionCutoutAdapterDetails.innerHTML.includes('BRIA RMBG-2.0 (BiRefNet architecture)'));
+assert.ok(elements.precisionCutoutAdapterDetails.innerHTML.includes('MODNet photographic portrait matting'));
+assert.ok(elements.precisionCutoutAdapterDetails.innerHTML.includes('BiRefNet v1 lite'));
+assert.ok(elements.precisionCutoutAdapterDetails.innerHTML.includes('torch, transformers'));
+assert.equal(elements.btnPrecisionCutoutAdapterDetails.getAttribute('aria-expanded'), 'false', 'Candidate details must start collapsed.');
+assert.equal(vm.runInContext("setPrecisionCutoutSelectedAdapter('rmbg-2.0')", context), false, 'An unavailable adapter must be rejected even if the browser submits its ID.');
+assert.equal(context.precisionCutoutSelectedAdapter, 'u2net-human-seg-onnx');
+
+// A cancelled/stale operation flag must not permanently lock the algorithm
+// picker when there is no live request controller anymore.
+context.precisionCutoutPending = true;
+context.precisionCutoutAbortController = null;
+assert.equal(vm.runInContext('precisionCutoutUiBusy()', context), false);
+assert.equal(vm.runInContext('renderPrecisionCutoutAdapterPicker(precisionCutoutCapability).adapter', context), 'u2net-human-seg-onnx');
+assert.equal(elements.precisionCutoutAlgorithm.disabled, false);
+context.precisionCutoutAbortController = { signal: { aborted: true } };
+assert.equal(vm.runInContext('precisionCutoutUiBusy()', context), false, 'An already-aborted controller must not keep the picker locked.');
+context.precisionCutoutPending = false;
+context.precisionCutoutAbortController = null;
+assert.equal(vm.runInContext('togglePrecisionCutoutAdapterDetails()', context), true);
+assert.equal(elements.precisionCutoutAdapterDetails.classList.contains('hidden'), false);
+
+// Multiple executable adapters must be selectable without promoting unverified candidates.
+const multiAdapterCapability = JSON.parse(JSON.stringify(adapterCapability));
+multiAdapterCapability.adapters.push('modnet-photographic-portrait');
+multiAdapterCapability.adapter_capabilities[2].available = true;
+multiAdapterCapability.adapter_capabilities[2].executable = true;
+multiAdapterCapability.adapter_capabilities[2].state = 'ready';
+context.precisionCutoutCapability = multiAdapterCapability;
+assert.equal(vm.runInContext('renderPrecisionCutoutAdapterPicker(precisionCutoutCapability).adapter', context), 'u2net-human-seg-onnx');
+assert.equal(elements.precisionCutoutAlgorithm.disabled, false);
+assert.ok(elements.precisionCutoutAlgorithm.innerHTML.includes('U2Net human segmentation ONNX'));
+assert.ok(elements.precisionCutoutAlgorithm.innerHTML.includes('MODNet photographic portrait matting'));
+assert.ok(elements.precisionCutoutAlgorithm.innerHTML.includes('creator.cutout_algorithm_modnet_lab_notice'), 'MODNet must remain explicitly experimental in the local lab picker.');
+assert.equal(vm.runInContext("setPrecisionCutoutSelectedAdapter('modnet-photographic-portrait')", context), true, 'A second executable adapter must be selectable.');
+assert.equal(context.precisionCutoutSelectedAdapter, 'modnet-photographic-portrait');
+assert.equal(elements.precisionCutoutAlgorithm.value, 'modnet-photographic-portrait');
+assert.equal(vm.runInContext("setPrecisionCutoutSelectedAdapter('u2net-human-seg-onnx')", context), true, 'The original executable adapter must remain selectable after switching.');
+assert.equal(context.precisionCutoutSelectedAdapter, 'u2net-human-seg-onnx');
+
+// U2-Net remains the deterministic default even when the backend orders an
+// experimental MODNet candidate first.
+const reorderedAdapterCapability = JSON.parse(JSON.stringify(multiAdapterCapability));
+reorderedAdapterCapability.adapters = ['modnet-photographic-portrait', 'u2net-human-seg-onnx'];
+reorderedAdapterCapability.adapter_capabilities.reverse();
+context.precisionCutoutSelectedAdapter = '';
+context.precisionCutoutCapability = reorderedAdapterCapability;
+assert.equal(vm.runInContext('renderPrecisionCutoutAdapterPicker(precisionCutoutCapability).adapter', context), 'u2net-human-seg-onnx');
+
+// If the capability probe reports only unverified candidates, fail closed while retaining guidance.
+const unavailableOnlyCapability = JSON.parse(JSON.stringify(adapterCapability));
+unavailableOnlyCapability.available = false;
+unavailableOnlyCapability.executable = false;
+unavailableOnlyCapability.adapters = [];
+unavailableOnlyCapability.adapter_capabilities.forEach((record) => {
+  record.available = false;
+  record.executable = false;
+  record.state = 'unavailable';
+});
+context.precisionCutoutCapability = unavailableOnlyCapability;
+assert.equal(vm.runInContext('renderPrecisionCutoutAdapterPicker(precisionCutoutCapability)', context), null, 'No executable adapter may become selected.');
+assert.equal(context.precisionCutoutSelectedAdapter, '');
+assert.equal(elements.precisionCutoutAlgorithm.disabled, true);
+assert.ok(elements.precisionCutoutAlgorithm.innerHTML.includes('creator.cutout_algorithm_unavailable'));
+assert.equal(elements.precisionCutoutAlgorithmStatus.textContent, 'creator.cutout_algorithm_unavailable');
+assert.ok(elements.precisionCutoutAdapterDetails.innerHTML.includes('U2Net human segmentation ONNX'));
+assert.ok(elements.precisionCutoutAdapterDetails.innerHTML.includes('creator.cutout_algorithm_unverified'));
 
 function response(status, body) {
   return {
@@ -237,10 +375,10 @@ function renderedState(modelValue, taskValue = null, overrideState) {
 }
 
 assert.equal(renderedState(null, null, 'checking'), 'checking');
-assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true', 'Status checks should expose the detail region until readiness is known.');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'false', 'Status checks should keep the detail region collapsed by default.');
 assert.equal(renderedState(model()), 'missing');
-assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true', 'Missing models should reveal install guidance and actions by default.');
-assert.equal(elements.precisionCutoutModelDetails.classList.contains('hidden'), false);
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'false', 'Missing models should keep verbose install guidance collapsed by default.');
+assert.equal(elements.precisionCutoutModelDetails.classList.contains('hidden'), true);
 assert.equal(elements.btnPrecisionCutoutModelInstall.classList.contains('hidden'), false);
 assert.equal(elements.btnPrecisionCutoutModelInstall.disabled, false);
 assert.equal(elements.precisionCutoutModelPath.textContent, 'storage/models/cutout/u2net_human_seg.onnx');
@@ -261,18 +399,18 @@ assert.equal(calls.length, 0);
 assert.equal(confirmations.length, 0);
 
 assert.equal(renderedState(model({ state: 'downloading' }), task('downloading')), 'downloading');
-assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true', 'Active downloads should expose progress and cancellation by default.');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'false', 'Active downloads should keep verbose progress details collapsed by default.');
 assert.equal(elements.precisionCutoutModelProgress.classList.contains('hidden'), false);
 assert.equal(elements.precisionCutoutModelProgressBar.value, 35);
 assert.equal(elements.btnPrecisionCutoutModelCancel.classList.contains('hidden'), false);
 
 assert.equal(renderedState(model({ installed: true, state: 'hash_mismatch', reason: 'model_hash_mismatch' })), 'hash_mismatch');
-assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true', 'Fingerprint failures should expose recovery actions by default.');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'false', 'Fingerprint failures should keep recovery details collapsed by default.');
 assert.equal(elements.btnPrecisionCutoutModelRetry.classList.contains('hidden'), false);
 assert.equal(elements.btnPrecisionCutoutModelRemoveCorrupt.classList.contains('hidden'), false);
 
 assert.equal(renderedState(model({ state: 'error', reason: 'download_failed' })), 'error');
-assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true', 'Installer errors should expose recovery actions by default.');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'false', 'Installer errors should keep recovery details collapsed by default.');
 assert.equal(elements.btnPrecisionCutoutModelRetry.classList.contains('hidden'), false);
 
 const readyModel = model({ installed: true, valid: true, state: 'ready', reason: '', download_supported: true });
@@ -294,11 +432,11 @@ assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded
 assert.equal(vm.runInContext('togglePrecisionCutoutModelDetails()', context), false);
 assert.equal(context.precisionCutoutModelDetailsPreference, false);
 assert.equal(renderedState(model({ state: 'error', reason: 'download_failed' })), 'error');
-assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true', 'Attention states must override a remembered ready-state collapse.');
-assert.equal(vm.runInContext('togglePrecisionCutoutModelDetails()', context), true, 'Attention states must not be manually collapsed.');
-assert.equal(context.precisionCutoutModelDetailsPreference, false, 'Forced expansion must not overwrite the remembered ready-state preference.');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'false', 'Attention states should keep verbose recovery details collapsed by default.');
+assert.equal(vm.runInContext('togglePrecisionCutoutModelDetails()', context), true, 'Attention-state details should expand on demand.');
+assert.equal(context.precisionCutoutModelDetailsPreference, true, 'Expanding attention details should remember the user preference.');
 assert.equal(renderedState(readyModel), 'ready');
-assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'false', 'Returning to ready should restore the remembered collapse.');
+assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'true', 'Returning to ready should preserve the remembered expansion.');
 context.precisionCutoutModelDetailsPreference = null;
 assert.equal(renderedState(readyModel), 'ready');
 assert.equal(elements.btnPrecisionCutoutModelDetails.getAttribute('aria-expanded'), 'false');
@@ -402,6 +540,15 @@ assert.equal(await olderRefresh, false);
 assert.equal(context.precisionCutoutModel.state, 'ready', 'An older refresh response must not replace newer model state.');
 assert.equal(capabilityProbes, 1, 'A ready model must be followed by exactly one executable capability probe.');
 
+// A failed model-status refresh still has a live recovery path through the
+// independently authoritative algorithm capability endpoint.
+fetchImpl = async () => { throw new Error('model status unavailable'); };
+context.precisionCutoutModel = readyModel;
+context.precisionCutoutModelTask = null;
+capabilityProbes = 0;
+assert.equal(await vm.runInContext('refreshPrecisionCutoutSetup()', context), true);
+assert.equal(capabilityProbes, 1, 'Failed model refresh must fall back to a capability recheck.');
+
 let resolveStaleTask;
 fetchImpl = async () => new Promise((resolve) => { resolveStaleTask = resolve; });
 context.precisionCutoutModel = model({ state: 'downloading' });
@@ -429,11 +576,17 @@ for (const id of [
   'precisionCutoutModelInstall', 'precisionCutoutModelStatus', 'btnPrecisionCutoutModelDetails',
   'precisionCutoutModelDetails', 'precisionCutoutModelProgress',
   'btnPrecisionCutoutModelInstall', 'btnPrecisionCutoutModelCancel', 'btnPrecisionCutoutModelRetry',
-  'btnPrecisionCutoutModelRemoveCorrupt', 'btnPrecisionCutoutModelDelete',
+  'btnPrecisionCutoutModelRemoveCorrupt', 'btnPrecisionCutoutModelDelete', 'btnPrecisionCutoutCapabilityRefresh',
 ]) expect(html.includes('id="' + id + '"'), 'Missing cutout model installer element: ' + id);
 expect(html.includes('aria-controls="precisionCutoutModelDetails"'), 'The details toggle must name its controlled region.');
-expect(html.includes('aria-expanded="true"'), 'The initial checking state must expose its details accessibly.');
+expect(html.includes('id="btnPrecisionCutoutCapabilityRefresh"'), 'Capability recheck must remain available after a failed model status refresh.');
+expect(js.includes("cutoutCapabilityRefresh.addEventListener('click', refreshPrecisionCutoutSetup)"), 'Capability recheck must bind to the recovery flow.');
+expect(html.includes('data-details-expanded="false"'), 'The installer details must start collapsed.');
+expect(html.includes('id="btnPrecisionCutoutModelDetails" role="button" tabindex="0" aria-expanded="false"'), 'The collapsed details toggle must remain accessible.');
+expect(html.includes('id="precisionCutoutModelDetails" aria-hidden="true"'), 'The initial details region must be hidden.');
+expect(/id="btnPrecisionCutoutModelDetails"[^>]*role="button"[^>]*tabindex="0"/.test(html), 'The whole cutout status summary must be keyboard-focusable and clickable.');
 expect(js.includes("cutoutModelDetailsToggle.addEventListener('click', togglePrecisionCutoutModelDetails)"), 'The details control must be bound once with the other Precision Edit controls.');
+expect(js.includes("cutoutModelDetailsToggle.addEventListener('keydown'") && js.includes("event.key !== 'Enter' && event.key !== ' '"), 'The clickable cutout status summary must support Enter and Space.');
 expect(html.includes('storage/models/cutout/u2net_human_seg.onnx'), 'The UI must show the fixed relative model path.');
 expect(html.includes('rembg-u2net-human-seg-v0.0.0'), 'The UI must show the fixed source identity.');
 expect(!/precisionCutoutModel[^>]*(?:input|type="url")/i.test(html), 'The installer must not expose a remote URL input.');

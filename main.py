@@ -23,7 +23,7 @@ import warnings
 import uvicorn
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from genbox_version import __version__
@@ -169,6 +169,7 @@ from image_tools.cutout_model_manager import (
     CutoutModelManager,
     CutoutModelManagerError,
 )
+from image_tools.cutout_registry import create_default_registry
 from image_tools.cutout_refine import (
     CUTOUT_REFINE_CONTRACT,
     CUTOUT_SELECTION_MASK_CONTRACT,
@@ -177,6 +178,11 @@ from image_tools.cutout_refine import (
     refine_cutout_alpha,
     save_refined_png_atomic,
 )
+from image_tools.cutout_modnet_import import (
+    ModNetImportError,
+    ModNetModelImportManager,
+)
+from image_tools.cutout_modnet import MODNET_ADAPTER_ID, ModNetONNXAdapter
 
 
 # ──────────────────────────────────────────────────────────────
@@ -292,6 +298,8 @@ class CutoutRequest(BaseModel):
 
     contract: str
     image_data: str
+    adapter: Optional[str] = None
+    algorithm: Optional[str] = None
 
 
 class CutoutModelActionRequest(BaseModel):
@@ -351,7 +359,38 @@ CUTOUT_CONTRACT = "genbox-cutout-v1"
 CUTOUT_MODEL_PATH = BASE_DIR / CUTOUT_MODEL_RELATIVE_PATH
 CUTOUT_ADAPTER = CutoutONNXAdapter(model_path=CUTOUT_MODEL_PATH)
 CUTOUT_MODEL_MANAGER = CutoutModelManager(CUTOUT_ADAPTER)
-CUTOUT_ADAPTERS: tuple[str, ...] = (CUTOUT_ADAPTER_ID,)
+# MODNet is an explicit, user-supplied experimental checkpoint.  Keep its
+# importer isolated from the U²-Net installer and default registry.
+MODNET_IMPORT_MANAGER = ModNetModelImportManager(base_path=BASE_DIR)
+# Keep model installation tied to the existing U2Net adapter while routing
+# execution through the fail-closed multi-algorithm registry.
+CUTOUT_REGISTRY = create_default_registry(CUTOUT_ADAPTER)
+
+
+def _refresh_modnet_registry(manager: ModNetModelImportManager) -> dict[str, Any]:
+    """Replace the MODNet placeholder only after a full runtime probe passes."""
+    status = manager.status()
+    manifest = manager.manifest()
+    if not status.get("installed") or not status.get("valid") or manifest is None:
+        return {"available": False, "executable": False, "state": "needs_model"}
+    adapter = ModNetONNXAdapter(
+        model_path=manager.model_path,
+        base_path=manager.base_path,
+        model_manifest={**manifest, "filename": status.get("filename") or manifest["filename"]},
+        license_confirmed=bool(status.get("license_confirmed")),
+        license_source=status.get("license_source"),
+    )
+    capability = dict(adapter.capabilities())
+    if capability.get("available") is not True or capability.get("executable") is not True:
+        return capability
+    CUTOUT_REGISTRY.replace(
+        "modnet-photographic-portrait",
+        adapter,
+        verified=True,
+        algorithm=capability.get("algorithm") or "MODNet photographic portrait matting ONNX",
+        algorithm_aliases=("modnet", "modnet portrait", "modnet photographic portrait matting"),
+    )
+    return capability
 GENERATION_ALLOWED_IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/webp"})
 MAX_GENERATION_INPUT_BYTES = int(
     os.getenv("GENBOX_GENERATE_MAX_IMAGE_BYTES", str(25 * 1024 * 1024))
@@ -2708,6 +2747,143 @@ def _cutout_model_projection(capability: dict) -> dict:
         }
 
 
+MODNET_IMPORT_HTTP_CONTRACT = "genbox-cutout-modnet-http-v1"
+
+
+def _parse_modnet_import_manifest(raw_manifest: str) -> dict:
+    """Parse the browser-supplied manifest without accepting paths or URLs."""
+    if not isinstance(raw_manifest, str) or not raw_manifest.strip():
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "modnet_manifest_required",
+                "message": "请提供 MODNet 文件清单",
+                "contract": MODNET_IMPORT_HTTP_CONTRACT,
+            },
+        )
+    try:
+        manifest = _json.loads(raw_manifest)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "modnet_manifest_invalid",
+                "message": "MODNet 文件清单必须是 JSON 对象",
+                "contract": MODNET_IMPORT_HTTP_CONTRACT,
+            },
+        ) from None
+    if not isinstance(manifest, dict):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "modnet_manifest_invalid",
+                "message": "MODNet 文件清单必须是 JSON 对象",
+                "contract": MODNET_IMPORT_HTTP_CONTRACT,
+            },
+        )
+    required = {"filename", "size_bytes", "sha256", "md5"}
+    if not required.issubset(manifest):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "modnet_manifest_incomplete",
+                "message": "MODNet 文件清单缺少必要字段",
+                "required": sorted(required),
+                "contract": MODNET_IMPORT_HTTP_CONTRACT,
+            },
+        )
+    # Do not allow a manifest to smuggle a server path or a remote source.
+    filename = manifest.get("filename")
+    if not isinstance(filename, str) or filename != Path(filename).name or "\\" in filename:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "modnet_filename_invalid",
+                "message": "MODNet 文件名必须是上传内容中的安全 .onnx 文件名",
+                "contract": MODNET_IMPORT_HTTP_CONTRACT,
+            },
+        )
+    return {key: manifest[key] for key in required}
+
+
+def _modnet_import_http_error(exc: ModNetImportError) -> HTTPException:
+    return HTTPException(
+        status_code=exc.status_code if exc.status_code in {400, 409, 413, 422, 500} else 422,
+        detail={
+            "code": exc.code,
+            "message": exc.message,
+            "contract": MODNET_IMPORT_HTTP_CONTRACT,
+        },
+    )
+
+
+@app.post("/api/image-tools/cutout/modnet/import", status_code=201)
+async def import_modnet_model(
+    upload: UploadFile = File(...),
+    manifest: str = Form(...),
+    license_confirmed: str = Form(...),
+    license_source: str = Form(""),
+):
+    """Import an explicitly authorized MODNet checkpoint from browser bytes."""
+    expected = _parse_modnet_import_manifest(manifest)
+    if license_confirmed.strip().lower() != "true":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "modnet_license_unconfirmed",
+                "message": "请明确确认你拥有该 MODNet 权重的使用许可",
+                "contract": MODNET_IMPORT_HTTP_CONTRACT,
+            },
+        )
+    try:
+        result = await MODNET_IMPORT_MANAGER.import_upload(
+            upload,
+            filename=expected["filename"],
+            license_confirmed=True,
+            license_source=license_source,
+            expected=expected,
+        )
+    except ModNetImportError as exc:
+        raise _modnet_import_http_error(exc) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "modnet_import_failed",
+                "message": "MODNet 模型导入失败",
+                "contract": MODNET_IMPORT_HTTP_CONTRACT,
+            },
+        ) from None
+    # Importing a checkpoint is not enough to advertise it: rebuild the
+    # optional adapter and require a fresh CPU/runtime capability probe.
+    try:
+        runtime_capability = _refresh_modnet_registry(MODNET_IMPORT_MANAGER)
+    except Exception:
+        # Import remains successful, but capability advertisement stays
+        # fail-closed if registry replacement/probing encounters an issue.
+        runtime_capability = {
+            "available": False,
+            "executable": False,
+            "state": "unavailable",
+        }
+    # Never expose local filesystem paths in a browser response.
+    return {
+        "ok": True,
+        "contract": MODNET_IMPORT_HTTP_CONTRACT,
+        "adapter": result.as_dict()["adapter"],
+        "filename": result.filename,
+        "size_bytes": result.size_bytes,
+        "sha256": result.sha256,
+        "md5": result.md5,
+        "license_confirmed": True,
+        "runtime": {
+            "available": runtime_capability.get("available") is True,
+            "executable": runtime_capability.get("executable") is True,
+            "state": runtime_capability.get("state") or "unavailable",
+        },
+    }
+
+
 @app.get("/api/image-tools/cutout/model")
 async def get_cutout_model_status():
     try:
@@ -2796,26 +2972,29 @@ async def delete_cutout_model(req: CutoutModelActionRequest):
 
 @app.get("/api/image-tools/cutout/capabilities")
 async def get_cutout_capabilities():
-    if not CUTOUT_ADAPTERS:
+    # Pick up an already-imported, explicitly licensed optional MODNet
+    # checkpoint without requiring a process restart.  The refresh remains
+    # fail-closed: invalid manifests, missing dependencies, or a failed CPU
+    # probe leave the default U2-Net capability unchanged.
+    try:
+        modnet_status = MODNET_IMPORT_MANAGER.status()
+        if modnet_status.get("installed") and modnet_status.get("valid"):
+            _refresh_modnet_registry(MODNET_IMPORT_MANAGER)
+    except Exception:
+        pass
+    try:
+        capability = CUTOUT_REGISTRY.probe()
+    except Exception:
         capability = {
-            "code": "cutout_adapter_unavailable",
-            "message": "当前没有可用的本地抠图适配器，请先安装受支持的本地适配器后再试。",
+            "code": "cutout_capability_invalid",
+            "message": "本地抠图能力状态无效",
             "contract": CUTOUT_CONTRACT,
             "available": False,
             "executable": False,
             "adapters": [],
             "state": "unavailable",
+            "adapter_capabilities": [],
         }
-        capability["model"] = _cutout_model_projection(capability)
-        capability["can_download"] = capability["model"].get("download_supported") is True
-        raise HTTPException(
-            status_code=503,
-            detail=capability,
-        )
-    try:
-        capability = CUTOUT_ADAPTER.capabilities()
-    except CutoutAdapterError as exc:
-        capability = exc.to_detail(adapter_id=CUTOUT_ADAPTER_ID)
     if not isinstance(capability, dict):
         capability = {
             "contract": CUTOUT_CONTRACT,
@@ -2825,11 +3004,13 @@ async def get_cutout_capabilities():
             "code": "cutout_capability_invalid",
             "message": "本地抠图能力状态无效",
             "state": "unavailable",
+            "adapter_capabilities": [],
         }
     capability.setdefault("contract", CUTOUT_CONTRACT)
     capability.setdefault("available", False)
     capability.setdefault("executable", False)
-    capability.setdefault("adapters", list(CUTOUT_ADAPTERS) if capability.get("available") else [])
+    capability.setdefault("adapters", [])
+    capability.setdefault("adapter_capabilities", [])
     capability["model"] = _cutout_model_projection(capability)
     capability["can_download"] = capability["model"].get("download_supported") is True
     if capability.get("available") is not True or capability.get("executable") is not True:
@@ -2847,39 +3028,18 @@ async def cutout_image(req: CutoutRequest):
             f"cutout requires contract={CUTOUT_CONTRACT}",
             field="contract",
         )
-    if not CUTOUT_ADAPTERS:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "code": "cutout_adapter_unavailable",
-                "message": "当前没有可用的本地抠图适配器，请先安装受支持的本地适配器后再试。",
-                "contract": CUTOUT_CONTRACT,
-                "available": False,
-                "executable": False,
-                "adapters": [],
-                "state": "unavailable",
-            },
+    try:
+        result = await CUTOUT_REGISTRY.process_async(
+            req.image_data,
+            adapter=req.adapter,
+            algorithm=req.algorithm,
         )
-    try:
-        capability = CUTOUT_ADAPTER.capabilities()
     except CutoutAdapterError as exc:
-        capability = exc.to_detail(adapter_id=CUTOUT_ADAPTER_ID)
-    if not isinstance(capability, dict) or capability.get("available") is not True or capability.get("executable") is not True:
-        if not isinstance(capability, dict):
-            capability = {
-                "code": "cutout_adapter_unavailable",
-                "message": "当前没有可用的本地抠图适配器。",
-                "contract": CUTOUT_CONTRACT,
-                "available": False,
-                "executable": False,
-                "adapters": [],
-            }
-        raise HTTPException(status_code=503, detail=capability)
-
-    try:
-        result = await CUTOUT_ADAPTER.process_async(req.image_data)
-    except CutoutAdapterError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.to_detail(adapter_id=CUTOUT_ADAPTER_ID)) from None
+        adapter_id = str(exc.details.get("adapter") or req.adapter or CUTOUT_ADAPTER_ID)
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.to_detail(adapter_id=adapter_id),
+        ) from None
     except Exception:
         # Do not expose runtime/provider internals or write a partial result.
         raise HTTPException(
@@ -2890,7 +3050,7 @@ async def cutout_image(req: CutoutRequest):
                 "contract": CUTOUT_CONTRACT,
                 "available": True,
                 "executable": True,
-                "adapters": list(CUTOUT_ADAPTERS),
+                "adapters": [],
                 "cancel_supported": False,
             },
         ) from None
@@ -2904,7 +3064,22 @@ async def cutout_image(req: CutoutRequest):
                 "contract": CUTOUT_CONTRACT,
                 "available": True,
                 "executable": True,
-                "adapters": list(CUTOUT_ADAPTERS),
+                "adapters": [],
+            },
+        )
+
+    result_adapter_id = str(result.get("adapter") or "")
+    result_adapter = CUTOUT_REGISTRY.get(result_adapter_id)
+    if result_adapter is None:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_output_invalid",
+                "message": "本地抠图未返回有效适配器，未保存结果",
+                "contract": CUTOUT_CONTRACT,
+                "available": True,
+                "executable": True,
+                "adapters": [],
             },
         )
 
@@ -2915,13 +3090,16 @@ async def cutout_image(req: CutoutRequest):
         except (TypeError, ValueError):
             expected_size = None
     try:
-        local_path = CUTOUT_ADAPTER.save_atomic(
+        local_path = result_adapter.save_atomic(
             result["image_bytes"],
             GALLERY_DIR,
             expected_size=expected_size,
         )
     except CutoutAdapterError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.to_detail(adapter_id=CUTOUT_ADAPTER_ID)) from None
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.to_detail(adapter_id=result_adapter_id),
+        ) from None
     except Exception:
         raise HTTPException(
             status_code=500,
@@ -2931,7 +3109,7 @@ async def cutout_image(req: CutoutRequest):
                 "contract": CUTOUT_CONTRACT,
                 "available": True,
                 "executable": True,
-                "adapters": list(CUTOUT_ADAPTERS),
+                "adapters": [result_adapter_id],
             },
         ) from None
 
@@ -2944,7 +3122,14 @@ async def cutout_image(req: CutoutRequest):
         height_value = expected_size[1]
     width = int(width_value or 0)
     height = int(height_value or 0)
-    return {
+    try:
+        executable_adapters = list(CUTOUT_REGISTRY.probe().get("adapters") or [])
+    except Exception:
+        executable_adapters = [result_adapter_id]
+    if result_adapter_id not in executable_adapters:
+        executable_adapters.insert(0, result_adapter_id)
+
+    response = {
         "contract": CUTOUT_CONTRACT,
         "success": True,
         "status": "completed",
@@ -2953,8 +3138,8 @@ async def cutout_image(req: CutoutRequest):
         "preview_background": "checkerboard",
         "available": True,
         "executable": True,
-        "adapters": list(CUTOUT_ADAPTERS),
-        "adapter": result.get("adapter") or CUTOUT_ADAPTER_ID,
+        "adapters": executable_adapters,
+        "adapter": result_adapter_id,
         "image_data": "data:image/png;base64," + encoded,
         "filename": Path(local_path).name,
         "gallery_url": f"/api/gallery/image/{quote(Path(local_path).name)}",
@@ -2963,6 +3148,9 @@ async def cutout_image(req: CutoutRequest):
         "elapsed_seconds": float(result.get("elapsed_seconds") or 0.0),
         "cancel_supported": False,
     }
+    if result.get("fallback_from"):
+        response["fallback_from"] = str(result["fallback_from"])
+    return response
 
 
 @app.post("/api/image-tools/cutout/refine")

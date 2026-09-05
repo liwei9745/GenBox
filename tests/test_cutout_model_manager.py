@@ -18,6 +18,7 @@ from image_tools.cutout_model_manager import (
     CutoutModelManagerError,
 )
 from image_tools.cutout_onnx import CutoutONNXAdapter
+from image_tools.cutout_registry import CutoutAdapterRegistry
 
 
 _PAYLOAD = b"small-local-cutout-model-fixture"
@@ -712,6 +713,8 @@ def test_capability_reports_download_disabled_for_production_manifest(monkeypatc
     route_manager = _RouteManager(download_supported=False)
 
     class ReadyAdapter:
+        adapter_id = "u2net-human-seg-onnx"
+
         def capabilities(self):
             return {
                 "contract": "genbox-cutout-v1",
@@ -722,8 +725,7 @@ def test_capability_reports_download_disabled_for_production_manifest(monkeypatc
             }
 
     monkeypatch.setattr(main, "CUTOUT_MODEL_MANAGER", route_manager)
-    monkeypatch.setattr(main, "CUTOUT_ADAPTER", ReadyAdapter())
-    monkeypatch.setattr(main, "CUTOUT_ADAPTERS", ("u2net-human-seg-onnx",))
+    monkeypatch.setattr(main, "CUTOUT_REGISTRY", CutoutAdapterRegistry([ReadyAdapter()]))
 
     response = TestClient(main.app, base_url="http://testserver").get(
         "/api/image-tools/cutout/capabilities"
@@ -738,6 +740,8 @@ def test_capability_keeps_legacy_fields_and_adds_model_projection(monkeypatch):
     route_manager = _RouteManager()
 
     class ReadyAdapter:
+        adapter_id = "u2net-human-seg-onnx"
+
         def capabilities(self):
             return {
                 "contract": "genbox-cutout-v1",
@@ -749,8 +753,7 @@ def test_capability_keeps_legacy_fields_and_adds_model_projection(monkeypatch):
             }
 
     monkeypatch.setattr(main, "CUTOUT_MODEL_MANAGER", route_manager)
-    monkeypatch.setattr(main, "CUTOUT_ADAPTER", ReadyAdapter())
-    monkeypatch.setattr(main, "CUTOUT_ADAPTERS", ("u2net-human-seg-onnx",))
+    monkeypatch.setattr(main, "CUTOUT_REGISTRY", CutoutAdapterRegistry([ReadyAdapter()]))
 
     response = TestClient(main.app, base_url="http://testserver").get(
         "/api/image-tools/cutout/capabilities"

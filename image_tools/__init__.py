@@ -34,6 +34,14 @@ from .cutout_refine import (
     validate_refined_png,
     validate_selection_mask,
 )
+from .cutout_modnet_import import (
+    MAX_MODNET_MODEL_BYTES,
+    MODNET_IMPORT_CONTRACT,
+    MODNET_IMPORT_DIR,
+    MODNET_MODEL_FILENAME,
+    ModNetModelManager,
+    ModNetModelManagerError,
+)
 
 __all__ = [
     "ADAPTER_ID",
@@ -60,4 +68,10 @@ __all__ = [
     "validate_refine_source",
     "validate_refined_png",
     "validate_selection_mask",
+    "MAX_MODNET_MODEL_BYTES",
+    "MODNET_IMPORT_CONTRACT",
+    "MODNET_IMPORT_DIR",
+    "MODNET_MODEL_FILENAME",
+    "ModNetModelManager",
+    "ModNetModelManagerError",
 ]

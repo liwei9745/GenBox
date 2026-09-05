@@ -25,6 +25,7 @@ from image_tools.cutout_onnx import (
     validate_input_image,
     validate_output_png,
 )
+from image_tools.cutout_registry import CutoutAdapterRegistry
 
 
 def _image_data(size=(12, 8), *, mode="RGB"):
@@ -324,6 +325,8 @@ def test_atomic_save_uses_same_directory_and_leaves_no_temp_on_success(tmp_path)
 
 def test_cutout_success_response_omits_internal_filesystem_path(tmp_path, monkeypatch):
     class SuccessfulAdapter:
+        adapter_id = ADAPTER_ID
+
         def capabilities(self):
             return {"available": True, "executable": True}
 
@@ -341,8 +344,8 @@ def test_cutout_success_response_omits_internal_filesystem_path(tmp_path, monkey
             target.write_bytes(image_bytes)
             return target.resolve()
 
-    monkeypatch.setattr(main, "CUTOUT_ADAPTER", SuccessfulAdapter())
-    monkeypatch.setattr(main, "CUTOUT_ADAPTERS", (ADAPTER_ID,))
+    adapter = SuccessfulAdapter()
+    monkeypatch.setattr(main, "CUTOUT_REGISTRY", CutoutAdapterRegistry([adapter]))
     monkeypatch.setattr(main, "GALLERY_DIR", tmp_path)
 
     response = TestClient(main.app, base_url="http://testserver").post(
@@ -374,14 +377,16 @@ def test_cutout_runtime_error_response_does_not_expose_internal_path(tmp_path, m
     internal_path = tmp_path.resolve() / "private-model.onnx"
 
     class FailingAdapter:
+        adapter_id = ADAPTER_ID
+
         def capabilities(self):
             return {"available": True, "executable": True}
 
         async def process_async(self, _image_data_value):
             raise RuntimeError(f"synthetic failure at {internal_path}")
 
-    monkeypatch.setattr(main, "CUTOUT_ADAPTER", FailingAdapter())
-    monkeypatch.setattr(main, "CUTOUT_ADAPTERS", (ADAPTER_ID,))
+    adapter = FailingAdapter()
+    monkeypatch.setattr(main, "CUTOUT_REGISTRY", CutoutAdapterRegistry([adapter]))
 
     response = TestClient(main.app, base_url="http://testserver").post(
         "/api/image-tools/cutout",
@@ -396,8 +401,9 @@ def test_cutout_runtime_error_response_does_not_expose_internal_path(tmp_path, m
         "code": "cutout_failed",
         "message": "本地抠图失败，未保存结果",
         "contract": "genbox-cutout-v1",
-        "available": True,
-        "executable": True,
-        "adapters": [ADAPTER_ID],
-        "cancel_supported": False,
-    }
+            "available": True,
+            "executable": True,
+            "adapters": [ADAPTER_ID],
+            "adapter": ADAPTER_ID,
+            "cancel_supported": False,
+        }
