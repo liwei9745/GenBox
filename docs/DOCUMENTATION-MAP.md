@@ -23,16 +23,21 @@ unlimited development diary. The audience-facing hub is
 | [`README.md`](../README.md) / [`README_EN.md`](../README_EN.md) | Product positioning, stable release, installation choices, documentation links | A shipped capability, installation path, or stable release changes |
 | [`docs/CLIENT-QUICKSTART.md`](CLIENT-QUICKSTART.md) | Windows, macOS, and Linux client startup and local data handling | Client names, startup, first-run flow, or storage location changes |
 | [`docs/DOCKER-QUICKSTART.md`](DOCKER-QUICKSTART.md) | Compose configuration, administrator key handling, startup, status, and update | Docker defaults, required environment, image name, or operator commands change |
-| [`docs/CUTOUT-MODEL-GUIDE.md`](CUTOUT-MODEL-GUIDE.md) | Manual cutout-model installation, fixed fingerprint, upstream sources, and conservative use boundary | Model identity, supported installation paths, verification contract, or rights evidence changes |
+| [`docs/CUTOUT-MODEL-GUIDE.md`](CUTOUT-MODEL-GUIDE.md) | U²-Net default model installation, fixed fingerprint, upstream sources, and conservative use boundary | Model identity, supported installation paths, verification contract, or rights evidence changes |
+| [`docs/MODNET-USER-IMPORT-GUIDE.md`](MODNET-USER-IMPORT-GUIDE.md) | MODNet technically runnable local experiment, user-provided checkpoint import, runtime probe, and non-redistribution boundary | MODNet adapter, manifest, import endpoint, runtime probe, or weight-rights evidence changes |
+| [`docs/CUTOUT-ALGORITHM-FEASIBILITY-20260904.md`](CUTOUT-ALGORITHM-FEASIBILITY-20260904.md) | Cross-algorithm status matrix: U²-Net default, MODNet local-only experiment, and fail-closed candidates | Algorithm capability, quality evidence, authorization boundary, or Release packaging decision changes |
+| [`docs/CUTOUT-INSPYRENET-FEASIBILITY-20260904.md`](CUTOUT-INSPYRENET-FEASIBILITY-20260904.md) | InSPyReNet candidate evidence and fail-closed integration boundary | InSPyReNet checkpoint, dependency, quality, or authorization evidence changes |
 | [`RELEASE_NOTES.md`](../RELEASE_NOTES.md) | Rolling pointer to the latest stable bilingual release notes | A stable release is published or a failed candidate is superseded |
 | [`release-notes-v2.6.6-zh.md`](../release-notes-v2.6.6-zh.md) / [`release-notes-v2.6.6.md`](../release-notes-v2.6.6.md) | Frozen v2.6.6 changes, verification scope, packaging, and limitations | Factual correction only after publication |
 | In-app Precision Edit `文档说明` | Task-oriented Precision Edit operation help | Workbench interaction or user terminology changes; keep release scope in the current release notes |
 
-Precision Edit documentation must not imply that the ONNX checkpoint is
-bundled or available for production network installation. Its provenance and
-commercial-use rights remain **UNVERIFIED**, production download/install is
-disabled, and local UI or fixture tests do not establish real Provider or
-cutout-model E2E.
+Precision Edit documentation must identify U²-Net as the default verified path.
+It must not imply that U²-Net or MODNet checkpoints are bundled or available for
+production network installation. MODNet may be technically runnable only after a
+user-provided import and runtime probe; its real-photo quality and any
+commercial/re-distribution rights remain **UNVERIFIED**. InSPyReNet, BiRefNet,
+and BRIA RMBG-2.0 remain fail-closed candidates. Local UI or fixture tests do
+not establish real Provider, cutout quality, or cross-environment E2E.
 
 ## Pinned Contracts
 
