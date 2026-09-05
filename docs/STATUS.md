@@ -1,5 +1,31 @@
 # Current Project Status
 
+## 2026-09-05 Precision Edit Evidence Ledger Refresh
+
+- **VERIFIED / REAL UPSTREAM REQUEST:** The `1024` precision-edit probe
+  completed successfully with a real `1024x1024` output. This is a narrow
+  upstream success, not a general strict-size acceptance.
+- **VERIFIED / STRICT FAIL-CLOSED:** The `1536` probe returned `1376x768`.
+  Strict preserve validation rejected that output; it did not replace the
+  editable base image.
+- **UNVERIFIED / THIS RUN:** The `1792` probe ended in `ReadTimeout`, so this
+  run produced no verified upstream output for that target. It must not be
+  recorded as a strict-size PASS.
+- **VERIFIED / LOADED-CANVAS UAT TEST EVIDENCE:** Automated browser coverage
+  completed the loaded precision-canvas interaction contract at `390x844`,
+  `937x920`, and `1200x800`, including canvas hit targeting, middle-button
+  zoom reset and pan, image-only fullscreen, source-menu bounds and keyboard
+  interaction, and workbench fullscreen exit. This is test evidence, not a
+  substitute for independent human acceptance.
+- **VERIFIED / FOLLOW-UP COMMITS:** `b239eb2` (workspace controls),
+  `fab6418` (UI transitions), `7677073` (loaded-canvas UAT gaps), and
+  `71e159b` (temporary cutout PNG ignore rule) are the relevant 2026-09-05
+  commits.
+- **UNVERIFIED / RELEASE BLOCKERS:** The cutout structural gate, authorized
+  human-image quality acceptance, and redistribution/packaging authorization
+  remain incomplete. The Release remains blocked; no external size result,
+  local UI test, or local runtime probe changes that decision.
+
 **Last updated:** 2026-09-03
 **Current branch:** `codex/phase7-campaign-20260820`
 **Current phase:** Phase 9 Sender Push Source Cleanup (User-Selected) - **In Progress (receiver-grant shipped in v2.6.1 2026-08-21; sender PR #26 OPEN/MERGEABLE/UNSTABLE; no maintainer review; Vercel authorization failure is external state and cannot be handled automatically; clean E2E gates passed for receiver)**

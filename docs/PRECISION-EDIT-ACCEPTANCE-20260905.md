@@ -14,25 +14,26 @@ screenshots, and temporary test artifacts are deliberately excluded.
 - `gpt-image2-b` was accepted as the user-confirmed upstream alias and preserved
   as the outbound model name.
 - A real upstream precision edit with intentionally mismatched input MIME metadata
-  succeeded after transport normalization and returned a 1024x1024 result.
-- Two real source-only resize requests produced exact 1792x768 PNG outputs.
-- U2-Net and user-imported MODNet passed the local offline quality gate: CPU-only
-  execution, blocked Python network access, same-size RGBA PNG output, and alpha
-  extrema of 0 to 255. U2-Net remains the default; MODNet remains experimental.
-- The headed local UI pass verified gallery source loading, displayed source prompt,
-  session date-picker expansion and quick ranges, model visibility menu opening,
-  workbench fullscreen toggle, and the experimental MODNet label.
+  succeeded after transport normalization and returned a `1024x1024` result.
+- Automated loaded-canvas browser UAT coverage passed at `390x844`, `937x920`, and
+  `1200x800`. It covers canvas hit targeting, middle-button zoom reset and pan,
+  image-only fullscreen, source-menu bounds and keyboard interaction, and
+  workbench fullscreen exit. This is automated test evidence, not independent
+  human acceptance.
+- U2-Net and user-imported MODNet passed local technical checks: CPU-only execution,
+  blocked Python network access, same-size RGBA PNG output, and alpha extrema of 0
+  to 255. U2-Net remains the default; MODNet remains experimental. This does not
+  satisfy the cutout structural gate or human-image quality acceptance.
 
 ## Verified Safety Behavior
 
-- A real second request used a successful 1792x768 image as its source and included
-  a rectangle annotation. The upstream returned an image, but its actual dimensions
-  were 2048x864. Strict preserve mode rejected it with
-  `precision_edit_output_size_mismatch`; it was not allowed to replace the editable
-  base image.
-- Previous strict resize probes also observed dimensions differing from requested
-  values. The application keeps strict mode fail-closed. `fit_crop` remains an
-  explicit local adaptation policy and is never presented as native upstream sizing.
+- The `1536` strict-size probe returned `1376x768`. Strict preserve mode rejected it
+  with `precision_edit_output_size_mismatch`; it was not allowed to replace the
+  editable base image.
+- The `1792` strict-size probe in this run ended in `ReadTimeout`, so it has no
+  verified output and is explicitly `UNVERIFIED` for this run.
+- The application keeps strict mode fail-closed. `fit_crop` remains an explicit local
+  adaptation policy and is never presented as native upstream sizing.
 
 ## Commits Frozen By This Record
 
@@ -43,21 +44,27 @@ screenshots, and temporary test artifacts are deliberately excluded.
 - `ea446ed` - offline cutout quality gate
 - `3cfec77` - precision-edit provider transport and MIME repair
 - `a2fd40d` - idempotent MODNet refresh and pure-resize UI behavior
+- `b239eb2` - precision workspace controls
+- `fab6418` - precision-edit UI transitions
+- `7677073` - loaded precision-canvas UAT gaps
+- `71e159b` - temporary cutout PNG ignore rule
 
 ## Still Unverified
 
-- Stable native strict output for both 1536x864 and 1792x768 from the configured
-  upstream across repeated calls.
+- Stable native strict output for the configured upstream across repeated calls;
+  the 1536 probe was rejected at `1376x768`, and the 1792 probe ended in
+  `ReadTimeout` during this run.
 - A second annotated precision edit that returns exactly the prior base dimensions
   and becomes a new editable session version.
-- Headed interaction completion for every canvas editing gesture, image-only
-  fullscreen with loaded media, session-thumbnail date highlighting, and all three
-  target viewport sizes.
-- Authorized human-sample cutout quality for legs, hair, semi-transparent edges,
-  and complex backgrounds.
-- MODNet redistribution/packaging approval. It remains user-imported and excluded
-  from Release assets.
-- Clean-clone build, GitHub push, version/tag, and GitHub Release gates.
+- Independent human acceptance for every canvas editing gesture, image-only
+  fullscreen with loaded media, and session-thumbnail date highlighting. The
+  three-viewport loaded-canvas contract is covered by automated browser evidence.
+- The cutout structural gate and authorized human-sample cutout quality for legs,
+  hair, semi-transparent edges, and complex backgrounds.
+- MODNet redistribution/packaging authorization. It remains user-imported and
+  excluded from Release assets.
+- Clean-clone build, GitHub push, version/tag, and GitHub Release gates. Release
+  remains blocked until the preceding evidence is complete.
 
 ## Resume Order
 
