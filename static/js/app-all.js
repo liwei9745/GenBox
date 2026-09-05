@@ -23,7 +23,36 @@ var PRECISION_CUTOUT_MODEL_INSTALL_CONTRACT = 'genbox-cutout-model-install-v1';
 var PRECISION_CUTOUT_MODEL_SOURCE_ID = 'rembg-u2net-human-seg-v0.0.0';
 var PRECISION_CUTOUT_MODEL_RELATIVE_PATH = 'storage/models/cutout/u2net_human_seg.onnx';
 var PRECISION_CUTOUT_MODEL_POLL_INTERVAL_MS = 800;
+var PRECISION_CUTOUT_CAPABILITY_TIMEOUT_MS = 15000;
 var PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE = 'gpt-image-2';
+var PRECISION_GPT_IMAGE_2_SIZE_ALIGNMENT = 16;
+var PRECISION_GPT_IMAGE_2_MIN_OUTPUT_PIXELS = 655360;
+var PRECISION_GPT_IMAGE_2_MAX_OUTPUT_PIXELS = 8294400;
+var PRECISION_GPT_IMAGE_2_MAX_SIDE = 3840;
+var PRECISION_GPT_IMAGE_2_CANONICAL_PRESETS = {
+  '1k': '1024x1024',
+  '2k': '2048x1152',
+  '4k': '3840x2160'
+};
+// Preset dimensions are local form helpers. Every entry satisfies the strict
+// gpt-image-2 envelope; provider capability authorization is still required.
+var PRECISION_GPT_IMAGE_2_TIER_RATIOS = {
+  '1k': {
+    '1:1': '1024x1024', '16:9': '1168x656', '9:16': '656x1168',
+    '4:3': '1024x768', '3:4': '768x1024', '3:2': '1008x672',
+    '2:3': '672x1008', '21:9': '1344x576', '9:21': '576x1344'
+  },
+  '2k': {
+    '1:1': '2048x2048', '16:9': '2048x1152', '9:16': '1152x2048',
+    '4:3': '2048x1536', '3:4': '1536x2048', '3:2': '2016x1344',
+    '2:3': '1344x2016', '21:9': '2544x1088', '9:21': '1088x2544'
+  },
+  '4k': {
+    '1:1': '2880x2880', '16:9': '3840x2160', '9:16': '2160x3840',
+    '4:3': '3328x2480', '3:4': '2480x3328', '3:2': '3520x2352',
+    '2:3': '2352x3520', '21:9': '3840x1648', '9:21': '1648x3840'
+  }
+};
 var PRECISION_CUTOUT_MAX_FEATHER = 64;
 var PRECISION_MAX_OUTPUT_PIXELS = 64 * 1024 * 1024;
 var PRECISION_HISTORY_LIMIT = 30;
@@ -42,6 +71,7 @@ var precisionEditPointerTarget = null;
 var precisionEditPointerFinishing = false;
 var precisionEditDragOrigin = null;
 var precisionEditDragMoved = false;
+var precisionEditGestureCheckpoint = null;
 var precisionEditAnnotationsVisible = true;
 var precisionEditIdCounter = 0;
 var precisionEditLabelCounter = 0;
@@ -56,6 +86,9 @@ var precisionModelVisibilityMenuProviderId = '';
 var precisionModelVisibilityDraft = null;
 var precisionModelVisibilityDismissBound = false;
 var precisionEditSelectedModel = { providerId: '', model: '' };
+var precisionEditStrategy = 'standard';
+var precisionEditSelectionMode = 'annotation';
+var precisionSelectionFeather = 0;
 var precisionEditSizeMode = 'preserve';
 var precisionOutputSizePolicy = 'strict';
 var PRECISION_RESIZE_PRESET_STORAGE_KEY = 'genbox_precision_resize_presets_v1';
@@ -91,11 +124,15 @@ var precisionTaskMonitorElapsedSeconds = null;
 var precisionTaskMonitorTerminal = false;
 var precisionTaskMonitorTimer = null;
 var precisionCanvasResizeState = null;
+// View-only interaction state. These values never enter annotation payloads.
+var precisionCanvasPanState = null;
+var precisionCanvasSpaceHeld = false;
 var precisionEditModelPickerReady = false;
 var precisionEditAuthorizationPending = false;
 var precisionCutoutCapability = null;
 var precisionCutoutPending = false;
 var precisionCutoutProbeToken = 0;
+var precisionCutoutAvailabilityAbortController = null;
 var precisionCutoutOperationToken = 0;
 var precisionCutoutAbortController = null;
 var precisionCutoutModel = null;
@@ -106,6 +143,8 @@ var precisionCutoutModelTaskId = '';
 var precisionCutoutModelPollTimer = null;
 var precisionCutoutModelMutationPending = false;
 var precisionCutoutModelDetailsPreference = null;
+var precisionCutoutSelectedAdapter = '';
+var precisionCutoutAdapterDetailsExpanded = false;
 
 // 生图数量: {provider_id: int}
 var providerQuantities = {};
@@ -832,14 +871,13 @@ function ensurePrecisionEditPanel() {
       if (object && object.type === 'text') {
         precisionEditSelectedId = object.id;
         openPrecisionEditTextEditor(point, object);
+      } else {
+        togglePrecisionCompareFullscreen();
       }
     });
-    canvas.addEventListener('keydown', function(event) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
-        event.preventDefault();
-        if (event.shiftKey) redoPrecisionEdit(); else undoPrecisionEdit();
-      }
-    });
+    canvas.addEventListener('keydown', handlePrecisionEditCanvasKeydown);
+    canvas.addEventListener('keyup', handlePrecisionEditCanvasKeyup);
+    canvas.addEventListener('blur', resetPrecisionCanvasKeyboardState);
     setPrecisionEditTool(precisionEditTool);
   }
   [['precisionToolSelect', 'select'], ['precisionToolEllipse', 'ellipse'], ['precisionToolArrow', 'arrow'], ['precisionToolRect', 'rect'], ['precisionToolBrush', 'brush'], ['precisionToolEraser', 'eraser'], ['precisionToolText', 'text']].forEach(function(binding) {
@@ -860,6 +898,9 @@ function ensurePrecisionEditPanel() {
   var cutoutCancel = cutoutControls.cancelButton;
   var cutoutFeather = cutoutControls.feather;
   var cutoutUseSelection = cutoutControls.useSelection;
+  var cutoutAdapterSelect = cutoutControls.adapterSelect;
+  var cutoutCapabilityRefresh = cutoutControls.capabilityRefreshButton;
+  var cutoutAdapterDetailsToggle = cutoutControls.adapterDetailsToggle;
   var cutoutModelInstall = cutoutControls.modelInstallButton;
   var cutoutModelDetailsToggle = cutoutControls.modelDetailsToggle;
   var cutoutModelCancel = cutoutControls.modelCancelButton;
@@ -901,6 +942,23 @@ function ensurePrecisionEditPanel() {
     cutoutUseSelection.dataset.precisionBound = 'true';
     cutoutUseSelection.addEventListener('change', updatePrecisionCutoutRefineControls);
   }
+  if (cutoutAdapterSelect && cutoutAdapterSelect.dataset.precisionBound !== 'true') {
+    cutoutAdapterSelect.dataset.precisionBound = 'true';
+    cutoutAdapterSelect.addEventListener('change', function() { setPrecisionCutoutSelectedAdapter(cutoutAdapterSelect.value); });
+  }
+  if (cutoutCapabilityRefresh && cutoutCapabilityRefresh.dataset.precisionBound !== 'true') {
+    cutoutCapabilityRefresh.dataset.precisionBound = 'true';
+    cutoutCapabilityRefresh.addEventListener('click', refreshPrecisionCutoutSetup);
+  }
+  if (cutoutAdapterDetailsToggle && cutoutAdapterDetailsToggle.dataset.precisionBound !== 'true') {
+    cutoutAdapterDetailsToggle.dataset.precisionBound = 'true';
+    cutoutAdapterDetailsToggle.addEventListener('click', togglePrecisionCutoutAdapterDetails);
+  }
+  var precisionSelectionFeatherInput = document.getElementById('precisionSelectionFeather');
+  if (precisionSelectionFeatherInput && precisionSelectionFeatherInput.dataset.precisionBound !== 'true') {
+    precisionSelectionFeatherInput.dataset.precisionBound = 'true';
+    precisionSelectionFeatherInput.addEventListener('input', updatePrecisionSelectionFeather);
+  }
   if (cutoutModelInstall && cutoutModelInstall.dataset.precisionBound !== 'true') {
     cutoutModelInstall.dataset.precisionBound = 'true';
     cutoutModelInstall.addEventListener('click', requestPrecisionCutoutModelInstall);
@@ -908,6 +966,11 @@ function ensurePrecisionEditPanel() {
   if (cutoutModelDetailsToggle && cutoutModelDetailsToggle.dataset.precisionBound !== 'true') {
     cutoutModelDetailsToggle.dataset.precisionBound = 'true';
     cutoutModelDetailsToggle.addEventListener('click', togglePrecisionCutoutModelDetails);
+    cutoutModelDetailsToggle.addEventListener('keydown', function(event) {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      togglePrecisionCutoutModelDetails();
+    });
   }
   if (cutoutModelCancel && cutoutModelCancel.dataset.precisionBound !== 'true') {
     cutoutModelCancel.dataset.precisionBound = 'true';
@@ -977,6 +1040,8 @@ function ensurePrecisionEditPanel() {
     zoomFit.addEventListener('click', fitPrecisionCanvasToWindow);
   }
   bindPrecisionResizeControls();
+  if (typeof setPrecisionEditStrategy === 'function') setPrecisionEditStrategy(precisionEditStrategy);
+  if (typeof setPrecisionEditSelectionMode === 'function') setPrecisionEditSelectionMode(precisionEditSelectionMode);
   bindPrecisionCanvasResizeHandle();
   bindPrecisionHelpTooltips();
   bindPrecisionWorkbenchHelp();
@@ -992,11 +1057,28 @@ function ensurePrecisionEditPanel() {
     zoomShell.addEventListener('wheel', function(event) {
       if (!event.ctrlKey || !precisionEditSourceImageData) return;
       event.preventDefault();
-      setPrecisionViewZoom(precisionViewZoom + (event.deltaY < 0 ? 10 : -10));
+      setPrecisionViewZoom(precisionViewZoom + (event.deltaY < 0 ? 10 : -10), event);
     }, { passive: false });
+    zoomShell.addEventListener('wheel', function(event) {
+      if (event.ctrlKey || !precisionEditSourceImageData) return;
+      event.preventDefault();
+      setPrecisionViewZoom(precisionViewZoom + (event.deltaY < 0 ? 10 : -10), event);
+    }, { passive: false });
+    zoomShell.addEventListener('mousedown', function(event) {
+      if (event.button !== 1 || !precisionEditSourceImageData) return;
+      event.preventDefault();
+      setPrecisionViewZoom(100, event);
+      fitPrecisionCanvasToWindow();
+    });
   }
   var compareStage = document.getElementById('precisionCompareStage');
   if (compareStage) bindPrecisionCompareEvents(compareStage);
+  var fullscreenButton = document.getElementById('btnPrecisionFullscreen');
+  if (fullscreenButton && fullscreenButton.dataset.precisionFullscreenBound !== 'true') {
+    fullscreenButton.dataset.precisionFullscreenBound = 'true';
+    document.addEventListener('fullscreenchange', syncPrecisionFullscreenState);
+  }
+  syncPrecisionFullscreenState();
   updatePrecisionEditControls();
   return existing;
 }
@@ -1017,6 +1099,67 @@ function precisionResizeInputDimension(id) {
   if (!/^[1-9]\d*$/.test(raw)) return null;
   var numeric = Number(raw);
   return Number.isInteger(numeric) ? numeric : null;
+}
+
+function precisionResizeTierRatioSize(tier, ratio) {
+  var table = PRECISION_GPT_IMAGE_2_TIER_RATIOS[String(tier || '').toLowerCase()];
+  var value = table && table[String(ratio || '')];
+  return value && precisionGptImage2SizeError(value) === '' ? value : '';
+}
+
+function precisionResizeTierRatioForSize(size) {
+  var result = { tier: 'custom', ratio: 'custom' };
+  Object.keys(PRECISION_GPT_IMAGE_2_TIER_RATIOS).some(function(tier) {
+    var table = PRECISION_GPT_IMAGE_2_TIER_RATIOS[tier];
+    return Object.keys(table).some(function(ratio) {
+      if (table[ratio] !== size) return false;
+      result = { tier: tier, ratio: ratio };
+      return true;
+    });
+  });
+  return result;
+}
+
+function syncPrecisionResizeTierRatioFromSize(size) {
+  var match = precisionResizeTierRatioForSize(size);
+  var tier = document.getElementById('precisionResizeTier');
+  var ratio = document.getElementById('precisionResizeRatio');
+  if (tier) tier.value = match.tier;
+  if (ratio) ratio.value = match.ratio;
+  return match;
+}
+
+function applyPrecisionResizeTierRatio() {
+  var tier = document.getElementById('precisionResizeTier');
+  var ratio = document.getElementById('precisionResizeRatio');
+  var tierValue = tier && tier.value;
+  var ratioValue = ratio && ratio.value;
+  // A partial selection resolves to the neutral 1:1 pair, keeping the two
+  // controls coupled instead of silently leaving stale pixel dimensions.
+  if (tierValue && tierValue !== 'custom' && (!ratioValue || ratioValue === 'custom')) {
+    ratioValue = '1:1';
+    if (ratio) ratio.value = ratioValue;
+  }
+  if (ratioValue && ratioValue !== 'custom' && (!tierValue || tierValue === 'custom')) {
+    tierValue = '1k';
+    if (tier) tier.value = tierValue;
+  }
+  var size = precisionResizeTierRatioSize(tierValue, ratioValue);
+  if (!size) {
+    markPrecisionResizeCustom();
+    return '';
+  }
+  var parts = size.split('x');
+  var width = document.getElementById('precisionResizeWidth');
+  var height = document.getElementById('precisionResizeHeight');
+  if (width) width.value = parts[0];
+  if (height) height.value = parts[1];
+  var preset = document.getElementById('precisionResizePreset');
+  if (preset) preset.value = size;
+  syncPrecisionAspectRatioHint();
+  updatePrecisionResizePresetControls();
+  updatePrecisionEditControls();
+  return size;
 }
 
 function precisionResizeDimensions(value, output) {
@@ -1138,8 +1281,24 @@ function getPrecisionResizeCapability() {
   return {
     known: !!(resolution.structureValid && resolution.sizeDeclarationValid),
     declared: !!(resolution.structureValid && resolution.sizeDeclarationPresent),
-    sizes: resolution.structureValid && resolution.sizeDeclarationValid ? resolution.sizes : {}
+    sizes: resolution.structureValid && resolution.sizeDeclarationValid ? resolution.sizes : {},
+    canonicalModel: resolution.canonicalModel || ''
   };
+}
+
+function precisionGptImage2SizeError(value) {
+  var match = /^([1-9]\d{1,4})x([1-9]\d{1,4})$/.exec(String(value || ''));
+  if (!match) return 'precision_target_size_invalid';
+  var width = Number(match[1]);
+  var height = Number(match[2]);
+  if (width > PRECISION_GPT_IMAGE_2_MAX_SIDE || height > PRECISION_GPT_IMAGE_2_MAX_SIDE) return 'precision_target_size_side_exceeded';
+  if (width % PRECISION_GPT_IMAGE_2_SIZE_ALIGNMENT || height % PRECISION_GPT_IMAGE_2_SIZE_ALIGNMENT) return 'precision_target_size_alignment_invalid';
+  var ratio = width / height;
+  if (ratio < (1 / 3) || ratio > 3) return 'precision_target_size_aspect_invalid';
+  var pixels = width * height;
+  if (pixels < PRECISION_GPT_IMAGE_2_MIN_OUTPUT_PIXELS) return 'precision_target_size_pixels_too_small';
+  if (pixels > PRECISION_GPT_IMAGE_2_MAX_OUTPUT_PIXELS) return 'precision_target_size_pixels_exceeded';
+  return '';
 }
 
 function getPrecisionResizeTargetSize() {
@@ -1603,6 +1762,18 @@ function bindPrecisionResizeControls() {
       updatePrecisionEditControls();
     });
   }
+  ['precisionResizeTier', 'precisionResizeRatio'].forEach(function(id) {
+    var input = document.getElementById(id);
+    if (!input || input.dataset.precisionBound === 'true') return;
+    input.dataset.precisionBound = 'true';
+    input.addEventListener('change', function() {
+      if (this.value === 'custom') {
+        markPrecisionResizeCustom();
+        return;
+      }
+      applyPrecisionResizeTierRatio();
+    });
+  });
   var promptPreset = document.getElementById('precisionResizePromptPreset');
   if (promptPreset && promptPreset.dataset.precisionBound !== 'true') {
     promptPreset.dataset.precisionBound = 'true';
@@ -1653,6 +1824,9 @@ function bindPrecisionResizeControls() {
     });
   }
   renderPrecisionResizeSavedPresets();
+  if (typeof syncPrecisionResizeTierRatioFromSize === 'function') {
+    syncPrecisionResizeTierRatioFromSize(getPrecisionResizeTargetSize());
+  }
   syncPrecisionAspectRatioHint();
 }
 
@@ -1795,11 +1969,15 @@ function precisionDocsFocusable(dialog) {
 function openPrecisionDocsDialog() {
   var dialog = document.getElementById('precisionDocsDialog');
   if (!dialog) return false;
+  var gallery = document.getElementById('precisionGalleryOverlay');
+  if (gallery && gallery.parentNode) gallery.parentNode.removeChild(gallery);
   dialog._precisionReturnFocus = document.activeElement && typeof document.activeElement.focus === 'function' ? document.activeElement : document.getElementById('btnPrecisionDocs');
   dialog.classList.remove('hidden');
   dialog.setAttribute('aria-hidden', 'false');
   if (document.body) document.body.classList.add('precision-docs-open');
   bindPrecisionDocsDialog();
+  var body = document.getElementById('precisionDocsBody');
+  if (body) body.scrollTop = 0;
   var close = document.getElementById('btnPrecisionDocsClose');
   var panel = document.getElementById('precisionDocsPanel');
   var target = close || panel;
@@ -1972,6 +2150,12 @@ function getPrecisionCutoutControls() {
     restoreHint: document.getElementById('precisionCutoutRestoreHint'),
     selectionHint: document.getElementById('precisionCutoutSelectionHint'),
     status: document.getElementById('precisionCutoutStatus'),
+    adapterPanel: document.getElementById('precisionCutoutAdapterPicker'),
+    adapterSelect: document.getElementById('precisionCutoutAlgorithm'),
+    capabilityRefreshButton: document.getElementById('btnPrecisionCutoutCapabilityRefresh'),
+    adapterStatus: document.getElementById('precisionCutoutAlgorithmStatus'),
+    adapterDetailsToggle: document.getElementById('btnPrecisionCutoutAdapterDetails'),
+    adapterDetails: document.getElementById('precisionCutoutAdapterDetails'),
     modelPanel: document.getElementById('precisionCutoutModelInstall'),
     modelStatus: document.getElementById('precisionCutoutModelStatus'),
     modelDetailsToggle: document.getElementById('btnPrecisionCutoutModelDetails'),
@@ -2046,6 +2230,9 @@ function precisionSourceHasDirtyState() {
     precisionEditPointerTarget || precisionEditDragOrigin || precisionEditDragMoved ||
     precisionEditTextDraftPoint || precisionEditPendingInstruction || precisionEditEraserSnapshot || precisionEditEraserChanged ||
     precisionEditSession.versions.length || precisionEditSession.selectedVersionId !== 'original' || precisionEditSession.baseVersionId !== 'original' ||
+    (typeof precisionEditStrategy === 'string' && precisionEditStrategy !== 'standard') ||
+    (typeof precisionEditSelectionMode === 'string' && precisionEditSelectionMode !== 'annotation') ||
+    (typeof precisionSelectionFeather === 'number' && precisionSelectionFeather !== 0) ||
     precisionEditSizeMode !== 'preserve' || resizePrompt || overallPrompt ||
     (Number.isFinite(width) && precisionEditSourceWidth && width !== precisionEditSourceWidth) ||
     (Number.isFinite(height) && precisionEditSourceHeight && height !== precisionEditSourceHeight) ||
@@ -2103,15 +2290,21 @@ function resetPrecisionSourceSpecificState(generation) {
   precisionEditPointerFinishing = false;
   precisionEditDragOrigin = null;
   precisionEditDragMoved = false;
+  precisionEditGestureCheckpoint = null;
   precisionEditTextDraftPoint = null;
   precisionEditPendingInstruction = '';
   precisionEditEraserSnapshot = null;
   precisionEditEraserChanged = false;
+  precisionCanvasPanState = null;
+  precisionCanvasSpaceHeld = false;
   precisionEditIdCounter = 0;
   precisionEditLabelCounter = 0;
   precisionComparePointerId = null;
   precisionComparePointerTarget = null;
   precisionEditSizeMode = 'preserve';
+  precisionEditStrategy = 'standard';
+  precisionEditSelectionMode = 'annotation';
+  precisionSelectionFeather = 0;
   precisionCutoutPending = false;
   precisionTaskSourceGeneration = 0;
   precisionEditSession = { source: null, versions: [], selectedVersionId: 'original', baseVersionId: 'original', taskBaseVersionId: null, view: 'after', taskId: null, sourceGeneration: generation };
@@ -2123,11 +2316,15 @@ function resetPrecisionSourceSpecificState(generation) {
   });
   var resizePreset = document.getElementById('precisionResizePreset');
   var resizePromptPreset = document.getElementById('precisionResizePromptPreset');
+  var selectionFeather = document.getElementById('precisionSelectionFeather');
   var rail = document.getElementById('precisionVersionRail');
   var before = document.getElementById('precisionCompareBefore');
   var after = document.getElementById('precisionCompareAfter');
   if (resizePreset) resizePreset.value = 'custom';
   if (resizePromptPreset) resizePromptPreset.value = '';
+  if (selectionFeather) selectionFeather.value = '0';
+  if (typeof setPrecisionEditStrategy === 'function') setPrecisionEditStrategy(precisionEditStrategy);
+  if (typeof setPrecisionEditSelectionMode === 'function') setPrecisionEditSelectionMode(precisionEditSelectionMode);
   if (rail) rail.textContent = '';
   if (before) before.removeAttribute('src');
   if (after) after.removeAttribute('src');
@@ -2236,7 +2433,7 @@ function loadPrecisionEditSourceImage(dataUrl, prompt, options) {
     }
     if (!options.preserveSession) {
       precisionEditSession = {
-        source: { id: 'original', label: i18nText('creator.precision_original'), data: dataUrl },
+        source: { id: 'original', label: i18nText('creator.precision_original'), data: dataUrl, prompt: String(prompt || ''), createdAt: new Date().toISOString() },
         versions: [], selectedVersionId: 'original', baseVersionId: 'original', taskBaseVersionId: null, view: 'after', taskId: null, sourceGeneration: generation
       };
       updatePrecisionTaskMonitor(null);
@@ -2298,12 +2495,38 @@ function setPrecisionEditTool(tool) {
   });
 }
 
-function setPrecisionViewZoom(value) {
+function setPrecisionViewZoom(value, anchor) {
   precisionViewZoom = Math.max(50, Math.min(200, Math.round((Number(value) || 100) / 10) * 10));
+  var shell = document.getElementById('precisionCanvasShell');
   var surface = document.getElementById('precisionCanvasSurface');
   var input = document.getElementById('precisionViewZoom');
   var output = document.getElementById('precisionViewZoomValue');
-  if (surface) surface.style.width = precisionViewZoom + '%';
+  if (surface) {
+    var previousRect = surface.getBoundingClientRect ? surface.getBoundingClientRect() : { width: 0, height: 0 };
+    var shellRect = shell && shell.getBoundingClientRect ? shell.getBoundingClientRect() : { left: 0, top: 0 };
+    var previousWidth = previousRect.width || 0;
+    var previousHeight = previousRect.height || 0;
+    var shellWidth = shell && shell.clientWidth || 0;
+    var shellHeight = shell && shell.clientHeight || 0;
+    var resetScroll = !!(anchor && anchor.resetScroll);
+    var clientX = Number(anchor && anchor.clientX);
+    var clientY = Number(anchor && anchor.clientY);
+    var viewportX = Number.isFinite(clientX) && shellWidth > 0 ? Math.max(0, Math.min(shellWidth, clientX - (shellRect.left || 0))) : shellWidth / 2;
+    var viewportY = Number.isFinite(clientY) && shellHeight > 0 ? Math.max(0, Math.min(shellHeight, clientY - (shellRect.top || 0))) : shellHeight / 2;
+    var anchorRatioX = previousWidth > 0 ? (Number(shell && shell.scrollLeft || 0) + viewportX) / previousWidth : 0.5;
+    var anchorRatioY = previousHeight > 0 ? (Number(shell && shell.scrollTop || 0) + viewportY) / previousHeight : 0.5;
+    surface.style.width = precisionViewZoom + '%';
+    if (shell && shellWidth > 0 && shellHeight > 0) {
+      var schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(callback) { callback(); };
+      schedule(function() {
+        var nextRect = surface.getBoundingClientRect ? surface.getBoundingClientRect() : { width: 0, height: 0 };
+        var maxScrollLeft = Math.max(0, (nextRect.width || 0) - shellWidth);
+        var maxScrollTop = Math.max(0, (nextRect.height || 0) - shellHeight);
+        shell.scrollLeft = resetScroll ? 0 : Math.max(0, Math.min(maxScrollLeft, anchorRatioX * (nextRect.width || 0) - viewportX));
+        shell.scrollTop = resetScroll ? 0 : Math.max(0, Math.min(maxScrollTop, anchorRatioY * (nextRect.height || 0) - viewportY));
+      });
+    }
+  }
   if (input && String(input.value) !== String(precisionViewZoom)) input.value = String(precisionViewZoom);
   if (output) output.value = output.textContent = precisionViewZoom + '%';
 }
@@ -2311,10 +2534,156 @@ function setPrecisionViewZoom(value) {
 function fitPrecisionCanvasToWindow() {
   var shell = document.getElementById('precisionCanvasShell');
   if (!shell || !precisionEditSourceWidth || !precisionEditSourceHeight) return;
-  var width = Math.max(1, shell.clientWidth);
-  var height = Math.max(1, shell.clientHeight);
-  var heightFit = (height * precisionEditSourceWidth / (width * precisionEditSourceHeight)) * 100;
-  setPrecisionViewZoom(Math.min(100, Math.max(50, heightFit)));
+  var width = Math.max(1, shell.clientWidth || shell.getBoundingClientRect().width);
+  var limits = precisionCanvasResizeLimits(shell);
+  var viewportHeight = typeof window !== 'undefined' ? window.innerHeight : limits.maxHeight;
+  var availableHeight = Math.max(1, Math.min(limits.maxHeight, viewportHeight || limits.maxHeight));
+  var heightFit = (availableHeight * precisionEditSourceWidth / (width * precisionEditSourceHeight)) * 100;
+  setPrecisionViewZoom(Math.min(100, Math.max(50, heightFit)), { resetScroll: true });
+}
+
+function precisionCanvasPanRequested(event) {
+  if (!event || event.isPrimary === false) return false;
+  return event.button === 1 || (event.button === 0 && precisionCanvasSpaceHeld);
+}
+
+function beginPrecisionCanvasPan(event) {
+  var shell = document.getElementById('precisionCanvasShell');
+  var canvas = event && event.currentTarget;
+  if (!shell || !canvas || !precisionEditSourceImageData || precisionCanvasPanState) return false;
+  precisionCanvasPanState = { pointerId: event.pointerId, target: canvas, startX: event.clientX, startY: event.clientY, scrollLeft: shell.scrollLeft, scrollTop: shell.scrollTop };
+  canvas.classList.add('is-panning');
+  try { canvas.setPointerCapture(event.pointerId); } catch (error) {}
+  event.preventDefault();
+  return true;
+}
+
+function continuePrecisionCanvasPan(event) {
+  var state = precisionCanvasPanState;
+  var shell = document.getElementById('precisionCanvasShell');
+  if (!state || !shell || !event || event.pointerId !== state.pointerId) return false;
+  shell.scrollLeft = state.scrollLeft - (event.clientX - state.startX);
+  shell.scrollTop = state.scrollTop - (event.clientY - state.startY);
+  event.preventDefault();
+  return true;
+}
+
+function endPrecisionCanvasPan(event) {
+  var state = precisionCanvasPanState;
+  if (!state || !event || event.pointerId !== state.pointerId) return false;
+  var target = state.target;
+  precisionCanvasPanState = null;
+  if (target) {
+    target.classList.remove('is-panning');
+    if (target.hasPointerCapture && target.hasPointerCapture(event.pointerId) && target.releasePointerCapture) {
+      try { target.releasePointerCapture(event.pointerId); } catch (error) {}
+    }
+  }
+  return true;
+}
+
+function cancelPrecisionCanvasInteraction() {
+  var checkpoint = precisionEditGestureCheckpoint;
+  var pointerTarget = precisionEditPointerTarget;
+  var pointerId = precisionEditPointerId;
+  var panState = precisionCanvasPanState;
+  var hadInteraction = !!(checkpoint || precisionEditDraftObject || precisionEditDragOrigin || panState || precisionEditTextDraftPoint || precisionEditSelectedId);
+  cancelPrecisionEditText();
+  if (checkpoint) {
+    precisionEditObjects = precisionEditClone(checkpoint.objects);
+    precisionEditHistory = precisionEditClone(checkpoint.history);
+    precisionEditRedo = precisionEditClone(checkpoint.redo);
+    precisionEditSelectedId = checkpoint.selectedId;
+  }
+  precisionEditPointerFinishing = true;
+  precisionEditDraftObject = null;
+  precisionEditDragOrigin = null;
+  precisionEditPointerId = null;
+  precisionEditPointerTarget = null;
+  precisionEditDragMoved = false;
+  precisionEditGestureCheckpoint = null;
+  precisionEditEraserSnapshot = null;
+  precisionEditEraserChanged = false;
+  precisionCanvasPanState = null;
+  var canvas = document.getElementById('precisionAnnotationCanvas');
+  if (canvas) canvas.classList.remove('is-panning', 'is-pan-ready');
+  if (pointerTarget && pointerTarget.releasePointerCapture && pointerId !== null) {
+    try { pointerTarget.releasePointerCapture(pointerId); } catch (error) {}
+  }
+  if (panState && panState.target && panState.target.releasePointerCapture) {
+    try { panState.target.releasePointerCapture(panState.pointerId); } catch (error) {}
+  }
+  precisionEditPointerFinishing = false;
+  renderPrecisionEditCanvas();
+  updatePrecisionEditControls();
+  return hadInteraction;
+}
+
+function deletePrecisionEditSelection() {
+  if (!precisionEditSelectedId || !precisionEditObjectById(precisionEditSelectedId)) return false;
+  capturePrecisionEditHistory();
+  precisionEditObjects = precisionEditObjects.filter(function(object) { return object.id !== precisionEditSelectedId; });
+  precisionEditSelectedId = null;
+  renderPrecisionEditCanvas();
+  updatePrecisionEditControls();
+  return true;
+}
+
+function handlePrecisionEditCanvasKeydown(event) {
+  var canvas = event && event.currentTarget;
+  if (!event || !canvas) return;
+  var modifier = event.ctrlKey || event.metaKey;
+  var key = String(event.key || '');
+  var lowerKey = key.toLowerCase();
+  if (key === ' ' && precisionEditSourceImageData) {
+    precisionCanvasSpaceHeld = true;
+    canvas.classList.add('is-pan-ready');
+    updatePrecisionEditCanvasCursor(null, canvas);
+    event.preventDefault();
+    return;
+  }
+  if (key === 'Escape') {
+    if (cancelPrecisionCanvasInteraction()) event.preventDefault();
+    return;
+  }
+  if (key === 'Delete' || key === 'Backspace') {
+    if (deletePrecisionEditSelection()) event.preventDefault();
+    return;
+  }
+  if (modifier && key === '0') {
+    event.preventDefault();
+    fitPrecisionCanvasToWindow();
+    return;
+  }
+  if (modifier && (lowerKey === 'z' || lowerKey === 'y')) {
+    event.preventDefault();
+    if (lowerKey === 'y' || event.shiftKey) redoPrecisionEdit(); else undoPrecisionEdit();
+    return;
+  }
+  if ((key === '+' || key === '=' || key === '-' || key === '_') && precisionEditSourceImageData) {
+    event.preventDefault();
+    setPrecisionViewZoom(precisionViewZoom + (key === '-' || key === '_' ? -10 : 10));
+  }
+}
+
+function handlePrecisionEditCanvasKeyup(event) {
+  if (!event || event.key !== ' ') return;
+  precisionCanvasSpaceHeld = false;
+  var canvas = event.currentTarget;
+  if (canvas) {
+    canvas.classList.remove('is-pan-ready', 'is-panning');
+    updatePrecisionEditCanvasCursor(null, canvas);
+  }
+  event.preventDefault();
+}
+
+function resetPrecisionCanvasKeyboardState(event) {
+  precisionCanvasSpaceHeld = false;
+  var canvas = event && event.currentTarget || document.getElementById('precisionAnnotationCanvas');
+  if (canvas) {
+    canvas.classList.remove('is-pan-ready', 'is-panning');
+    updatePrecisionEditCanvasCursor(null, canvas);
+  }
 }
 
 function startPrecisionAiErase(kind) {
@@ -2580,6 +2949,15 @@ function precisionEditHandlePoints(object) {
       end: { x: Math.max(0, Math.min(1, Number(object.x2) || 0)), y: Math.max(0, Math.min(1, Number(object.y2) || 0)) }
     };
   }
+  if (object && object.type === 'brush' && Array.isArray(object.points)) {
+    return object.points.reduce(function(handles, point, index) {
+      handles['point-' + index] = {
+        x: Math.max(0, Math.min(1, Number(point && point.x) || 0)),
+        y: Math.max(0, Math.min(1, Number(point && point.y) || 0))
+      };
+      return handles;
+    }, {});
+  }
   var bounds = precisionEditObjectBounds(object);
   return {
     nw: { x: bounds.left, y: bounds.top },
@@ -2594,7 +2972,7 @@ function findPrecisionEditHandle(point, object, event) {
   var pointerPixels = event && event.pointerType === 'touch' ? PRECISION_HANDLE_TOUCH_PX : PRECISION_HANDLE_MOUSE_PX;
   var tolerance = precisionEditPointerTolerance(event, pointerPixels);
   var handles = precisionEditHandlePoints(object);
-  var names = object.type === 'arrow' ? ['start', 'end'] : ['nw', 'ne', 'sw', 'se'];
+  var names = Object.keys(handles);
   for (var index = 0; index < names.length; index++) {
     var name = names[index];
     var handle = handles[name];
@@ -2605,12 +2983,52 @@ function findPrecisionEditHandle(point, object, event) {
 
 function precisionEditResizeCursor(handle) {
   if (handle === 'start' || handle === 'end') return 'crosshair';
+  if (String(handle || '').indexOf('point-') === 0) return 'move';
   return handle === 'nw' || handle === 'se' ? 'nwse-resize' : 'nesw-resize';
+}
+
+function precisionEditBrushSegmentIndex(point, object, event) {
+  if (!point || !object || object.type !== 'brush' || !Array.isArray(object.points) || object.points.length < 2) return -1;
+  var tolerance = precisionEditPointerTolerance(event, event && event.pointerType === 'touch' ? PRECISION_HANDLE_TOUCH_PX : PRECISION_HANDLE_MOUSE_PX);
+  var limit = Math.max(tolerance.x, tolerance.y);
+  for (var index = 0; index < object.points.length - 1; index++) {
+    var start = object.points[index];
+    var end = object.points[index + 1];
+    var dx = end.x - start.x;
+    var dy = end.y - start.y;
+    var lengthSquared = dx * dx + dy * dy;
+    var position = lengthSquared ? Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared)) : 0;
+    var nearestX = start.x + dx * position;
+    var nearestY = start.y + dy * position;
+    if (Math.hypot(point.x - nearestX, point.y - nearestY) <= limit) return index;
+  }
+  return -1;
+}
+
+function beginPrecisionEditBrushNode(point, object, segmentIndex) {
+  var original = precisionEditClone(precisionEditObjects);
+  var nextObject = precisionEditClone([object])[0];
+  var nodeIndex = Math.max(0, Math.min(nextObject.points.length - 1, segmentIndex + 1));
+  nextObject.points.splice(nodeIndex, 0, { x: Math.max(0, Math.min(1, point.x)), y: Math.max(0, Math.min(1, point.y)) });
+  precisionEditObjects = original.map(function(item) { return item.id === object.id ? nextObject : item; });
+  precisionEditSelectedId = object.id;
+  precisionEditDragOrigin = {
+    point: { x: point.x, y: point.y },
+    objects: original,
+    mode: 'node',
+    handle: 'point-' + nodeIndex,
+    objectId: object.id,
+    insertedNode: true
+  };
+  precisionEditDragMoved = true;
+  precisionEditDraftObject = null;
 }
 
 function updatePrecisionEditCanvasCursor(event, canvas) {
   canvas = canvas || document.getElementById('precisionAnnotationCanvas');
   if (!canvas) return;
+  if (precisionCanvasPanState) { canvas.style.cursor = 'grabbing'; return; }
+  if (precisionCanvasSpaceHeld) { canvas.style.cursor = 'grab'; return; }
   if (precisionEditDragOrigin) {
     canvas.style.cursor = precisionEditDragOrigin.mode === 'resize'
       ? precisionEditResizeCursor(precisionEditDragOrigin.handle) : 'grabbing';
@@ -2641,6 +3059,10 @@ function beginPrecisionEditTransform(point, object, mode, handle) {
 
 function beginPrecisionEditPointer(event) {
   if (!precisionEditSourceImageData || precisionEditPointerId !== null) return;
+  if (precisionCanvasPanRequested(event)) {
+    beginPrecisionCanvasPan(event);
+    return;
+  }
   if (event.isPrimary === false || (event.pointerType === 'mouse' && event.button !== 0)) return;
   var point = precisionEditCanvasPoint(event);
   if (!point) return;
@@ -2671,12 +3093,21 @@ function beginPrecisionEditPointer(event) {
     var shape = handle ? selected : findPrecisionEditObject(point, event);
     if (shape) {
       if (precisionEditTool !== 'eraser' && (precisionEditTool === 'select' || shape.type === precisionEditTool || ((precisionEditTool === 'rect' || precisionEditTool === 'ellipse') && precisionEditIsBoxShape(shape)))) {
-        beginPrecisionEditTransform(point, shape, handle ? 'resize' : 'move', handle);
+        var segmentIndex = event.shiftKey && !handle && shape.type === 'brush' && precisionEditTool === 'brush' && shape.id === precisionEditSelectedId
+          ? precisionEditBrushSegmentIndex(point, shape, event) : -1;
+        if (segmentIndex >= 0) beginPrecisionEditBrushNode(point, shape, segmentIndex);
+        else beginPrecisionEditTransform(point, shape, handle && shape.type === 'brush' ? 'node' : handle ? 'resize' : 'move', handle);
       } else {
         shape = null;
       }
     }
     if (shape) {
+      precisionEditGestureCheckpoint = {
+        objects: precisionEditClone(precisionEditObjects),
+        history: precisionEditClone(precisionEditHistory),
+        redo: precisionEditClone(precisionEditRedo),
+        selectedId: precisionEditSelectedId
+      };
       precisionEditPointerId = event.pointerId;
       precisionEditPointerTarget = canvas;
       precisionEditPointerFinishing = false;
@@ -2697,6 +3128,12 @@ function beginPrecisionEditPointer(event) {
     return;
   }
 
+  precisionEditGestureCheckpoint = {
+    objects: precisionEditClone(precisionEditObjects),
+    history: precisionEditClone(precisionEditHistory),
+    redo: precisionEditClone(precisionEditRedo),
+    selectedId: precisionEditSelectedId
+  };
   precisionEditPointerId = event.pointerId;
   precisionEditPointerTarget = canvas;
   precisionEditPointerFinishing = false;
@@ -2706,6 +3143,18 @@ function beginPrecisionEditPointer(event) {
     precisionEditEraserSnapshot = precisionEditClone(precisionEditObjects);
     precisionEditEraserChanged = false;
     var selectedObject = precisionEditObjectById(precisionEditSelectedId);
+    var selectedBrushHandle = selectedObject && selectedObject.type === 'brush' ? findPrecisionEditHandle(point, selectedObject, event) : null;
+    if (selectedBrushHandle && selectedObject.points.length > 2) {
+      var selectedBrushIndex = Number(String(selectedBrushHandle).slice('point-'.length));
+      if (Number.isInteger(selectedBrushIndex) && selectedBrushIndex >= 0 && selectedBrushIndex < selectedObject.points.length) {
+        capturePrecisionEditHistory();
+        selectedObject.points.splice(selectedBrushIndex, 1);
+        precisionEditEraserChanged = true;
+        renderPrecisionEditCanvas();
+        updatePrecisionEditControls();
+        return;
+      }
+    }
     if (selectedObject && findPrecisionEditObject(point, event) === selectedObject) {
       capturePrecisionEditHistory();
       precisionEditObjects = precisionEditObjects.filter(function(item) { return item.id !== selectedObject.id; });
@@ -2752,6 +3201,26 @@ function applyPrecisionEditPointerPoint(point) {
   if (!precisionEditIsTransformable(originObject)) return false;
   var bounds = precisionEditObjectBounds(originObject);
   var nextBounds;
+  if (precisionEditDragOrigin.mode === 'node' && originObject.type === 'brush') {
+    var nodeIndex = Number(String(precisionEditDragOrigin.handle || '').slice('point-'.length));
+    var nextBrush = precisionEditClone([originObject])[0];
+    if (precisionEditDragOrigin.insertedNode) {
+      if (nodeIndex < 0 || nodeIndex > nextBrush.points.length) return false;
+      nextBrush.points.splice(nodeIndex, 0, { x: point.x, y: point.y });
+    }
+    if (!Number.isInteger(nodeIndex) || nodeIndex < 0 || nodeIndex >= nextBrush.points.length) return false;
+    nextBrush.points[nodeIndex] = { x: Math.max(0, Math.min(1, point.x)), y: Math.max(0, Math.min(1, point.y)) };
+    var originalNode = originObject.points[nodeIndex];
+    var changedNode = precisionEditDragOrigin.insertedNode
+      ? true
+      : !!originalNode && (Math.abs(nextBrush.points[nodeIndex].x - originalNode.x) > 0.0001 || Math.abs(nextBrush.points[nodeIndex].y - originalNode.y) > 0.0001);
+    precisionEditDragMoved = changedNode;
+    if (!changedNode) return false;
+    precisionEditObjects = precisionEditClone(precisionEditDragOrigin.objects).map(function(object) {
+      return object.id === precisionEditSelectedId ? nextBrush : object;
+    });
+    return true;
+  }
   if (precisionEditDragOrigin.mode === 'resize') {
     var handle = precisionEditDragOrigin.handle;
     if (originObject.type === 'arrow' && (handle === 'start' || handle === 'end')) {
@@ -2862,6 +3331,10 @@ function erasePrecisionBrushAt(point) {
 }
 
 function continuePrecisionEditPointer(event) {
+  if (continuePrecisionCanvasPan(event)) {
+    updatePrecisionEditCanvasCursor(event, event.currentTarget);
+    return;
+  }
   if (event.pointerId !== precisionEditPointerId) {
     updatePrecisionEditCanvasCursor(event, event.currentTarget);
     return;
@@ -2875,6 +3348,10 @@ function continuePrecisionEditPointer(event) {
 }
 
 function endPrecisionEditPointer(event) {
+  if (endPrecisionCanvasPan(event)) {
+    updatePrecisionEditCanvasCursor(event, event.currentTarget);
+    return;
+  }
   if (!event || event.pointerId !== precisionEditPointerId || precisionEditPointerFinishing) return;
   precisionEditPointerFinishing = true;
   var pointerId = precisionEditPointerId;
@@ -2906,6 +3383,7 @@ function endPrecisionEditPointer(event) {
     precisionEditDraftObject = null;
     precisionEditDragOrigin = null;
     precisionEditDragMoved = false;
+    precisionEditGestureCheckpoint = null;
     precisionEditEraserSnapshot = null;
     precisionEditEraserChanged = false;
     renderPrecisionEditCanvas();
@@ -3034,7 +3512,7 @@ function drawPrecisionEditHandles(context, object, width, height) {
   context.fillStyle = '#ffffff';
   context.strokeStyle = '#f59e0b';
   context.lineWidth = Math.max(2, Math.min(5, halfSize * 0.35));
-  (object.type === 'arrow' ? ['start', 'end'] : ['nw', 'ne', 'sw', 'se']).forEach(function(name) {
+  Object.keys(handles).forEach(function(name) {
     var point = handles[name];
     context.fillRect(point.x * width - halfSize, point.y * height - halfSize, halfSize * 2, halfSize * 2);
     context.strokeRect(point.x * width - halfSize, point.y * height - halfSize, halfSize * 2, halfSize * 2);
@@ -3295,6 +3773,16 @@ function bindPrecisionCompareEvents(stage) {
     stage.addEventListener('pointercancel', endPrecisionComparePointer);
     stage.addEventListener('lostpointercapture', endPrecisionComparePointer);
     stage.addEventListener('keydown', handlePrecisionCompareKeydown);
+    stage.addEventListener('dblclick', function(event) {
+      event.preventDefault();
+      var entries = [precisionEditSession.source].concat(precisionEditSession.versions || []).filter(Boolean);
+      var current = entries.find(function(entry) { return entry.id === precisionEditSession.selectedVersionId; }) || entries[entries.length - 1];
+      if (current && current.data) openPrecisionImageFullscreen(current.data, current.label || '', {
+        prompt: current.prompt || '',
+        sessionEntries: entries,
+        currentId: current.id
+      });
+    });
   }
   if (stage.dataset.precisionResizeBound === 'true') return;
   if (precisionCompareResizeCleanup) precisionCompareResizeCleanup();
@@ -3353,8 +3841,200 @@ function renderPrecisionEditSession() {
     button.classList.toggle('btn-ghost', !active);
   });
   updatePrecisionCompareSlider((document.getElementById('precisionCompareSlider') || { value: 50 }).value);
+  renderPrecisionSessionShowcase(entries);
   updatePrecisionCutoutRefineControls();
 }
+
+function renderPrecisionSessionShowcase(entries) {
+  var gallery = document.getElementById('precisionSessionGallery');
+  var count = document.getElementById('precisionSessionResultCount');
+  var strip = document.getElementById('precisionPromptStrip');
+  entries = (entries || []).filter(function(entry) { return entry && entry.data; });
+  window.precisionSessionCalendarEntries = entries.slice(1);
+  var source = entries[0] || null;
+  var results = filterPrecisionSessionEntries(entries.slice(1));
+  if (count) count.textContent = String(results.length);
+  if (gallery) gallery.innerHTML = results.length ? results.map(function(entry, index) {
+    var selected = entry.id === precisionEditSession.selectedVersionId;
+    var label = String(entry.label || ('结果 ' + (index + 1)));
+    return '<div class="precision-session-item" role="listitem"><button type="button" class="precision-session-thumb' + (selected ? ' selected' : '') + '" data-version-id="' + escAttr(entry.id) + '" onclick="selectPrecisionVersion(\'' + escAttr(entry.id) + '\')" aria-label="' + escAttr(label) + '"' + (selected ? ' aria-current="true"' : '') + ' title="' + escAttr(label) + '"><img src="' + escAttr(entry.data) + '" alt="" loading="lazy" draggable="false"><span>' + (index + 1) + '</span></button></div>';
+  }).join('') : '<p class="precision-session-empty">' + escHtml(i18nText('creator.precision_session_empty')) + '</p>';
+  var visiblePromptEntries = [source].concat(results).filter(function(entry) {
+    return entry && String(entry.prompt || '').trim();
+  });
+  if (strip) strip.innerHTML = visiblePromptEntries.map(function(entry, index) {
+    var prompt = String(entry.prompt || '').trim();
+    var title = index === 0 ? '原图提示词' : '改图 ' + index + ' 提示词';
+    return '<details' + (index === visiblePromptEntries.length - 1 ? ' open' : '') + '><summary>' + escHtml(title) + '</summary><div class="precision-prompt-chunks">' + splitDisplayPrompt(prompt, 220).map(function(chunk, chunkIndex) { return '<div class="precision-prompt-chunk"><b>' + (chunkIndex + 1) + '</b> ' + escHtml(chunk) + '</div>'; }).join('') + '</div></details>';
+  }).join('');
+  renderPrecisionSessionCalendar();
+  updatePrecisionSessionDateSummary();
+}
+
+function precisionCalendarDateKey(date) {
+  var y = date.getFullYear();
+  var m = String(date.getMonth() + 1).padStart(2, '0');
+  var d = String(date.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + d;
+}
+
+function precisionCalendarDateFromKey(key) {
+  var parts = String(key || '').split('-').map(Number);
+  return parts.length === 3 && parts.every(Number.isFinite) ? new Date(parts[0], parts[1] - 1, parts[2]) : null;
+}
+
+function precisionCalendarDateIndex() {
+  var index = {};
+  (window.precisionSessionCalendarEntries || []).forEach(function(entry) {
+    var time = precisionSessionEntryTime(entry);
+    if (!Number.isFinite(time)) return;
+    var key = precisionCalendarDateKey(new Date(time));
+    index[key] = (index[key] || 0) + 1;
+  });
+  return index;
+}
+
+function renderPrecisionSessionCalendar() {
+  var calendar = document.getElementById('precisionSessionCalendar');
+  var label = document.getElementById('precisionSessionCalendarLabel');
+  if (!calendar || !label) return;
+  var state = window.precisionSessionCalendarState || (window.precisionSessionCalendarState = { anchor: new Date(), start: '', end: '' });
+  var anchor = new Date(state.anchor.getFullYear(), state.anchor.getMonth(), 1);
+  state.anchor = anchor;
+  label.textContent = anchor.getFullYear() + '年' + (anchor.getMonth() + 1) + '月';
+  var firstDay = new Date(anchor.getFullYear(), anchor.getMonth(), 1).getDay();
+  var days = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate();
+  var index = precisionCalendarDateIndex();
+  var today = precisionCalendarDateKey(new Date());
+  var html = ['<span class="precision-session-calendar-weekday">日</span><span class="precision-session-calendar-weekday">一</span><span class="precision-session-calendar-weekday">二</span><span class="precision-session-calendar-weekday">三</span><span class="precision-session-calendar-weekday">四</span><span class="precision-session-calendar-weekday">五</span><span class="precision-session-calendar-weekday">六</span>'];
+  for (var i = 0; i < firstDay; i += 1) html.push('<span class="precision-session-calendar-day is-placeholder" aria-hidden="true"></span>');
+  for (var day = 1; day <= days; day += 1) {
+    var date = new Date(anchor.getFullYear(), anchor.getMonth(), day);
+    var key = precisionCalendarDateKey(date);
+    var has = !!index[key];
+    var selected = state.start && key >= state.start && (!state.end || key <= state.end);
+    var classes = 'precision-session-calendar-day' + (has ? ' has-results' : ' is-empty') + (selected ? ' selected' : '') + (key === today ? ' today' : '');
+    html.push('<button type="button" class="' + classes + '" data-date="' + key + '" aria-pressed="' + (selected ? 'true' : 'false') + '" onclick="selectPrecisionSessionCalendarDate(\'' + key + '\')"><span>' + day + '</span>' + (has ? '<small>' + index[key] + '</small>' : '') + '</button>');
+  }
+  calendar.innerHTML = html.join('');
+}
+
+function updatePrecisionSessionDateSummary() {
+  var summary = document.getElementById('precisionSessionDateSummary');
+  var from = document.getElementById('precisionSessionDateFrom');
+  var to = document.getElementById('precisionSessionDateTo');
+  if (!summary) return;
+  if (!from || !to || (!from.value && !to.value)) summary.textContent = '日期筛选';
+  else if (from.value && to.value && from.value !== to.value) summary.textContent = from.value + ' 至 ' + to.value;
+  else summary.textContent = from && from.value ? from.value : to.value;
+}
+
+function togglePrecisionSessionDatePopover(force) {
+  var popover = document.getElementById('precisionSessionDatePopover');
+  var trigger = document.getElementById('precisionSessionDateToggle');
+  if (!popover || !trigger) return;
+  var open = typeof force === 'boolean' ? force : popover.hidden;
+  popover.hidden = !open;
+  trigger.setAttribute('aria-expanded', String(open));
+  if (open) {
+    if (!window.precisionSessionCalendarState) window.precisionSessionCalendarState = { anchor: new Date(), start: '', end: '' };
+    renderPrecisionSessionCalendar();
+  }
+}
+
+function shiftPrecisionSessionCalendar(offset) {
+  var state = window.precisionSessionCalendarState || (window.precisionSessionCalendarState = { anchor: new Date(), start: '', end: '' });
+  state.anchor = new Date(state.anchor.getFullYear(), state.anchor.getMonth() + Number(offset || 0), 1);
+  renderPrecisionSessionCalendar();
+}
+
+function setPrecisionSessionDateRange(range) {
+  var end = new Date();
+  var start = new Date(end);
+  if (range === '3d' || range === '5d') start.setDate(start.getDate() - (range === '3d' ? 2 : 4));
+  else if (range === 'week') { start.setDate(end.getDate() - end.getDay()); }
+  else if (range === 'month') { start = new Date(end.getFullYear(), end.getMonth(), 1); }
+  else if (range === 'quarter') { start = new Date(end.getFullYear(), Math.floor(end.getMonth() / 3) * 3, 1); }
+  else if (range === 'half-year') { start = new Date(end.getFullYear(), end.getMonth() < 6 ? 0 : 6, 1); }
+  else if (range === 'year') { start = new Date(end.getFullYear(), 0, 1); }
+  else return;
+  var from = document.getElementById('precisionSessionDateFrom');
+  var to = document.getElementById('precisionSessionDateTo');
+  if (from) from.value = precisionCalendarDateKey(start);
+  if (to) to.value = precisionCalendarDateKey(end);
+  var state = window.precisionSessionCalendarState || (window.precisionSessionCalendarState = { anchor: new Date(), start: '', end: '' });
+  state.start = from ? from.value : '';
+  state.end = to ? to.value : '';
+  applyPrecisionSessionDateFilter();
+  updatePrecisionSessionDateSummary();
+  renderPrecisionSessionCalendar();
+}
+
+function selectPrecisionSessionCalendarDate(key) {
+  var state = window.precisionSessionCalendarState || (window.precisionSessionCalendarState = { anchor: new Date(), start: '', end: '' });
+  if (!state.start || state.end) { state.start = key; state.end = ''; }
+  else if (key < state.start) { state.end = state.start; state.start = key; }
+  else state.end = key;
+  var from = document.getElementById('precisionSessionDateFrom');
+  var to = document.getElementById('precisionSessionDateTo');
+  if (from) from.value = state.start;
+  if (to) to.value = state.end;
+  applyPrecisionSessionDateFilter();
+  updatePrecisionSessionDateSummary();
+  renderPrecisionSessionCalendar();
+}
+
+function precisionSessionEntryTime(entry) {
+  if (!entry) return NaN;
+  var raw = entry.createdAt || entry.created_at || entry.timestamp || entry.created || '';
+  var time = Date.parse(raw);
+  return Number.isFinite(time) ? time : NaN;
+}
+
+function filterPrecisionSessionEntries(entries) {
+  var fromInput = document.getElementById('precisionSessionDateFrom');
+  var toInput = document.getElementById('precisionSessionDateTo');
+  var fromValue = fromInput ? fromInput.value : '';
+  var toValue = toInput ? toInput.value : '';
+  if (!fromValue && !toValue) return entries;
+  var fromTime = fromValue ? Date.parse(fromValue + 'T00:00:00') : -Infinity;
+  var toTime = toValue ? Date.parse(toValue + 'T23:59:59.999') : Infinity;
+  if (Number.isFinite(fromTime) && Number.isFinite(toTime) && fromTime > toTime) return [];
+  return entries.filter(function(entry) {
+    var time = precisionSessionEntryTime(entry);
+    return Number.isFinite(time) && time >= fromTime && time <= toTime;
+  });
+}
+
+function applyPrecisionSessionDateFilter() {
+  var state = window.precisionSessionCalendarState || (window.precisionSessionCalendarState = { anchor: new Date(), start: '', end: '' });
+  var from = document.getElementById('precisionSessionDateFrom');
+  var to = document.getElementById('precisionSessionDateTo');
+  state.start = from ? from.value : '';
+  state.end = to ? to.value : '';
+  updatePrecisionSessionDateSummary();
+  renderPrecisionEditSession();
+}
+
+function clearPrecisionSessionDateFilter() {
+  var fromInput = document.getElementById('precisionSessionDateFrom');
+  var toInput = document.getElementById('precisionSessionDateTo');
+  if (fromInput) fromInput.value = '';
+  if (toInput) toInput.value = '';
+  var state = window.precisionSessionCalendarState || (window.precisionSessionCalendarState = { anchor: new Date(), start: '', end: '' });
+  state.start = '';
+  state.end = '';
+  renderPrecisionEditSession();
+  updatePrecisionSessionDateSummary();
+}
+
+document.addEventListener('click', function(event) {
+  var wrap = document.querySelector('.precision-session-date-filter');
+  if (wrap && !wrap.contains(event.target)) togglePrecisionSessionDatePopover(false);
+});
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape') togglePrecisionSessionDatePopover(false);
+});
 
 function selectPrecisionVersion(id) {
   var entries = [precisionEditSession.source].concat(precisionEditSession.versions);
@@ -3386,10 +4066,31 @@ function updatePrecisionCompareSlider(value) {
 }
 
 function togglePrecisionCompareFullscreen() {
-  var panel = document.getElementById('precisionCanvasShell');
+  var panel = document.getElementById('panelPrecisionEdit');
   if (!panel) return;
-  if (document.fullscreenElement) document.exitFullscreen();
+  if (document.fullscreenElement === panel) document.exitFullscreen();
+  else if (document.fullscreenElement) document.exitFullscreen();
   else if (panel.requestFullscreen) panel.requestFullscreen();
+}
+
+function syncPrecisionFullscreenState() {
+  var panel = document.getElementById('panelPrecisionEdit');
+  var button = document.getElementById('btnPrecisionFullscreen');
+  if (!button) return false;
+  var active = !!(panel && document.fullscreenElement === panel);
+  var labelKey = active ? 'creator.precision_exit_fullscreen_label' : 'creator.precision_fullscreen_label';
+  var tooltipKey = active ? 'creator.precision_exit_fullscreen_tooltip' : 'creator.precision_fullscreen_tooltip';
+  button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  button.setAttribute('aria-label', i18nText(labelKey));
+  button.setAttribute('title', i18nText(tooltipKey));
+  button.dataset.i18nAriaLabel = labelKey;
+  button.dataset.i18nTitle = tooltipKey;
+  var label = button.querySelector('[data-i18n]');
+  if (label) {
+    label.dataset.i18n = active ? 'creator.precision_exit_fullscreen_label' : 'creator.precision_fullscreen';
+    label.textContent = i18nText(label.dataset.i18n);
+  }
+  return active;
 }
 
 function syncPrecisionResizeInputsToSource() {
@@ -3399,8 +4100,81 @@ function syncPrecisionResizeInputsToSource() {
   if (width && precisionEditSourceWidth) width.value = String(precisionEditSourceWidth);
   if (height && precisionEditSourceHeight) height.value = String(precisionEditSourceHeight);
   if (preset) preset.value = 'custom';
+  if (typeof syncPrecisionResizeTierRatioFromSize === 'function') {
+    syncPrecisionResizeTierRatioFromSize(precisionEditSourceWidth && precisionEditSourceHeight
+      ? precisionEditSourceWidth + 'x' + precisionEditSourceHeight : '');
+  }
   updatePrecisionResizePresetControls();
   syncPrecisionAspectRatioHint();
+}
+
+function precisionSelectionFeatherValue() {
+  var input = document.getElementById('precisionSelectionFeather');
+  var value = input ? Number(input.value) : Number(typeof precisionSelectionFeather === 'number' ? precisionSelectionFeather : 0);
+  if (!Number.isFinite(value)) value = 0;
+  return Math.max(0, Math.min(64, Math.round(value)));
+}
+
+function precisionEditStrategyValue() {
+  return typeof precisionEditStrategy === 'string' && ['fine', 'standard', 'fast'].indexOf(precisionEditStrategy) !== -1
+    ? precisionEditStrategy : 'standard';
+}
+
+function precisionEditSelectionModeValue() {
+  return typeof precisionEditSelectionMode === 'string' && precisionEditSelectionMode === 'local'
+    ? 'local' : 'annotation';
+}
+
+function setPrecisionEditStrategy(strategy) {
+  precisionEditStrategy = ['fine', 'standard', 'fast'].indexOf(strategy) !== -1 ? strategy : 'standard';
+  [
+    ['fine', 'btnPrecisionStrategyFine'],
+    ['standard', 'btnPrecisionStrategyStandard'],
+    ['fast', 'btnPrecisionStrategyFast']
+  ].forEach(function(pair) {
+    var button = document.getElementById(pair[1]);
+    if (!button) return;
+    var active = precisionEditStrategy === pair[0];
+    button.classList.toggle('btn-secondary', active);
+    button.classList.toggle('btn-ghost', !active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  updatePrecisionEditControls();
+  return precisionEditStrategy;
+}
+
+function setPrecisionEditSelectionMode(mode) {
+  precisionEditSelectionMode = mode === 'local' ? 'local' : 'annotation';
+  [
+    ['annotation', 'btnPrecisionSelectionAnnotation'],
+    ['local', 'btnPrecisionSelectionLocal']
+  ].forEach(function(pair) {
+    var button = document.getElementById(pair[1]);
+    if (!button) return;
+    var active = precisionEditSelectionMode === pair[0];
+    button.classList.toggle('btn-secondary', active);
+    button.classList.toggle('btn-ghost', !active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  var control = document.getElementById('precisionSelectionFeatherControl');
+  var input = document.getElementById('precisionSelectionFeather');
+  var active = precisionEditSelectionMode === 'local';
+  if (control) control.classList.toggle('hidden', !active);
+  if (input) {
+    input.disabled = !active;
+    input.value = String(precisionSelectionFeatherValue());
+  }
+  var output = document.getElementById('precisionSelectionFeatherValue');
+  if (output) output.textContent = String(precisionSelectionFeatherValue());
+  updatePrecisionEditControls();
+  return precisionEditSelectionMode;
+}
+
+function updatePrecisionSelectionFeather() {
+  precisionSelectionFeather = precisionSelectionFeatherValue();
+  var output = document.getElementById('precisionSelectionFeatherValue');
+  if (output) output.textContent = String(precisionSelectionFeather);
+  updatePrecisionEditControls();
 }
 
 function setPrecisionSizeMode(mode) {
@@ -3437,6 +4211,7 @@ function applyPrecisionResizePreset(value) {
   var height = document.getElementById('precisionResizeHeight');
   if (width) width.value = parts[0];
   if (height) height.value = parts[1];
+  if (typeof syncPrecisionResizeTierRatioFromSize === 'function') syncPrecisionResizeTierRatioFromSize(size);
   syncPrecisionAspectRatioHint();
   updatePrecisionEditControls();
 }
@@ -3471,7 +4246,11 @@ function applyPrecisionResizePromptPreset(key) {
 
 function markPrecisionResizeCustom() {
   var preset = document.getElementById('precisionResizePreset');
+  var tier = document.getElementById('precisionResizeTier');
+  var ratio = document.getElementById('precisionResizeRatio');
   if (preset) preset.value = 'custom';
+  if (tier) tier.value = 'custom';
+  if (ratio) ratio.value = 'custom';
   updatePrecisionResizePresetControls();
   syncPrecisionAspectRatioHint();
   updatePrecisionEditControls();
@@ -3491,6 +4270,25 @@ function getPrecisionSizeRequest() {
     return { error: i18nText('creator.precision_size_instruction_required') };
   }
   var capability = getPrecisionResizeCapability();
+  var selectedPrecisionModel = precisionEditSelectedModel && precisionEditSelectedModel.model || '';
+  var compatibilityProfile = typeof PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE === 'string'
+    ? PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE : 'gpt-image-2';
+  var protocolModel = selectedPrecisionModel === compatibilityProfile;
+  if (!protocolModel && capability.canonicalModel === compatibilityProfile) {
+    var declaredProtocolSizes = Object.keys(capability.sizes || {});
+    protocolModel = declaredProtocolSizes.length > 0 && declaredProtocolSizes.every(function(size) {
+      return precisionGptImage2SizeError(size) === '';
+    });
+  }
+  if (protocolModel) {
+    var protocolError = precisionGptImage2SizeError(targetSize);
+    if (protocolError) {
+      return {
+        error: i18nText('creator.precision_size_invalid'),
+        rejection: { code: protocolError, target_size: targetSize }
+      };
+    }
+  }
   if (!capability.known) {
     return {
       error: i18nText('creator.precision_size_capability_unknown', { size: targetSize }),
@@ -3556,7 +4354,9 @@ function appendPrecisionEditVersion(result, expectedGeneration) {
   if (Number.isFinite(expectedGeneration) && expectedGeneration !== precisionSourceLoadGeneration) return;
   if (!result || !result.success || !result.local_path || !precisionEditSession.source) return;
   var src = precisionLocalPathUrl(result.local_path);
-  appendPrecisionEditImageVersion(src);
+  var promptField = typeof document !== 'undefined' ? document.getElementById('txtPromptPrecision') : null;
+  var prompt = result.prompt || result.enhanced_prompt || (promptField ? promptField.value : '');
+  appendPrecisionEditImageVersion(src, null, { prompt: prompt });
 }
 
 function appendPrecisionEditImageVersion(src, parentId, metadata) {
@@ -3574,8 +4374,12 @@ function appendPrecisionEditImageVersion(src, parentId, metadata) {
     transparent: metadata.transparent === true,
     previewBackground: metadata.previewBackground === 'checkerboard' ? 'checkerboard' : '',
     operation: typeof metadata.operation === 'string' ? metadata.operation : '',
+    prompt: typeof metadata.prompt === 'string' ? metadata.prompt : '',
     remoteVersionId: typeof metadata.remoteVersionId === 'string' ? metadata.remoteVersionId : '',
+    adapter: precisionCutoutAdapterId(metadata.adapter),
+    fallbackFrom: precisionCutoutAdapterId(metadata.fallbackFrom),
     restoreMode: metadata.restoreMode === true,
+    createdAt: metadata.createdAt || metadata.created_at || metadata.timestamp || new Date().toISOString(),
     restoreMinAlpha: Number.isInteger(metadata.restoreMinAlpha) ? metadata.restoreMinAlpha : null,
     selectionApplied: metadata.selectionApplied === true,
     width: Number.isInteger(metadata.width) ? metadata.width : precisionEditSourceWidth,
@@ -3829,6 +4633,16 @@ function precisionCutoutHasSource() {
     && !!precisionEditSession.source;
 }
 
+// UI controls should only be locked while a live cutout/refine request exists.
+// A stale pending flag can survive SPA navigation or a cancelled request; the
+// abort controller is the authoritative marker that work is still in flight.
+function precisionCutoutUiBusy() {
+  return precisionCutoutPending === true
+    && (typeof precisionCutoutAbortController === 'undefined'
+      || (!!precisionCutoutAbortController
+        && (!precisionCutoutAbortController.signal || precisionCutoutAbortController.signal.aborted !== true)));
+}
+
 function precisionCutoutIsExecutable(capability) {
   return !!(capability
     && capability.contract === PRECISION_CUTOUT_CONTRACT
@@ -3836,6 +4650,205 @@ function precisionCutoutIsExecutable(capability) {
     && capability.executable === true
     && Array.isArray(capability.adapters)
     && capability.adapters.length > 0);
+}
+
+function precisionCutoutAdapterId(value) {
+  var adapterId = typeof value === 'string' ? value.trim() : '';
+  return /^[a-z0-9][a-z0-9._-]{0,127}$/.test(adapterId) ? adapterId : '';
+}
+
+function precisionCutoutAdapterText(value, fallback) {
+  var text = typeof value === 'string' ? value.trim() : '';
+  return text || fallback || '';
+}
+
+function precisionCutoutAdapterRecords(capability) {
+  if (!capability || capability.contract !== PRECISION_CUTOUT_CONTRACT) return [];
+  var records = [];
+  var seen = {};
+  var rawCapabilities = Array.isArray(capability.adapter_capabilities) ? capability.adapter_capabilities : [];
+  rawCapabilities.forEach(function(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+    var descriptor = raw.descriptor && typeof raw.descriptor === 'object' && !Array.isArray(raw.descriptor) ? raw.descriptor : {};
+    var adapterId = precisionCutoutAdapterId(raw.adapter || descriptor.adapter_id);
+    if (!adapterId || seen[adapterId]) return;
+    seen[adapterId] = true;
+    var dependencies = Array.isArray(raw.dependencies) ? raw.dependencies : (Array.isArray(descriptor.dependencies) ? descriptor.dependencies : []);
+    var resource = precisionCutoutAdapterText(raw.resource_status || descriptor.resource_status, '');
+    if (!resource && raw.needs_model === true && raw.needs_dependency === true) resource = i18nText('creator.cutout_algorithm_resources_model_dependency');
+    else if (!resource && raw.needs_model === true) resource = i18nText('creator.cutout_algorithm_resources_model');
+    else if (!resource && raw.needs_dependency === true) resource = i18nText('creator.cutout_algorithm_resources_dependency');
+    else if (!resource) resource = precisionCutoutAdapterText(raw.state, '');
+    records.push({
+      adapter: adapterId,
+      algorithm: precisionCutoutAdapterText(raw.algorithm || descriptor.algorithm, adapterId),
+      available: raw.available === true,
+      executable: raw.executable === true,
+      state: precisionCutoutAdapterText(raw.state || descriptor.status, ''),
+      source: precisionCutoutAdapterText(raw.source_page || descriptor.source_page || raw.weights_source || descriptor.weights_source, ''),
+      license: precisionCutoutAdapterText((raw.license && raw.license.name) || (descriptor.license && descriptor.license.name) || descriptor.license_name, ''),
+      licenseStatus: precisionCutoutAdapterText((raw.license && raw.license.status) || (descriptor.license && descriptor.license.status) || descriptor.license_status, ''),
+      dependencies: dependencies.filter(function(item) { return typeof item === 'string' && item.trim(); }).map(function(item) { return item.trim(); }),
+      resource: resource,
+      reason: precisionCutoutAdapterText(raw.reason || descriptor.reason, '')
+    });
+  });
+  if (!records.length && capability.available === true && capability.executable === true && Array.isArray(capability.adapters)) {
+    capability.adapters.forEach(function(adapter) {
+      var adapterId = precisionCutoutAdapterId(adapter);
+      if (!adapterId || seen[adapterId]) return;
+      seen[adapterId] = true;
+      records.push({ adapter: adapterId, algorithm: adapterId, available: true, executable: true, state: 'ready', source: '', license: '', licenseStatus: '', dependencies: [], resource: '', reason: '' });
+    });
+  }
+  return records;
+}
+
+function precisionCutoutExecutableAdapterRecords(capability) {
+  return precisionCutoutAdapterRecords(capability).filter(function(record) {
+    return record.available === true && record.executable === true;
+  });
+}
+
+function precisionCutoutSelectedAdapterRecord(capability) {
+  var executable = precisionCutoutExecutableAdapterRecords(capability);
+  var selected = precisionCutoutAdapterId(precisionCutoutSelectedAdapter);
+  return executable.find(function(record) { return record.adapter === selected; })
+    || executable.find(function(record) { return record.adapter === 'u2net-human-seg-onnx'; })
+    || executable[0]
+    || null;
+}
+
+function precisionCutoutAdapterDisplayName(record) {
+  var algorithm = precisionCutoutAdapterText(record && record.algorithm, '');
+  if (record && record.adapter === 'modnet-photographic-portrait') {
+    return algorithm + ' - ' + i18nText('creator.cutout_algorithm_modnet_lab_notice');
+  }
+  return algorithm;
+}
+
+function precisionCutoutAdapterEscaped(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function precisionCutoutAdapterFact(label, value) {
+  var content = precisionCutoutAdapterText(value, i18nText('creator.cutout_algorithm_not_reported'));
+  return '<div><dt>' + precisionCutoutAdapterEscaped(label) + '</dt><dd>' + precisionCutoutAdapterEscaped(content) + '</dd></div>';
+}
+
+function setPrecisionCutoutAdapterDetailsExpanded(expanded) {
+  var controls = getPrecisionCutoutControls();
+  var panel = controls.adapterPanel;
+  var toggle = controls.adapterDetailsToggle;
+  var details = controls.adapterDetails;
+  if (!panel || !toggle || !details) return false;
+  precisionCutoutAdapterDetailsExpanded = expanded === true;
+  panel.dataset.detailsExpanded = precisionCutoutAdapterDetailsExpanded ? 'true' : 'false';
+  toggle.setAttribute('aria-expanded', precisionCutoutAdapterDetailsExpanded ? 'true' : 'false');
+  details.classList.toggle('hidden', !precisionCutoutAdapterDetailsExpanded);
+  details.setAttribute('aria-hidden', precisionCutoutAdapterDetailsExpanded ? 'false' : 'true');
+  return precisionCutoutAdapterDetailsExpanded;
+}
+
+function togglePrecisionCutoutAdapterDetails() {
+  return setPrecisionCutoutAdapterDetailsExpanded(!precisionCutoutAdapterDetailsExpanded);
+}
+
+// Build native options explicitly when the browser DOM is available. This
+// avoids stale disabled attributes left behind by an initial capability probe
+// and keeps the accessibility tree aligned with the actual selectable state.
+function renderPrecisionCutoutAdapterOptions(select, executable) {
+  if (!select) return;
+  var unavailableLabel = precisionCutoutAdapterEscaped(i18nText('creator.cutout_algorithm_unavailable'));
+  var canCreateOption = typeof document !== 'undefined' && typeof document.createElement === 'function'
+    && typeof select.appendChild === 'function';
+  if (!canCreateOption) {
+    select.innerHTML = executable.length
+      ? executable.map(function(record) {
+        return '<option value="' + precisionCutoutAdapterEscaped(record.adapter) + '">' + precisionCutoutAdapterEscaped(precisionCutoutAdapterDisplayName(record)) + '</option>';
+      }).join('')
+      : '<option value="">' + unavailableLabel + '</option>';
+    return;
+  }
+  select.innerHTML = '';
+  if (!executable.length) {
+    var emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = i18nText('creator.cutout_algorithm_unavailable');
+    emptyOption.disabled = false;
+    select.appendChild(emptyOption);
+    return;
+  }
+  executable.forEach(function(record) {
+    var option = document.createElement('option');
+    option.value = record.adapter;
+    option.textContent = precisionCutoutAdapterDisplayName(record);
+    option.disabled = false;
+    select.appendChild(option);
+  });
+}
+
+function renderPrecisionCutoutAdapterPicker(capability) {
+  var controls = getPrecisionCutoutControls();
+  var records = precisionCutoutAdapterRecords(capability);
+  var executable = records.filter(function(record) { return record.available === true && record.executable === true; });
+  var selected = precisionCutoutSelectedAdapterRecord(capability);
+  precisionCutoutSelectedAdapter = selected ? selected.adapter : '';
+  if (controls.adapterSelect) {
+    var selectDisabled = precisionCutoutUiBusy() || !selected;
+    controls.adapterSelect.disabled = true;
+    renderPrecisionCutoutAdapterOptions(controls.adapterSelect, executable);
+    controls.adapterSelect.value = selected ? selected.adapter : '';
+    controls.adapterSelect.disabled = selectDisabled;
+  }
+  if (controls.capabilityRefreshButton) {
+    controls.capabilityRefreshButton.disabled = precisionCutoutModelMutationPending || precisionCutoutModelTaskIsActive(precisionCutoutModelTask) || precisionCutoutUiBusy();
+  }
+  if (controls.adapterStatus) {
+    controls.adapterStatus.textContent = selected
+      ? i18nText('creator.cutout_algorithm_ready', { algorithm: precisionCutoutAdapterDisplayName(selected) })
+      : i18nText('creator.cutout_algorithm_unavailable');
+    controls.adapterStatus.dataset.state = selected ? 'ready' : 'unavailable';
+  }
+  if (controls.adapterDetails) {
+    controls.adapterDetails.innerHTML = records.length ? records.map(function(record) {
+      var status = record.available === true && record.executable === true
+        ? i18nText('creator.cutout_algorithm_verified')
+        : i18nText('creator.cutout_algorithm_unverified');
+      var license = [record.license, record.licenseStatus].filter(Boolean).join(' · ');
+      return '<section class="precision-cutout-adapter-record" data-adapter="' + precisionCutoutAdapterEscaped(record.adapter) + '" data-executable="' + (record.available === true && record.executable === true ? 'true' : 'false') + '">' +
+        '<strong>' + precisionCutoutAdapterEscaped(precisionCutoutAdapterDisplayName(record)) + '</strong>' +
+        '<span class="precision-cutout-adapter-state">' + precisionCutoutAdapterEscaped(status) + '</span>' +
+        '<dl class="precision-cutout-model-facts">' +
+          precisionCutoutAdapterFact(i18nText('creator.cutout_algorithm_adapter_id'), record.adapter) +
+          precisionCutoutAdapterFact(i18nText('creator.cutout_algorithm_source'), record.source) +
+          precisionCutoutAdapterFact(i18nText('creator.cutout_algorithm_license'), license) +
+          precisionCutoutAdapterFact(i18nText('creator.cutout_algorithm_dependencies'), record.dependencies.join(', ')) +
+          precisionCutoutAdapterFact(i18nText('creator.cutout_algorithm_resources'), record.resource || record.reason || record.state) +
+        '</dl></section>';
+    }).join('') : '<p class="precision-cutout-adapter-empty">' + precisionCutoutAdapterEscaped(i18nText('creator.cutout_algorithm_details_empty')) + '</p>';
+  }
+  setPrecisionCutoutAdapterDetailsExpanded(precisionCutoutAdapterDetailsExpanded);
+  return selected;
+}
+
+function setPrecisionCutoutSelectedAdapter(adapterId) {
+  var normalized = precisionCutoutAdapterId(adapterId);
+  var selectable = precisionCutoutExecutableAdapterRecords(precisionCutoutCapability).find(function(record) {
+    return record.adapter === normalized;
+  });
+  if (!selectable) {
+    renderPrecisionCutoutAdapterPicker(precisionCutoutCapability);
+    return false;
+  }
+  precisionCutoutSelectedAdapter = selectable.adapter;
+  renderPrecisionCutoutAdapterPicker(precisionCutoutCapability);
+  return true;
 }
 
 function precisionCutoutPngData(value) {
@@ -3978,13 +4991,17 @@ function setPrecisionCutoutModelDetailsExpanded(expanded, remember) {
   }
   panel.dataset.detailsExpanded = nextExpanded ? 'true' : 'false';
   toggle.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+  var affordance = toggle.querySelector && toggle.querySelector('.precision-cutout-model-toggle');
+  if (affordance) affordance.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
   details.classList.toggle('hidden', !nextExpanded);
   details.setAttribute('aria-hidden', nextExpanded ? 'false' : 'true');
   return nextExpanded;
 }
 
 function syncPrecisionCutoutModelDetails(state) {
-  var expanded = state !== 'ready' || precisionCutoutModelDetailsPreference === true;
+  // Keep the installer compact by default; users can expand details on demand.
+  // A remembered preference is respected across status refreshes.
+  var expanded = precisionCutoutModelDetailsPreference === true;
   return setPrecisionCutoutModelDetailsExpanded(expanded, false);
 }
 
@@ -3993,7 +5010,6 @@ function togglePrecisionCutoutModelDetails() {
   var panel = controls.modelPanel;
   var toggle = controls.modelDetailsToggle;
   if (!panel || !toggle) return false;
-  if (panel.dataset.state !== 'ready') return setPrecisionCutoutModelDetailsExpanded(true, false);
   return setPrecisionCutoutModelDetailsExpanded(toggle.getAttribute('aria-expanded') !== 'true', true);
 }
 
@@ -4073,6 +5089,7 @@ function stopPrecisionCutoutModelPolling(invalidate) {
 function disablePrecisionCutoutForModel() {
   precisionCutoutProbeToken += 1;
   precisionCutoutCapability = null;
+  if (typeof renderPrecisionCutoutAdapterPicker === 'function') renderPrecisionCutoutAdapterPicker(null);
   if (!precisionCutoutPending) setPrecisionCutoutUi('creator.cutout_unconfigured_clear', 'unavailable');
 }
 
@@ -4121,7 +5138,7 @@ function monitorPrecisionCutoutModelTask(task) {
 function refreshPrecisionCutoutModelStatus() {
   var refreshToken = ++precisionCutoutModelRefreshToken;
   renderPrecisionCutoutModelInstaller(precisionCutoutModel, precisionCutoutModelTask, 'checking');
-  return _authFetch('/api/image-tools/cutout/model').then(readPrecisionCutoutResponse).then(function(result) {
+  return _authFetch('/api/image-tools/cutout/model', { cache: 'no-store' }).then(readPrecisionCutoutResponse).then(function(result) {
     if (refreshToken !== precisionCutoutModelRefreshToken) return false;
     if (!result.ok) throw precisionCutoutResponseError(result);
     var model = precisionCutoutModelRecord(result.data);
@@ -4150,6 +5167,19 @@ function refreshPrecisionCutoutModelStatus() {
     disablePrecisionCutoutForModel();
     renderPrecisionCutoutModelInstaller(precisionCutoutModel, null, 'error');
     return false;
+  });
+}
+
+// A failed model-status refresh must not strand the capability UI in a
+// permanent checking state. The capability endpoint is independently
+// authoritative for whether a local cutout request may be enabled.
+function refreshPrecisionCutoutSetup() {
+  if (precisionCutoutModelMutationPending || precisionCutoutModelTaskIsActive(precisionCutoutModelTask) || precisionCutoutUiBusy()) return Promise.resolve(false);
+  return refreshPrecisionCutoutModelStatus().then(function(refreshed) {
+    if (refreshed) return true;
+    return updatePrecisionCutoutAvailability().then(function(capability) {
+      return precisionCutoutIsExecutable(capability);
+    });
   });
 }
 
@@ -4289,12 +5319,12 @@ function updatePrecisionCutoutRefineControls() {
   var restoreEnabled = !!(controls.restoreMode && controls.restoreMode.checked);
   if (controls.featherValue) controls.featherValue.value = controls.featherValue.textContent = radius === null ? '0' : String(radius);
   if (controls.restoreMode) {
-    controls.restoreMode.disabled = precisionCutoutPending || !restoreReady;
+    controls.restoreMode.disabled = precisionCutoutUiBusy() || !restoreReady;
     if (!restoreReady) controls.restoreMode.checked = false;
     restoreEnabled = !!controls.restoreMode.checked;
   }
   if (controls.useSelection) {
-    controls.useSelection.disabled = precisionCutoutPending || selectionCount === 0 || restoreEnabled;
+    controls.useSelection.disabled = precisionCutoutUiBusy() || selectionCount === 0 || restoreEnabled;
     if (!selectionCount) controls.useSelection.checked = false;
     else if (restoreEnabled) controls.useSelection.checked = true;
   }
@@ -4304,7 +5334,7 @@ function updatePrecisionCutoutRefineControls() {
     controls.restoreMinAlphaValue.value = controls.restoreMinAlphaValue.textContent = restoreAlphaText;
   }
   if (controls.restoreMinAlpha) {
-    controls.restoreMinAlpha.disabled = precisionCutoutPending || !restoreReady || !restoreEnabled;
+    controls.restoreMinAlpha.disabled = precisionCutoutUiBusy() || !restoreReady || !restoreEnabled;
   }
   if (controls.restoreHint) {
     var restoreHintKey = !transparentVersion ? 'creator.cutout_restore_source_required' : selectionCount === 0 ? 'creator.cutout_restore_selection_empty' : 'creator.cutout_restore_hint';
@@ -4325,8 +5355,8 @@ function updatePrecisionCutoutRefineControls() {
   }
   var selectionReady = restoreEnabled ? selectionCount > 0 : !(controls.useSelection && controls.useSelection.checked) || selectionCount > 0;
   if (controls.refineButton) {
-    controls.refineButton.disabled = precisionCutoutPending || !transparentVersion || radius === null || !selectionReady || (restoreEnabled && restoreMinAlpha === null);
-    controls.refineButton.setAttribute('aria-busy', precisionCutoutPending ? 'true' : 'false');
+    controls.refineButton.disabled = precisionCutoutUiBusy() || !transparentVersion || radius === null || !selectionReady || (restoreEnabled && restoreMinAlpha === null);
+    controls.refineButton.setAttribute('aria-busy', precisionCutoutUiBusy() ? 'true' : 'false');
   }
   if (controls.cancelButton) {
     controls.cancelButton.classList.toggle('hidden', !precisionCutoutPending);
@@ -4334,20 +5364,20 @@ function updatePrecisionCutoutRefineControls() {
   }
 }
 
-function setPrecisionCutoutUi(key, state) {
+function setPrecisionCutoutUi(key, state, values) {
   var controls = getPrecisionCutoutControls();
   var button = controls.button;
   var status = controls.status;
   if (!button || !status) return;
-  status.textContent = i18nText(key);
+  status.textContent = i18nText(key, values || {});
   status.dataset.key = key;
   status.dataset.state = state || 'idle';
   status.classList.toggle('is-processing', state === 'checking' || state === 'processing');
   status.classList.toggle('is-success', state === 'success');
   status.classList.toggle('is-error', state === 'busy' || state === 'timeout' || state === 'error');
   button.dataset.state = state || 'idle';
-  button.setAttribute('aria-busy', precisionCutoutPending ? 'true' : 'false');
-  button.disabled = precisionCutoutPending || !precisionCutoutHasSource() || !precisionCutoutIsExecutable(precisionCutoutCapability);
+  button.setAttribute('aria-busy', precisionCutoutUiBusy() ? 'true' : 'false');
+  button.disabled = precisionCutoutUiBusy() || !precisionCutoutHasSource() || !precisionCutoutIsExecutable(precisionCutoutCapability);
   updatePrecisionCutoutRefineControls();
 }
 
@@ -4370,23 +5400,83 @@ function precisionCutoutResponseError(result) {
 }
 
 function probePrecisionCutoutCapability(signal) {
-  var options = signal ? { signal: signal } : undefined;
-  return _authFetch('/api/image-tools/cutout/capabilities', options).then(readPrecisionCutoutResponse).then(function(result) {
+  // Capabilities change when local model files are installed or updated. Do
+  // not let the browser reuse an older one-algorithm response.
+  var options = { cache: 'no-store' };
+  var timeoutMs = Number(typeof PRECISION_CUTOUT_CAPABILITY_TIMEOUT_MS === 'number' ? PRECISION_CUTOUT_CAPABILITY_TIMEOUT_MS : 15000);
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) timeoutMs = 15000;
+  var requestController = null;
+  var requestSignal = signal || null;
+  var detachAbortForwarder = null;
+  // Compose a caller abort signal with the local timeout when the browser
+  // supports abort events. Older test shims may only expose `aborted`; in
+  // that case preserve the caller signal and still fail closed on timeout.
+  if (typeof AbortController === 'function' && (!signal || typeof signal.addEventListener === 'function')) {
+    requestController = new AbortController();
+    requestSignal = requestController.signal;
+    if (signal) {
+      var forwardAbort = function() {
+        try { requestController.abort(); } catch (ignore) {}
+      };
+      if (signal.aborted === true) forwardAbort();
+      else if (typeof signal.addEventListener === 'function') {
+        signal.addEventListener('abort', forwardAbort);
+        detachAbortForwarder = function() {
+          if (typeof signal.removeEventListener === 'function') signal.removeEventListener('abort', forwardAbort);
+        };
+      }
+    }
+  } else if (signal) {
+    requestSignal = signal;
+  } else if (typeof AbortController === 'function') {
+    requestController = new AbortController();
+    requestSignal = requestController.signal;
+  }
+  if (requestSignal) options.signal = requestSignal;
+  var timeoutId = null;
+  var request = Promise.resolve().then(function() {
+    return _authFetch('/api/image-tools/cutout/capabilities', options);
+  }).then(readPrecisionCutoutResponse).then(function(result) {
     if (!result.ok && !(result.data && result.data.available === false)) throw precisionCutoutResponseError(result);
     return result.data;
+  });
+  var timeout = new Promise(function(resolve, reject) {
+    timeoutId = setTimeout(function() {
+      if (requestController) {
+        try { requestController.abort(); } catch (ignore) {}
+      }
+      var error = new Error('cutout capability probe timed out');
+      error.code = 'cutout_timeout';
+      reject(error);
+    }, timeoutMs);
+  });
+  return Promise.race([request, timeout]).then(function(result) {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+    if (detachAbortForwarder) detachAbortForwarder();
+    return result;
+  }, function(error) {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+    if (detachAbortForwarder) detachAbortForwarder();
+    throw error;
   });
 }
 
 function updatePrecisionCutoutAvailability() {
   var probeToken = ++precisionCutoutProbeToken;
   var sourceGeneration = precisionSourceLoadGeneration;
+  if (precisionCutoutAvailabilityAbortController) {
+    try { precisionCutoutAvailabilityAbortController.abort(); } catch (ignore) {}
+  }
+  var availabilityAbortController = typeof AbortController === 'function' ? new AbortController() : null;
+  precisionCutoutAvailabilityAbortController = availabilityAbortController;
   if (!precisionCutoutPending) {
     precisionCutoutCapability = null;
     setPrecisionCutoutUi('creator.cutout_checking', 'checking');
   }
-  return probePrecisionCutoutCapability().then(function(capability) {
+  return probePrecisionCutoutCapability(availabilityAbortController && availabilityAbortController.signal).then(function(capability) {
     if (sourceGeneration !== precisionSourceLoadGeneration || probeToken !== precisionCutoutProbeToken) return capability;
     precisionCutoutCapability = capability;
+    renderPrecisionCutoutAdapterPicker(capability);
     if (precisionCutoutPending) return capability;
     if (!precisionCutoutIsExecutable(capability)) {
       setPrecisionCutoutUi('creator.cutout_unconfigured_clear', 'unavailable');
@@ -4399,8 +5489,11 @@ function updatePrecisionCutoutAvailability() {
   }).catch(function(error) {
     if (sourceGeneration !== precisionSourceLoadGeneration || probeToken !== precisionCutoutProbeToken) return null;
     precisionCutoutCapability = null;
+    renderPrecisionCutoutAdapterPicker(null);
     if (!precisionCutoutPending) setPrecisionCutoutUi('creator.cutout_check_failed', 'error');
     return null;
+  }).finally(function() {
+    if (precisionCutoutAvailabilityAbortController === availabilityAbortController) precisionCutoutAvailabilityAbortController = null;
   });
 }
 
@@ -4412,6 +5505,10 @@ function precisionCutoutResultSource(result, expectedWidth, expectedHeight) {
       || result.source_preserved !== true
       || result.transparent !== true
       || result.preview_background !== 'checkerboard') return '';
+  var adapter = precisionCutoutAdapterId(result.adapter);
+  var fallbackFrom = result.fallback_from == null ? '' : precisionCutoutAdapterId(result.fallback_from);
+  if (!adapter || (result.fallback_from != null && !fallbackFrom) || (fallbackFrom && fallbackFrom === adapter)) return '';
+  if (Array.isArray(result.adapters) && result.adapters.indexOf(adapter) === -1) return '';
   var width = Number(result.width);
   var height = Number(result.height);
   if (!Number.isInteger(width) || !Number.isInteger(height) || width !== expectedWidth || height !== expectedHeight) return '';
@@ -4427,6 +5524,8 @@ function appendPrecisionCutoutVersion(result, expectedWidth, expectedHeight, par
     transparent: true,
     previewBackground: 'checkerboard',
     operation: 'cutout',
+    adapter: result.adapter,
+    fallbackFrom: result.fallback_from,
     width: expectedWidth,
     height: expectedHeight
   }) === true : false;
@@ -4452,7 +5551,8 @@ function startPrecisionCutout() {
   return probePrecisionCutoutCapability(abortController && abortController.signal).then(function(capability) {
     if (operationToken !== precisionCutoutOperationToken || requestGeneration !== precisionSourceLoadGeneration) return null;
     precisionCutoutCapability = capability;
-    if (!precisionCutoutIsExecutable(capability)) {
+    var selectedAdapter = renderPrecisionCutoutAdapterPicker(capability);
+    if (!selectedAdapter || !precisionCutoutIsExecutable(capability)) {
       setPrecisionCutoutUi('creator.cutout_unconfigured_clear', 'unavailable');
       return null;
     }
@@ -4460,7 +5560,12 @@ function startPrecisionCutout() {
     return _authFetch('/api/image-tools/cutout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contract: PRECISION_CUTOUT_CONTRACT, image_data: requestSource }),
+      body: JSON.stringify({
+        contract: PRECISION_CUTOUT_CONTRACT,
+        image_data: requestSource,
+        adapter: selectedAdapter.adapter,
+        algorithm: selectedAdapter.algorithm
+      }),
       signal: abortController && abortController.signal
     }).then(readPrecisionCutoutResponse).then(function(result) {
       if (operationToken !== precisionCutoutOperationToken || requestGeneration !== precisionSourceLoadGeneration) return null;
@@ -4478,8 +5583,12 @@ function startPrecisionCutout() {
       setPrecisionCutoutUi('creator.cutout_result_invalid', 'error');
       return false;
     }
-    setPrecisionCutoutUi('creator.cutout_completed', 'success');
-    setStatus(i18nText('creator.cutout_completed'));
+    var actualAdapter = precisionCutoutAdapterId(result.adapter);
+    var fallbackFrom = result.fallback_from == null ? '' : precisionCutoutAdapterId(result.fallback_from);
+    var completionKey = fallbackFrom ? 'creator.cutout_completed_fallback' : 'creator.cutout_completed';
+    var completionValues = fallbackFrom ? { adapter: actualAdapter, requested: fallbackFrom } : {};
+    setPrecisionCutoutUi(completionKey, 'success', completionValues);
+    setStatus(i18nText(completionKey, completionValues));
     return true;
   }).catch(function(error) {
     if (operationToken !== precisionCutoutOperationToken || requestGeneration !== precisionSourceLoadGeneration) return false;
@@ -4728,12 +5837,23 @@ function clearPrecisionEdit() {
 
 function getPrecisionEditReadiness() {
   if (!precisionEditSourceImageData) return { ready: false, message: i18nText('creator.precision_source_required') };
+  var selectionMode = typeof precisionEditSelectionMode === 'string' && precisionEditSelectionMode === 'local'
+    ? 'local' : 'annotation';
+  var hasLocalSelection = precisionEditObjects.some(function(object) {
+    return object && ['rect', 'ellipse', 'brush'].indexOf(object.type) !== -1;
+  });
   if (!precisionEditObjects.length) {
+    if (selectionMode === 'local') {
+      return { ready: false, message: i18nText('creator.precision_selection_local_required') };
+    }
     if (precisionEditSizeMode !== 'resize') return { ready: false, message: i18nText('creator.precision_annotation_required') };
     if (!selectedProviders.length) return { ready: false, message: i18nText('creator.model_required') };
     var pureResize = getPrecisionSizeRequest();
     if (pureResize.error) return { ready: false, message: pureResize.error };
     return { ready: true, pureResize: true, message: i18nText('creator.precision_pure_resize_ready') };
+  }
+  if (selectionMode === 'local' && !hasLocalSelection) {
+    return { ready: false, message: i18nText('creator.precision_selection_local_required') };
   }
   if (precisionEditObjects.some(function(object) { return object.type !== 'text' && !precisionEditObjectInstruction(object); })) return { ready: false, message: i18nText('creator.precision_instruction_required') };
   if (!selectedProviders.length) return { ready: false, message: i18nText('creator.model_required') };
@@ -4974,6 +6094,10 @@ function unbindPrecisionModelVisibilityDismiss() {
   if (typeof window !== 'undefined' && window.removeEventListener) {
     window.removeEventListener('resize', positionPrecisionModelVisibilityMenu, true);
     window.removeEventListener('scroll', positionPrecisionModelVisibilityMenu, true);
+    if (window.visualViewport && window.visualViewport.removeEventListener) {
+      window.visualViewport.removeEventListener('resize', positionPrecisionModelVisibilityMenu);
+      window.visualViewport.removeEventListener('scroll', positionPrecisionModelVisibilityMenu);
+    }
   }
 }
 
@@ -5029,29 +6153,35 @@ function positionPrecisionModelVisibilityMenu() {
   var menu = document.getElementById('precisionModelVisibilityMenu');
   var trigger = panel && panel.querySelector ? panel.querySelector('[data-precision-model-visibility-toggle]') : null;
   if (!menu || !trigger || !trigger.getBoundingClientRect || typeof window === 'undefined') return false;
-  var margin = 12;
-  var viewportWidth = Math.max(0, window.innerWidth || document.documentElement && document.documentElement.clientWidth || 0);
-  var viewportHeight = Math.max(0, window.innerHeight || document.documentElement && document.documentElement.clientHeight || 0);
+  var visualViewport = window.visualViewport;
+  var viewportWidth = Math.max(0, visualViewport && visualViewport.width || window.innerWidth || document.documentElement && document.documentElement.clientWidth || 0);
+  var viewportHeight = Math.max(0, visualViewport && visualViewport.height || window.innerHeight || document.documentElement && document.documentElement.clientHeight || 0);
   if (!viewportWidth || !viewportHeight) return false;
+  var viewportLeft = Math.max(0, visualViewport && visualViewport.offsetLeft || 0);
+  var viewportTop = Math.max(0, visualViewport && visualViewport.offsetTop || 0);
+  var margin = Math.min(12, Math.floor(viewportWidth / 4), Math.floor(viewportHeight / 4));
   var triggerRect = trigger.getBoundingClientRect();
-  var width = Math.min(420, Math.max(280, viewportWidth - (margin * 2)));
-  var anchorRight = Math.min(viewportWidth - margin, Math.max(margin + width, triggerRect.right));
-  var left = Math.min(Math.max(margin, anchorRight - width), Math.max(margin, viewportWidth - margin - width));
-  var belowTop = Math.max(margin, triggerRect.bottom + 6);
-  var belowSpace = viewportHeight - belowTop - margin;
-  var aboveSpace = triggerRect.top - margin - 6;
+  var width = Math.max(1, Math.min(420, viewportWidth - (margin * 2)));
+  var viewportRight = viewportLeft + viewportWidth;
+  var viewportBottom = viewportTop + viewportHeight;
+  var anchorRight = Math.min(viewportRight - margin, Math.max(viewportLeft + margin + width, triggerRect.right));
+  var left = Math.min(Math.max(viewportLeft + margin, anchorRight - width), Math.max(viewportLeft + margin, viewportRight - margin - width));
+  var belowTop = Math.max(viewportTop + margin, triggerRect.bottom + 6);
+  var belowSpace = viewportBottom - belowTop - margin;
+  var aboveSpace = triggerRect.top - viewportTop - margin - 6;
   var useAbove = belowSpace < 220 && aboveSpace > belowSpace;
   var viewportAvailableHeight = Math.max(0, viewportHeight - (margin * 2));
   var preferredSpace = Math.max(0, useAbove ? aboveSpace : belowSpace);
-  var maxHeight = Math.min(420, viewportAvailableHeight, Math.max(120, preferredSpace));
+  var maxHeight = Math.max(1, Math.min(420, viewportAvailableHeight, Math.max(96, preferredSpace)));
   var top = useAbove ? triggerRect.top - 6 - maxHeight : belowTop;
-  top = Math.min(Math.max(margin, top), Math.max(margin, viewportHeight - margin - maxHeight));
+  top = Math.min(Math.max(viewportTop + margin, top), Math.max(viewportTop + margin, viewportBottom - margin - maxHeight));
   menu.style.left = Math.round(left) + 'px';
   menu.style.right = 'auto';
   menu.style.top = Math.round(top) + 'px';
   menu.style.bottom = 'auto';
   menu.style.width = Math.round(width) + 'px';
   menu.style.maxHeight = Math.round(maxHeight) + 'px';
+  menu.style.boxSizing = 'border-box';
   return true;
 }
 
@@ -5098,6 +6228,10 @@ function openPrecisionModelVisibilityMenu(providerId) {
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('resize', positionPrecisionModelVisibilityMenu, true);
     window.addEventListener('scroll', positionPrecisionModelVisibilityMenu, true);
+    if (window.visualViewport && window.visualViewport.addEventListener) {
+      window.visualViewport.addEventListener('resize', positionPrecisionModelVisibilityMenu);
+      window.visualViewport.addEventListener('scroll', positionPrecisionModelVisibilityMenu);
+    }
   }
   return true;
 }
@@ -6751,6 +7885,12 @@ function applyPrecisionEditPayload(payload, context) {
   context = context || {};
   payload.operation = 'precision_edit';
   payload.image_data = context.imageData;
+  payload.precision_strategy = ['fine', 'standard', 'fast'].indexOf(context.strategy) !== -1 ? context.strategy : 'standard';
+  payload.precision_selection_mode = context.selectionMode === 'local' ? 'local' : 'annotation';
+  if (payload.precision_selection_mode === 'local') {
+    var feather = Number(context.selectionFeather);
+    payload.precision_selection_feather = Number.isFinite(feather) ? Math.max(0, Math.min(64, Math.round(feather))) : 0;
+  }
   payload.precision_size_mode = context.sizeMode === 'resize' ? 'resize' : 'preserve';
   if (payload.precision_size_mode === 'resize') {
     payload.precision_target_size = context.targetSize;
@@ -6845,6 +7985,9 @@ function retryProvider(key, realPid) {
     delete payload.size;
     applyPrecisionEditPayload(payload, {
       imageData: lastGenContext.image_data,
+      strategy: lastGenContext.precision_strategy,
+      selectionMode: lastGenContext.precision_selection_mode,
+      selectionFeather: lastGenContext.precision_selection_feather,
       sizeMode: lastGenContext.precision_size_mode,
       targetSize: lastGenContext.precision_target_size,
       resizePrompt: lastGenContext.precision_resize_prompt,
@@ -7544,6 +8687,9 @@ function doGenerate() {
     // overlay; pure resize submits only the explicit resize envelope.
     applyPrecisionEditPayload(payload, {
       imageData: precisionEditSourceImageData,
+      strategy: precisionEditStrategy,
+      selectionMode: precisionEditSelectionMode,
+      selectionFeather: precisionSelectionFeather,
       sizeMode: precisionSizeRequest.mode,
       targetSize: precisionSizeRequest.targetSize,
       resizePrompt: precisionSizeRequest.prompt,
@@ -7587,6 +8733,9 @@ function doGenerate() {
     precision_target_size: currentMode === 'precision_edit' && precisionSizeRequest ? precisionSizeRequest.targetSize || null : null,
     precision_resize_prompt: currentMode === 'precision_edit' && precisionSizeRequest ? precisionSizeRequest.prompt || null : null,
     precision_output_size_policy: currentMode === 'precision_edit' && precisionSizeRequest && precisionSizeRequest.mode === 'resize' ? precisionSizeRequest.outputSizePolicy : null,
+    precision_strategy: currentMode === 'precision_edit' ? precisionEditStrategy : null,
+    precision_selection_mode: currentMode === 'precision_edit' ? precisionEditSelectionMode : null,
+    precision_selection_feather: currentMode === 'precision_edit' && precisionEditSelectionMode === 'local' ? precisionSelectionFeather : null,
     provider_settings: currentMode === 'precision_edit' && precisionEditSelectedModel.providerId
       ? (function() { var settings = {}; settings[precisionEditSelectedModel.providerId] = { model: precisionEditSelectedModel.model }; return settings; })() : {},
     strength: parseFloat(document.getElementById('selStrength').value || '0.55'),
@@ -7822,7 +8971,9 @@ function openLightbox(src, label, prompt) {
   var info = document.getElementById('lightbox-info');
   var promptBox = document.getElementById('lightbox-prompt-box');
   var promptEl = document.getElementById('lightbox-prompt');
+  var promptChunks = document.getElementById('lightbox-prompt-chunks');
   if (lb && img) {
+    bindLightboxImageFullscreen();
     // 重置：显示图片，隐藏视频
     img.classList.remove('hidden', 'zoomed');
     if (video) { video.classList.add('hidden'); video.pause(); video.src = ''; }
@@ -7837,6 +8988,12 @@ function openLightbox(src, label, prompt) {
     // 显示提示词
     lightboxCurrentPrompt = prompt || '';
     if (promptEl) promptEl.textContent = prompt || '';
+    if (promptChunks) {
+      var chunks = splitDisplayPrompt(prompt || '');
+      promptChunks.innerHTML = chunks.map(function(chunk, index) {
+        return '<div class="lightbox-prompt-chunk"><b>' + (index + 1) + '</b> ' + escHtml(chunk) + '</div>';
+      }).join('');
+    }
     if (promptBox) promptBox.style.display = prompt ? 'block' : 'none';
     var lbLabel = promptBox ? promptBox.querySelector('.lb-prompt-label') : null;
     if (lbLabel) lbLabel.textContent = i18nText('lightbox.image_prompt');
@@ -7898,6 +9055,217 @@ function sendToPrecisionEdit(e) {
     });
   return true;
 }
+
+function splitDisplayPrompt(value, size) {
+  var text = String(value || '').trim();
+  var chunkSize = Number(size) || 280;
+  if (!text) return [];
+  var chunks = [];
+  for (var index = 0; index < text.length; index += chunkSize) chunks.push(text.slice(index, index + chunkSize));
+  return chunks;
+}
+
+function toggleLightboxImageFullscreen(event) {
+  if (event && event.stopPropagation) event.stopPropagation();
+  var img = document.getElementById('lightbox-img');
+  if (!img || img.classList.contains('hidden') || !img.src) return false;
+  var overlay = document.getElementById('precisionImageFullscreen');
+  var target = document.getElementById('precisionImageFullscreenImg');
+  if (!overlay || !target) return false;
+  if (!overlay.classList.contains('hidden')) { closePrecisionImageFullscreen(); return true; }
+  overlay._precisionReturnFocus = document.activeElement && typeof document.activeElement.focus === 'function' ? document.activeElement : img;
+  target.src = img.src;
+  target.alt = img.alt || '';
+  overlay.dataset.zoom = '1';
+  target.style.transform = 'scale(1)';
+  overlay.classList.remove('hidden');
+  overlay.classList.add('show');
+  renderPrecisionImageFullscreenPrompts({
+    label: img.alt || '',
+    prompt: lightboxCurrentPrompt || ''
+  });
+  document.body.classList.add('precision-image-viewing');
+  bindPrecisionImageFullscreenLifecycle();
+  if (typeof overlay.focus === 'function') overlay.focus();
+  return true;
+}
+
+function bindLightboxImageFullscreen() {
+  var img = document.getElementById('lightbox-img');
+  if (!img || img.dataset.precisionFullscreenBound === 'true') return;
+  img.dataset.precisionFullscreenBound = 'true';
+  img.addEventListener('dblclick', function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleLightboxImageFullscreen(event);
+  });
+}
+
+function precisionImageFullscreenPromptEntries(options) {
+  options = options || {};
+  var sessionEntries = Array.isArray(options.sessionEntries)
+    ? options.sessionEntries.filter(function(entry) { return entry && typeof entry === 'object'; })
+    : [];
+  if (!sessionEntries.length && String(options.prompt || '').trim()) {
+    sessionEntries = [{
+      id: 'current',
+      label: options.label || '',
+      prompt: String(options.prompt || ''),
+      createdAt: new Date().toISOString()
+    }];
+  }
+  return sessionEntries.map(function(entry, index) {
+    var prompt = String(entry.prompt || '').trim();
+    var operation = String(entry.operation || '').trim();
+    var text = prompt || (operation ? '操作：' + operation + '（此版本未记录文字提示词）' : '此版本未记录文字提示词');
+    return {
+      id: String(entry.id || ('entry-' + index)),
+      title: index === 0 ? '原图提示词' : '改图 ' + index + ' 提示词',
+      prompt: text,
+      rawPrompt: prompt,
+      createdAt: entry.createdAt || entry.created_at || entry.timestamp || '',
+      current: String(entry.id || ('entry-' + index)) === String(options.currentId || '')
+    };
+  });
+}
+
+function renderPrecisionImageFullscreenPrompts(options) {
+  var overlay = document.getElementById('precisionImageFullscreen');
+  var panel = document.getElementById('precisionImageFullscreenPromptPanel');
+  var history = document.getElementById('precisionImageFullscreenPromptHistory');
+  var caption = document.getElementById('precisionImageFullscreenCaption');
+  if (!overlay || !panel || !history) return [];
+  options = options || {};
+  if (caption) caption.textContent = String(options.label || '');
+  var entries = precisionImageFullscreenPromptEntries(options);
+  overlay._precisionPromptEntries = entries;
+  overlay._precisionPromptText = entries.map(function(entry) {
+    return entry.title + '\n' + entry.prompt;
+  }).join('\n\n');
+  panel.classList.toggle('hidden', entries.length === 0);
+  history.innerHTML = entries.map(function(entry) {
+    var chunks = splitDisplayPrompt(entry.prompt, 220);
+    var createdAt = entry.createdAt ? new Date(entry.createdAt) : null;
+    var timeLabel = createdAt && Number.isFinite(createdAt.getTime()) ? ' · ' + createdAt.toLocaleString() : '';
+    return '<section class="precision-image-fullscreen-prompt-entry' + (entry.current ? ' selected' : '') + '">' +
+      '<div class="precision-image-fullscreen-prompt-title"><strong>' + escHtml(entry.title) + '</strong><span>' + escHtml(timeLabel) + '</span></div>' +
+      '<div class="precision-image-fullscreen-prompt-chunks">' + chunks.map(function(chunk, index) {
+        return '<div class="precision-image-fullscreen-prompt-chunk"><b>' + (index + 1) + '</b> ' + escHtml(chunk) + '</div>';
+      }).join('') + '</div></section>';
+  }).join('');
+  return entries;
+}
+
+function copyPrecisionImageFullscreenPrompt(event) {
+  if (event && event.stopPropagation) event.stopPropagation();
+  var overlay = document.getElementById('precisionImageFullscreen');
+  var text = overlay && String(overlay._precisionPromptText || '').trim();
+  if (!text) return false;
+  var copied = false;
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    navigator.clipboard.writeText(text).then(function() { setStatus(i18nText('lightbox.prompt_copied')); }).catch(function() {});
+    copied = true;
+  }
+  if (!copied && document.execCommand) {
+    var input = document.createElement('textarea');
+    input.value = text;
+    input.setAttribute('readonly', '');
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    input.select();
+    try { copied = document.execCommand('copy'); } catch (error) { copied = false; }
+    input.remove();
+    if (copied) setStatus(i18nText('lightbox.prompt_copied'));
+  }
+  return copied;
+}
+
+function openPrecisionImageFullscreen(src, label, options) {
+  var overlay = document.getElementById('precisionImageFullscreen');
+  var target = document.getElementById('precisionImageFullscreenImg');
+  if (!overlay || !target || !src) return false;
+  options = options || {};
+  overlay._precisionReturnFocus = document.activeElement && typeof document.activeElement.focus === 'function' ? document.activeElement : null;
+  target.src = src;
+  target.alt = label || '';
+  options.label = label || options.label || '';
+  renderPrecisionImageFullscreenPrompts(options);
+  overlay.classList.remove('hidden');
+  overlay.classList.add('show');
+  document.body.classList.add('precision-image-viewing');
+  overlay.dataset.zoom = '1';
+  target.style.transform = 'scale(1)';
+  bindPrecisionImageFullscreenLifecycle();
+  if (typeof overlay.focus === 'function') overlay.focus();
+  return true;
+}
+
+function bindPrecisionImageFullscreenLifecycle() {
+  var overlay = document.getElementById('precisionImageFullscreen');
+  if (!overlay || overlay.dataset.precisionLifecycleBound === 'true') return;
+  overlay.dataset.precisionLifecycleBound = 'true';
+  overlay.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closePrecisionImageFullscreen();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    var controls = Array.prototype.slice.call(overlay.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(function(node) { return !node.disabled && !node.hidden; });
+    if (!controls.length) { event.preventDefault(); overlay.focus(); return; }
+    var first = controls[0], last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  });
+}
+
+function closePrecisionImageFullscreen() {
+  var overlay = document.getElementById('precisionImageFullscreen');
+  var target = document.getElementById('precisionImageFullscreenImg');
+  var restore = overlay && overlay._precisionReturnFocus;
+  if (target) { target.removeAttribute('src'); target.style.transform = 'scale(1)'; }
+  var caption = document.getElementById('precisionImageFullscreenCaption');
+  var history = document.getElementById('precisionImageFullscreenPromptHistory');
+  var panel = document.getElementById('precisionImageFullscreenPromptPanel');
+  if (caption) caption.textContent = '';
+  if (history) history.textContent = '';
+  if (panel) panel.classList.add('hidden');
+  if (overlay) { overlay.classList.add('hidden'); overlay.classList.remove('show'); overlay.dataset.zoom = '1'; overlay._precisionReturnFocus = null; }
+  if (overlay) { overlay._precisionPromptEntries = []; overlay._precisionPromptText = ''; }
+  document.body.classList.remove('precision-image-viewing');
+  if (restore && typeof restore.focus === 'function') restore.focus();
+}
+
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape') {
+    var overlay = document.getElementById('precisionImageFullscreen');
+    if (overlay && !overlay.classList.contains('hidden')) { event.preventDefault(); closePrecisionImageFullscreen(); }
+  }
+});
+
+document.addEventListener('wheel', function(event) {
+  var overlay = document.getElementById('precisionImageFullscreen');
+  var target = document.getElementById('precisionImageFullscreenImg');
+  if (!overlay || overlay.classList.contains('hidden') || !target) return;
+  if (event.target !== target && !(event.target && event.target.closest && event.target.closest('.precision-image-fullscreen-figure'))) return;
+  event.preventDefault();
+  var zoom = Number(overlay.dataset.zoom || 1);
+  zoom = Math.max(0.5, Math.min(4, zoom + (event.deltaY < 0 ? 0.1 : -0.1)));
+  overlay.dataset.zoom = String(zoom);
+  target.style.transform = 'scale(' + zoom + ')';
+}, { passive: false });
+
+document.addEventListener('mousedown', function(event) {
+  var overlay = document.getElementById('precisionImageFullscreen');
+  var target = document.getElementById('precisionImageFullscreenImg');
+  if (!overlay || overlay.classList.contains('hidden') || !target || event.button !== 1) return;
+  if (event.target !== target && !(event.target && event.target.closest && event.target.closest('.precision-image-fullscreen-figure'))) return;
+  event.preventDefault();
+  overlay.dataset.zoom = '1';
+  target.style.transform = 'scale(1)';
+});
 
 function sendToVideo(e) {
   e.stopPropagation();
@@ -10900,6 +12268,7 @@ function mountCreatorGenerateAction(mode){
 }
 
 function openPrecisionGalleryPicker(){
+  if (typeof closePrecisionDocsDialog === 'function') closePrecisionDocsDialog(false);
   var hadDirty=precisionEditSourceImageData&&precisionSourceHasDirtyState();
   if(!preparePrecisionSourceReplacement())return false;
   var requestGeneration=++precisionSourceLoadGeneration;
@@ -10950,7 +12319,9 @@ function openPrecisionGalleryPicker(){
         if(requestGeneration!==precisionSourceLoadGeneration||precisionSourceTaskIsActive())return;
         if(!hadDirty&&precisionEditSourceImageData&&precisionSourceHasDirtyState()&&!preparePrecisionSourceReplacement())return;
         setCreatorWorkbenchMode('image','precision');
-        loadPrecisionEditSourceImage(item.data,item.prompt||'',{generation:requestGeneration,onLoaded:function(){setStatus(i18nText('creator.precision_edit_gallery_loaded'));}});
+        var source = item.data || item.gallery_url || item.url || item.src || '';
+        if (!source) return;
+        loadPrecisionEditSourceImage(source,item.prompt||'',{generation:requestGeneration,onLoaded:function(){setStatus(i18nText('creator.precision_edit_gallery_loaded'));}});
         overlay.remove();
       };
       grid.appendChild(button);
@@ -11215,6 +12586,9 @@ function setUiLanguage(language){
     applyWorkspace(localStorage.getItem('igs_workspace_mode')||'full');
     initializeCreatorWorkbenches();
     initializeImageWorkbenchLayout();
+    // Render the session gallery's empty state before an image is loaded so the
+    // reserved lower area communicates its purpose instead of appearing blank.
+    renderPrecisionSessionShowcase([]);
     initializeDockAutoHide();
     initializeAppRouting();
     try {

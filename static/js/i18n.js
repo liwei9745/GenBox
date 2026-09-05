@@ -170,6 +170,18 @@
     "creator.precision_edit_instruction":{"zh-CN":"修改说明","en":"Edit instruction"},
     "creator.precision_edit_instruction_placeholder":{"zh-CN":"例如：把箭头指向的杯子改成透明玻璃杯，其他内容保持不变。","en":"For example: replace the cup indicated by the arrow with a clear glass cup and keep everything else unchanged."},
     "creator.precision_edit_guidance":{"zh-CN":"批注负责指出位置，修改说明负责告诉模型怎么改；未标注区域应尽量保持不变。","en":"Annotations identify the location; the instruction explains the change. Unmarked areas should remain unchanged where possible."},
+    "creator.precision_guidance_title":{"zh-CN":"改图策略","en":"Edit controls"},
+    "creator.precision_guidance_hint":{"zh-CN":"策略影响模型处理重点；局部选区是模型指导，不是已验证的像素遮罩。","en":"The strategy changes the model's focus. A local selection is model guidance, not a verified pixel mask."},
+    "creator.precision_strategy":{"zh-CN":"处理策略","en":"Processing strategy"},
+    "creator.precision_strategy_fine":{"zh-CN":"精细","en":"Fine"},
+    "creator.precision_strategy_standard":{"zh-CN":"标准","en":"Standard"},
+    "creator.precision_strategy_fast":{"zh-CN":"快速","en":"Fast"},
+    "creator.precision_selection_mode":{"zh-CN":"选区语义","en":"Selection meaning"},
+    "creator.precision_selection_annotation":{"zh-CN":"批注编辑","en":"Annotation edit"},
+    "creator.precision_selection_local":{"zh-CN":"局部选区","en":"Local selection"},
+    "creator.precision_selection_feather":{"zh-CN":"选区羽化","en":"Selection feather"},
+    "creator.precision_selection_local_required":{"zh-CN":"局部选区模式需要至少一个矩形、椭圆或画笔选区。","en":"Local selection mode needs at least one rectangle, ellipse, or brush selection."},
+    "creator.precision_selection_feather_hint":{"zh-CN":"羽化只作为局部选区边缘的模型指导，范围为 0 到 64px。","en":"Feather guides the local selection edge only and is limited to 0–64px."},
     "creator.precision_edit_annotation_preview":{"zh-CN":"批注图预览","en":"Annotated image preview"},
     "creator.precision_edit_preview_empty":{"zh-CN":"添加批注后，这里会显示提交给模型的批注图。","en":"The annotated image sent to the model will appear here after you add annotations."},
     "creator.precision_edit_model_notice":{"zh-CN":"需要支持图片编辑和参考图理解的模型","en":"Requires a model that supports image editing and reference-image understanding"},
@@ -1954,10 +1966,42 @@
   MESSAGES['creator.precision_docs_text_body'] = {"zh-CN":"文字工具单击画布添加文字；切到“选择/移动”后可拖动移动，双击已有文字可再次编辑，选中后可调整字号和颜色。","en":"With the text tool, click once on the canvas to add text. Switch to Select/Move to drag it, double-click existing text to edit it again, and adjust font size or color while it is selected."};
   MESSAGES['creator.precision_docs_cutout_title'] = {"zh-CN":"抠图、羽化与选区","en":"Cutout, feather, and selection"};
   MESSAGES['creator.precision_docs_cutout_body'] = {"zh-CN":"一键抠图会追加真实透明 PNG 版本。选择透明版本后可用 0–64 px 羽化精修 alpha 边缘；勾选“仅精修画布选区”时，画笔、矩形或椭圆会作为局部选区。棋盘格只用于预览，不会改变文件透明度。","en":"One-click cutout appends a real transparent PNG version. After selecting a transparent version, use 0-64 px feathering to refine the alpha edge; when Refine canvas selection only is enabled, brush, rectangle, and ellipse marks become the local selection. The checkerboard is preview-only and does not change file transparency."};
+  MESSAGES['creator.cutout_algorithm_label'] = {"zh-CN":"抠图算法","en":"Cutout algorithm"};
+  MESSAGES['creator.cutout_algorithm_checking'] = {"zh-CN":"正在检查已验证算法…","en":"Checking verified algorithms..."};
+  MESSAGES['creator.cutout_capability_refresh'] = {"zh-CN":"重新检查","en":"Recheck"};
+  MESSAGES['creator.cutout_capability_refresh_tooltip'] = {"zh-CN":"重新检查本地模型和算法能力","en":"Recheck local model and algorithm capability"};
+  MESSAGES['creator.cutout_algorithm_details'] = {"zh-CN":"候选详情","en":"Candidate details"};
+  MESSAGES['creator.cutout_algorithm_ready'] = {"zh-CN":"已选择已验证算法：{algorithm}","en":"Verified algorithm selected: {algorithm}"};
+  MESSAGES['creator.cutout_algorithm_unavailable'] = {"zh-CN":"当前没有已验证且可执行的抠图算法。","en":"No verified executable cutout algorithm is available."};
+  MESSAGES['creator.cutout_algorithm_verified'] = {"zh-CN":"已验证且可执行","en":"Verified and executable"};
+  MESSAGES['creator.cutout_algorithm_unverified'] = {"zh-CN":"未验证，只读展示","en":"Unverified, read-only"};
+  MESSAGES['creator.cutout_algorithm_modnet_lab_notice'] = {"zh-CN":"本地实验室（实验性）：人像优化，复杂背景可能误抠","en":"Local lab (experimental): optimized for portraits; complex backgrounds may be cut incorrectly"};
+  MESSAGES['creator.cutout_algorithm_adapter_id'] = {"zh-CN":"规范 ID","en":"Canonical ID"};
+  MESSAGES['creator.cutout_algorithm_source'] = {"zh-CN":"来源","en":"Source"};
+  MESSAGES['creator.cutout_algorithm_license'] = {"zh-CN":"许可证","en":"License"};
+  MESSAGES['creator.cutout_algorithm_dependencies'] = {"zh-CN":"依赖","en":"Dependencies"};
+  MESSAGES['creator.cutout_algorithm_resources'] = {"zh-CN":"资源状态","en":"Resource status"};
+  MESSAGES['creator.cutout_algorithm_resources_model'] = {"zh-CN":"缺少已验证权重","en":"Verified weights missing"};
+  MESSAGES['creator.cutout_algorithm_resources_dependency'] = {"zh-CN":"缺少已验证运行依赖","en":"Verified runtime dependency missing"};
+  MESSAGES['creator.cutout_algorithm_resources_model_dependency'] = {"zh-CN":"缺少已验证权重和运行依赖","en":"Verified weights and runtime dependencies missing"};
+  MESSAGES['creator.cutout_algorithm_not_reported'] = {"zh-CN":"未报告","en":"Not reported"};
+  MESSAGES['creator.cutout_algorithm_details_empty'] = {"zh-CN":"后端尚未报告算法候选详情。","en":"The backend has not reported algorithm candidate details."};
+  MESSAGES['creator.precision_docs_cutout_model_title'] = {"zh-CN":"本地人物抠图模型","en":"Local person-cutout model"};
+  MESSAGES['creator.precision_docs_cutout_model_purpose'] = {"zh-CN":"该 ONNX 模型只在本机进行人物分割，为“一键抠出人物”生成透明背景；它不是精准改图 Provider，也不会把图片发送给模型下载站。","en":"This ONNX model performs person segmentation locally to create a transparent background for One-click person cutout. It is not a precise-edit provider and does not send your image to the model download site."};
+  MESSAGES['creator.precision_docs_cutout_model_links_label'] = {"zh-CN":"模型资料链接","en":"Model reference links"};
+  MESSAGES['creator.precision_docs_cutout_model_project_guide'] = {"zh-CN":"GenBox 手动安装与校验指南","en":"GenBox manual installation and verification guide"};
+  MESSAGES['creator.precision_docs_cutout_model_upstream'] = {"zh-CN":"rembg 上游模型发布页","en":"rembg upstream model release"};
+  MESSAGES['creator.precision_docs_cutout_model_official'] = {"zh-CN":"U²-Net 官方项目","en":"Official U²-Net project"};
+  MESSAGES['creator.precision_docs_cutout_model_step_download'] = {"zh-CN":"从上游发布页手动下载文件 u2net_human_seg.onnx。","en":"Manually download u2net_human_seg.onnx from the upstream release page."};
+  MESSAGES['creator.precision_docs_cutout_model_step_place'] = {"zh-CN":"在 GenBox 数据目录下创建对应文件夹，并把文件放到所有系统统一的相对位置：","en":"Create the folders under the GenBox data directory and place the file at the same relative location on every system:"};
+  MESSAGES['creator.precision_docs_cutout_model_step_verify'] = {"zh-CN":"返回工作台刷新状态；只有文件校验和本地运行能力探测都通过后，一键抠图才会启用。","en":"Return to the workbench and refresh the status. One-click cutout is enabled only after file verification and the local runtime capability probe both pass."};
+  MESSAGES['creator.precision_docs_cutout_model_boundary'] = {"zh-CN":"当前自动下载未启用。模型转换链、训练数据来源、授权与商业使用权利尚未由 GenBox 验证；下载或使用前请自行阅读上游资料并确认适用于你的场景。","en":"Automated download is currently disabled. GenBox has not verified the model conversion chain, training-data provenance, license, or commercial-use rights. Review the upstream materials and confirm suitability for your use before downloading or using it."};
   MESSAGES['creator.precision_docs_resize_title'] = {"zh-CN":"纯尺寸扩图","en":"Pure size expansion"};
   MESSAGES['creator.precision_docs_resize_body'] = {"zh-CN":"无需批注也可开启“改变尺寸”，填写目标宽高和构图说明后提交。请求只携带底图、目标尺寸与构图说明；模型必须明确声明支持该尺寸。","en":"You can submit without annotations by enabling Change size, then entering target dimensions and composition guidance. The request carries only the base image, target size, and guidance; the model must explicitly declare support for that size."};
   MESSAGES['creator.precision_docs_versions_title'] = {"zh-CN":"版本与对比","en":"Versions and comparison"};
   MESSAGES['creator.precision_docs_versions_body'] = {"zh-CN":"版本栏只切换浏览结果，不会自动替换底图。“修改前”显示当前版本的父版本，“修改后”显示所选版本，“对比”可拖动分隔线。只有“设为下一次底图”会改变后续编辑基准。","en":"The version rail only browses results and never replaces the base image automatically. Before shows the current version parent, After shows the selected version, and Compare exposes a draggable divider. Only Use as next base changes the base for later edits."};
+  MESSAGES['creator.precision_docs_fullscreen_title'] = {"zh-CN":"全屏与节点编辑","en":"Fullscreen and node editing"};
+  MESSAGES['creator.precision_docs_fullscreen_body'] = {"zh-CN":"双击主画布可进入或退出完整工作台全屏，也可使用“全屏”按钮；按 Esc 可退出。选择已有标注后拖动控制节点可调整形状和箭头端点，双击文字可再次编辑。","en":"Double-click the main canvas to enter or leave full-workbench fullscreen, or use the Fullscreen button; press Escape to exit. Select an annotation and drag its control nodes to adjust shapes or arrow endpoints, and double-click text to edit it again."};
   MESSAGES['creator.precision_docs_models_title'] = {"zh-CN":"模型筛选","en":"Model filtering"};
   MESSAGES['creator.precision_docs_models_body'] = {"zh-CN":"显示模型菜单只控制列表可见性并保存在本机；取消会还原打开前选择。提交始终使用真实模型 ID；精准改图能力与尺寸能力必须由端点明确声明或由你确认，别名仅通过显式配置或你确认的受限兼容映射继承合约。","en":"The displayed-model menu only controls local list visibility; Cancel restores the selection from before opening. Submissions always use the real model ID; precise-edit and size capabilities must be endpoint-declared or explicitly confirmed, and aliases inherit a contract only through explicit configuration or a limited compatibility mapping you confirm."};
   MESSAGES['creator.precision_replace_image'] = {"zh-CN":"更换图片","en":"Replace image"};
@@ -1968,6 +2012,8 @@
   MESSAGES['creator.precision_config_docs_short'] = {"zh-CN":"配置说明","en":"Config guide"};
   MESSAGES['creator.precision_display_mode'] = {"zh-CN":"显示模式","en":"Display mode"};
   MESSAGES['creator.precision_manual_edit'] = {"zh-CN":"手动编辑","en":"Manual editing"};
+  MESSAGES['creator.precision_shapes'] = {"zh-CN":"形状","en":"Shapes"};
+  MESSAGES['creator.precision_history'] = {"zh-CN":"历史","en":"History"};
   MESSAGES['creator.precision_edit_annotation_group'] = {"zh-CN":"批注类型","en":"Annotation type"};
   MESSAGES['creator.precision_edit_style_group'] = {"zh-CN":"批注样式","en":"Annotation style"};
   MESSAGES['creator.precision_edit_history_group'] = {"zh-CN":"批注历史","en":"Annotation history"};
@@ -1980,6 +2026,11 @@
   MESSAGES['creator.precision_edit_file_required'] = {"zh-CN":"请选择图片文件。","en":"Choose an image file."};
   MESSAGES['creator.precision_original'] = {"zh-CN":"原","en":"Original"};
   MESSAGES['creator.precision_versions'] = {"zh-CN":"版本","en":"Versions"};
+  MESSAGES['creator.precision_session_results'] = {"zh-CN":"当前会话结果","en":"Current session results"};
+  MESSAGES['creator.precision_session_empty'] = {"zh-CN":"提交改图后，结果会显示在精准改图图库中。","en":"Submit an edit to see the result in the Precision Edit gallery."};
+  MESSAGES['creator.precision_session_date_from'] = {"zh-CN":"从","en":"From"};
+  MESSAGES['creator.precision_session_date_to'] = {"zh-CN":"至","en":"To"};
+  MESSAGES['creator.precision_session_date_clear'] = {"zh-CN":"清除","en":"Clear"};
   MESSAGES['creator.precision_use_as_base'] = {"zh-CN":"设为下一次底图","en":"Use as next base"};
   MESSAGES['creator.precision_base_updated'] = {"zh-CN":"已明确设为下一次修改底图。","en":"Set as the base for the next edit."};
   MESSAGES['creator.precision_before'] = {"zh-CN":"修改前","en":"Before"};
@@ -1988,6 +2039,15 @@
   MESSAGES['creator.precision_version_view'] = {"zh-CN":"版本视图","en":"Version view"};
   MESSAGES['creator.precision_compare_slider'] = {"zh-CN":"对比滑块","en":"Comparison slider"};
   MESSAGES['creator.precision_fullscreen'] = {"zh-CN":"全屏","en":"Fullscreen"};
+  MESSAGES['creator.precision_fullscreen_label'] = {"zh-CN":"全屏工作台","en":"Fullscreen workbench"};
+  MESSAGES['creator.precision_fullscreen_tooltip'] = {"zh-CN":"全屏工作台（也可双击画布）","en":"Fullscreen workbench (or double-click the canvas)"};
+  MESSAGES['creator.precision_exit_fullscreen_label'] = {"zh-CN":"退出全屏工作台","en":"Exit fullscreen workbench"};
+  MESSAGES['creator.precision_exit_fullscreen_tooltip'] = {"zh-CN":"退出全屏（也可双击画布或按 Esc）","en":"Exit fullscreen (or double-click the canvas or press Escape)"};
+  MESSAGES['creator.precision_fullscreen_double_click'] = {"zh-CN":"双击画布切换全屏","en":"Double-click the canvas to toggle fullscreen"};
+  MESSAGES['creator.precision_fullscreen_hint'] = {"zh-CN":"全屏会显示完整工作台；再次双击画布、按 Esc 或使用全屏按钮可退出。","en":"Fullscreen shows the complete workbench. Double-click the canvas again, press Escape, or use the Fullscreen button to exit."};
+  MESSAGES['creator.precision_canvas_interaction_hint'] = {"zh-CN":"选择标注后可拖动控制节点调整形状或箭头端点；双击文字重新编辑，双击画布切换全屏。","en":"After selecting an annotation, drag control nodes to adjust shapes or arrow endpoints. Double-click text to edit it again, or double-click the canvas to toggle fullscreen."};
+  MESSAGES['creator.precision_canvas_resize_label'] = {"zh-CN":"调整画布显示大小","en":"Resize the canvas display"};
+  MESSAGES['creator.precision_canvas_resize_tooltip'] = {"zh-CN":"拖动或使用左右方向键调整画布显示大小","en":"Drag or use the Left and Right arrow keys to resize the canvas display"};
   MESSAGES['creator.precision_version_shortcuts'] = {"zh-CN":"版本快捷栏","en":"Version shortcuts"};
   MESSAGES['creator.precision_subject_actions'] = {"zh-CN":"主体处理","en":"Subject processing"};
   MESSAGES['creator.precision_size_title'] = {"zh-CN":"画布尺寸","en":"Canvas size"};
@@ -1996,6 +2056,8 @@
   MESSAGES['creator.precision_size_preserve_hint'] = {"zh-CN":"默认保持原图尺寸和比例，不会套用文生图设置。","en":"Keeps the source dimensions and aspect ratio by default; text-to-image settings are not reused."};
   MESSAGES['creator.precision_size_resize_active_hint'] = {"zh-CN":"已开启改变尺寸；GenBox 会发送所选像素尺寸，后端会由尺寸推导构图比例约束。","en":"Size change is enabled. GenBox sends the selected pixel size; the backend derives the aspect-ratio composition constraint from it."};
   MESSAGES['creator.precision_size_preset'] = {"zh-CN":"常用尺寸","en":"Common sizes"};
+  MESSAGES['creator.precision_size_tier'] = {"zh-CN":"输出档位","en":"Output tier"};
+  MESSAGES['creator.precision_size_ratio'] = {"zh-CN":"构图比例","en":"Aspect ratio"};
   MESSAGES['creator.precision_size_custom'] = {"zh-CN":"自定义","en":"Custom"};
   MESSAGES['creator.precision_size_preset_name'] = {"zh-CN":"预设名称","en":"Preset name"};
   MESSAGES['creator.precision_size_preset_name_placeholder'] = {"zh-CN":"例如：横版封面","en":"For example: Landscape cover"};
@@ -2108,6 +2170,7 @@
   MESSAGES['creator.cutout_result_invalid'] = {"zh-CN":"本地抠图结果未通过验证，未添加新版本。","en":"The cutout result did not pass validation. No new version was added."};
   MESSAGES['creator.cutout_source_changed'] = {"zh-CN":"抠图期间底图已更换，结果未添加到当前会话。","en":"The base image changed during cutout, so the result was not added to the current session."};
   MESSAGES['creator.cutout_completed'] = {"zh-CN":"抠图完成，已添加为可浏览的新版本。","en":"Cutout complete. A new browseable version was added."};
+  MESSAGES['creator.cutout_completed_fallback'] = {"zh-CN":"抠图完成，已使用 {adapter}；原请求算法 {requested} 失败后已按边界回退。","en":"Cutout complete using {adapter}; the requested algorithm {requested} failed and a bounded fallback was used."};
   MESSAGES['creator.cutout'] = {"zh-CN":"一键抠图","en":"Background removal"};
   MESSAGES['creator.cutout_hint'] = {"zh-CN":"仅在已配置抠图组件时可用。","en":"Available only when a cutout component is configured."};
   MESSAGES['creator.cutout_start'] = {"zh-CN":"开始抠图","en":"Start cutout"};
@@ -2141,6 +2204,10 @@
   MESSAGES['creator.cutout_model_checking'] = {"zh-CN":"正在检查模型状态…","en":"Checking model status…"};
   MESSAGES['creator.cutout_model_source'] = {"zh-CN":"来源","en":"Source"};
   MESSAGES['creator.cutout_model_size'] = {"zh-CN":"大小","en":"Size"};
+  MESSAGES['creator.cutout_model_verification'] = {"zh-CN":"校验","en":"Verification"};
+  MESSAGES['creator.cutout_model_verification_value'] = {"zh-CN":"文件大小、SHA-256 与 MD5 双指纹","en":"File size plus SHA-256 and MD5 dual fingerprints"};
+  MESSAGES['creator.cutout_model_runtime_probe'] = {"zh-CN":"启用条件","en":"Enablement"};
+  MESSAGES['creator.cutout_model_runtime_probe_value'] = {"zh-CN":"校验通过且本地运行能力探测可执行","en":"Verification passes and the local runtime capability probe is executable"};
   MESSAGES['creator.cutout_model_path'] = {"zh-CN":"本地路径","en":"Local path"};
   MESSAGES['creator.cutout_model_size_approx'] = {"zh-CN":"约 176 MB","en":"About 176 MB"};
   MESSAGES['creator.cutout_model_size_value'] = {"zh-CN":"{size} MB","en":"{size} MB"};
@@ -2164,7 +2231,7 @@
   MESSAGES['creator.cutout_model_installing'] = {"zh-CN":"校验通过，正在原子安装模型。","en":"Verification passed; installing the model atomically."};
   MESSAGES['creator.cutout_model_hash_mismatch'] = {"zh-CN":"模型指纹不匹配，损坏文件不会启用。可删除后重新下载。","en":"The model fingerprint does not match. The damaged file will not be enabled; remove it before retrying."};
   MESSAGES['creator.cutout_model_error'] = {"zh-CN":"模型安装未完成；抠图保持不可用。可刷新状态或重试。","en":"Model installation did not complete; cutout remains unavailable. Refresh the status or retry."};
-  MESSAGES['creator.cutout_model_ready'] = {"zh-CN":"模型已通过大小与双指纹校验。正在以运行能力探测结果决定是否启用抠图。","en":"The model passed size and dual-fingerprint verification. Cutout is enabled only if the runtime capability probe is also executable."};
+  MESSAGES['creator.cutout_model_ready'] = {"zh-CN":"本地模型已就绪","en":"Local model ready"};
   MESSAGES['creator.cutout_model_install_confirm'] = {"zh-CN":"将从固定的 rembg 托管资产下载 {size} 到 {path}。\n\n模型转换链、训练数据来源及商业使用权利均为 UNVERIFIED。GenBox 会核验本地文件与固定远端资产的大小、SHA-256 和 MD5，但这不等于商业授权。\n\n确认继续下载吗？","en":"GenBox will download {size} from the fixed rembg-hosted asset to {path}.\n\nThe model conversion chain, training-data provenance, and commercial-use rights are UNVERIFIED. GenBox verifies the local file against the fixed remote asset using size, SHA-256, and MD5, but that is not a commercial license.\n\nContinue with the download?"};
   MESSAGES['creator.cutout_model_remove_corrupt_confirm'] = {"zh-CN":"确认删除 {path} 中未通过指纹校验的损坏模型文件吗？","en":"Remove the damaged model file at {path} that failed fingerprint verification?"};
   MESSAGES['creator.cutout_model_remove_retry_confirm'] = {"zh-CN":"将删除 {path} 中未通过校验的文件，然后从固定 rembg 托管资产重新下载 {size}。模型来源链和商业使用权利仍为 UNVERIFIED。确认继续吗？","en":"GenBox will remove the failed file at {path}, then download {size} again from the fixed rembg-hosted asset. The model provenance chain and commercial-use rights remain UNVERIFIED. Continue?"};

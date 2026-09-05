@@ -22,6 +22,7 @@ function extractFunction(name) {
   let depth = 0;
   let quote = '';
   let escaped = false;
+  let regex = false;
   for (let index = bodyStart; index < js.length; index += 1) {
     const char = js[index];
     if (quote) {
@@ -30,9 +31,22 @@ function extractFunction(name) {
       else if (char === quote) quote = '';
       continue;
     }
+    if (regex) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '/') regex = false;
+      continue;
+    }
     if (char === '"' || char === "'" || char === String.fromCharCode(96)) {
       quote = char;
       continue;
+    }
+    if (char === '/' && js[index + 1] !== '/' && js[index + 1] !== '*') {
+      const prefix = js.slice(bodyStart, index);
+      if (/(?:\b(?:return|throw|case)|[({[=,:;!&|?])\s*$/.test(prefix)) {
+        regex = true;
+        continue;
+      }
     }
     if (char === '{') depth += 1;
     if (char === '}' && --depth === 0) return js.slice(start, index + 1);
@@ -132,6 +146,12 @@ expect(annotationTransformSource.includes('!event.altKey') && annotationTransfor
 expect(annotationTransformSource.includes('var clampedDx = Math.max(-bounds.left, Math.min(1 - bounds.right, dx))'), 'Moving a shape must clamp its whole box without changing its dimensions.');
 expect(annotationTransformSource.includes('PRECISION_ANNOTATION_MIN_SIZE'), 'Shape resize must enforce the normalized minimum box size.');
 expect(js.includes('if (selected && precisionEditIsBoxShape(object)) drawPrecisionEditHandles'), 'Selected box shapes must draw visible corner handles.');
+expect(annotationTransformSource.includes("handles['point-' + index]"), 'Selected brush paths must expose every normalized point as a touchable control node.');
+expect(annotationTransformSource.includes('function precisionEditBrushSegmentIndex') && annotationTransformSource.includes('function beginPrecisionEditBrushNode'), 'Brush paths must support inserting a control node from a pointer hit on an existing segment.');
+expect(annotationTransformSource.includes("mode === 'node' && originObject.type === 'brush'") && annotationTransformSource.includes("selectedBrushHandle && selectedObject.points.length > 2"), 'Brush nodes must support pointer movement and eraser-driven deletion while retaining a valid path.');
+const fullscreenSource = extractFunction('syncPrecisionFullscreenState');
+expect(extractFunction('togglePrecisionCompareFullscreen').includes('document.fullscreenElement === panel') && extractFunction('togglePrecisionCompareFullscreen').includes('panel.requestFullscreen'), 'Fullscreen toggles must request only the complete precision panel.');
+expect(fullscreenSource.includes("creator.precision_exit_fullscreen_label") && fullscreenSource.includes("button.setAttribute('title'") && fullscreenSource.includes("button.setAttribute('aria-label'"), 'Fullscreen state must synchronize the button text, tooltip, and accessible label.');
 const precisionExportSource = js.slice(js.indexOf('function exportPrecisionEditAnnotationImage'), js.indexOf('function buildPrecisionEditAnnotationData'));
 expect(precisionExportSource.includes('drawPrecisionEditObject(context, object, output.width, output.height, false)'), 'Export must omit selection handles from the annotation image.');
 expect(js.includes('color: style.color, strokeWidth: style.strokeWidth'), 'New annotations must retain the selected color and line width.');
@@ -197,6 +217,9 @@ function assertPureResizePayload(payload, label, expectedPolicy = 'strict') {
   assert.equal(payload.precision_target_size, '1536x864', `${label} must retain the target size.`);
   assert.equal(payload.precision_resize_prompt, 'Extend the scene naturally.', `${label} must retain composition guidance.`);
   assert.equal(payload.precision_output_size_policy, expectedPolicy, `${label} must carry the expected output-size policy.`);
+  assert.equal(payload.precision_strategy, 'standard', `${label} must default to the standard strategy.`);
+  assert.equal(payload.precision_selection_mode, 'annotation', `${label} must default to annotation semantics.`);
+  assert.equal(Object.prototype.hasOwnProperty.call(payload, 'precision_selection_feather'), false, `${label} must not send selection feather outside local selection mode.`);
   assert.ok(!payload.precision_resize_prompt.includes('16:9 aspect ratio'), `${label} must not concatenate the aspect constraint into the prompt text.`);
   assert.equal(Object.prototype.hasOwnProperty.call(payload, 'size'), false, `${label} must not fall back to the generic size field.`);
 }
@@ -210,6 +233,8 @@ function assertAnnotatedPayload(payload, label, expectedSizeMode, expectedPolicy
   assert.equal(payload.precision_size_mode, expectedSizeMode, `${label} must preserve the expected precision size mode.`);
   assert.equal(payload.annotation_image_data, 'data:image/png;base64,YW5ub3RhdGlvbg==', `${label} must keep the annotated image.`);
   assert.equal(payload.annotation_contract, 'genbox-annotation-v3', `${label} must keep the annotation contract.`);
+  assert.equal(payload.precision_strategy, 'standard', `${label} must default to the standard strategy.`);
+  assert.equal(payload.precision_selection_mode, 'annotation', `${label} must default to annotation semantics.`);
   assert.ok(Array.isArray(payload.annotations) && payload.annotations.length === expectedAnnotations.length, `${label} must carry only the visible annotations array.`);
   expectedAnnotations.forEach((expected, index) => assertExactAnnotation(payload.annotations[index], expected, `${label} annotations[${index}]`));
   if (expectedSizeMode === 'resize') {
@@ -236,6 +261,23 @@ vm.runInContext([
   extractFunction('serializePrecisionAnnotationsForRequest'),
   extractFunction('applyPrecisionEditPayload'),
 ].join('\n'), payloadContext);
+const localPayload = JSON.parse(vm.runInContext(`
+  var localPayload = {};
+  applyPrecisionEditPayload(localPayload, {
+    imageData: 'data:image/png;base64,c291cmNl',
+    strategy: 'fine',
+    selectionMode: 'local',
+    selectionFeather: 14,
+    sizeMode: 'preserve',
+    annotationContract: 'genbox-annotation-v3',
+    annotationImageData: 'data:image/png;base64,YW5ub3RhdGlvbg==',
+    annotations: [${JSON.stringify(canonicalRectangleAnnotation)}]
+  });
+  JSON.stringify(localPayload);
+`, payloadContext));
+assert.equal(localPayload.precision_strategy, 'fine', 'Local selection payload must retain the selected strategy.');
+assert.equal(localPayload.precision_selection_mode, 'local', 'Local selection payload must retain local selection semantics.');
+assert.equal(localPayload.precision_selection_feather, 14, 'Local selection payload must retain the bounded feather value.');
 const firstPureResizePayload = JSON.parse(vm.runInContext(`
   var firstPayload = {
     prompt: 'Extend the background.',
@@ -452,7 +494,7 @@ expect(compareBinding.includes('var syncCompareSize') && compareBinding.includes
 expect(compareBinding.includes('new ResizeObserver(syncCompareSize)') && compareBinding.includes("window.addEventListener('resize', syncCompareSize)"), 'Compare layer must resync after ResizeObserver and window resize events.');
 expect(!/else\s*\{\s*window\.addEventListener\('resize', syncCompareSize\);\s*\}/.test(compareBinding), 'Window resize sync must remain active when ResizeObserver is available.');
 expect(compareSizing.includes('after.style.width = width + \'px\';') && !compareSizing.includes('after.width =') && !compareSizing.includes('after.height ='), 'Compare resync may update CSS layout width but must not change image pixel dimensions.');
-expect(js.includes("var panel = document.getElementById('precisionCanvasShell');") && !js.includes("var panel = document.getElementById('precisionSessionPanel');"), 'Fullscreen must target the reusable main canvas.');
+expect(js.includes("var panel = document.getElementById('panelPrecisionEdit');") && !js.includes("var panel = document.getElementById('precisionSessionPanel');"), 'Fullscreen must target the complete precision workbench panel.');
 expect(js.includes('preserveEditor: true') && js.includes('renderObjectList: !(options && options.preserveEditor)'), 'Per-annotation typing must not recreate the active editor.');
 expect(html.indexOf('id="precisionSessionPanel"') < html.indexOf('id="precisionCanvasShell"'), 'Version shortcuts must sit above the main canvas.');
 expect(html.indexOf('id="precisionVersionRail"') < html.indexOf('data-precision-view="before"') && html.indexOf('data-precision-view="compare"') < html.indexOf('id="btnPrecisionFullscreen"'), 'Versions, view modes, and fullscreen must share the requested order.');
@@ -879,6 +921,22 @@ visibilityPositionTrigger.getBoundingClientRect = () => ({ top: 700, bottom: 736
 expect(visibilityMenuTest.positionPrecisionModelVisibilityMenu(), 'Narrow viewport menu should still position.');
 assert.equal(visibilityPositionStyles.width, '366px', '390px menu width should be viewport minus 24px.');
 assert.equal(visibilityPositionStyles.left, '12px', '390px menu should stay within the viewport without horizontal overflow.');
+visibilityMenuContext.window.innerWidth = 280;
+visibilityMenuContext.window.innerHeight = 500;
+visibilityMenuContext.document.documentElement.clientWidth = 280;
+visibilityMenuContext.document.documentElement.clientHeight = 500;
+visibilityPositionTrigger.getBoundingClientRect = () => ({ top: 80, bottom: 116, right: 268 });
+expect(visibilityMenuTest.positionPrecisionModelVisibilityMenu(), 'Very narrow viewport menu should still position.');
+assert.equal(visibilityPositionStyles.width, '256px', 'Very narrow menus must shrink below the old 280px floor.');
+assert.equal(visibilityPositionStyles.left, '12px');
+visibilityMenuContext.window.visualViewport = { width: 320, height: 460, offsetLeft: 40, offsetTop: 90 };
+visibilityPositionTrigger.getBoundingClientRect = () => ({ top: 420, bottom: 456, right: 348 });
+expect(visibilityMenuTest.positionPrecisionModelVisibilityMenu(), 'Zoomed visual viewport menu should use visual viewport offsets.');
+assert.equal(visibilityPositionStyles.width, '296px');
+assert.equal(visibilityPositionStyles.left, '52px');
+assert.ok(parseInt(visibilityPositionStyles.top, 10) >= 102, 'Zoomed menus must remain below the visual viewport top edge.');
+assert.ok(parseInt(visibilityPositionStyles.top, 10) + parseInt(visibilityPositionStyles.maxHeight, 10) <= 538, 'Zoomed menus must remain above the visual viewport bottom edge.');
+assert.equal(visibilityPositionStyles.boxSizing, 'border-box');
 
 const resizeOptions = [
   { value: 'custom', dataset: {}, disabled: true, title: '' },
@@ -1354,6 +1412,10 @@ function createPrecisionPointerHarness(objects, tool = 'rect', selectedId = null
     function setStatus() {}
     function openPrecisionEditTextEditor(point) { globalThis.__textPoints.push({ x: point.x, y: point.y }); }
     function erasePrecisionBrushAt(point) { globalThis.__erasePoints.push({ x: point.x, y: point.y }); return true; }
+    function precisionCanvasPanRequested() { return false; }
+    function beginPrecisionCanvasPan() { return false; }
+    function continuePrecisionCanvasPan() { return false; }
+    function endPrecisionCanvasPan() { return false; }
     function i18nText(key) { return key; }
     function escAttr(value) { return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/"/g, '&quot;'); }
     function escHtml(value) { return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
@@ -1362,7 +1424,7 @@ function createPrecisionPointerHarness(objects, tool = 'rect', selectedId = null
       'capturePrecisionEditHistory', 'precisionEditObjectInstruction', 'normalizePrecisionEditObject',
       'precisionEditObjectBounds', 'precisionEditIsBoxShape', 'precisionEditIsTransformable', 'precisionEditApplyBounds', 'precisionEditPointerTolerance',
       'precisionEditShapeHit', 'findPrecisionEditShape', 'findPrecisionEditObject',
-      'precisionEditHandlePoints', 'findPrecisionEditHandle', 'beginPrecisionEditTransform',
+      'precisionEditHandlePoints', 'findPrecisionEditHandle', 'precisionEditBrushSegmentIndex', 'beginPrecisionEditBrushNode', 'beginPrecisionEditTransform',
       'precisionEditObjectById', 'beginPrecisionEditPointer', 'applyPrecisionEditPointerPoint',
       'continuePrecisionEditPointer', 'endPrecisionEditPointer', 'precisionEditObjectName',
       'renderPrecisionEditObjectList', 'buildPrecisionEditAnnotationData',
@@ -1674,7 +1736,7 @@ assert.equal(textMoveState.objects[0].text, 'Edit me', 'Text move must preserve 
 expect(html.includes('id="btnPrecisionCutout"') && js.includes("_authFetch('/api/image-tools/cutout/capabilities'"), 'Cutout must use the real capability endpoint.');
 expect(html.includes('data-i18n="creator.cutout_person"') && html.includes('data-i18n="creator.cutout_person_hint"') && html.includes('data-i18n="creator.cutout_unconfigured_clear"'), 'Cutout must explain the person-extraction scope and unavailable fallback in the UI.');
 const cutoutFlow = js.slice(js.indexOf('function precisionCutoutHasSource'), js.indexOf('function exportPrecisionEditAnnotationImage'));
-expect(cutoutFlow.includes("_authFetch('/api/image-tools/cutout'") && cutoutFlow.includes("contract: PRECISION_CUTOUT_CONTRACT, image_data: requestSource"), 'Cutout must POST the exact local v1 request contract.');
+expect(cutoutFlow.includes("_authFetch('/api/image-tools/cutout'") && cutoutFlow.includes('adapter: selectedAdapter.adapter') && cutoutFlow.includes('algorithm: selectedAdapter.algorithm'), 'Cutout must POST the canonical adapter ID and matching algorithm description.');
 expect(cutoutFlow.includes('if (precisionCutoutPending) return Promise.resolve(false);') && cutoutFlow.includes('precisionCutoutIsExecutable(capability)'), 'Cutout must prevent duplicate clicks and fail closed unless the capability probe is executable.');
 expect(cutoutFlow.includes('appendPrecisionCutoutVersion(result, requestWidth, requestHeight, requestParentId)') && !cutoutFlow.includes('loadPrecisionEditSourceImage('), 'Cutout success must append a version without replacing the editable base.');
 expect(!cutoutFlow.includes("/api/generate"), 'Cutout must never submit provider generation.');
@@ -1709,6 +1771,8 @@ expect(
     visibilityMenuSource.includes('positionPrecisionModelVisibilityMenu()') &&
     visibilityMenuSource.includes("window.addEventListener('resize', positionPrecisionModelVisibilityMenu, true)") &&
     visibilityMenuSource.includes("window.addEventListener('scroll', positionPrecisionModelVisibilityMenu, true)") &&
+    visibilityMenuSource.includes("window.visualViewport.addEventListener('resize', positionPrecisionModelVisibilityMenu)") &&
+    visibilityMenuSource.includes("window.visualViewport.addEventListener('scroll', positionPrecisionModelVisibilityMenu)") &&
     visibilityMenuSource.includes('document.body.appendChild(menu)') &&
     visibilityMenuSource.includes('panel.contains') &&
     visibilityMenuSource.includes('menu.contains') &&
@@ -1740,7 +1804,7 @@ expect(
   'Model display popover needs fixed viewport positioning, clamped width, row text that cannot sit under the checkbox, a scrolling list, and a fixed footer.',
 );
 expect(js.includes("record.alias ? record.alias + ' · ' + record.id : record.id"), 'Model alias presentation must remain separate from the real model id.');
-for (const key of ['precision_edit_overall_instruction', 'precision_instruction_required', 'precision_pure_resize_ready', 'precision_versions', 'precision_compare', 'precision_size_preserve', 'precision_size_resize', 'precision_edit_ellipse', 'precision_edit_brush', 'precision_edit_eraser', 'precision_zoom', 'precision_zoom_fit', 'precision_zoom_hint', 'precision_quick_tools', 'precision_ai_remove', 'precision_remove_people', 'precision_remove_watermark', 'cutout_person', 'cutout_person_start', 'cutout_person_hint', 'cutout_unconfigured_clear', 'cutout_checking', 'cutout_source_required', 'cutout_processing', 'cutout_busy', 'cutout_timeout', 'cutout_failed', 'cutout_completed', 'cutout_refine', 'cutout_refine_feather', 'cutout_refine_use_selection', 'cutout_refine_selection_empty', 'cutout_refine_processing', 'cutout_refine_completed', 'cutout_restore_foreground', 'cutout_restore_min_alpha', 'cutout_restore_hint', 'cutout_restore_selection_empty', 'cutout_restore_selection_required', 'cutout_restore_source_required', 'cutout_restore_min_alpha_invalid', 'cutout_restore_ready', 'cutout_restore_processing', 'cutout_restore_failed', 'cutout_restore_completed', 'cutout_cancel_wait', 'cutout_cancelled']) {
+for (const key of ['precision_edit_overall_instruction', 'precision_instruction_required', 'precision_pure_resize_ready', 'precision_versions', 'precision_compare', 'precision_size_preserve', 'precision_size_resize', 'precision_edit_ellipse', 'precision_edit_brush', 'precision_edit_eraser', 'precision_zoom', 'precision_zoom_fit', 'precision_zoom_hint', 'precision_quick_tools', 'precision_ai_remove', 'precision_remove_people', 'precision_remove_watermark', 'cutout_person', 'cutout_person_start', 'cutout_person_hint', 'cutout_unconfigured_clear', 'cutout_checking', 'cutout_source_required', 'cutout_processing', 'cutout_busy', 'cutout_timeout', 'cutout_failed', 'cutout_completed', 'cutout_completed_fallback', 'cutout_refine', 'cutout_refine_feather', 'cutout_refine_use_selection', 'cutout_refine_selection_empty', 'cutout_refine_processing', 'cutout_refine_completed', 'cutout_restore_foreground', 'cutout_restore_min_alpha', 'cutout_restore_hint', 'cutout_restore_selection_empty', 'cutout_restore_selection_required', 'cutout_restore_source_required', 'cutout_restore_min_alpha_invalid', 'cutout_restore_ready', 'cutout_restore_processing', 'cutout_restore_failed', 'cutout_restore_completed', 'cutout_cancel_wait', 'cutout_cancelled', 'cutout_capability_refresh', 'cutout_capability_refresh_tooltip', 'cutout_algorithm_modnet_lab_notice']) {
   expect(i18n.includes("MESSAGES['creator." + key + "']"), 'Missing bilingual translation: ' + key);
 }
 
@@ -1802,6 +1866,28 @@ let cutoutFetch = async () => { throw new Error('unexpected fetch'); };
 const readyCapability = {
   contract: 'genbox-cutout-v1', available: true, executable: true,
   adapters: ['u2net-human-seg-onnx'], state: 'ready',
+  adapter_capabilities: [
+    {
+      adapter: 'u2net-human-seg-onnx', algorithm: 'U2Net human segmentation ONNX',
+      available: true, executable: true, state: 'ready', source_page: 'fixed rembg source',
+      license: { name: 'UNVERIFIED', status: 'UNVERIFIED' }, dependencies: ['onnxruntime'],
+    },
+    {
+      adapter: 'rmbg-2.0', algorithm: 'BRIA RMBG-2.0 (BiRefNet architecture)',
+      available: false, executable: false, state: 'unavailable', needs_model: true, needs_dependency: true,
+      descriptor: { source_page: 'gated source', license_name: 'bria-rmbg-2.0', license_status: 'NON_COMMERCIAL_ONLY_UNVERIFIED', dependencies: ['torch', 'transformers'] },
+    },
+    {
+      adapter: 'modnet-photographic-portrait', algorithm: 'MODNet photographic portrait matting',
+      available: false, executable: false, state: 'unavailable', needs_model: true, needs_dependency: true,
+      descriptor: { source_page: 'MODNet source', license_name: 'Apache-2.0 code; checkpoint terms unverified', license_status: 'UNVERIFIED', dependencies: ['onnxruntime', 'Pillow', 'numpy'] },
+    },
+    {
+      adapter: 'birefnet-v1-lite', algorithm: 'BiRefNet v1 lite',
+      available: false, executable: false, state: 'unavailable', needs_model: true, needs_dependency: true,
+      descriptor: { source_page: 'BiRefNet source', license_name: 'Checkpoint license unverified', license_status: 'UNVERIFIED', dependencies: ['torch', 'Pillow', 'numpy'] },
+    },
+  ],
 };
 const cutoutNodes = {
   btnPrecisionCutout: cutoutButton,
@@ -1859,9 +1945,13 @@ const cutoutContext = vm.createContext({
   PRECISION_CUTOUT_REFINE_CONTRACT: 'genbox-cutout-refine-v1',
   PRECISION_CUTOUT_SELECTION_MASK_CONTRACT: 'genbox-cutout-selection-mask-v1',
   PRECISION_CUTOUT_MAX_FEATHER: 64,
+  PRECISION_CUTOUT_CAPABILITY_TIMEOUT_MS: 1000,
   precisionCutoutCapability: null,
+  precisionCutoutSelectedAdapter: '',
+  precisionCutoutAdapterDetailsExpanded: false,
   precisionCutoutPending: false,
   precisionCutoutProbeToken: 0,
+  precisionCutoutAvailabilityAbortController: null,
   precisionCutoutOperationToken: 0,
   precisionCutoutAbortController: null,
   precisionSourceLoadGeneration: 1,
@@ -1874,9 +1964,11 @@ const cutoutContext = vm.createContext({
     versions: [], selectedVersionId: 'original', baseVersionId: 'original', taskBaseVersionId: null, view: 'after',
   },
   _authFetch: (...args) => cutoutFetch(...args),
+  setTimeout,
+  clearTimeout,
   renderPrecisionEditSession: () => {},
   setStatus: (value) => cutoutStatuses.push(value),
-  i18nText: (key) => key,
+  i18nText: (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll('{' + name + '}', String(value)), key),
   AbortController: class FakeAbortController {
     constructor() {
       this.signal = { aborted: false };
@@ -1891,7 +1983,10 @@ const cutoutContext = vm.createContext({
 });
 vm.runInContext([
   'getPrecisionCutoutControls', 'precisionLocalPathUrl', 'appendPrecisionEditImageVersion',
-  'precisionCutoutHasSource', 'precisionCutoutIsExecutable', 'setPrecisionCutoutUi',
+  'precisionCutoutHasSource', 'precisionCutoutUiBusy', 'precisionCutoutIsExecutable', 'precisionCutoutAdapterId', 'precisionCutoutAdapterText',
+  'precisionCutoutAdapterRecords', 'precisionCutoutExecutableAdapterRecords', 'precisionCutoutSelectedAdapterRecord', 'precisionCutoutAdapterDisplayName',
+  'precisionCutoutAdapterEscaped', 'precisionCutoutAdapterFact', 'setPrecisionCutoutAdapterDetailsExpanded',
+  'togglePrecisionCutoutAdapterDetails', 'renderPrecisionCutoutAdapterOptions', 'renderPrecisionCutoutAdapterPicker', 'setPrecisionCutoutSelectedAdapter', 'setPrecisionCutoutUi',
   'precisionCutoutPngData', 'precisionCutoutGalleryUrl', 'precisionCutoutSelectedVersion',
   'precisionCutoutSelectedTransparentVersion', 'precisionCutoutSelectionObjects',
   'exportPrecisionCutoutSelectionMask', 'precisionCutoutFeatherRadius', 'precisionCutoutRestoreMinAlpha', 'updatePrecisionCutoutRefineControls',
@@ -1909,12 +2004,74 @@ await vm.runInContext('updatePrecisionCutoutAvailability()', cutoutContext);
 assert.equal(cutoutStatus.dataset.state, 'ready');
 assert.equal(cutoutStatus.textContent, 'creator.cutout_ready');
 assert.equal(cutoutButton.disabled, false, 'Ready capability plus a local image must enable cutout.');
+assert.equal(vm.runInContext('precisionCutoutSelectedAdapter', cutoutContext), 'u2net-human-seg-onnx', 'The first executable adapter must become the canonical default selection.');
+
+const staleCapabilityProbe = deferred();
+const freshCapabilityProbe = deferred();
+let capabilityProbeCount = 0;
+cutoutFetch = async (url) => {
+  if (!url.endsWith('/capabilities')) return cutoutResponse(500, {});
+  capabilityProbeCount += 1;
+  return capabilityProbeCount === 1 ? staleCapabilityProbe.promise : freshCapabilityProbe.promise;
+};
+const staleAvailability = vm.runInContext('updatePrecisionCutoutAvailability()', cutoutContext);
+for (let index = 0; index < 10 && capabilityProbeCount < 1; index += 1) {
+  await new Promise((resolve) => setImmediate(resolve));
+}
+const freshAvailability = vm.runInContext('updatePrecisionCutoutAvailability()', cutoutContext);
+for (let index = 0; index < 10 && capabilityProbeCount < 2; index += 1) {
+  await new Promise((resolve) => setImmediate(resolve));
+}
+freshCapabilityProbe.resolve(cutoutResponse(200, readyCapability));
+await freshAvailability;
+assert.equal(cutoutStatus.dataset.state, 'ready', 'The newest capability probe must restore a usable ready state.');
+staleCapabilityProbe.resolve(cutoutResponse(503, { contract: 'genbox-cutout-v1', available: false, executable: false, adapters: [], state: 'unavailable' }));
+await staleAvailability;
+assert.equal(cutoutStatus.dataset.state, 'ready', 'A stale probe resolving after a newer probe must not overwrite the ready state.');
+assert.equal(cutoutButton.disabled, false, 'A stale probe must not leave the selector locked after a newer probe succeeds.');
+
+cutoutFetch = async () => { throw new Error('capability probe unavailable'); };
+await vm.runInContext('updatePrecisionCutoutAvailability()', cutoutContext);
+assert.equal(cutoutStatus.dataset.state, 'error', 'A rejected capability probe must leave checking and show an error state.');
+assert.equal(cutoutButton.disabled, true, 'A rejected capability probe must keep submission disabled.');
+
+cutoutFetch = async () => cutoutResponse(503, {
+  contract: 'genbox-cutout-v1', available: false, executable: false,
+  adapters: [], state: 'unavailable',
+});
+await vm.runInContext('updatePrecisionCutoutAvailability()', cutoutContext);
+assert.equal(cutoutStatus.dataset.state, 'unavailable', 'A fail-closed 503 capability response must not remain checking.');
+assert.equal(cutoutButton.disabled, true);
+
+vm.runInContext('PRECISION_CUTOUT_CAPABILITY_TIMEOUT_MS = 20', cutoutContext);
+cutoutFetch = async () => new Promise(() => {});
+await vm.runInContext('updatePrecisionCutoutAvailability()', cutoutContext);
+assert.equal(cutoutStatus.dataset.state, 'error', 'A hung capability probe must time out into an error state.');
+assert.equal(cutoutStatus.dataset.key, 'creator.cutout_check_failed');
+assert.equal(cutoutButton.disabled, true, 'A timed-out capability probe must not leave the action enabled.');
+vm.runInContext('PRECISION_CUTOUT_CAPABILITY_TIMEOUT_MS = 1000', cutoutContext);
+
+const multiReadyCapability = JSON.parse(JSON.stringify(readyCapability));
+multiReadyCapability.adapters.push('modnet-photographic-portrait');
+multiReadyCapability.adapter_capabilities[2].available = true;
+multiReadyCapability.adapter_capabilities[2].executable = true;
+multiReadyCapability.adapter_capabilities[2].state = 'ready';
+multiReadyCapability.adapter_capabilities[2].needs_model = false;
+multiReadyCapability.adapter_capabilities[2].needs_dependency = false;
+cutoutFetch = async (url, options) => {
+  cutoutCalls.push({ url, options });
+  if (url.endsWith('/capabilities')) return cutoutResponse(200, multiReadyCapability);
+  return cutoutResponse(200, multiReadyCapability);
+};
+await vm.runInContext('updatePrecisionCutoutAvailability()', cutoutContext);
+assert.equal(vm.runInContext('precisionCutoutCapability.adapters.length', cutoutContext), 2);
+assert.equal(vm.runInContext("setPrecisionCutoutSelectedAdapter('modnet-photographic-portrait')", cutoutContext), true, 'A second executable adapter must be selectable before submission.');
 
 cutoutCalls.length = 0;
 const postDeferred = deferred();
 cutoutFetch = async (url, options) => {
   cutoutCalls.push({ url, options });
-  if (url.endsWith('/capabilities')) return cutoutResponse(200, readyCapability);
+  if (url.endsWith('/capabilities')) return cutoutResponse(200, multiReadyCapability);
   return postDeferred.promise;
 };
 const successfulCutout = vm.runInContext('startPrecisionCutout()', cutoutContext);
@@ -1926,6 +2083,7 @@ assert.equal(cutoutCalls[1].url, '/api/image-tools/cutout');
 assert.equal(cutoutCalls[1].options.method, 'POST');
 assert.deepEqual(JSON.parse(cutoutCalls[1].options.body), {
   contract: 'genbox-cutout-v1', image_data: 'data:image/png;base64,c291cmNl',
+  adapter: 'modnet-photographic-portrait', algorithm: 'MODNet photographic portrait matting',
 });
 assert.equal(cutoutStatus.dataset.state, 'processing');
 assert.equal(cutoutButton.disabled, true);
@@ -1934,6 +2092,7 @@ postDeferred.resolve(cutoutResponse(200, {
   contract: 'genbox-cutout-v1', success: true, status: 'completed', width: 4, height: 3,
   source_preserved: true, transparent: true, preview_background: 'checkerboard',
   image_data: 'data:image/png;base64,iVBORw0KGgoAAAAA',
+  adapter: 'modnet-photographic-portrait',
   gallery_url: '/api/gallery/image/cutout.png', filename: 'cutout.png',
   restore_mode: false, restore_applied: false, restore_min_alpha: null,
 }));
@@ -1942,6 +2101,8 @@ let cutoutState = vm.runInContext('({ precisionEditSourceImageData, precisionEdi
 assert.equal(cutoutState.precisionEditSession.versions.length, 1);
 assert.equal(cutoutState.precisionEditSession.versions[0].data, '/api/gallery/image/cutout.png');
 assert.equal(cutoutState.precisionEditSession.versions[0].parentId, 'original');
+assert.equal(cutoutState.precisionEditSession.versions[0].adapter, 'modnet-photographic-portrait');
+assert.equal(cutoutState.precisionEditSession.versions[0].fallbackFrom, '');
 assert.equal(cutoutState.precisionEditSession.selectedVersionId, 'version-1');
 assert.equal(cutoutState.precisionEditSession.baseVersionId, 'original', 'Cutout must not replace the editable base.');
 assert.equal(cutoutState.precisionEditSourceImageData, 'data:image/png;base64,c291cmNl');
@@ -2272,6 +2433,7 @@ cutoutFetch = async (url, options) => {
     contract: 'genbox-cutout-v1', success: true, status: 'completed', width: 4, height: 3,
     source_preserved: true, transparent: true, preview_background: 'checkerboard',
     image_data: 'data:image/png;base64,iVBORw0KGgoAAAAA', gallery_url: '/api/gallery/image/cutout-2.png',
+    adapter: 'u2net-human-seg-onnx',
   });
 };
 const firstClick = vm.runInContext('startPrecisionCutout()', cutoutContext);
@@ -2315,11 +2477,15 @@ expect(/\.precision-workbench-help-trigger::before\s*\{[\s\S]*?content:\s*"";[\s
 expect(/\.precision-workbench-help-trigger::after\s*\{[\s\S]*?content:\s*"\?";[\s\S]*?font-size:\s*12px;[\s\S]*?font-weight:\s*700;[\s\S]*?line-height:\s*1;/.test(css), 'The compact inner help mark must retain the established question-mark typography.');
 expect(/\.precision-workbench-help-trigger:hover::before,\s*\.precision-workbench-help-trigger:focus-visible::before,\s*\.precision-workbench-help-trigger\[aria-expanded="true"\]::before\s*\{[\s\S]*?border-color:\s*var\(--accent\);[\s\S]*?outline:\s*2px solid color-mix\(in srgb, var\(--accent\) 24%, transparent\);[\s\S]*?outline-offset:\s*2px;/.test(css), 'Hover, keyboard focus, and pinned-open states must remain visible on the compact inner help circle.');
 expect(js.includes("else setPrecisionWorkbenchHelp(false,false,true);"), 'Leaving precision mode must close help and reset its pinned interaction state.');
-expect(/href="https:\/\/github\.com\/liwei9745\/GenBox\/blob\/main\/docs\/CLIENT-QUICKSTART\.md#start--[^\"]+" target="_blank" rel="noopener noreferrer"/.test(html), 'Workbench help documentation links must use the stable HTTPS target with noopener and noreferrer.');
+expect(/href="https:\/\/github\.com\/liwei9745\/GenBox\/blob\/master\/docs\/CLIENT-QUICKSTART\.md#start--[^\"]+" target="_blank" rel="noopener noreferrer"/.test(html), 'Workbench help documentation links must use the stable master-branch HTTPS target with noopener and noreferrer.');
+expect(/href="https:\/\/github\.com\/liwei9745\/GenBox\/blob\/master\/docs\/CUTOUT-MODEL-GUIDE\.md" target="_blank" rel="noopener noreferrer"/.test(html), 'Cutout model help must use the stable master-branch GenBox guide link.');
+expect(!html.includes('https://github.com/liwei9745/GenBox/blob/main/'), 'GenBox documentation links must not target the nonexistent main branch.');
 const docsDialogIndex = html.indexOf('id="precisionDocsDialog"');
 expect(/id="btnPrecisionDocs"[^>]*aria-haspopup="dialog"[^>]*aria-controls="precisionDocsDialog"[\s\S]*?<svg[\s\S]*?<span data-i18n="creator\.precision_docs_open">/.test(html), 'The top precision docs action must be an icon+text dialog trigger.');
 expect(/id="precisionDocsDialog"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-hidden="true"[^>]*aria-labelledby="precisionDocsTitle"[^>]*aria-describedby="precisionDocsIntro"/.test(html), 'Precision docs must be an independent modal dialog with labelledby and description.');
 expect(docsDialogIndex > -1 && html.indexOf('id="precisionDocsPanel" tabindex="-1"', docsDialogIndex) > docsDialogIndex && html.indexOf('id="btnPrecisionDocsClose"', docsDialogIndex) > docsDialogIndex, 'Precision docs dialog must include a focusable panel and close control.');
+expect(/class="glass-panel precision-docs-panel" id="precisionDocsPanel"/.test(html), 'Precision docs must reuse the established glass modal surface.');
+expect(/class="precision-docs-body" id="precisionDocsBody" tabindex="0"/.test(html), 'Precision docs content must remain a keyboard-scrollable region.');
 for (const key of ['precision_docs_shapes', 'precision_docs_eraser', 'precision_docs_text', 'precision_docs_cutout', 'precision_docs_resize', 'precision_docs_versions', 'precision_docs_models']) {
   expect(html.includes('creator.' + key + '_title') && html.includes('creator.' + key + '_body'), 'Precision docs dialog must cover ' + key + '.');
 }
@@ -2451,6 +2617,7 @@ helpTrigger.focus();
 assert.equal(helpTrigger.getAttribute('aria-expanded'), 'true', 'Returning to precision mode must allow the first keyboard focus to open help.');
 
 const docsBodyClassList = classListRecorder();
+const docsScrollBody = { scrollTop: 73 };
 const docsDocument = {
   activeElement: null,
   body: { classList: docsBodyClassList },
@@ -2458,6 +2625,7 @@ const docsDocument = {
     return ({
       precisionDocsDialog: docsDialog,
       precisionDocsPanel: docsPanel,
+      precisionDocsBody: docsScrollBody,
       btnPrecisionDocs: docsTrigger,
       btnPrecisionDocsClose: docsClose,
       precisionDocsDone: docsDone,
@@ -2491,6 +2659,7 @@ assert.equal(vm.runInContext('openPrecisionDocsDialog()', docsContext), true, 'T
 assert.equal(docsDialog.classList.contains('hidden'), false);
 assert.equal(docsDialog.getAttribute('aria-hidden'), 'false');
 assert.equal(docsBodyClassList.contains('precision-docs-open'), true, 'Opening docs must lock the page behind the dialog.');
+assert.equal(docsScrollBody.scrollTop, 0, 'Opening docs must reset the scrollable document body to the beginning.');
 assert.equal(docsClose.focusCount, 1, 'Opening docs must focus the close control.');
 assert.equal(docsDocument.activeElement, docsClose);
 assert.equal(docsDialog.dataset.precisionDocsBound, 'true', 'Precision docs binding must be idempotent.');
@@ -2859,6 +3028,27 @@ staleCutoutResponse.resolve(cutoutResponse(200, {
 }));
 assert.equal(await staleCutout, false, 'An old cutout response must resolve harmlessly after source replacement.');
 assert.equal(vm.runInContext('precisionEditSession.versions.length', cutoutContext), cutoutVersionCountBeforeStaleResponse, 'An old cutout response must not append a version.');
+
+cutoutCalls.length = 0;
+cutoutStatuses.length = 0;
+cutoutFetch = async (url) => {
+  cutoutCalls.push(url);
+  if (url.endsWith('/capabilities')) return cutoutResponse(200, readyCapability);
+  return cutoutResponse(200, {
+    contract: 'genbox-cutout-v1', success: true, status: 'completed', width: 4, height: 3,
+    source_preserved: true, transparent: true, preview_background: 'checkerboard',
+    image_data: 'data:image/png;base64,iVBORw0KGgoFALLBACK', gallery_url: '/api/gallery/image/fallback.png',
+    filename: 'fallback.png', adapters: ['u2net-human-seg-onnx'],
+    adapter: 'u2net-human-seg-onnx', fallback_from: 'requested-adapter',
+  });
+};
+assert.equal(await vm.runInContext('startPrecisionCutout()', cutoutContext), true, 'A bounded backend fallback response should still append a valid result.');
+cutoutState = vm.runInContext('({ precisionEditSession, precisionCutoutPending })', cutoutContext);
+const fallbackVersion = cutoutState.precisionEditSession.versions.at(-1);
+assert.equal(fallbackVersion.adapter, 'u2net-human-seg-onnx');
+assert.equal(fallbackVersion.fallbackFrom, 'requested-adapter');
+assert.ok(cutoutStatus.textContent.includes('creator.cutout_completed_fallback'));
+assert.ok(cutoutStatuses.some((status) => status.includes('creator.cutout_completed_fallback')));
 
 expect(/@media \(max-width: 400px\)\s*\{[\s\S]*?\.precision-workbench-help-popover\s*\{[\s\S]*?right:\s*auto;[\s\S]*?left:\s*12px;[\s\S]*?width:\s*min\(320px, calc\(100vw - 114px\)\);[\s\S]*?max-width:\s*calc\(100vw - 114px\);[\s\S]*?margin:\s*0;[\s\S]*?\}[\s\S]*?\}/.test(css), 'The narrow-mobile contract must tolerate fractional viewport widths while keeping the help popover inside viewport bounds.');
 
