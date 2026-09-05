@@ -39,6 +39,13 @@ InSPyReNet、BiRefNet 和 BRIA RMBG-2.0 仍保持
 远程 URL。导入响应中的 `runtime.executable` 仅表示本次运行时探测结果；
 `true` 不代表真实照片质量验收，也不代表可随 Release 再分发。
 
+2026-09-05 的统一结构门禁已经用当前本地 U²-Net 与 MODNet 固定文件分别完成
+CPU-only、Python 网络阻断、同尺寸 RGBA PNG 和 Alpha `0..255` smoke。命令、
+摘要和真人样本验收矩阵见
+[`CUTOUT-QUALITY-GATE-20260905.md`](CUTOUT-QUALITY-GATE-20260905.md)。这使
+MODNet 的本地技术运行证据可重复，但不改变其“实验性、非默认、不随 Release
+打包”的产品边界。
+
 权重的具体授权由用户自行核对。GenBox 不对上游权重作新的法律定性；若权利
 条款未明确允许商业使用，应将该权重限制为非商业研究、教学或个人实验。任何
 公共下载、商业部署或 Release 打包都必须另行取得并保存明确的权重授权、来源链
@@ -80,4 +87,5 @@ GenBox 已核验的固定权重、摘要、离线运行证据和适用授权时�
 实现证据：`../image_tools/cutout_registry.py`、`../image_tools/cutout_modnet.py`、
 `../image_tools/cutout_modnet_import.py`、`../image_tools/cutout_inspyrenet.py`。
 用户操作见 [`MODNET-USER-IMPORT-GUIDE.md`](MODNET-USER-IMPORT-GUIDE.md)；U²-Net
-固定安装合同见 [`CUTOUT-MODEL-GUIDE.md`](CUTOUT-MODEL-GUIDE.md)。
+固定安装合同见 [`CUTOUT-MODEL-GUIDE.md`](CUTOUT-MODEL-GUIDE.md)；统一离线
+结构门禁见 [`CUTOUT-QUALITY-GATE-20260905.md`](CUTOUT-QUALITY-GATE-20260905.md)。

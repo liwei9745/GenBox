@@ -65,6 +65,16 @@ Docker Compose 使用仓库目录的 `./storage` 挂载到容器的 `/app/storag
 
 - MODNet 仅使用 `CPUExecutionProvider`，需要 `onnxruntime` 与 `numpy`；输出须
   是与原图同尺寸的 RGBA PNG。
+- 导入完成后可运行以下本地结构门禁，检查固定清单、CPU-only 会话、Python
+  网络阻断、同尺寸 RGBA 和 Alpha 端点：
+
+```powershell
+$env:PYTHONPATH='.'
+python -m image_tools.cutout_quality_gate --adapter modnet-portrait-onnx
+```
+
+  该命令使用生成的合成图，不保存图片，也不读取媒体库。详见
+  [`CUTOUT-QUALITY-GATE-20260905.md`](CUTOUT-QUALITY-GATE-20260905.md)。
 - 当前只有合成图和适配器契约测试证明技术路径；腿部、发丝、半透明边缘、复杂
   背景等真实照片质量仍 **UNVERIFIED**。
 - MODNet 不能替换 U²-Net 默认模型，也不能通过把文件放入目录来绕过清单、摘要

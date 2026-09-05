@@ -135,3 +135,21 @@ docker compose restart genbox
 
 本机通过不代表其他设备已安装模型，也不把合成图本地推理升级为真实照片、
 真实 Provider 或跨环境端到端验收。
+
+## 统一结构门禁（2026-09-05）
+
+安装完成后，可以用同一条命令重新验证固定清单、CPU-only 会话、Python 网络
+阻断、同尺寸 RGBA 和 Alpha 端点：
+
+```powershell
+$env:PYTHONPATH='.'
+python -m image_tools.cutout_quality_gate --adapter u2net-human-seg-onnx
+```
+
+当前开发机的合成全身样本通过该门禁：输出为 `96 × 128` RGBA PNG，Alpha
+范围 `0..255`，网络尝试为 `0`。详细证据和 MODNet 对照结果见
+[`CUTOUT-QUALITY-GATE-20260905.md`](CUTOUT-QUALITY-GATE-20260905.md)。
+
+U²-Net 官方 README 同时明确说明：由于 Supervisely 人物数据集的标注精度，
+`u2net_human_seg` 不应期待发丝级精度。腿部完整性、发丝和半透明边缘仍必须用
+用户有权测试的真实样本验收，不能由合成图 smoke 代替。
