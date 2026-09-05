@@ -105,6 +105,7 @@ if (typeof window !== 'undefined' && typeof window.__genboxPrecisionCompareResiz
 }
 var precisionCompareResizeCleanup = null;
 var precisionVersionLoadToken = 0;
+var precisionBaseVersionSwitchPending = false;
 var precisionSourceLoadGeneration = 0;
 var precisionPendingSourceIntent = null;
 var precisionGenerationControlState = 'idle';
@@ -2204,7 +2205,7 @@ function updatePrecisionSourceActions() {
   var gallery = document.getElementById('btnPrecisionReplaceFromGallery');
   var hint = document.getElementById('precisionReplaceDisabledHint');
   var hasSource = !!precisionEditSourceImageData;
-  var blocked = precisionSourceTaskIsActive();
+  var blocked = precisionSourceTaskIsActive() || (typeof precisionBaseVersionSwitchPending !== 'undefined' && precisionBaseVersionSwitchPending);
   if (actions) actions.classList.toggle('hidden', !hasSource);
   if (hint) {
     hint.classList.toggle('sr-only', !blocked);
@@ -2265,6 +2266,7 @@ function requestPrecisionLocalSource() {
 
 function resetPrecisionSourceSpecificState(generation) {
   precisionVersionLoadToken += 1;
+  if (typeof precisionBaseVersionSwitchPending !== 'undefined') precisionBaseVersionSwitchPending = false;
   precisionCutoutProbeToken += 1;
   precisionCutoutOperationToken += 1;
   if (typeof precisionCutoutAbortController !== 'undefined' && precisionCutoutAbortController) {
@@ -2387,9 +2389,11 @@ function loadPrecisionEditSourceImage(dataUrl, prompt, options) {
     var width = source.naturalWidth || source.width;
     var height = source.naturalHeight || source.height;
     if (!width || !height || width * height > INPAINT_MAX_PIXELS) {
-      alert(i18nText('creator.inpaint_image_too_large'));
+      if (typeof options.onError === 'function') options.onError();
+      else alert(i18nText('creator.inpaint_image_too_large'));
       return;
     }
+    if (typeof options.beforeCommit === 'function' && options.beforeCommit() === false) return;
     if (!options.preserveSession) resetPrecisionSourceSpecificState(generation);
     precisionEditSourceImageData = dataUrl;
     precisionEditSourceWidth = width;
@@ -2446,7 +2450,9 @@ function loadPrecisionEditSourceImage(dataUrl, prompt, options) {
     if (typeof options.onLoaded === 'function') options.onLoaded();
   };
   source.onerror = function() {
-    if (generation === precisionSourceLoadGeneration) alert(i18nText('image.load_failed') + i18nText('image.unavailable'));
+    if (generation !== precisionSourceLoadGeneration) return;
+    if (typeof options.onError === 'function') options.onError();
+    else alert(i18nText('image.load_failed') + i18nText('image.unavailable'));
   };
   source.src = dataUrl;
   return generation;
@@ -3822,13 +3828,13 @@ function renderPrecisionEditSession() {
   var selected = precisionEditSession.selectedVersionId;
   var entries = [precisionEditSession.source].concat(precisionEditSession.versions);
   rail.innerHTML = entries.map(function(entry) {
-    return '<div class="precision-version-item"><button type="button" class="precision-version' + (entry.id === selected ? ' selected' : '') + '" onclick="selectPrecisionVersion(\'' + escAttr(entry.id) + '\')">' + escHtml(entry.label) + '</button></div>';
+    return '<div class="precision-version-item"><button type="button" class="precision-version' + (entry.id === selected ? ' selected' : '') + '" onclick="selectPrecisionVersion(\'' + escAttr(entry.id) + '\')"' + ((typeof precisionBaseVersionSwitchPending !== 'undefined' && precisionBaseVersionSwitchPending) ? ' disabled aria-disabled="true"' : '') + '>' + escHtml(entry.label) + '</button></div>';
   }).join('');
   var current = entries.find(function(entry) { return entry.id === selected; }) || precisionEditSession.source;
   var base = entries.find(function(entry) { return entry.id === (current.parentId || 'original'); }) || precisionEditSession.source;
   var hasComparison = current.id !== base.id;
   var isEditingBase = current.id === precisionEditSession.baseVersionId;
-  var canUseSelectedAsBase = current.id !== precisionEditSession.baseVersionId && !precisionSourceTaskIsActive();
+  var canUseSelectedAsBase = current.id !== precisionEditSession.baseVersionId && !precisionSourceTaskIsActive() && !(typeof precisionBaseVersionSwitchPending !== 'undefined' && precisionBaseVersionSwitchPending);
   if (useAsBase) {
     useAsBase.disabled = !canUseSelectedAsBase;
     useAsBase.setAttribute('aria-disabled', canUseSelectedAsBase ? 'false' : 'true');
@@ -4043,6 +4049,7 @@ document.addEventListener('keydown', function(event) {
 });
 
 function selectPrecisionVersion(id) {
+  if (typeof precisionBaseVersionSwitchPending !== 'undefined' && precisionBaseVersionSwitchPending) return false;
   var entries = [precisionEditSession.source].concat(precisionEditSession.versions);
   if (!entries.some(function(entry) { return entry.id === id; })) return;
   precisionEditSession.selectedVersionId = id;
@@ -4327,19 +4334,51 @@ function getPrecisionSizeRequest() {
 function setPrecisionBaseVersion(id) {
   var entries = [precisionEditSession.source].concat(precisionEditSession.versions);
   var version = entries.find(function(entry) { return entry.id === id; });
-  if (!version || version.id === precisionEditSession.baseVersionId || precisionSourceTaskIsActive()) return false;
-  precisionEditSession.baseVersionId = id;
-  precisionEditSession.selectedVersionId = id;
-  precisionEditSession.view = 'after';
+  if (!version || version.id === precisionEditSession.baseVersionId || precisionSourceTaskIsActive() || precisionBaseVersionSwitchPending) return false;
+  precisionBaseVersionSwitchPending = true;
   var loadToken = ++precisionVersionLoadToken;
   var sourceGeneration = precisionSourceLoadGeneration;
   renderPrecisionEditSession();
+  if (typeof updatePrecisionEditControls === 'function') updatePrecisionEditControls();
+  setStatus(i18nText('common.loading'));
   var prompt = (document.getElementById('txtPromptPrecision') || { value: '' }).value;
   var source = version.data;
+  function isCurrentSwitch() {
+    return sourceGeneration === precisionSourceLoadGeneration && loadToken === precisionVersionLoadToken && precisionBaseVersionSwitchPending;
+  }
+  function finishFailedSwitch() {
+    if (!isCurrentSwitch()) return;
+    precisionBaseVersionSwitchPending = false;
+    renderPrecisionEditSession();
+    if (typeof updatePrecisionEditControls === 'function') updatePrecisionEditControls();
+    setStatus(i18nText('image.load_failed'));
+  }
   function activateVersion(dataUrl) {
-    if (sourceGeneration !== precisionSourceLoadGeneration || loadToken !== precisionVersionLoadToken || precisionEditSession.selectedVersionId !== id) return;
-    loadPrecisionEditSourceImage(dataUrl, prompt, { preserveSession: true, generation: sourceGeneration });
-    setStatus(i18nText('creator.precision_base_updated'));
+    if (!isCurrentSwitch() || typeof dataUrl !== 'string' || dataUrl.indexOf('data:') !== 0) {
+      finishFailedSwitch();
+      return;
+    }
+    try {
+      loadPrecisionEditSourceImage(dataUrl, prompt, {
+        preserveSession: true,
+        generation: sourceGeneration,
+        beforeCommit: function() {
+          if (!isCurrentSwitch()) return false;
+          precisionEditSession.baseVersionId = id;
+          precisionEditSession.selectedVersionId = id;
+          precisionEditSession.view = 'after';
+          precisionBaseVersionSwitchPending = false;
+          return true;
+        },
+        onLoaded: function() {
+          if (sourceGeneration !== precisionSourceLoadGeneration || loadToken !== precisionVersionLoadToken) return;
+          setStatus(i18nText('creator.precision_base_updated'));
+        },
+        onError: finishFailedSwitch
+      });
+    } catch (error) {
+      finishFailedSwitch();
+    }
   }
   if (String(source).indexOf('data:') === 0) {
     activateVersion(source);
@@ -4350,18 +4389,22 @@ function setPrecisionBaseVersion(id) {
     if (!response.ok) throw new Error('HTTP ' + response.status);
     return response.blob();
   }).then(function(blob) {
-    if (!blob || sourceGeneration !== precisionSourceLoadGeneration || loadToken !== precisionVersionLoadToken) return;
+    if (sourceGeneration !== precisionSourceLoadGeneration || loadToken !== precisionVersionLoadToken) return;
+    if (!blob) {
+      finishFailedSwitch();
+      return;
+    }
     var reader = new FileReader();
     reader.onload = function() {
       if (sourceGeneration !== precisionSourceLoadGeneration || loadToken !== precisionVersionLoadToken) return;
       activateVersion(String(reader.result || ''));
     };
     reader.onerror = function() {
-      if (sourceGeneration === precisionSourceLoadGeneration && loadToken === precisionVersionLoadToken) setStatus(i18nText('image.load_failed'));
+      finishFailedSwitch();
     };
     reader.readAsDataURL(blob);
   }).catch(function() {
-    if (sourceGeneration === precisionSourceLoadGeneration && loadToken === precisionVersionLoadToken) setStatus(i18nText('image.load_failed'));
+    finishFailedSwitch();
   });
   return true;
 }
@@ -5854,6 +5897,7 @@ function clearPrecisionEdit() {
 }
 
 function getPrecisionEditReadiness() {
+  if (typeof precisionBaseVersionSwitchPending !== 'undefined' && precisionBaseVersionSwitchPending) return { ready: false, message: i18nText('common.loading') };
   if (!precisionEditSourceImageData) return { ready: false, message: i18nText('creator.precision_source_required') };
   var selectionMode = typeof precisionEditSelectionMode === 'string' && precisionEditSelectionMode === 'local'
     ? 'local' : 'annotation';

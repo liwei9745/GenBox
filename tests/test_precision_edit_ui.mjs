@@ -2931,6 +2931,11 @@ assert.deepEqual(versionContext.appended, ['/api/gallery/image/current.png']);
 
 const baseVersionLoads = [];
 const baseVersionStatuses = [];
+let baseVersionRenders = 0;
+let baseVersionControlUpdates = 0;
+const baseVersionSwitchSource = extractFunction('setPrecisionBaseVersion');
+expect(baseVersionSwitchSource.includes('precisionBaseVersionSwitchPending = true') && baseVersionSwitchSource.includes('beforeCommit: function()') && baseVersionSwitchSource.includes('onError: finishFailedSwitch'), 'Base-version switching must stage a load and commit only after the image loader validates it.');
+expect(extractFunction('getPrecisionEditReadiness').includes("i18nText('common.loading')"), 'Precision generation must remain blocked while a base-version switch is loading.');
 const baseVersionContext = vm.createContext({
   document: { getElementById: (id) => id === 'txtPromptPrecision' ? { value: 'Continue the selected result.' } : null },
   precisionEditSession: {
@@ -2940,23 +2945,68 @@ const baseVersionContext = vm.createContext({
   },
   precisionSourceLoadGeneration: 12,
   precisionVersionLoadToken: 0,
+  precisionBaseVersionSwitchPending: false,
   precisionSourceTaskIsActive: () => false,
-  renderPrecisionEditSession: () => {},
+  renderPrecisionEditSession: () => { baseVersionRenders += 1; },
+  updatePrecisionEditControls: () => { baseVersionControlUpdates += 1; },
   loadPrecisionEditSourceImage: (...args) => baseVersionLoads.push(args),
   setStatus: (value) => baseVersionStatuses.push(value),
   i18nText: (key) => key,
   String,
 });
-vm.runInContext(extractFunction('setPrecisionBaseVersion'), baseVersionContext);
+vm.runInContext(baseVersionSwitchSource, baseVersionContext);
 assert.equal(vm.runInContext("setPrecisionBaseVersion('version-1')", baseVersionContext), true, 'An explicitly selected result must be eligible as the next edit base.');
-assert.equal(vm.runInContext('precisionEditSession.baseVersionId', baseVersionContext), 'version-1');
+assert.equal(vm.runInContext('precisionEditSession.baseVersionId', baseVersionContext), 'original', 'The old base must remain active until the new image has loaded.');
 assert.equal(vm.runInContext('precisionEditSession.selectedVersionId', baseVersionContext), 'version-1');
-assert.equal(vm.runInContext('precisionEditSession.view', baseVersionContext), 'after');
+assert.equal(vm.runInContext('precisionEditSession.view', baseVersionContext), 'compare');
+assert.equal(vm.runInContext('precisionBaseVersionSwitchPending', baseVersionContext), true, 'The base switch must stay pending while its image is loading.');
+assert.equal(vm.runInContext("setPrecisionBaseVersion('original')", baseVersionContext), false, 'A second base switch must be rejected while the first image is loading.');
 assert.equal(baseVersionLoads.length, 1, 'The explicit base action must begin one replacement load.');
 assert.equal(baseVersionLoads[0][0], 'data:image/png;base64,c2Vjb25kLXJvdW5k', 'The second edit round must load the explicitly chosen version image instead of retaining the preview-only original.');
 assert.equal(baseVersionLoads[0][1], 'Continue the selected result.');
-assert.deepEqual(JSON.parse(JSON.stringify(baseVersionLoads[0][2])), { preserveSession: true, generation: 12 });
-assert.deepEqual(baseVersionStatuses, ['creator.precision_base_updated']);
+assert.equal(baseVersionLoads[0][2].preserveSession, true);
+assert.equal(baseVersionLoads[0][2].generation, 12);
+assert.equal(typeof baseVersionLoads[0][2].beforeCommit, 'function', 'The source loader must receive a transaction commit hook.');
+assert.equal(typeof baseVersionLoads[0][2].onError, 'function', 'The source loader must report a failed image load to the transaction.');
+assert.deepEqual(baseVersionStatuses, ['common.loading']);
+baseVersionLoads[0][2].beforeCommit();
+baseVersionLoads[0][2].onLoaded();
+assert.equal(vm.runInContext('precisionEditSession.baseVersionId', baseVersionContext), 'version-1', 'Only a successfully loaded version may become the edit base.');
+assert.equal(vm.runInContext('precisionEditSession.selectedVersionId', baseVersionContext), 'version-1');
+assert.equal(vm.runInContext('precisionEditSession.view', baseVersionContext), 'after');
+assert.equal(vm.runInContext('precisionBaseVersionSwitchPending', baseVersionContext), false, 'The pending lock must clear after a successful commit.');
+assert.deepEqual(baseVersionStatuses, ['common.loading', 'creator.precision_base_updated']);
+assert.ok(baseVersionRenders >= 1 && baseVersionControlUpdates >= 1, 'The loading state must rerender the base action and generation controls.');
+
+const failedBaseVersionLoads = [];
+const failedBaseVersionStatuses = [];
+const failedBaseVersionContext = vm.createContext({
+  document: { getElementById: (id) => id === 'txtPromptPrecision' ? { value: 'Keep the original request source.' } : null },
+  precisionEditSourceImageData: 'data:image/png;base64,b2xkLWNhbnZhcw==',
+  precisionEditSession: {
+    source: { id: 'original', data: 'data:image/png;base64,b2xkLWNhbnZhcw==' },
+    versions: [{ id: 'version-1', data: 'data:image/png;base64,bmV3LWNhbnZhcw==' }],
+    selectedVersionId: 'version-1', baseVersionId: 'original', view: 'compare'
+  },
+  precisionSourceLoadGeneration: 12,
+  precisionVersionLoadToken: 0,
+  precisionBaseVersionSwitchPending: false,
+  precisionSourceTaskIsActive: () => false,
+  renderPrecisionEditSession: () => {}, updatePrecisionEditControls: () => {},
+  loadPrecisionEditSourceImage: (...args) => failedBaseVersionLoads.push(args),
+  setStatus: (value) => failedBaseVersionStatuses.push(value),
+  i18nText: (key) => key,
+  String,
+});
+vm.runInContext(baseVersionSwitchSource, failedBaseVersionContext);
+assert.equal(vm.runInContext("setPrecisionBaseVersion('version-1')", failedBaseVersionContext), true);
+failedBaseVersionLoads[0][2].onError();
+assert.equal(vm.runInContext('precisionEditSession.baseVersionId', failedBaseVersionContext), 'original', 'A failed image load must retain the previous base version.');
+assert.equal(vm.runInContext('precisionEditSession.selectedVersionId', failedBaseVersionContext), 'version-1', 'A failed image load must retain the previous preview selection.');
+assert.equal(vm.runInContext('precisionEditSession.view', failedBaseVersionContext), 'compare', 'A failed image load must retain the prior comparison view.');
+assert.equal(vm.runInContext('precisionEditSourceImageData', failedBaseVersionContext), 'data:image/png;base64,b2xkLWNhbnZhcw==', 'A failed image load must retain the old canvas/request source.');
+assert.equal(vm.runInContext('precisionBaseVersionSwitchPending', failedBaseVersionContext), false, 'A failed image load must release the switch lock.');
+assert.deepEqual(failedBaseVersionStatuses, ['common.loading', 'image.load_failed'], 'A failed image load must report an error after retaining the prior state.');
 
 const terminalAppends = [];
 const terminalContext = vm.createContext({
