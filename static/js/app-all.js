@@ -867,14 +867,9 @@ function ensurePrecisionEditPanel() {
     canvas.addEventListener('pointercancel', endPrecisionEditPointer);
     canvas.addEventListener('lostpointercapture', endPrecisionEditPointer);
     canvas.addEventListener('dblclick', function(event) {
-      var point = precisionEditCanvasPoint(event);
-      var object = point && findPrecisionEditObject(point, event);
-      if (object && object.type === 'text') {
-        precisionEditSelectedId = object.id;
-        openPrecisionEditTextEditor(point, object);
-      } else {
-        togglePrecisionCompareFullscreen();
-      }
+      event.preventDefault();
+      event.stopPropagation();
+      openPrecisionCanvasImageFullscreen();
     });
     canvas.addEventListener('keydown', handlePrecisionEditCanvasKeydown);
     canvas.addEventListener('keyup', handlePrecisionEditCanvasKeyup);
@@ -1078,8 +1073,7 @@ function ensurePrecisionEditPanel() {
     zoomShell.addEventListener('mousedown', function(event) {
       if (event.button !== 1 || !precisionEditSourceImageData) return;
       event.preventDefault();
-      setPrecisionViewZoom(100, event);
-      fitPrecisionCanvasToWindow();
+      setPrecisionViewZoom(100, { resetScroll: true });
     });
   }
   var compareStage = document.getElementById('precisionCompareStage');
@@ -1088,6 +1082,7 @@ function ensurePrecisionEditPanel() {
   if (fullscreenButton && fullscreenButton.dataset.precisionFullscreenBound !== 'true') {
     fullscreenButton.dataset.precisionFullscreenBound = 'true';
     document.addEventListener('fullscreenchange', syncPrecisionFullscreenState);
+    document.addEventListener('keydown', handlePrecisionFullscreenKeydown);
   }
   syncPrecisionFullscreenState();
   updatePrecisionEditControls();
@@ -2647,7 +2642,7 @@ function beginPrecisionCanvasPan(event) {
   var shell = document.getElementById('precisionCanvasShell');
   var canvas = event && event.currentTarget;
   if (!shell || !canvas || !precisionEditSourceImageData || precisionCanvasPanState) return false;
-  precisionCanvasPanState = { pointerId: event.pointerId, target: canvas, startX: event.clientX, startY: event.clientY, scrollLeft: shell.scrollLeft, scrollTop: shell.scrollTop };
+  precisionCanvasPanState = { pointerId: event.pointerId, target: canvas, button: event.button, startX: event.clientX, startY: event.clientY, scrollLeft: shell.scrollLeft, scrollTop: shell.scrollTop, moved: false };
   canvas.classList.add('is-panning');
   try { canvas.setPointerCapture(event.pointerId); } catch (error) {}
   event.preventDefault();
@@ -2658,8 +2653,11 @@ function continuePrecisionCanvasPan(event) {
   var state = precisionCanvasPanState;
   var shell = document.getElementById('precisionCanvasShell');
   if (!state || !shell || !event || event.pointerId !== state.pointerId) return false;
-  shell.scrollLeft = state.scrollLeft - (event.clientX - state.startX);
-  shell.scrollTop = state.scrollTop - (event.clientY - state.startY);
+  var deltaX = event.clientX - state.startX;
+  var deltaY = event.clientY - state.startY;
+  if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) state.moved = true;
+  shell.scrollLeft = state.scrollLeft - deltaX;
+  shell.scrollTop = state.scrollTop - deltaY;
   event.preventDefault();
   return true;
 }
@@ -2675,6 +2673,7 @@ function endPrecisionCanvasPan(event) {
       try { target.releasePointerCapture(event.pointerId); } catch (error) {}
     }
   }
+  if (state.button === 1 && !state.moved) setPrecisionViewZoom(100, { resetScroll: true });
   return true;
 }
 
@@ -3871,13 +3870,8 @@ function bindPrecisionCompareEvents(stage) {
     stage.addEventListener('keydown', handlePrecisionCompareKeydown);
     stage.addEventListener('dblclick', function(event) {
       event.preventDefault();
-      var entries = [precisionEditSession.source].concat(precisionEditSession.versions || []).filter(Boolean);
-      var current = entries.find(function(entry) { return entry.id === precisionEditSession.selectedVersionId; }) || entries[entries.length - 1];
-      if (current && current.data) openPrecisionImageFullscreen(current.data, current.label || '', {
-        prompt: current.prompt || '',
-        sessionEntries: entries,
-        currentId: current.id
-      });
+      event.stopPropagation();
+      openPrecisionCanvasImageFullscreen();
     });
   }
   if (stage.dataset.precisionResizeBound === 'true') return;
@@ -3906,6 +3900,29 @@ function bindPrecisionCompareEvents(stage) {
   window.__genboxPrecisionCompareResizeCleanup = cleanup;
   window.addEventListener('resize', syncCompareSize);
   window.addEventListener('pagehide', cleanup, { once: true });
+}
+
+function openPrecisionCanvasImageFullscreen() {
+  var entries = [precisionEditSession.source].concat(precisionEditSession.versions || []).filter(Boolean);
+  var current = entries.find(function(entry) { return entry.id === precisionEditSession.selectedVersionId; }) || entries[entries.length - 1];
+  if (!current || !current.data) return false;
+  var openViewer = function() {
+    return openPrecisionImageFullscreen(current.data, current.label || '', {
+      prompt: current.prompt || '',
+      sessionEntries: entries,
+      currentId: current.id
+    });
+  };
+  if (document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+    try {
+      var exitResult = document.exitFullscreen();
+      if (exitResult && typeof exitResult.then === 'function') {
+        exitResult.then(openViewer).catch(function() {});
+        return true;
+      }
+    } catch (error) {}
+  }
+  return openViewer();
 }
 
 function renderPrecisionEditSession() {
@@ -4241,10 +4258,30 @@ function updatePrecisionCompareSlider(value) {
 
 function togglePrecisionCompareFullscreen() {
   var panel = document.getElementById('panelPrecisionEdit');
-  if (!panel) return;
-  if (document.fullscreenElement === panel) document.exitFullscreen();
-  else if (document.fullscreenElement) document.exitFullscreen();
-  else if (panel.requestFullscreen) panel.requestFullscreen();
+  if (!panel) return false;
+  if (document.fullscreenElement === panel) {
+    if (typeof document.exitFullscreen === 'function') document.exitFullscreen();
+    return true;
+  }
+  if (document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+    var exitResult = document.exitFullscreen();
+    if (exitResult && typeof exitResult.then === 'function') {
+      exitResult.then(function() { if (panel.requestFullscreen) panel.requestFullscreen(); }).catch(function() {});
+      return true;
+    }
+  }
+  if (!panel.requestFullscreen) return false;
+  panel.requestFullscreen();
+  return true;
+}
+
+function handlePrecisionFullscreenKeydown(event) {
+  if (!event || event.key !== 'Escape' || event.defaultPrevented) return false;
+  var panel = document.getElementById('panelPrecisionEdit');
+  if (!panel || document.fullscreenElement !== panel || typeof document.exitFullscreen !== 'function') return false;
+  event.preventDefault();
+  document.exitFullscreen();
+  return true;
 }
 
 function syncPrecisionFullscreenState() {

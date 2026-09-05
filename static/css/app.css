@@ -6854,6 +6854,14 @@ body.precision-docs-open {
     justify-content: flex-start;
   }
 
+  .precision-source-menu {
+    right: auto;
+    left: 0;
+    width: min(240px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+    transform-origin: top left;
+  }
+
   .precision-docs-dialog {
     place-items: stretch;
     padding: 10px;
