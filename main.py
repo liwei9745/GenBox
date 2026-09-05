@@ -70,11 +70,13 @@ from PIL import Image
 
 from config import (
     cfg_mgr, BASE_DIR, GALLERY_DIR, STORAGE_DIR, PrecisionEditProfile, ProviderConfig, ProvidersConfig,
+    gpt_image_2_size_error,
     is_prod_mode, get_admin_key, verify_admin_key, generate_admin_key, reset_admin_key,
     normalize_precision_capability_size, precision_capability_size_declaration,
     resolve_precision_model_capability, verify_ssl_enabled,
 )
 from providers import (
+    DEFAULT_PRECISION_RESIZE_GUIDANCE,
     GeneratedImageValidationError,
     ImageResult,
     ProviderResponseValidationError,
@@ -234,6 +236,9 @@ class GenerateRequest(BaseModel):
     annotation_image_data: Optional[str] = None  # 精准改图批注叠加图
     annotation_contract: Optional[str] = None
     annotations: List[dict] = []       # 箭头、矩形、文字的归一化坐标
+    precision_strategy: str = "standard"  # fine | standard | fast
+    precision_selection_mode: str = "annotation"  # annotation | local
+    precision_selection_feather: StrictInt | StrictFloat = 0  # local selection guidance only, 0-64px
     precision_size_mode: str = "preserve"  # preserve | resize；精准改图不复用文生图尺寸
     precision_target_size: Optional[str] = None
     precision_resize_prompt: Optional[str] = None
@@ -324,6 +329,10 @@ PRECISION_ANNOTATION_CONTRACTS = frozenset({
 })
 PRECISION_EDIT_CAPABILITY = "precision_edit"
 PRECISION_ANNOTATION_TYPES = frozenset({"arrow", "rectangle", "ellipse", "brush", "text"})
+PRECISION_STRATEGIES = frozenset({"fine", "standard", "fast"})
+PRECISION_SELECTION_MODES = frozenset({"annotation", "local"})
+PRECISION_SELECTION_TYPES = frozenset({"rectangle", "ellipse", "brush"})
+MAX_PRECISION_SELECTION_FEATHER = 64
 MAX_PRECISION_ANNOTATIONS = 100
 MAX_PRECISION_BRUSH_POINTS = 1024
 MAX_PRECISION_BRUSH_POINTS_TOTAL = 4096
@@ -1072,12 +1081,29 @@ def _validate_generation_request_inputs(req: GenerateRequest) -> dict:
             field="mode",
         )
 
+    precision_strategy_supplied = "precision_strategy" in req.model_fields_set
+    precision_selection_mode_supplied = "precision_selection_mode" in req.model_fields_set
+    precision_selection_feather_supplied = "precision_selection_feather" in req.model_fields_set
     output_size_policy_supplied = "precision_output_size_policy" in req.model_fields_set
-    if mode != "precision_edit" and output_size_policy_supplied:
+    if mode != "precision_edit" and output_size_policy_supplied and not any((
+        precision_strategy_supplied,
+        precision_selection_mode_supplied,
+        precision_selection_feather_supplied,
+    )):
         raise _generation_contract_error(
             "precision_output_size_policy_not_allowed",
             "precision_output_size_policy is accepted only for precision_edit resize",
             field="precision_output_size_policy",
+        )
+    if mode != "precision_edit" and any((
+        precision_strategy_supplied,
+        precision_selection_mode_supplied,
+        precision_selection_feather_supplied,
+    )):
+        raise _generation_contract_error(
+            "precision_fields_not_allowed",
+            "precision strategy and selection fields are accepted only for precision_edit",
+            mode=mode,
         )
 
     has_image_list = bool(req.image_data_list)
@@ -1173,6 +1199,42 @@ def _validate_generation_request_inputs(req: GenerateRequest) -> dict:
                 "precision_edit prompt cannot contain URLs, HTML, or filesystem paths",
                 field="prompt",
             )
+        precision_strategy = str(req.precision_strategy or "standard").strip().lower()
+        if precision_strategy not in PRECISION_STRATEGIES:
+            raise _generation_contract_error(
+                "precision_strategy_invalid",
+                "precision_strategy must be fine, standard, or fast",
+                field="precision_strategy",
+                allowed_strategies=sorted(PRECISION_STRATEGIES),
+            )
+        precision_selection_mode = str(req.precision_selection_mode or "annotation").strip().lower()
+        if precision_selection_mode not in PRECISION_SELECTION_MODES:
+            raise _generation_contract_error(
+                "precision_selection_mode_invalid",
+                "precision_selection_mode must be annotation or local",
+                field="precision_selection_mode",
+                allowed_modes=sorted(PRECISION_SELECTION_MODES),
+            )
+        if isinstance(req.precision_selection_feather, bool) or not math.isfinite(float(req.precision_selection_feather)):
+            raise _generation_contract_error(
+                "precision_selection_feather_invalid",
+                "precision_selection_feather must be a finite number between 0 and 64",
+                field="precision_selection_feather",
+            )
+        precision_selection_feather = float(req.precision_selection_feather)
+        if not 0 <= precision_selection_feather <= MAX_PRECISION_SELECTION_FEATHER:
+            raise _generation_contract_error(
+                "precision_selection_feather_invalid",
+                "precision_selection_feather must be between 0 and 64",
+                field="precision_selection_feather",
+                max_feather=MAX_PRECISION_SELECTION_FEATHER,
+            )
+        if precision_selection_mode != "local" and precision_selection_feather_supplied:
+            raise _generation_contract_error(
+                "precision_selection_feather_not_allowed",
+                "precision_selection_feather is accepted only for local selection mode",
+                field="precision_selection_feather",
+            )
         size_mode = str(req.precision_size_mode or "preserve").strip().lower()
         if size_mode not in {"preserve", "resize"}:
             raise _generation_contract_error(
@@ -1213,6 +1275,12 @@ def _validate_generation_request_inputs(req: GenerateRequest) -> dict:
                 "precision_edit without annotations requires precision_size_mode=resize",
                 field="precision_size_mode",
             )
+        if precision_canvas_only and precision_selection_mode == "local":
+            raise _generation_contract_error(
+                "precision_local_selection_requires_annotations",
+                "local selection mode requires rectangle, ellipse, or brush annotations",
+                field="precision_selection_mode",
+            )
         resize_prompt = str(req.precision_resize_prompt or "").strip()
         if req.upscale_to is not None or req.upscale_ratio != "original":
             raise _generation_contract_error(
@@ -1251,18 +1319,15 @@ def _validate_generation_request_inputs(req: GenerateRequest) -> dict:
                     field="precision_target_size",
                 )
             target_size = normalized_target_size
-            if not resize_prompt:
-                raise _generation_contract_error(
-                    "precision_resize_prompt_required",
-                    "resize mode requires precision_resize_prompt",
-                    field="precision_resize_prompt",
-                )
+            resize_prompt = resize_prompt or DEFAULT_PRECISION_RESIZE_GUIDANCE
         base_image = _validate_generation_image_data(req.image_data, "image_data")
         if precision_canvas_only:
             return {
                 "mode": mode,
                 "images": [base_image],
                 "precision_canvas_only": True,
+                "precision_strategy": precision_strategy,
+                "precision_selection_mode": precision_selection_mode,
                 "precision_size_mode": size_mode,
                 "precision_target_size": target_size,
                 "precision_resize_prompt": resize_prompt,
@@ -1291,6 +1356,14 @@ def _validate_generation_request_inputs(req: GenerateRequest) -> dict:
                 mode=mode,
             )
         annotations = _validate_precision_annotations(req.annotations, annotation_contract)
+        if precision_selection_mode == "local" and not any(
+            item["type"] in PRECISION_SELECTION_TYPES for item in annotations
+        ):
+            raise _generation_contract_error(
+                "precision_local_selection_required",
+                "local selection mode requires at least one rectangle, ellipse, or brush annotation",
+                field="annotations",
+            )
         if annotation_contract == PRECISION_ANNOTATION_CONTRACT_V2:
             annotations.sort(key=lambda item: item["label"])
         return {
@@ -1300,6 +1373,9 @@ def _validate_generation_request_inputs(req: GenerateRequest) -> dict:
             "annotation_contract": annotation_contract,
             "annotations": annotations,
             "precision_canvas_only": False,
+            "precision_strategy": precision_strategy,
+            "precision_selection_mode": precision_selection_mode,
+            "precision_selection_feather": precision_selection_feather,
             "precision_size_mode": size_mode,
             "precision_target_size": target_size or None,
             "precision_resize_prompt": resize_prompt or None,
@@ -1437,6 +1513,28 @@ def _validate_precision_edit_size_authorization(
         provider = all_providers.get(provider_id)
         setting = settings.get(provider_id) if isinstance(settings.get(provider_id), dict) else {}
         model = str(setting.get("model") or "").strip()
+        resolution = _provider_precision_model_resolution(provider, model) if provider else None
+        protocol_model = bool(
+            resolution is not None
+            and (
+                model == PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE
+                or (
+                    resolution.canonical_model == PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE
+                    and bool(resolution.supported_sizes)
+                    and all(gpt_image_2_size_error(size) is None for size in resolution.supported_sizes)
+                )
+            )
+        )
+        if protocol_model:
+            protocol_error = gpt_image_2_size_error(target)
+            if protocol_error:
+                unsupported.append({
+                    "id": provider_id,
+                    "model": model,
+                    "reason": protocol_error[0],
+                    "target_size": target,
+                })
+                continue
         sizes = _precision_model_declared_sizes(provider, model) if provider else set()
         if not sizes:
             unsupported.append({
@@ -2190,6 +2288,21 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
             raise HTTPException(status_code=400, detail={"code": "precision_provider_openai_required", "message": "Provider must use the OpenAI-compatible image transport"})
         if not _provider_precision_model_capability(provider, model):
             raise HTTPException(status_code=400, detail={"code": "precision_model_precision_edit_required", "message": "Model must already have explicit precision_edit capability"})
+
+        # gpt-image-2 has a stricter upstream size envelope than the generic
+        # WIDTHxHEIGHT capability contract.  Apply it to both the canonical
+        # model and explicitly reviewed aliases that resolve to that model.
+        if req.enabled and resolution.structure_valid and capability_model == PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE:
+            protocol_error = gpt_image_2_size_error(normalized_size)
+            if protocol_error:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "code": "precision_size_invalid",
+                        "message": protocol_error[1],
+                        "reason_code": protocol_error[0],
+                    },
+                )
 
         supported_sizes = list(resolution.supported_sizes) if resolution.size_declaration_valid else []
         if req.enabled:
@@ -3128,11 +3241,15 @@ async def generate(req: GenerateRequest, request: Request):
             "mode": mode,
             "image_data": generation_input["images"][0]["value"],
             "precision_canvas_only": generation_input["precision_canvas_only"],
+            "precision_strategy": generation_input["precision_strategy"],
+            "precision_selection_mode": generation_input["precision_selection_mode"],
             "precision_size_mode": generation_input["precision_size_mode"],
             "precision_target_size": generation_input["precision_target_size"],
             "precision_resize_prompt": generation_input["precision_resize_prompt"],
             "precision_edit_authorized": True,
         })
+        if generation_input["precision_selection_mode"] == "local":
+            kwargs["precision_selection_feather"] = generation_input["precision_selection_feather"]
         if generation_input["precision_size_mode"] == "resize":
             kwargs["precision_output_size_policy"] = generation_input[
                 "precision_output_size_policy"

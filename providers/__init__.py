@@ -32,6 +32,7 @@ from io import BytesIO
 from config import (
     cfg_mgr,
     GALLERY_DIR,
+    gpt_image_2_size_error,
     PrecisionEditProfile,
     ProviderConfig,
     VideoModelSpec,
@@ -64,6 +65,10 @@ PRECISION_ANNOTATION_CONTRACTS = frozenset({
     PRECISION_ANNOTATION_CONTRACT_V3,
 })
 PRECISION_EDIT_CAPABILITY = "precision_edit"
+PRECISION_STRATEGIES = frozenset({"fine", "standard", "fast"})
+PRECISION_SELECTION_MODES = frozenset({"annotation", "local"})
+PRECISION_SELECTION_TYPES = frozenset({"rectangle", "ellipse", "brush"})
+MAX_PRECISION_SELECTION_FEATHER = 64
 LEGACY_PRECISION_EDIT_PROFILE = (
     PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_REPEATED_IMAGE
 )
@@ -108,6 +113,10 @@ PRECISION_MAX_OUTPUT_PIXELS = 64 * 1024 * 1024
 PRECISION_OUTPUT_SIZE_POLICIES = ("strict", "fit_crop")
 PRECISION_FIT_CROP_MAX_ASPECT_RATIO_DELTA = 0.05
 PRECISION_FIT_CROP_MAX_UPSCALE = 1.5
+DEFAULT_PRECISION_RESIZE_GUIDANCE = (
+    "Prevent cropping. Automatically resize and reframe the composition to match the "
+    "target aspect ratio, extending the canvas as needed while preserving the full subject."
+)
 PROVIDER_ERROR_MAX_LENGTH = 2400
 
 

@@ -1,0 +1,71 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const html = fs.readFileSync(path.join(root, 'static/index.html'), 'utf8');
+const css = fs.readFileSync(path.join(root, 'static/css/app.css'), 'utf8');
+const js = fs.readFileSync(path.join(root, 'static/js/app-all.js'), 'utf8');
+const i18n = fs.readFileSync(path.join(root, 'static/js/i18n.js'), 'utf8');
+const research = fs.readFileSync(path.join(root, 'docs/precision-edit-v4-research.md'), 'utf8');
+
+assert.match(html, /id="btnPrecisionFullscreen"[^>]+aria-pressed="false"/);
+assert.match(html, /id="precisionAnnotationCanvas"[^>]+aria-describedby="precisionCanvasInteractionHint precisionFullscreenHint"/);
+assert.match(html, /id="precisionCompareStage"[^>]+data-i18n-title="creator\.precision_fullscreen_double_click"/);
+assert.ok(html.includes('storage/models/cutout/u2net_human_seg.onnx'));
+assert.ok(html.includes('https://github.com/liwei9745/GenBox/blob/master/docs/CLIENT-QUICKSTART.md'));
+assert.ok(html.includes('https://github.com/liwei9745/GenBox/blob/master/docs/CUTOUT-MODEL-GUIDE.md'));
+assert.ok(!html.includes('https://github.com/liwei9745/GenBox/blob/main/'));
+assert.ok(html.includes('https://github.com/danielgatis/rembg/releases/tag/v0.0.0'));
+assert.ok(html.includes('https://github.com/xuebinqin/U-2-Net'));
+assert.ok(html.includes('creator.precision_docs_cutout_model_boundary'));
+assert.ok(html.includes('id="btnPrecisionStrategyFine"'));
+assert.ok(html.includes('id="btnPrecisionStrategyStandard"'));
+assert.ok(html.includes('id="btnPrecisionStrategyFast"'));
+assert.ok(html.includes('id="btnPrecisionSelectionLocal"'));
+assert.ok(html.includes('id="precisionSelectionFeather"'));
+assert.ok(!/precision-docs-model-guide[\s\S]*?[A-Za-z]:\\/.test(html), 'The model guide must not expose a Windows absolute path.');
+
+assert.match(html, /id="precisionImageFullscreen"[^>]+tabindex="-1"/, 'Image-only fullscreen viewer must be focusable for lifecycle management.');
+assert.ok(html.includes('toggleLightboxImageFullscreen(event)'), 'Lightbox must expose current-image-only fullscreen.');
+assert.ok(html.includes('id="precisionSessionGallery"'), 'Precision workbench must expose a current-session result gallery.');
+assert.ok(html.includes('id="precisionPromptStrip"'), 'Precision workbench must expose split prompt history.');
+const precisionCanvasShellIndex = html.indexOf('id="precisionCanvasShell"');
+const precisionSessionShowcaseIndex = html.indexOf('class="precision-session-showcase"');
+assert.ok(precisionCanvasShellIndex !== -1 && precisionSessionShowcaseIndex > precisionCanvasShellIndex, 'Current-session results must render below the precision canvas.');
+assert.ok(html.includes('id="precisionSessionGallery" class="precision-session-gallery" role="list"'), 'Session gallery must expose list semantics for result thumbnails.');
+assert.ok(i18n.includes("creator.precision_session_results"), 'Session gallery heading must have an i18n translation key.');
+assert.ok(i18n.includes("creator.precision_session_empty"), 'Session gallery empty state must have an i18n translation key.');
+assert.ok(/precision-session-empty/.test(fs.readFileSync(path.join(root, 'static/js/app-all.js'), 'utf8')), 'Session gallery must render an explicit localized empty state.');
+assert.ok(html.includes('id="galleryDateFrom"') && html.includes('id="galleryDateTo"'), 'Gallery must expose date range filters.');
+assert.ok(html.includes('id="precisionSessionDateFrom"') && html.includes('id="precisionSessionDateTo"'), 'Session gallery must expose isolated date range filters.');
+assert.ok(html.includes('applyPrecisionSessionDateFilter()') && html.includes('clearPrecisionSessionDateFilter()'), 'Session gallery date controls must have dedicated handlers.');
+assert.ok(css.includes('.precision-image-fullscreen') && css.includes('.precision-session-gallery'), 'Showcase/fullscreen styles must be responsive and scoped.');
+assert.ok(css.includes('grid-auto-flow: column') && css.includes('max-width: 100%'), 'Session gallery must stay bounded while supporting multiple result thumbnails.');
+assert.match(css, /precision-session-showcase-heading\s*\{[\s\S]*?flex-wrap:\s*wrap/, 'Session gallery heading must wrap instead of overflowing at intermediate widths.');
+assert.match(css, /precision-manual-tool-group > \.precision-style-controls\s*\{[\s\S]*?grid-row:\s*2/, 'Manual-edit style controls must occupy a dedicated second row.');
+assert.match(css, /precision-manual-tool-group\s*\{[\s\S]*?grid-template-rows:\s*auto auto/, 'Manual-edit controls must reserve two rows even when the inspector is narrow on a wide viewport.');
+assert.ok(html.includes('id="btnPrecisionCutoutCapabilityRefresh"'), 'Cutout model/algorithm recovery must expose a recheck action outside collapsed details.');
+assert.ok(js.includes('function refreshPrecisionCutoutSetup()') && js.includes('return updatePrecisionCutoutAvailability()'), 'A failed model refresh must recover through the independent capability probe.');
+assert.ok(js.includes("record.adapter === 'u2net-human-seg-onnx'") && js.includes("record.adapter === 'modnet-photographic-portrait'"), 'U2-Net must be the explicit default while MODNet is labeled separately.');
+assert.ok(i18n.includes('creator.cutout_algorithm_modnet_lab_notice'), 'MODNet experimental local-lab guidance must be translated.');
+assert.ok(/function filterPrecisionSessionEntries\(entries\)/.test(fs.readFileSync(path.join(root, 'static/js/app-all.js'), 'utf8')), 'Session date filtering must stay local to precision session entries.');
+assert.ok(/function bindPrecisionImageFullscreenLifecycle\(\)/.test(fs.readFileSync(path.join(root, 'static/js/app-all.js'), 'utf8')));
+assert.match(html, /id="precisionImageFullscreen"[^>]+ondblclick="if\(event\.target===this \|\|/,
+  'Image-only fullscreen must not close when the prompt history panel is double-clicked.');
+assert.ok(fs.readFileSync(path.join(root, 'static/js/app-all.js'), 'utf8').includes("event.target !== target && !(event.target && event.target.closest && event.target.closest('.precision-image-fullscreen-figure'))"),
+  'Image-only fullscreen wheel and middle-click handlers must ignore the prompt history panel.');
+
+assert.ok(css.includes('#panelPrecisionEdit:fullscreen'));
+assert.ok(!css.includes('.precision-edit-workspace:fullscreen'), 'Fullscreen must use #panelPrecisionEdit as its sole API root.');
+assert.ok(css.includes('height: 100dvh;'));
+assert.match(css, /#panelPrecisionEdit:fullscreen[\s\S]+?overflow:\s*hidden;/);
+assert.match(css, /@media \(max-width: 760px\)[\s\S]+?precision-edit-inspector[\s\S]+?overflow-y:\s*auto;/);
+assert.match(css, /#panelPrecisionEdit:fullscreen textarea[\s\S]+?max-width:\s*100%;/);
+
+assert.ok(research.includes('本地模型已就绪'));
+assert.ok(research.includes('storage/models/cutout/u2net_human_seg.onnx'));
+assert.ok(research.includes('#panelPrecisionEdit` or `.precision-edit-workspace'));
+
+console.log('precision-edit static documentation and fullscreen contracts passed');

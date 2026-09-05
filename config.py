@@ -106,6 +106,22 @@ PRECISION_MODEL_SIZE_FIELDS = ("supported_sizes", "supportedSizes", "sizes", "di
 PRECISION_MODEL_ALIAS_MAX_DEPTH = 1
 PRECISION_MODEL_DEFAULT_MAX_OUTPUT_PIXELS = 64 * 1024 * 1024
 
+# Exact-size legality for the documented gpt-image-2 image protocol.  These
+# limits intentionally remain separate from the generic capability validator:
+# custom/OpenAI-compatible providers may expose legacy dimensions such as
+# 64x64, while gpt-image-2 requests must satisfy the protocol itself.
+GPT_IMAGE_2_SIZE_ALIGNMENT = 16
+GPT_IMAGE_2_MIN_OUTPUT_PIXELS = 655_360
+GPT_IMAGE_2_MAX_OUTPUT_PIXELS = 8_294_400
+GPT_IMAGE_2_MAX_SIDE = 3_840
+GPT_IMAGE_2_EXPERIMENTAL_MAX_WIDTH = 2_560
+GPT_IMAGE_2_EXPERIMENTAL_MAX_HEIGHT = 1_440
+GPT_IMAGE_2_CANONICAL_PRESETS = {
+    "1k": "1024x1024",
+    "2k": "2048x1152",
+    "4k": "3840x2160",
+}
+
 
 @dataclass(frozen=True)
 class PrecisionModelCapabilityResolution:
@@ -145,6 +161,40 @@ def normalize_precision_capability_size(
         return None
     normalized = f"{width}x{height}"
     return normalized if normalized == value else None
+
+
+def gpt_image_2_size_error(value: object) -> Optional[Tuple[str, str]]:
+    """Return a structured legality error for one exact gpt-image-2 size.
+
+    This helper does not inspect provider declarations.  A size can be legal
+    under the upstream protocol and still be rejected later when the selected
+    provider/model has not explicitly declared support for it.
+    """
+    if not isinstance(value, str):
+        return "precision_target_size_invalid", "size must be WIDTHxHEIGHT"
+    match = re.fullmatch(r"([1-9]\d{1,4})x([1-9]\d{1,4})", value)
+    if not match:
+        return "precision_target_size_invalid", "size must be WIDTHxHEIGHT"
+    width, height = int(match.group(1)), int(match.group(2))
+    if width > GPT_IMAGE_2_MAX_SIDE or height > GPT_IMAGE_2_MAX_SIDE:
+        return "precision_target_size_side_exceeded", "gpt-image-2 dimensions cannot exceed 3840 pixels per side"
+    if width % GPT_IMAGE_2_SIZE_ALIGNMENT or height % GPT_IMAGE_2_SIZE_ALIGNMENT:
+        return "precision_target_size_alignment_invalid", "gpt-image-2 dimensions must be divisible by 16"
+    ratio = width / height
+    if ratio < (1 / 3) or ratio > 3:
+        return "precision_target_size_aspect_invalid", "gpt-image-2 aspect ratio must be between 1:3 and 3:1"
+    pixels = width * height
+    if pixels < GPT_IMAGE_2_MIN_OUTPUT_PIXELS:
+        return "precision_target_size_pixels_too_small", "gpt-image-2 output must contain at least 655360 pixels"
+    if pixels > GPT_IMAGE_2_MAX_OUTPUT_PIXELS:
+        return "precision_target_size_pixels_exceeded", "gpt-image-2 output cannot exceed 8294400 pixels"
+    return None
+
+
+def validate_gpt_image_2_size(value: object) -> Tuple[bool, str]:
+    """Return ``(is_valid, reason_code)`` for an exact gpt-image-2 size."""
+    error = gpt_image_2_size_error(value)
+    return (error is None, "" if error is None else error[0])
 
 
 def precision_capability_size_declaration(
