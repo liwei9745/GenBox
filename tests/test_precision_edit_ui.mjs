@@ -154,6 +154,7 @@ expect(extractFunction('togglePrecisionCompareFullscreen').includes('document.fu
 expect(fullscreenSource.includes("creator.precision_exit_fullscreen_label") && fullscreenSource.includes("button.setAttribute('title'") && fullscreenSource.includes("button.setAttribute('aria-label'"), 'Fullscreen state must synchronize the button text, tooltip, and accessible label.');
 expect(extractFunction('handlePrecisionFullscreenKeydown').includes("event.key !== 'Escape'") && extractFunction('handlePrecisionFullscreenKeydown').includes('document.exitFullscreen()'), 'Escape must exit the real precision workbench fullscreen root.');
 expect(extractFunction('openPrecisionCanvasImageFullscreen').includes('openPrecisionImageFullscreen') && !extractFunction('openPrecisionCanvasImageFullscreen').includes('togglePrecisionCompareFullscreen'), 'Loaded-canvas fullscreen must open the media viewer instead of toggling the workbench.');
+expect(extractFunction('openPrecisionSelectedImageFullscreen').includes("precisionSelectedVersion: true") && extractFunction('precisionFullscreenVisibleEntry').includes('event.precisionSelectedVersion === true'), 'The image fullscreen action must open the selected version rather than depend on the active compare pane.');
 expect(extractFunction('endPrecisionCanvasPan').includes('state.button === 1 && !state.moved') && extractFunction('endPrecisionCanvasPan').includes('setPrecisionViewZoom(100'), 'A stationary middle-button gesture must reset view zoom while preserving drag-to-pan.');
 const precisionExportSource = js.slice(js.indexOf('function exportPrecisionEditAnnotationImage'), js.indexOf('function buildPrecisionEditAnnotationData'));
 expect(precisionExportSource.includes('drawPrecisionEditObject(context, object, output.width, output.height, false)'), 'Export must omit selection handles from the annotation image.');
@@ -501,7 +502,8 @@ expect(compareSizing.includes('after.style.width = width + \'px\';') && !compare
 expect(js.includes("var panel = document.getElementById('panelPrecisionEdit');") && !js.includes("var panel = document.getElementById('precisionSessionPanel');"), 'Fullscreen must target the complete precision workbench panel.');
 expect(js.includes('preserveEditor: true') && js.includes('renderObjectList: !(options && options.preserveEditor)'), 'Per-annotation typing must not recreate the active editor.');
 expect(html.indexOf('id="precisionSessionPanel"') < html.indexOf('id="precisionCanvasShell"'), 'Version shortcuts must sit above the main canvas.');
-expect(html.indexOf('id="precisionVersionRail"') < html.indexOf('data-precision-view="before"') && html.indexOf('data-precision-view="compare"') < html.indexOf('id="btnPrecisionFullscreen"'), 'Versions, view modes, and fullscreen must share the requested order.');
+expect(html.indexOf('id="precisionVersionRail"') < html.indexOf('data-precision-view="before"') && html.indexOf('data-precision-view="compare"') < html.indexOf('id="btnPrecisionImageFullscreen"') && html.indexOf('id="btnPrecisionImageFullscreen"') < html.indexOf('id="btnPrecisionFullscreen"'), 'Versions, view modes, image fullscreen, and workbench fullscreen must share the requested order.');
+expect(html.includes('id="btnPrecisionImageFullscreen"') && html.includes('creator.precision_image_fullscreen'), 'The workbench must expose a dedicated image fullscreen action next to the workbench fullscreen action.');
 expect(css.includes('.precision-canvas-session') && css.includes('justify-content: flex-end'), 'Canvas session tools must align together at the upper right.');
 const responsiveReliability = css.slice(css.indexOf('/* Precision edit responsive reliability:'));
 expect(responsiveReliability.includes('.precision-edit-stage-heading') && responsiveReliability.includes('grid-template-columns: minmax(0, 1fr);'), 'The stage heading must stack its metadata and version rail inside the stage column.');
@@ -2514,10 +2516,48 @@ const canvasTitleIndex = html.indexOf('data-i18n="creator.precision_edit_canvas"
 const compactHelpIndex = html.indexOf('id="precisionWorkbenchHelp"', canvasTitleIndex);
 const dimensionsIndex = html.indexOf('id="precisionCanvasDimensions"', canvasTitleIndex);
 const stageActionsIndex = html.indexOf('class="precision-stage-actions"', dimensionsIndex);
-const sourceActionsIndex = html.indexOf('id="precisionSourceActions"', stageActionsIndex);
 const docsTriggerIndex = html.indexOf('id="btnPrecisionDocs"', stageActionsIndex);
+const displayModeGroupIndex = html.indexOf('class="precision-version-group precision-display-mode-group"');
+const sourceActionsIndex = html.indexOf('id="precisionSourceActions"', displayModeGroupIndex);
+const versionRailIndex = html.indexOf('id="precisionVersionRail"');
+const useAsBaseIndex = html.indexOf('id="btnPrecisionUseSelectedAsBase"');
+const compareModesIndex = html.indexOf('class="precision-compare-modes"', displayModeGroupIndex);
 expect(canvasTitleIndex !== -1 && compactHelpIndex > canvasTitleIndex && dimensionsIndex > compactHelpIndex, 'Precision canvas title row must order label, compact help trigger, then dimensions.');
-expect(stageActionsIndex > dimensionsIndex && sourceActionsIndex > stageActionsIndex && docsTriggerIndex > stageActionsIndex, 'Precision source actions and the docs trigger must live in the right-side stage actions.');
+expect(stageActionsIndex > dimensionsIndex && docsTriggerIndex > stageActionsIndex, 'The compact docs trigger must remain in the right-side stage actions.');
+expect(versionRailIndex !== -1 && useAsBaseIndex > versionRailIndex && useAsBaseIndex < displayModeGroupIndex, 'The next-base action must stay on the same compact row as version buttons.');
+expect(displayModeGroupIndex !== -1 && sourceActionsIndex > displayModeGroupIndex && sourceActionsIndex < compareModesIndex, 'Replace-image must sit in the middle of the display-mode controls before view modes.');
+expect(/id="btnPrecisionReplaceSource"[^>]*aria-haspopup="menu"[^>]*aria-controls="precisionSourceMenu"[^>]*aria-expanded="false"/.test(html), 'The compact replace-image trigger must retain its accessible menu relationship.');
+expect(!/<span class="precision-version-group-label" data-i18n="creator\.precision_version_shortcuts">版本<\/span>/.test(html), 'The visible version-shortcut label must not consume workbench space.');
+const toolbarIndex = html.indexOf('class="precision-toolbar"');
+const sessionShowcaseIndex = html.indexOf('id="precisionSessionShowcase"');
+expect(toolbarIndex !== -1 && sessionShowcaseIndex > toolbarIndex, 'The current-session gallery must live below the annotation toolbar.');
+expect(/id="btnPrecisionSessionShowcaseToggle"[^>]*aria-controls="precisionSessionShowcaseContent"[^>]*aria-expanded="false"/.test(html), 'The session gallery must begin as an accessible collapsed pill.');
+expect(html.includes('creator.precision_session_gallery_show') && html.includes('data-precision-gallery-render-target="current-session"'), 'The gallery pill must declare its current-session render target without inventing a history API.');
+expect(js.includes('function setPrecisionSessionShowcaseOpen') && js.includes('function togglePrecisionSessionShowcase') && js.includes('togglePrecisionSessionDatePopover(false)'), 'The session gallery pill must support stateful reflow and close its nested date controls when collapsed.');
+expect(css.includes('grid-template-rows: 0fr') && css.includes('grid-template-rows: 1fr') && css.includes('.precision-session-showcase.is-expanded'), 'The session gallery must use a content-reflow expansion state rather than a detached modal.');
+expect(/id="precisionSessionShowcaseContent"[^>]*aria-hidden="true"[^>]*inert/.test(html) && extractFunction('setPrecisionSessionShowcaseOpen').includes("content.setAttribute('inert', '')"), 'Collapsed gallery content must leave the keyboard focus order until the pill is expanded.');
+expect(html.includes('id="precisionWorkflowHistoryDateFrom"') && html.includes('id="precisionWorkflowHistoryDateTo"') && !html.includes('id="precisionWorkflowHistoryId"'), 'Expanded gallery history must retain date filters without exposing a workflow-ID search input.');
+expect(/id="btnPrecisionWorkflowHistoryFilter"[^>]*aria-haspopup="dialog"[^>]*aria-controls="precisionWorkflowHistoryFilterPopover"[^>]*aria-expanded="false"/.test(html), 'History workflow filtering must use an accessible collapsed pill.');
+expect(/id="precisionWorkflowHistoryFilterPopover"[^>]*role="dialog"[^>]*tabindex="-1"[^>]*hidden/.test(html) && /id="precisionWorkflowHistoryActionPopover"[^>]*role="dialog"[^>]*tabindex="-1"[^>]*hidden/.test(html), 'Workflow selection and actions must use separate focusable cards.');
+for (const fn of ['loadPrecisionWorkflowHistory', 'selectPrecisionWorkflowHistory', 'viewPrecisionWorkflowHistoryImage', 'restorePrecisionWorkflowHistory', 'setPrecisionWorkflowHistoryFilterOpen', 'setPrecisionWorkflowHistoryActionOpen']) {
+  expect(js.includes('function ' + fn), 'Missing precision workflow history action: ' + fn);
+}
+const workflowHistoryLoadSource = extractFunction('loadPrecisionWorkflowHistory');
+const workflowHistorySelectSource = extractFunction('selectPrecisionWorkflowHistory');
+const workflowHistoryRestoreSource = extractFunction('restorePrecisionWorkflowHistory');
+const workflowHistoryItemSource = extractFunction('precisionWorkflowHistoryItemMarkup');
+expect(workflowHistoryLoadSource.includes("_authFetch('/api/precision/workflows?'") && workflowHistoryLoadSource.includes("query.set('date_from'") && workflowHistoryLoadSource.includes("query.set('date_to'") && !workflowHistoryLoadSource.includes("query.set('workflow_id'"), 'History list requests must use bounded date filters without a user-facing workflow-ID query.');
+expect(workflowHistorySelectSource.includes("_authFetch('/api/precision/workflows/' + encodeURIComponent(workflowId))"), 'Selecting a history workflow must load its bounded detail projection.');
+expect(workflowHistoryRestoreSource.includes('precisionWorkflowHistoryImageDataUrl(imageUrl)') && workflowHistoryRestoreSource.includes('loadPrecisionEditSourceImage(dataUrl'), 'Restoring history must convert only the safe projected image URL into the existing editable workbench source.');
+expect(!/prompt|local_path|logs|source_sha256|filename/i.test(workflowHistoryItemSource), 'History rows must not render prompts, paths, logs, hashes, or filenames.');
+expect(!workflowHistoryItemSource.includes("escHtml(workflowId)"), 'History rows must keep workflow IDs internal instead of rendering them as user-facing content.');
+expect(css.includes('.precision-workflow-history-version-row') && css.includes('.precision-workflow-history-arrow') && css.includes('.precision-workflow-history-popover') && css.includes('.precision-workflow-history-action-popover'), 'History rows need compact source-to-step sequencing plus separate filter and action cards.');
+expect(extractFunction('setPrecisionWorkflowHistoryFilterOpen').includes('precisionWorkflowHistoryState.filterOpener') && extractFunction('setPrecisionWorkflowHistoryActionOpen').includes('precisionWorkflowHistoryState.actionOpener'), 'History cards must retain their openers for keyboard focus restoration.');
+expect(css.includes('flex-wrap: nowrap') && /@media \(max-width: 640px\)[\s\S]*?\.precision-guidance-row\s*\{[\s\S]*?flex-wrap:\s*wrap;/.test(css), 'Guidance strategy and selection rows must stay inline on wider inspectors and wrap only on narrow screens.');
+const workflowMediaContext = vm.createContext({ String });
+vm.runInContext(extractFunction('precisionWorkflowHistoryMediaUrl'), workflowMediaContext);
+assert.equal(vm.runInContext("precisionWorkflowHistoryMediaUrl('/api/precision/workflows/pw_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/versions/pv_bbbbbbbbbbbbbbbbbbbbbbbb/thumb')", workflowMediaContext), '/api/precision/workflows/pw_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/versions/pv_bbbbbbbbbbbbbbbbbbbbbbbb/thumb', 'History thumbnails must accept only the known same-origin projection route.');
+assert.equal(vm.runInContext("precisionWorkflowHistoryMediaUrl('https://example.invalid/private.png')", workflowMediaContext), '', 'History rendering must reject arbitrary external media URLs.');
 expect(/id="precisionReplaceDisabledHint" class="sr-only precision-source-action-status"/.test(html), 'The replacement status must start as a screen-reader-only hint with a dedicated component class.');
 const srOnlyUtilityIndex = css.lastIndexOf('[class~="sr-only"]');
 const srOnlyUtility = css.slice(srOnlyUtilityIndex);
@@ -3311,6 +3351,17 @@ assert.equal(vm.runInContext(`generationFailureMessage({
     provider: { result: { code: 'precision_edit_output_size_mismatch', actual_size: '1376x768', target_size: '1536x864' } }
   }
 })`, sizeNoticeContext), 'Upstream returned 1376x768, target was 1536x864; strict matching failed.', 'Strict mismatch details must become the visible failure message.');
+vm.runInContext(`updatePrecisionTaskMonitor({
+  status: 'failed',
+  provider_states: {
+    provider: {
+      status: 'failed',
+      result: { error_details: { code: 'precision_edit_output_size_mismatch', actual_size: '2048x864', requested_size: '1792x768' } }
+    }
+  },
+  elapsed_seconds: 1
+})`, sizeNoticeContext);
+assert.ok(sizeNoticeNodes.precisionTaskLog.textContent.includes('Upstream returned 2048x864, target was 1792x768; strict matching failed.'), 'Precision task logs must surface strict mismatch dimensions nested inside backend error details.');
 
 cutoutCalls.length = 0;
 vm.runInContext("precisionSourceLoadGeneration = 21; precisionCutoutPending = false; precisionCutoutOperationToken = 0; precisionEditSourceImageData = 'data:image/png;base64,c291cmNl'; precisionEditSourceWidth = 4; precisionEditSourceHeight = 3; precisionEditSession.source = { id: 'original', data: precisionEditSourceImageData }; precisionEditSession.baseVersionId = 'original';", cutoutContext);

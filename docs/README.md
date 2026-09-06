@@ -1,11 +1,11 @@
 # GenBox 文档矩阵 / Documentation Matrix
 
-这里是 README 之外的文档入口。当前稳定发布版是 **v2.6.6**（2026-09-03）。
+这里是 README 之外的文档入口。当前稳定发布版是 **v2.6.7**（2026-09-06）。
 普通用户从“安装、启动与升级”开始；开发者按专题进入合同；带日期的阶段
 证据仅用于审计和追溯。
 
 This is the documentation hub beyond the main README. The current stable
-release is **v2.6.6** (2026-09-03). Start with installation and usage; use the
+release is **v2.6.7** (2026-09-06). Start with installation and usage; use the
 topic contracts for development; treat dated phase evidence as historical.
 
 ## 安装、启动与升级 / Install, Start, and Upgrade
@@ -15,10 +15,10 @@ topic contracts for development; treat dated phase evidence as historical.
 | [中文 README](../README.md) / [English README](../README_EN.md) | 用户入口 | 项目定位、界面、下载选择和首次启动 |
 | [客户端快速开始](CLIENT-QUICKSTART.md) | 用户指南 | Windows、macOS、Linux 独立客户端启动、首次配置和数据位置 |
 | [Docker 快速开始](DOCKER-QUICKSTART.md) | 部署指南 | Compose 配置、管理员密钥、启动、状态检查和更新 |
-| [v2.6.6 中文发布说明](../release-notes-v2.6.6-zh.md) / [English](../release-notes-v2.6.6.md) | 已冻结发布记录 | 精细编辑 V4、客户端与 Docker 修复、验证范围和已知边界 |
+| [v2.6.7 中文发布说明](../release-notes-v2.6.7-zh.md) / [English](../release-notes-v2.6.7.md) | 已冻结发布记录 | 精准改图工作流历史、工作台整理、验证范围和已知边界 |
 | [当前发布说明指针](../RELEASE_NOTES.md) | 滚动入口 | 指向最新稳定版的中英文发布说明 |
 | [CHANGELOG](../CHANGELOG.md) | 版本索引 | 按版本记录用户可见的新增、改进、修复和安全变化 |
-| [GitHub Releases v2.6.6](https://github.com/liwei9745/GenBox/releases/tag/v2.6.6) | 下载入口 | 客户端、Docker Compose、源码包和 `SHA256SUMS.txt` |
+| [GitHub Releases v2.6.7](https://github.com/liwei9745/GenBox/releases/tag/v2.6.7) | 下载入口 | 客户端、Docker Compose、源码包和 `SHA256SUMS.txt` |
 | [许可证](../LICENSE) / [第三方声明](../THIRD_PARTY_NOTICES.md) | 合规文档 | GPLv3-only 条款与依赖、资产来源记录 |
 
 ## 精细编辑 V4 / Precision Edit V4
@@ -26,13 +26,13 @@ topic contracts for development; treat dated phase evidence as historical.
 | 文档或入口 | 面向读者 | 使用方式与边界 |
 |---|---|---|
 | [人物抠图模型手动安装指南](CUTOUT-MODEL-GUIDE.md) | Windows、macOS、Linux 和 Docker 用户 | `u2net_human_seg.onnx` 的用途、固定大小/摘要、手动安装路径、上游来源和非商业使用边界 |
-| [v2.6.6 中文发布说明](../release-notes-v2.6.6-zh.md) / [English](../release-notes-v2.6.6.md) | 使用者 | 查看精细编辑、尺寸扩展、结果对比、本地抠图/细化的发布范围与限制；工作台内的“文档说明”是完整操作入口 |
+| [v2.6.7 中文发布说明](../release-notes-v2.6.7-zh.md) / [English](../release-notes-v2.6.7.md) | 使用者 | 查看工作流历史、尺寸扩展、结果对比、本地抠图/细化的发布范围与限制；工作台内的“文档说明”是完整操作入口 |
 | [Precision Edit V4 研究与合同](precision-edit-v4-research.md) | 开发者与审查者 | 提交包约束、尺寸策略、标注交互、模型能力授权、抠图状态与测试矩阵 |
 | [当前验证状态](STATUS.md) | 审计者 | 查看最新的本地测试、用户确认、未验证项和恢复点 |
 
-**当前边界：** v2.6.6 已发布精细编辑工作台及其本地、打包与安全回归证据，
+**当前边界：** v2.6.7 已发布精细编辑工作台、工作流历史及其本地和安全回归证据，
 但 ONNX 抠图模型不随包分发。因模型来源和商业使用权利仍为 **UNVERIFIED**，
-生产联网下载/安装仍禁用。v2.6.6 发布验证也未包含真实 Provider 请求、
+生产联网下载/安装仍禁用。v2.6.7 发布验证也未包含所有真实 Provider 请求、
 真实抠图模型推理或 Provider 端到端验收。
 
 ## 产品、架构与当前计划 / Product, Architecture, and Current Plan

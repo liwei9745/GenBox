@@ -5,10 +5,16 @@ import hashlib
 import json
 import re
 import shutil
+import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from genbox_version import __version__
+
 STATIC_DIR = ROOT / "static"
 ASSET_DIR = STATIC_DIR / "readme-assets"
 OUTPUT = STATIC_DIR / "readme-lab-content.json"
@@ -59,8 +65,8 @@ def main() -> None:
     documents = {
         "readme": {"zh": ROOT / "README.md", "en": ROOT / "README_EN.md"},
         "release": {
-            "zh": ROOT / "release-notes-v2.6.0-zh.md",
-            "en": ROOT / "release-notes-v2.6.0.md",
+            "zh": ROOT / f"release-notes-v{__version__}-zh.md",
+            "en": ROOT / f"release-notes-v{__version__}.md",
         },
     }
     payload = {}

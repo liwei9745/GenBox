@@ -6979,6 +6979,13 @@ body.precision-docs-open {
   margin: 0;
 }
 
+#pageGenerate.precision-workbench .precision-session-fullscreen-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  gap: 4px;
+}
+
 #pageGenerate.precision-workbench .precision-task-log-panel.precision-task-idle .precision-task-progress {
   display: none;
 }
@@ -7373,6 +7380,489 @@ body.precision-docs-open {
 
   #pageGenerate.precision-workbench .precision-size-preset-actions {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Precision workbench: keep the active session library near its annotation tools. */
+#pageGenerate.precision-workbench .precision-session-showcase {
+  display: grid;
+  gap: 0;
+  width: 100%;
+  min-width: 0;
+  margin-top: 8px;
+  border-top: 0;
+}
+
+#pageGenerate.precision-workbench .precision-session-showcase-toggle {
+  display: inline-flex;
+  width: 100%;
+  min-height: 36px;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-radius 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+#pageGenerate.precision-workbench .precision-session-showcase-toggle:hover,
+#pageGenerate.precision-workbench .precision-session-showcase-toggle:focus-visible {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  outline: 0;
+}
+
+#pageGenerate.precision-workbench .precision-session-showcase-toggle > span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#pageGenerate.precision-workbench .precision-session-showcase-toggle .precision-session-result-count {
+  margin-left: auto;
+}
+
+#pageGenerate.precision-workbench .precision-session-showcase-caret {
+  flex: 0 0 auto;
+  transition: transform 160ms ease;
+}
+
+#pageGenerate.precision-workbench .precision-session-showcase-content {
+  display: grid;
+  grid-template-rows: 0fr;
+  min-width: 0;
+  opacity: 0;
+  transition: grid-template-rows 220ms ease, opacity 160ms ease;
+}
+
+#pageGenerate.precision-workbench .precision-session-showcase-content-inner {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#pageGenerate.precision-workbench .precision-session-showcase.is-expanded .precision-session-showcase-toggle {
+  border-color: var(--border);
+  border-radius: 6px 6px 0 0;
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-surface));
+  color: var(--text-primary);
+}
+
+#pageGenerate.precision-workbench .precision-session-showcase.is-expanded .precision-session-showcase-caret {
+  transform: rotate(180deg);
+}
+
+#pageGenerate.precision-workbench .precision-session-showcase.is-expanded .precision-session-showcase-content {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+#pageGenerate.precision-workbench .precision-session-showcase.is-expanded .precision-session-showcase-content-inner {
+  padding: 8px 10px 10px;
+  border: 1px solid var(--border);
+  border-top: 0;
+  border-radius: 0 0 6px 6px;
+  background: var(--bg-surface);
+}
+
+#pageGenerate.precision-workbench .precision-session-showcase .precision-session-showcase-heading {
+  padding: 0 0 3px;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-heading,
+#pageGenerate.precision-workbench .precision-workflow-history-heading > div,
+#pageGenerate.precision-workflow-history-selection,
+#pageGenerate.precision-workflow-history-selection-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-heading {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-heading > div {
+  gap: 7px;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-heading small {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-refresh {
+  width: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  font-size: 15px;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-filters {
+  display: grid;
+  position: relative;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: 5px;
+  min-width: 0;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-filters label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-filters input {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 11px;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-filter-toggle {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-filter-toggle[aria-expanded="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
+  color: var(--text-primary);
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-popover,
+#pageGenerate.precision-workbench .precision-workflow-history-action-popover {
+  position: absolute;
+  z-index: 36;
+  left: 0;
+  top: calc(100% + 6px);
+  width: min(620px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, .24);
+  transform-origin: top left;
+  animation: precision-filter-open 140ms ease-out;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-action-popover {
+  display: grid;
+  width: min(300px, calc(100vw - 32px));
+  gap: 6px;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-popover[hidden],
+#pageGenerate.precision-workbench .precision-workflow-history-action-popover[hidden] {
+  display: none;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-popover-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-popover-heading strong,
+#pageGenerate.precision-workbench .precision-workflow-history-action-popover > strong {
+  font-size: 12px;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-popover-heading button {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-action-popover button {
+  min-height: 32px;
+  padding: 5px 8px;
+  text-align: left;
+  white-space: normal;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-list {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-item {
+  min-width: 0;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-select {
+  display: grid;
+  grid-template-columns: minmax(104px, .7fr) minmax(0, 1.3fr);
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-select:hover,
+#pageGenerate.precision-workbench .precision-workflow-history-select:focus-visible,
+#pageGenerate.precision-workbench .precision-workflow-history-select.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  outline: 0;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-item-meta {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-item-meta strong,
+#pageGenerate.precision-workbench .precision-workflow-history-item-meta small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-item-meta strong {
+  font-size: 11px;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-item-meta small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-version-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 1px;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-version {
+  display: grid;
+  width: 48px;
+  min-width: 48px;
+  gap: 2px;
+  color: var(--text-secondary);
+  font-size: 9px;
+  text-align: center;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-version img,
+#pageGenerate.precision-workbench .precision-workflow-history-missing {
+  display: block;
+  width: 48px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-base);
+  object-fit: cover;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-missing {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-version.is-unavailable {
+  opacity: .58;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-arrow {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+#pageGenerate.precision-workbench .precision-workflow-history-empty {
+  margin: 0;
+  padding: 4px 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+#pageGenerate.precision-workbench .precision-shortcut-group {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+#pageGenerate.precision-workbench .precision-version-rail {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+#pageGenerate.precision-workbench .precision-shortcut-group .precision-version-base-action {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  justify-self: end;
+}
+
+#pageGenerate.precision-workbench .precision-display-mode-group {
+  flex-wrap: wrap;
+  align-content: center;
+}
+
+#pageGenerate.precision-workbench .precision-version-base-action {
+  min-height: 30px;
+  margin-top: 0;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+#pageGenerate.precision-workbench .precision-source-actions {
+  flex: 0 0 auto;
+  order: 0;
+}
+
+#pageGenerate.precision-workbench .precision-source-menu {
+  right: auto;
+  left: 0;
+  transform-origin: top left;
+}
+
+#pageGenerate.precision-workbench .precision-guidance-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 5px 7px;
+}
+
+#pageGenerate.precision-workbench .precision-guidance-row .precision-picker-label {
+  flex: 0 0 auto;
+}
+
+#pageGenerate.precision-workbench .precision-guidance-row .precision-size-modes,
+#pageGenerate.precision-workbench .precision-guidance-row:last-of-type .precision-size-modes {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  grid-template-columns: none;
+  gap: 5px;
+}
+
+#pageGenerate.precision-workbench .precision-guidance-row .precision-size-modes button {
+  flex: 1 1 0;
+}
+
+#pageGenerate.precision-workbench .precision-guidance-controls > .precision-quick-heading {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 3px 7px;
+}
+
+#pageGenerate.precision-workbench .precision-guidance-controls > .precision-quick-heading small {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  #pageGenerate.precision-workbench .precision-display-mode-group {
+    gap: 5px;
+  }
+
+  #pageGenerate.precision-workbench .precision-source-actions {
+    order: 2;
+  }
+
+  #pageGenerate.precision-workbench .precision-session-showcase-toggle {
+    font-size: 11px;
+  }
+
+  #pageGenerate.precision-workbench .precision-session-showcase.is-expanded .precision-session-showcase-content-inner {
+    padding-inline: 8px;
+  }
+
+  #pageGenerate.precision-workbench .precision-workflow-history-filters {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  #pageGenerate.precision-workbench .precision-workflow-history-filter-toggle {
+    grid-column: 1 / -1;
+  }
+
+  #pageGenerate.precision-workbench .precision-workflow-history-popover,
+  #pageGenerate.precision-workbench .precision-workflow-history-action-popover {
+    width: min(100%, calc(100vw - 32px));
+  }
+
+  #pageGenerate.precision-workbench .precision-workflow-history-select {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #pageGenerate.precision-workbench .precision-guidance-row {
+    flex-wrap: wrap;
+  }
+
+  #pageGenerate.precision-workbench .precision-guidance-row .precision-size-modes,
+  #pageGenerate.precision-workbench .precision-guidance-row:last-of-type .precision-size-modes {
+    flex-basis: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #pageGenerate.precision-workbench .precision-session-showcase-toggle,
+  #pageGenerate.precision-workbench .precision-session-showcase-caret,
+  #pageGenerate.precision-workbench .precision-session-showcase-content {
+    transition: none;
   }
 }
 

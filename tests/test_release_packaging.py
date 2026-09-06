@@ -346,14 +346,14 @@ def test_release_version_is_consistent():
     assert main.app.version == __version__
     assert updater.CURRENT_VERSION == __version__
     assert __version__ in (ROOT / "genbox_version.py").read_text(encoding="utf-8")
-    assert __version__ == "2.6.6"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", __version__)
 
 
 def test_compose_release_uses_ghcr_and_safe_internal_port():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     env_template = (ROOT / ".env.docker.example").read_text(encoding="utf-8")
 
-    stable_image = "ghcr.io/liwei9745/genbox:2.6.6"
+    stable_image = f"ghcr.io/liwei9745/genbox:{__version__}"
     assert f"GENBOX_IMAGE:-{stable_image}" in compose
     assert f"GENBOX_IMAGE={stable_image}" in env_template
     assert "ghcr.io/liwei9745/genbox:latest" not in compose
@@ -948,62 +948,66 @@ def test_release_notes_lead_with_download_and_first_run_guidance():
 def test_current_release_notes_are_versioned_and_linked_from_the_rolling_page():
     rolling_notes = (ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8")
     normalized_notes = " ".join(rolling_notes.split())
+    version = __version__
+    release_date = re.search(
+        rf"^## \[{re.escape(version)}\] - (\d{{4}}-\d{{2}}-\d{{2}})$",
+        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+        re.MULTILINE,
+    ).group(1)
 
     assert re.search(
-        r"^# GenBox v2\.6\.6 Release Notes$",
+        rf"^# GenBox v{re.escape(version)} Release Notes$",
         rolling_notes,
         re.MULTILINE,
     )
     assert "v2.6.5 tag was pushed" in normalized_notes
     assert "no GitHub Release, release assets, or GHCR image" in normalized_notes
-    assert "release-notes-v2.6.6.md" in rolling_notes
-    assert "release-notes-v2.6.6-zh.md" in rolling_notes
+    assert f"release-notes-v{version}.md" in rolling_notes
+    assert f"release-notes-v{version}-zh.md" in rolling_notes
 
     current_notes = {"rolling": rolling_notes}
-    for filename in ("release-notes-v2.6.6.md", "release-notes-v2.6.6-zh.md"):
+    for filename in (f"release-notes-v{version}.md", f"release-notes-v{version}-zh.md"):
         notes = (ROOT / filename).read_text(encoding="utf-8")
         current_notes[filename] = notes
-        assert "2.6.6" in notes
-        assert "2026-09-03" in notes
-        assert "33715658824" in notes
-        assert "33715658700" in notes
+        assert version in notes
+        assert release_date in notes
 
     public_release_text = "\n".join(current_notes.values())
     for transient_phrase in (
         "Release Candidate",
         "release-candidate",
         "prepared local candidate",
-        "No v2.6.6 tag",
+        "No v" + version + " tag",
         "claimed yet",
         "hosted release CI remains unverified",
         "拟发布候选版",
         "候选日期",
-        "尚未创建 v2.6.6",
+        "尚未创建 v" + version,
     ):
         assert transient_phrase not in public_release_text
 
-    english_notes = current_notes["release-notes-v2.6.6.md"]
-    chinese_notes = current_notes["release-notes-v2.6.6-zh.md"]
+    english_notes = current_notes[f"release-notes-v{version}.md"]
+    chinese_notes = current_notes[f"release-notes-v{version}-zh.md"]
     normalized_english_notes = " ".join(english_notes.split())
     normalized_chinese_notes = " ".join(chinese_notes.split())
     assert (
-        "provenance and commercial-use rights are **UNVERIFIED**"
+        "commercial-use rights are not established"
         in normalized_english_notes
     )
     assert (
         "Automatic update application and restart remain disabled"
         in normalized_english_notes
     )
-    assert "Real Provider requests, VPS deployment" in normalized_english_notes
-    assert "来源和商业使用权利仍为 **UNVERIFIED**" in normalized_chinese_notes
-    assert "自动更新应用和重启继续禁用" in normalized_chinese_notes
-    assert "真实 Provider 请求、VPS 部署" in normalized_chinese_notes
+    assert "does not claim universal support" in normalized_english_notes
+    assert "商业使用权不会因为本次发布而自动得到确认" in normalized_chinese_notes
+    assert "\u81ea\u52a8\u66f4\u65b0\u5e94\u7528\u548c\u81ea\u52a8\u91cd\u542f\u4ecd\u4fdd\u6301\u7981\u7528" in normalized_chinese_notes
+    assert "不代表所有第三方中转端点" in normalized_chinese_notes
 
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    current_changelog = changelog.split("## [2.6.5]", 1)[0]
-    assert "## [2.6.6] - 2026-09-03\n" in current_changelog
+    current_changelog = changelog.split("## [2.6.6]", 1)[0]
+    assert f"## [{version}] - {release_date}\n" in current_changelog
     assert "candidate" not in current_changelog.lower()
-    assert "No v2.6.6 tag" not in current_changelog
+    assert f"No v{version} tag" not in current_changelog
 
     for filename in ("release-notes-v2.6.5.md", "release-notes-v2.6.5-zh.md"):
         notes = (ROOT / filename).read_text(encoding="utf-8")
@@ -1023,11 +1027,11 @@ def test_release_candidate_version_ordering_is_supported():
 def test_release_tag_must_match_packaged_version_exactly():
     from scripts.package_release import SourcePackagingError, validate_release_tag
 
-    validate_release_tag("v2.6.6", "2.6.6")
+    validate_release_tag(f"v{__version__}", __version__)
     with pytest.raises(SourcePackagingError, match="does not match"):
-        validate_release_tag("v2.6.5", "2.6.6")
+        validate_release_tag("v0.0.0", __version__)
     with pytest.raises(SourcePackagingError, match="canonical v-prefixed"):
-        validate_release_tag("2.6.6", "2.6.6")
+        validate_release_tag(__version__, __version__)
 
 
 def test_readme_lab_content_matches_source_documents():
@@ -1040,11 +1044,14 @@ def test_readme_lab_content_matches_source_documents():
 
     sources = {
         "readme": {"zh": "README.md", "en": "README_EN.md"},
-        "release": {"zh": "release-notes-v2.6.0-zh.md", "en": "release-notes-v2.6.0.md"},
+        "release": {
+            "zh": f"release-notes-v{__version__}-zh.md",
+            "en": f"release-notes-v{__version__}.md",
+        },
     }
     assert 'id="document"' in lab
     assert "state.payload[state.document][state.language]" in lab
-    assert "Release v2.6.0" in lab
+    assert f"Release v{__version__}" in lab
     for document, languages in sources.items():
         for language, filename in languages.items():
             source = (ROOT / filename).read_text(encoding="utf-8")

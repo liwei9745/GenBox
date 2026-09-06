@@ -1,5 +1,93 @@
 # Current Project Status
 
+## 2026-09-06 Precision Workbench And Workflow-History Acceptance (latest)
+
+- **USER-CONFIRMED / HEADED WORKBENCH ACCEPTANCE:** The current precision
+  workbench completed two successful sequential results. The session gallery
+  showed a result count of `2`, the selected version advanced to the second
+  result, and the task reached its completed state. This closes the earlier
+  headed sequential-workbench boundary. No user image, prompt, raw log,
+  endpoint, or credential is retained in this record.
+- **VERIFIED / LOCAL PRODUCT DELIVERY:** The workbench now places a gallery
+  Pill below the toolbar and keeps it collapsed by default. The expanded
+  surface includes a redacted cross-session workflow browser, a two-level
+  operation-card hierarchy, restoration into the precision workbench, and
+  date-range plus workflow filtering. Public history projections omit prompts,
+  image bytes, hashes, absolute paths, raw logs, and credentials.
+- **VERIFIED / REGRESSION:** The complete local Python suite passed `1440`
+  tests. Precision UI and i18n Node contracts, JavaScript syntax validation,
+  and the repository diff check also passed.
+- **RETAINED BOUNDARIES:** Native strict-size success for a non-square target
+  remains unverified. When a workflow's original source image was not
+  persisted, history restoration can load only the latest available edited
+  result. Cutout execution is technically covered, but real-image quality for
+  legs, hair, soft edges, and complex backgrounds still requires authorized
+  human samples.
+
+## 2026-09-06 Authorized Local Precision-Edit Backend Acceptance
+
+- **VERIFIED / REAL UPSTREAM SEQUENTIAL EDIT:** In the local laboratory, a
+  non-sensitive generated geometry image with one minimal rectangle annotation
+  completed through the configured `gpt-image2-b` precision-edit path. The
+  returned RGB PNG was stored at `1024x1024`. That stored result was then used
+  as the input to one further minimal annotated edit through the same provider;
+  the second task also completed and stored a `1024x1024` RGB PNG. No user
+  image, user prompt, endpoint, credential, or raw provider response is kept
+  in this evidence record.
+- **VERIFIED / TARGETED REGRESSION:** Provider precision/strict-size/extension
+  tests passed `358`; precision UI-static and i18n checks also passed. The
+  previously recorded full-suite result remains `1435` Python tests.
+- **RETAINED BOUNDARY:** This proves two sequential backend calls with the
+  first generated result as the second input. It does not substitute for a
+  headed workbench interaction that uses the `设为下一次底图` control, appends
+  both results to the current session gallery, and displays its prompt-history
+  chunks in the image viewer.
+- **RETAINED STRICT-SIZE BOUNDARY:** The successful evidence is square
+  preserve-size editing. There is still no native strict-size PASS for a
+  non-square target; mismatch responses remain rejected before they can enter
+  the editable version or gallery result path.
+
+## 2026-09-06 Precision Edit Current Acceptance Follow-Up
+
+- **VERIFIED / STRICT FAIL-CLOSED:** A user-approved `1792x768` request returned
+  `2048x864` from the configured upstream. Strict mode rejected it without
+  replacing the editable base or creating a result version. This proves the
+  failure boundary, not native strict-size success.
+- **VERIFIED / LOCAL REGRESSION:** The focused provider/alias/strict-size/gallery
+  suites passed `176` tests. Precision i18n and UI static contracts also passed.
+  The size-mismatch recovery text now honestly offers another target size or an
+  explicit local-adaptation choice; it does not claim a stored upstream matrix.
+- **VERIFIED / FULL REGRESSION:** The full local Python suite passed `1435` tests.
+- **VERIFIED / LOCAL UI:** A dedicated `图片全屏` action now sits beside the
+  complete-workbench fullscreen action. It opens the selected session image and
+  its prompt-history chunks without submitting a generation; responsive browser
+  checks cover the two actions at mobile, compact, and desktop widths.
+- **VERIFIED / LOCAL CUTOUT TECHNICAL GATE:** Current U2-Net and user-imported
+  MODNet adapters each passed the synthetic full-body offline gate with CPU
+  execution, blocked Python networking, same-size RGBA output, and alpha `0..255`.
+- **VERIFIED / LAB CAPABILITY:** The running local capability endpoint now reports
+  both U2-Net and MODNet as `ready` and executable with CPU support. BiRefNet,
+  RMBG-2.0, and InSPyReNet remain unavailable and cannot be selected for a task.
+- **UNVERIFIED / NEXT HUMAN GATES:** Native strict success for a non-square
+  target and authorized human-image cutout quality for legs, hair, soft edges,
+  and complex backgrounds remain open. The sequential workbench and
+  real-result gallery boundary is closed by the newer acceptance record above;
+  Release remains subject to the remaining evidence and packaging gates.
+
+## 2026-09-05 Headed Annotation UAT PASS
+
+- **VERIFIED / HEADED LOCAL UAT:** On a non-sensitive blue-and-green geometric
+  test image, the loaded precision canvas created and then edited rectangle,
+  ellipse, arrow, and brush annotations successfully at `937x920`. At
+  `390x844`, the workbench had no horizontal overflow. No private asset was
+  generated or accessed. This is a narrow headed UI observation associated
+  with `7677073`; it does not verify provider output, a second precision edit,
+  or real-person cutout quality.
+- **UNVERIFIED / RETAINED BOUNDARIES:** Native strict success, the second
+  annotated edit/session-version path, and authorized real-person cutout
+  quality acceptance remain unverified. An earlier `1792` timeout was followed
+  by a later strict rejection when the upstream returned `2048x864`.
+
 ## 2026-09-05 Precision Edit Evidence Ledger Refresh
 
 - **VERIFIED / REAL UPSTREAM REQUEST:** The `1024` precision-edit probe
@@ -26,10 +114,451 @@
   remain incomplete. The Release remains blocked; no external size result,
   local UI test, or local runtime probe changes that decision.
 
-**Last updated:** 2026-09-03
+## 2026-09-05 Restarted Dual-Algorithm Runtime Verification
+
+- **VERIFIED / LAB RESTART:** The laboratory was restarted from the current
+  worktree and returned HTTP `200` from `/api/runtime/status`, reporting GenBox
+  `2.6.6` in development mode on port `8892` with runtime id
+  `ad11247da77b`.
+- **VERIFIED / REAL LOCAL REQUESTS:** After restart, the same stored gallery
+  image was submitted separately with `u2net-human-seg-onnx` and
+  `modnet-portrait-onnx`. Both returned HTTP `200`, the requested adapter id,
+  same-size RGBA PNG output (`1792x1024`), and alpha extrema `(0,255)`.
+  This closes the stale-process/algorithm-mismatch suspicion for the local
+  laboratory.
+- **QUALITY BOUNDARY:** The quality audit found U²-Net stable enough to remain
+  the default. MODNet is technically executable but can leave background or
+  remove foreground detail on complex samples; it remains experimental/local
+  opt-in and is excluded from Release until broader authorized-sample quality,
+  offline, and redistribution evidence is complete.
+- **VERIFIED / REGRESSION:** The focused cutout, precision-edit, provider,
+  strict-size, gallery, and model-manager suites passed `482` tests on this
+  worktree.
+
+## 2026-09-05 Current Cutout Capability Reconciliation (latest)
+
+- **VERIFIED / LOCAL RUNTIME:** the running lab capability endpoint reports
+  `u2net-human-seg-onnx` and `modnet-portrait-onnx` as executable. U²-Net
+  remains the default; MODNet is an opt-in, locally executable alternative and
+  uses the imported fixed checkpoint at
+  `storage/models/cutout/modnet/modnet.onnx`.
+- **VERIFIED / MODNET EVIDENCE:** the imported MODNet checkpoint is
+  `6,632,188` bytes with SHA-256
+  `92e49898c3e05a6d7a944fc67a8cb87c4aad754ffb6ebd949528c7d1105fee3a`.
+  The capability response reports `available=true`, `executable=true`,
+  `cpu_execution_provider=true`, and `license_confirmed=true` for this local
+  installation. This proves local technical readiness only; it is not a
+  portrait-edge quality acceptance or an upstream-provider result.
+- **VERIFIED / CACHE REFRESH:** the static bundle now references
+  `app-all.js?v=46`, so the capability picker is refreshed on reload.
+- **BOUNDARY:** BiRefNet, RMBG-2.0, and InSPyReNet remain fail-closed
+  candidates until fixed weights, redistribution terms, offline inference,
+  and portrait-edge quality evidence are complete. MODNet also remains
+  excluded from the Release until disconnected CPU execution, authorized
+  human-sample edge-quality evidence (legs, hair, and semi-transparent edges),
+  regression evidence, and the final compliance checklist are recorded. This
+  local result is not evidence of real upstream GPT Image 2 success.
+
+**Reconciliation note:** entries below dated before this record that say the
+worktree had no MODNet checkpoint or that U²-Net was the only executable
+adapter are historical snapshots from before the fixed MODNet import and
+runtime probe. They remain useful as an audit trail but are superseded by this
+dated live capability result; they must not be used as the current capability
+or Release decision.
+
+## 2026-09-04 MODNet Fixed-Checkpoint Runtime Smoke
+
+- **VERIFIED / LOCAL RUNTIME:** In the isolated local runtime, the fixed
+  `onnx-community/modnet-webnn` quantized checkpoint was imported through the
+  MODNet manager with explicit Apache-2.0 provenance and size/SHA-256/MD5
+  checks. The model is stored under the ignored runtime path
+  `storage/models/cutout/modnet/modnet.onnx`; it is not a tracked Release
+  artifact.
+- **VERIFIED / CPU SMOKE:** ONNX Runtime CPU created a session and processed a
+  stored gallery PNG into a same-size RGBA PNG (`1024x1024`) with alpha
+  extrema `(0, 255)` in about `0.381s`. This is technical execution evidence,
+  not a portrait-edge quality acceptance.
+- **BOUNDARY:** The default registry and U²-Net path remain unchanged. MODNet
+  must stay opt-in/unavailable for Release until断网运行、授权真人样本的腿部/发丝/半透明边缘验收、回归证据和最终合规清单全部完成。
+- **VERIFIED / REGRESSION:** The full Python suite passed `1415` tests on
+  2026-09-04; the focused MODNet and precision-edit suites passed as part of
+  that run.
+
+## 2026-09-05 Manual Edit Toolbar Narrow-Layout Fix
+
+- **FIXED / LOCAL UI:** The manual-edit/eraser control now wraps its label
+  safely in narrow inspectors instead of being clipped on one line. This is a
+  CSS-only change and does not alter cutout, precision-edit, or provider logic.
+- **VERIFIED / REGRESSION:** `node tests/test_precision_edit_ui.mjs` passed and
+  `git diff --check` passed.
+
+## 2026-09-05 Multi-Algorithm Cutout Availability Audit
+
+- **VERIFIED / LOCAL REGRESSION:** Full Python suite passed `1413` tests;
+  cutout registry, ONNX adapters, InSPyReNet candidate, precision-edit
+  contracts, and strict-size tests remain green.
+- **VERIFIED / MODEL INVENTORY:** The worktree contains one actual cutout
+  checkpoint, `storage/models/cutout/u2net_human_seg.onnx` (175,997,641 bytes,
+  SHA-256 `01eb6a29a5c4d8edb30b56adad9bb3a2a0535338e480724a213e0acfd2d1c73c`).
+  No MODNet, InSPyReNet, BiRefNet, or RMBG-2.0 checkpoint is present or
+  tracked.
+- **VERIFIED / RUNTIME:** The lab capability endpoint reports U²-Net as the
+  only `available=true` and `executable=true` adapter. The other algorithms
+  remain `UNVERIFIED`/`unavailable` by design.
+- **BOUNDARY:** Parallel adapter and authorization work may continue in
+  isolated branches/modules, but no second algorithm may enter the executable
+  selector or Release until fixed weights, redistribution permission,
+  SHA-256, offline CPU inference, transparent-PNG output, and portrait-edge
+  quality evidence are all recorded.
+- **VERIFIED / LOCAL SMOKE:** A stored RGB gallery image submitted through the
+  JSON `image_data` contract returned HTTP `200`, a transparent PNG, and a new
+  gallery result from `u2net-human-seg-onnx` (`1254x1254`, 2026-09-05). A
+  previously cutout/transparent input correctly failed closed with
+  `cutout_output_alpha_invalid`; this is an input-quality guard, not a model
+  availability failure.
+
+## 2026-09-04 Precision Edit And Cutout Regression Recheck
+
+- **VERIFIED / LOCAL REGRESSION:** Full Python suite passed `1413` tests;
+  precision-edit UI/static contracts, cutout installer UI assertions,
+  JavaScript syntax, and `git diff --check` also passed.
+- **VERIFIED / LOCAL RUNTIME:** `GET http://127.0.0.1:8892/api/runtime/status`
+  returned HTTP `200`, reporting GenBox `2.6.6` in development mode. The
+  cutout capability endpoint reports U²-Net as the only `ready` executable
+  adapter.
+- **VERIFIED / LOCAL SMOKE:** A real stored gallery PNG was submitted to the
+  running `/api/image-tools/cutout` endpoint and returned a transparent
+  `1024x1024` PNG from `u2net-human-seg-onnx`. This verifies the local U²-Net
+  request path only; it does not establish human-edge quality or upstream
+  precision-edit success.
+- **UNVERIFIED / RELEASE BOUNDARY:** MODNet, InSPyReNet, BiRefNet, and
+  RMBG-2.0 remain candidate adapters without a fixed redistributable
+  checkpoint, complete license/hash evidence, offline CPU smoke, and real
+  portrait-edge quality acceptance. Real upstream precision-edit and strict
+  16:9/21:9 generation still require headed-browser evidence.
+
+## 2026-09-04 Optional Cutout Import Runtime Refresh
+
+- **VERIFIED / LOCAL CONTRACT:** A successful MODNet upload now triggers a
+  fresh CPU/runtime probe and replaces only the MODNet unavailable placeholder
+  when the imported manifest, license, model hashes, dependencies, and ONNX
+  session all pass. The default U²-Net adapter is untouched.
+- **VERIFIED / REGRESSION:** MODNet import/route/registry/model-manager suites
+  pass (`48` focused tests); the broader cutout, strict-size, and precision
+  contract run passed `328` tests.
+- **UNVERIFIED / BOUNDARY:** This worktree has no approved MODNet checkpoint;
+  real MODNet execution and portrait-edge quality remain unavailable and no
+  candidate algorithm is enabled for Release.
+
+## 2026-09-04 MODNet Import/Runtime Path Alignment
+
+- **FIXED / LOCAL CONTRACT:** The optional MODNet adapter now derives its
+  default checkpoint path from the same canonical directory and filename used
+  by the MODNet import manager (`storage/models/cutout/modnet/modnet.onnx`).
+  An import can therefore be discovered by the adapter without changing the
+  verified U²-Net path.
+- **VERIFIED / REGRESSION:** MODNet import, adapter, and model-manager tests
+  passed `23` tests; `git diff --check` passed.
+- **BOUNDARY:** No MODNet checkpoint is installed in this worktree, so MODNet
+  remains `UNVERIFIED`/`executable=false` until license, fixed SHA-256,
+  offline CPU inference, and real portrait-edge quality evidence are complete.
+
+## 2026-09-04 Precision Edit Regression Resume
+
+- **VERIFIED / LOCAL REGRESSION:** The focused precision-edit, strict-size,
+  session-gallery, provider-contract, and cutout suites passed `280` tests;
+  the full Python suite passed `1410` tests. Static precision-edit and cutout
+  installer checks also passed, and `git diff --check` reported no whitespace
+  errors.
+- **VERIFIED / LOCAL RUNTIME:** The lab endpoint returned HTTP `200` from
+  `/api/runtime/status`, reporting GenBox `2.6.6`, `DEV`, runtime head
+  `a9c8cde` on port `8892`.
+- **VERIFIED / UI:** Cutout model details now default to collapsed and expand
+  only on user action; the change does not alter the cutout runtime or U²-Net
+  selection path.
+- **UNVERIFIED / RELEASE BLOCKER:** U²-Net remains the only executable cutout
+  adapter. MODNet and InSPyReNet remain candidate adapters until fixed,
+  redistributable weights, offline inference, and real portrait-edge quality
+  evidence are complete. Real upstream precision-edit and strict 16:9/21:9
+  output still require independent headed-browser evidence.
+
+## 2026-09-04 Multi-Algorithm Cutout Registry Expansion
+
+- **VERIFIED / LOCAL CONTRACT:** Added the isolated InSPyReNet fail-closed
+  adapter and registered it in the shared cutout registry. The capability
+  endpoint can now describe U²-Net, MODNet, BiRefNet, RMBG-2.0, and InSPyReNet
+  without importing optional runtimes or downloading weights.
+- **UNVERIFIED / RELEASE BLOCKER:** InSPyReNet remains
+  `available=false`/`executable=false` until a fixed checkpoint, license
+  provenance, SHA-256, offline CPU inference, and portrait-edge quality pass
+  are recorded. U²-Net remains the only verified executable default.
+- **VERIFIED / REGRESSION:** Registry, InSPyReNet, and MODNet route tests pass
+  (`26 passed`); `git diff --check` passes. This does not verify real upstream
+  precision-edit requests or visual cutout quality.
+
+## 2026-09-04 Multi-Algorithm Cutout Gate
+
+- **VERIFIED / LOCAL CONTRACT:** The cutout selector and request contract now
+  support switching among multiple `executable=true` adapters; unverified
+  candidates remain visible only as unavailable details and all-unavailable
+  states fail closed. `node tests/test_cutout_model_install_ui.mjs` and
+  `node tests/test_precision_edit_ui.mjs` passed.
+- **VERIFIED / CANDIDATE PROBE:** A community MODNet ONNX file was loaded by
+  `onnxruntime` and produced a valid synthetic RGBA matte (`25,897,433` bytes,
+  SHA-256 recorded in `docs/CUTOUT-ALGORITHM-FEASIBILITY-20260904.md`).
+- **UNVERIFIED / RELEASE BLOCKER:** The official `ZHKKKe/MODNet` README states
+  that its code, model, and demos are Apache-2.0. The fixed ONNX file probed
+  here is nevertheless a community conversion, and no independent
+  redistribution declaration for that binary has been established. It remains
+  `MODNET_DESCRIPTOR` + `UnavailableCutoutAdapter`, `available=false`,
+  `executable=false`. BiRefNet and RMBG-2.0 remain unavailable for the same
+  evidence/weight gate. The only verified executable algorithm is U2Net.
+- **VERIFIED / REGRESSION:** The full Python suite passed `1382` tests on
+  2026-09-04 after fixing the calendar browser fixture to dispatch native
+  handlers while the static panel is hidden. The change does not relax the
+  production visibility or interaction rules.
+- **VERIFIED / CANDIDATE AUDIT:** The independent InSPyReNet review in
+  `docs/CUTOUT-INSPYRENET-FEASIBILITY-20260904.md` confirms MIT code but no
+  independently licensed, fixed-SHA checkpoint with a fully offline runtime.
+  InSPyReNet therefore remains `UNVERIFIED`, unavailable, and excluded from
+  the Release until weight provenance, dependencies, and real portrait-edge
+  quality are closed.
+- **VERIFIED / OPT-IN ADAPTER:** An isolated MODNet ONNX adapter now exists at
+  `image_tools/cutout_modnet.py` with five focused tests. It requires a
+  user-provided checkpoint, a complete size/SHA-256/MD5 manifest, and explicit
+  license confirmation before it can report `executable=true`; it is not
+  registered in the default registry and is excluded from Release artifacts.
+- **VERIFIED / RUNTIME PROBE:** The local laboratory capability endpoint
+  `/api/image-tools/cutout/capabilities` returned HTTP 200 and reported U²-Net
+  as `available=true`/`executable=true`; MODNet, BiRefNet, and RMBG-2.0 were
+  correctly reported as `UNVERIFIED`/non-executable. This is local runtime
+  evidence only and does not verify any upstream image-edit request.
+
+**Resume:** To enable a second algorithm, obtain a fixed weight with explicit
+  redistribution permission, record its license and SHA-256, add an isolated
+  adapter plus offline inference tests, then run the capability endpoint and
+  headed/manual quality acceptance before changing it to `VERIFIED`.
+
+## 2026-09-04 Precision Session Gallery Calendar Filter
+
+- **VERIFIED / LOCAL UI:** The current-session Precision Edit gallery now uses
+  a collapsed date-filter trigger. Its popover provides a seven-column local
+  calendar, highlighted dates with generated results, muted empty dates, month
+  navigation, single-day/range selection, outside-click/Escape closing, and
+  quick ranges for the recent 3/5 days plus the current natural week, month,
+  quarter, half-year, and year.
+- **VERIFIED / LOCAL COMPATIBILITY:** The existing date inputs remain as hidden
+  state fields, so the prior date filtering and clear behavior continue to use
+  the same filtering function.
+- **VERIFIED / LOCAL REGRESSION:** `node --check static/js/app-all.js`,
+  `node tests/test_precision_edit_static_contract.mjs`,
+  `python -m pytest -q tests/test_precision_session_gallery_browser.py`, and
+  `git diff --check` passed after the calendar change.
+- **BOUNDARY:** This is a local UI change. It does not change the external
+  provider, real upstream precision-edit success, strict provider dimensions,
+  or cutout algorithm availability.
+
+**Last updated:** 2026-09-04
 **Current branch:** `codex/phase7-campaign-20260820`
 **Current phase:** Phase 9 Sender Push Source Cleanup (User-Selected) - **In Progress (receiver-grant shipped in v2.6.1 2026-08-21; sender PR #26 OPEN/MERGEABLE/UNSTABLE; no maintainer review; Vercel authorization failure is external state and cannot be handled automatically; clean E2E gates passed for receiver)**
 **Previous phase:** Phase 8 Upstream Delivery - **In Progress (proposal PRs open, awaiting upstream response)**
+
+## 2026-09-04 Precision Session Gallery Confirmation
+
+- **VERIFIED / LOCAL LAB:** `GET http://127.0.0.1:8892/api/runtime/status`
+  returned HTTP `200`; the development runtime reports GenBox `2.6.6`.
+- **VERIFIED / LOCAL REGRESSION:** `python -m pytest -q` passed `1382` tests
+  in `73.35s`; the focused session-gallery browser suite passed `2` tests and
+  the precision-edit static/UI contracts passed.
+- **VERIFIED / LOCAL INTERACTION:** The focused gallery browser coverage now
+  dispatches a thumbnail click and confirms the selected version changes to
+  the clicked result before applying date filtering.
+- **VERIFIED / SCOPE:** The blank area below the annotation canvas is the
+  current-session Precision Edit gallery, with thumbnails, version switching,
+  date filtering, clear-filter, empty state, and split prompt history.
+- **VERIFIED / HEADED AX TREE:** The live loopback workbench exposes the
+  `当前会话结果` region below the canvas with its result count, date fields,
+  clear action, and list semantics; the same headed page exposes the version
+  controls, fullscreen action, and annotation toolbar without a missing gallery
+  region.
+- **BOUNDARY:** This confirms local behavior only. Real upstream generation,
+  strict provider 16:9/21:9 output, second-pass provider editing, and cutout
+  quality remain separate external/manual acceptance items.
+
+## 2026-09-04 Precision Session Gallery Layout And Toolbar Regression Fix
+
+- **VERIFIED / LOCAL UI:** The lower blank area of the Precision Edit stage is
+  the current-session gallery (`当前会话结果`). It renders generated result
+  thumbnails, selected-version switching, result count, date-from/date-to
+  filtering, clear-filter, empty state, and split prompt history. It is scoped
+  to the current editing session and does not replace the media library.
+- **FIXED / LOCAL CSS:** The manual-edit toolbar now assigns the label and
+  eraser/tool group to separate grid columns on wide layouts, with style
+  controls on the second row. This removes the previously observed overlap;
+  narrow layouts retain their responsive one-column behavior.
+- **FIXED / LOCAL UI:** Prompt-history expansion now opens the last visible
+  prompt after date filtering, instead of comparing against the unfiltered
+  entry count.
+- **VERIFIED / LOCAL REGRESSION:** `python -m pytest -q` passed `1382` tests
+  in `73.35s`; focused gallery, static contract, UI, JavaScript syntax, and
+  `git diff --check` validations also passed.
+- **VERIFIED / LOCAL LAB:** On 2026-09-04, `GET
+  http://127.0.0.1:8892/api/runtime/status` returned HTTP `200` and reported
+  GenBox `2.6.6` in `dev` mode on port `8892`, runtime head `a9c8cde`.
+- **BOUNDARY:** This confirms the local gallery and layout behavior only. Real
+  upstream precision-edit generation, strict 16:9/21:9 provider output,
+  second-pass editing on a generated result, and cutout quality remain
+  separate external/manual evidence requirements.
+
+## 2026-09-04 Historical Precision Edit Acceptance Audit
+
+## 2026-09-04 Precision Session Gallery And Image Viewer Follow-Up
+
+- **VERIFIED / HEADED LOCAL CHECK:** A headed Chromium pass against the live
+  loopback lab rendered the session gallery empty state and measured the
+  manual-edit section at `372x100px`, confirming the controls occupy a stable
+  two-row region without clipping. Evidence screenshot:
+  `screenshots/local-ui/precision-headed-20260904.png`.
+- **VERIFIED / LOCAL UI FIX:** The compact manual-edit toolbar now keeps its
+  helper description screen-reader-only, so the visible controls remain in a
+  stable two-row layout instead of being pushed into a clipped third row.
+- **VERIFIED / LOCAL REGRESSION:** Added browser coverage for the successful
+  generation-to-session-gallery write path (source session plus `local_path`
+  result). `python -m pytest -q
+  tests/test_precision_session_gallery_browser.py` now passes `2` tests.
+- **VERIFIED / LOCAL UI:** The lower blank area is implemented as the
+  current-session Precision Edit gallery. It supports result thumbnails,
+  selected-version switching, date-from/date-to filtering, clear-filter,
+  empty state, responsive narrow-layout scrolling, and prompt-history display.
+- **VERIFIED / LOCAL UI:** Image-only fullscreen now opens from the current
+  comparison image (including double-click), displays the selected image
+  caption and original/edit/multi-round prompt history in split chunks, and
+  supports copy, Escape/background close, and wheel zoom with middle-click
+  reset. The existing media-library lightbox entry remains separate.
+- **VERIFIED / LOCAL REGRESSION:** `python -m pytest -q` passed `1382` tests;
+  `node tests/test_precision_edit_static_contract.mjs`,
+  `node tests/test_precision_edit_ui.mjs`, `node --check static/js/app-all.js`,
+  and `git diff --check` passed.
+- **VERIFIED / LOCAL LAB:** After a source-aware restart, the loopback lab
+  returned HTTP 200 and reported GenBox `v2.6.6` in development mode on port
+  `8892`.
+- **BOUNDARY:** The gallery and viewer are locally verified UI/contract
+  behavior. Real upstream image generation, automatic result persistence from
+  a provider response, and headed-browser generation with real user images
+  remain separate external evidence requirements.
+
+- **VERIFIED / LOCAL:** The lower blank area is now a current-session Precision
+  Edit gallery. It renders result thumbnails, highlights the selected version,
+  switches the main comparison view on click, supports date-from/date-to
+  filtering, and shows split prompt history. The date filter is wired through
+  `renderPrecisionSessionShowcase()` and uses each entry's `createdAt` value.
+- **VERIFIED / LOCAL:** The historical UI/code requests for two-line narrow
+  manual controls, linked 1K/2K/4K ratio presets and custom preset handling,
+  wheel zoom with middle-click reset, chained-version base selection, model
+  visibility controls, and documentation entry points are present in the
+  current worktree.
+- **GAPS FOUND:** The cutout registry has only U2Net executable; MODNet,
+  BiRefNet, and RMBG-2.0 remain unavailable adapters pending fixed weights,
+  dependency and license evidence.
+- **HUMAN / EXTERNAL EVIDENCE NEEDED:** Real `gpt-image2-b` precision-edit
+  requests, strict upstream 16:9/21:9 output, cutout leg quality, a second
+  edit on a generated version, and headed-browser visual/interaction checks
+  still have no current independent PASS. This audit therefore does not mark
+  the whole historical request complete or release-ready.
+
+## 2026-09-04 Precision Edit Strategy And Local Selection Follow-Up
+
+- **VERIFIED / LOCAL IMPLEMENTATION:** Precision Edit now exposes explicit
+  page-session controls for `fine`, `standard`, and `fast` processing, with
+  `standard` as the default. It also exposes `annotation` versus `local`
+  selection semantics and a bounded `0-64px` local-selection feather control.
+- **VERIFIED / LOCAL CONTRACT:** The backend rejects invalid strategy/mode/
+  feather values, rejects local mode without a rectangle, ellipse, or brush
+  region, and rejects the new fields outside `mode=precision_edit`. Pure
+  resize remains the no-annotation envelope and cannot use local selection.
+- **VERIFIED / LOCAL PROVIDER BOUNDARY:** Provider transport remains the
+  existing allowlisted OpenAI-compatible multipart profile. Strategy, local
+  selection guidance, bounded feather guidance, and person/leg protection are
+  appended as constrained prompt instructions. Local selection is explicitly
+  described as model guidance, not a verified pixel mask.
+- **VERIFIED / LOCAL REGRESSION:** Precision/provider/alias contract tests
+  passed `497`; the full Python suite excluding browser and release-packaging
+  environment-sensitive modules passed `1295`, and all `9` MJS contract suites,
+  JavaScript syntax checks, Python compilation, and `git diff --check` passed.
+- **VERIFIED / FULL LOCAL REGRESSION:** With the repository's Python 3.14
+  runtime (`C:\Python314\python.exe`), the complete Python suite passed `1350`
+  tests in `71.29s`, including release-packaging and browser modules. An
+  earlier `pytest` command used the unrelated Python 3.11 executable and was
+  not used as final evidence.
+- **UNVERIFIED / EXTERNAL BOUNDARY:** No real paid Provider precision-edit
+  request, manual browser acceptance, or VPS operation was performed. The new
+  prompt constraints therefore remain locally tested behavior rather than
+  real upstream image-quality evidence.
+- **BOUNDARY / RESUME:** Existing uncommitted work and test artifacts were
+  preserved. Continue from the current worktree; rerun the focused commands
+  above before any release or upstream claim.
+
+## 2026-09-03 Wave 0 Baseline (local clock 2026-09-04 +08:00)
+
+- **VERIFIED / LOCAL LAB:** `./start-lab.ps1 -Action restart -Background`
+  restarted only the local lab. `http://127.0.0.1:8892/` and
+  `/api/runtime/status` both returned HTTP `200`; runtime reported GenBox
+  `v2.6.6`, `dev` mode, port `8892`, and HEAD `a9c8cde`.
+- **VERIFIED / LOCAL REGRESSION:** the current full Python suite passed `1325`;
+  focused provider/inpaint/precision tests passed `149`, all provider tests
+  passed `289`, and Python compile, JavaScript syntax, and `git diff --check`
+  passed.
+- **EVIDENCE:** detailed command output and the pre-existing uncommitted-file
+  inventory are recorded in
+  `docs/PHASE9-10-WAVE0-BASELINE-20260903T173700Z.md`.
+- **BOUNDARY:** no cleanup, revert, commit, tag, Release, VPS access, or
+  production mutation was performed. Real upstream Provider precision-edit,
+  cutout inference, and headed-browser acceptance remain **UNVERIFIED**.
+
+## 2026-09-03 Local Error-Safety Follow-Up
+
+- **VERIFIED / LOCAL LAB:** `.\start-lab.ps1 -Action start -Background` reported
+  the owned lab already running at `127.0.0.1:8892`. Read-only probes returned
+  HTTP `200` for
+  `/`, `/api/runtime/status`, and `/api/image-tools/cutout/capabilities`; the
+  runtime reported `v2.6.6` in `dev` mode and cutout reported
+  `available=true`, `executable=true`, `state=ready`.
+- **VERIFIED / PROVIDER ERROR REDACTION:** `_friendly_generation_error()` now
+  applies provider-aware redaction before taking a bounded 200-character
+  technical excerpt. Configured provider keys and generic Bearer, URL-userinfo,
+  query-token, JSON-field, and prefixed-key patterns remain masked. Multi-endpoint
+  summaries keep their bounded per-endpoint status evidence.
+- **VERIFIED / LOCAL TESTS:** provider/error-focused coverage passed `44`; the
+  current provider safety/precision/inpaint/transport set passed `267`; the
+  full repository suite excluding the Docker Bash harness passed `1278`.
+  All `9` MJS contract suites, five JavaScript `node --check` checks,
+  `python -m py_compile providers/__init__.py`, and `git diff --check` passed.
+- **UNVERIFIED / LOCAL HARNESS:** the direct full-suite run reached `1313`
+  passing tests, with `6` failures isolated to
+  `tests/test_release_packaging.py`: this machine resolves `bash` to
+  `C:\Windows\System32\bash.exe`, which returns an
+  `E_ACCESSDENIED`/UTF-16 payload instead of the expected smoke-script output.
+  No application or provider test failed; rerun those six checks on a host with
+  a compatible Bash runtime.
+- **BOUNDARY / RESUME:** no Provider request, VPS action, production mutation,
+  cleanup, commit, tag, Release, or push was performed. Real Provider precision
+  edit and user-led browser acceptance remain **UNVERIFIED**; preserve the
+  existing release and isolated-lab boundaries for the next session.
+
+## 2026-09-03 Local Continuation Verification
+
+- **VERIFIED / LOCAL LAB:** after source-change detection required a safe lab
+  restart, `./start-lab.ps1 -Action restart -Background` restarted only the
+  local GenBox lab. Read-only probes returned HTTP `200` for `/` and
+  `/api/runtime/status`; the runtime reported version `2.6.6`, `dev` mode,
+  port `8892`, and HEAD `a9c8cde`.
+- **VERIFIED / LOCAL REGRESSION:** the focused precision/provider contract set
+  passed `450`; the full Python suite passed `1321` in `71.32s`. All MJS
+  contract suites, `node --check static/js/app-all.js`, Python compilation, and
+  `git diff --check` passed.
+- **BOUNDARY:** this continuation changed no implementation or release
+  identity. Real Provider precision-edit success, real cutout inference, and
+  independent user-led browser acceptance remain **UNVERIFIED**.
 
 ## v2.6.6 release evidence (updated 2026-09-03)
 
@@ -2911,3 +3440,216 @@ full sanitization review, and public release remain later gates.
 - **BOUNDARY:** this proves reproducible clean local deployment and sanitized
   source state. It does not authorize a production upgrade or an upstream PR;
   those remain separate release decisions.
+
+## Precision edit media showcase slice (2026-09-03)
+
+- **Evidence class:** `LOCAL STATIC/UI CONTRACT`. The precision-edit display
+  now has an image-only fullscreen overlay (separate from the workbench
+  Fullscreen API root), split prompt chunks for the original and each edit,
+  a current-session result thumbnail rail, and gallery start/end date filters.
+- **Verification:** `node tests/test_precision_edit_static_contract.mjs` and
+  `node tests/test_precision_edit_ui.mjs` passed; `node --check
+  static/js/app-all.js` and `git diff --check` passed for the touched display
+  surfaces.
+- **Boundary:** no browser visual capture, mobile device run, provider call,
+  or VPS deployment was performed. Date filtering relies on parseable
+  `created_at` values returned by the gallery API; malformed timestamps are
+  excluded when a date range is active.
+- **Resume:** run the browser smoke/UAT for image-only fullscreen while the
+  precision workbench itself is fullscreen, then verify prompt/history and
+  date-range interactions at desktop and narrow mobile widths.
+
+## Multi-algorithm cutout registry slice (2026-09-04)
+
+- **Evidence class:** `LOCAL CODE/UNIT TEST`. Added
+  `image_tools/cutout_registry.py` with ordered adapter probing, explicit
+  executable-only fallback, and bounded failure isolation. The existing
+  `u2net-human-seg-onnx` adapter is untouched.
+- **Second algorithm status:** `rmbg-2.0` (BRIA RMBG-2.0 source) is recorded as
+  `UNVERIFIED` and `unavailable`. Its gated weights were not downloaded, no
+  SHA-256 was independently verified, and license/commercial-use approval is
+  unresolved; runtime dependencies are metadata only (`torch`, `transformers`,
+  `Pillow`, `numpy`). No capability is advertised from this descriptor.
+- **Verification command/result:**
+  `$env:PYTHONPATH='.'; pytest -q tests/test_cutout_registry.py tests/test_cutout_onnx.py tests/test_cutout_refine.py`
+  -> `28 passed`.
+- **Boundary:** this is not evidence of a runnable RMBG model or end-to-end
+  route integration. `main.py`, providers, static UI, VPS, and remote systems
+  were not changed or exercised.
+
+## Precision edit goal-mode verification refresh (2026-09-04)
+
+- **Lab reachability:** `start-lab.ps1 -Action start -Background` reported
+  GenBox `v2.6.6` ready on loopback port `8892`; `/` and
+  `/api/runtime/status` both returned HTTP `200`. This is local-only evidence.
+- **Focused contracts:** with `PYTHONPATH=.` the precision edit, strict-size,
+  provider-alias, provider-precision, and cutout-registry selection passed
+  `377` tests.
+- **Full local regression:** with `PYTHONPATH=.` the full Python suite passed
+  `1361` tests in `77.64s`. All nine JavaScript `.mjs` contract files passed;
+  `node --check static/js/app-all.js`, Python compilation of `main.py` and
+  `providers/__init__.py`, and `git diff --check` also passed.
+- **Second cutout algorithm:** the independent feasibility record is
+  `docs/CUTOUT-ALGORITHM-FEASIBILITY-20260904.md`. RMBG-2.0 remains
+  `UNVERIFIED`/non-executable because gated weights, an independently verified
+  digest, and redistribution/commercial-use rights are not established.
+- **Remaining acceptance boundary:** real `gpt-image2-b` precision editing,
+  real-person cutout quality (including leg retention), and a fresh headed
+  browser UAT are still `UNVERIFIED`. No VPS, cleanup, execute marker, commit,
+  tag, or Release action was performed.
+- **Resume:** obtain an authorized, redistributable second cutout model and
+  verify its local inference path, or explicitly accept the current single
+  executable algorithm for v2.6.6; then run headed browser UAT with user-owned
+  provider credentials before release approval.
+- **Candidate policy refresh:** a GitHub repository popularity snapshot on
+  2026-09-04 identified InSPyReNet (MIT repository, 745 stars), a
+  Transformers.js browser-removal candidate (MIT repository, 1,014 stars),
+  and an Apache-2.0 browser candidate (466 stars) for further evaluation.
+  These are research candidates only: repository Star/license does not prove
+  model-weight licensing, quality, or redistributability. AGPL/GPL candidates
+  remain external-reference-only for the default Release. The next decision is
+  user-selectable download/install guidance after weight terms and local
+  inference are independently verified; no candidate is currently packaged.
+
+## Precision edit manual-toolbar layout follow-up (2026-09-04)
+
+- **VERIFIED / LOCAL UI FIX:** the manual-edit toolbar now reserves two rows at
+  all inspector widths. The label and eraser remain on row one while color,
+  stroke-width, and text-size controls occupy a bounded second row; this fixes
+  the clipped one-line presentation seen during headed review without relying
+  on viewport width.
+- **VERIFIED / CONTRACTS:** `node tests/test_precision_edit_static_contract.mjs`,
+  `node tests/test_precision_edit_ui.mjs`, `node --check static/js/app-all.js`,
+  and `git diff --check` passed after the change. The full local Python suite
+  also passed `1379` tests in `68.94s`.
+- **VERIFIED / LOCAL LAB:** the owned loopback lab was safely restarted after
+  source-change detection; `/api/runtime/status` returned HTTP 200 and
+  reported GenBox `v2.6.6` in `dev` mode on port `8892`.
+- **BOUNDARY:** this closes the narrow-toolbar layout defect only. Real
+  provider generation, external strict-size output, cutout quality, and full
+  headed UAT remain separately marked `UNVERIFIED` until observed.
+
+## Precision edit session gallery headed check (2026-09-04)
+
+- **VERIFIED / HEADED LOCAL UI:** the loopback workbench visibly renders the
+  `当前会话结果` gallery below the canvas, including result count, thumbnail
+  list area, start/end date filters, and a clear-filter control. The empty
+  state correctly explains that results appear after a successful edit.
+- **BOUNDARY:** this confirms the gallery surface and empty state only. The
+  current session had zero successful provider results, so automatic insertion
+  of a real upstream result remains `UNVERIFIED`.
+
+- **VERIFIED / BROWSER CONTRACT:** `python -m pytest -q
+  tests/test_precision_session_gallery_browser.py` -> `1 passed in 3.23s`.
+  The test injects two dated session results, verifies count `2`, filters to
+  one result, then clears the filter and verifies count `2` again. This is
+  local browser behavior evidence, not proof of upstream generation.
+- **FOLLOW-UP REGRESSION:** `node tests/test_cutout_model_install_ui.mjs`,
+  `node tests/test_precision_edit_ui.mjs`, and focused Python contracts
+  (`tests/test_precision_session_gallery_browser.py`,
+  `tests/test_cutout_registry.py`, `tests/test_precision_edit_contract.py`)
+  passed: `233 passed` plus both JavaScript contract suites.
+- **LAB REFRESH:** after source-change detection, the local lab was safely
+  restarted with `start-lab.ps1 -Action restart -Background`; runtime status
+  returned HTTP `200` with GenBox `2.6.6`, `dev`, loopback port `8892`, and
+  runtime head `a9c8cde` on 2026-09-04.
+- **FULL REGRESSION REFRESH:** using the workspace Python runtime,
+  `$env:PYTHONPATH='.'; python -m pytest -q` completed with `1382 passed in
+  74.30s` on 2026-09-04. The plain `pytest` launcher is a separate Python
+  installation without Playwright and is not used as the evidence command.
+
+## Precision edit gallery follow-up audit (2026-09-04)
+
+- **VERIFIED / LIVE LOCAL LAB:** `/api/runtime/status` returned HTTP `200`,
+  `version=2.6.6`, `mode=dev`, and loopback port `8892`.
+- **VERIFIED / HEADED UI:** the workbench renders `当前会话结果` directly
+  below the canvas. The empty state, result counter, date range fields, and
+  clear-filter control are present; populated results are covered by the
+  browser contract test.
+- **VERIFIED / REGRESSION:** the focused gallery/strict-size/cutout registry
+  set passed `236` tests, and the complete workspace suite passed `1382`
+  tests in `68.44s` using `PYTHONPATH=.`.
+- **BOUNDARY:** this remains local UI and contract evidence. A real upstream
+  edit and automatic insertion of its result are still `UNVERIFIED` until a
+  user-owned provider call succeeds.
+
+## Multi-algorithm cutout parallel audit (2026-09-04)
+
+- **VERIFIED / LOCAL REGRESSION:** `$env:PYTHONPATH='.'; python -m pytest -q`
+  completed with `1387 passed` in `72.30s` on the current worktree.
+- **VERIFIED / PARALLEL REVIEW:** the candidate-algorithm review confirmed that
+  only `u2net-human-seg-onnx` is registered as `VERIFIED` and executable.
+  `MODNet` remains an isolated opt-in adapter requiring a user-supplied model
+  manifest and explicit license confirmation; `BiRefNet`, `RMBG-2.0`, and
+  `InSPyReNet` remain `UNVERIFIED`/non-executable because fixed weights,
+  redistribution terms, and offline quality evidence are not complete.
+- **Boundary:** no candidate was added to the default registry, no U²-Net path
+  was changed, and no Release artifact was produced. Real upstream precision
+  editing and headed user acceptance remain separate `UNVERIFIED` gates.
+- **Resume:** obtain one authorized, fixed-hash second-algorithm checkpoint,
+  validate offline CPU inference and leg/hair edge quality, then integrate it
+  serially after the isolated adapter tests pass.
+
+## MODNet user-import boundary follow-up (2026-09-04)
+
+- **VERIFIED / DOCUMENTATION:** `docs/MODNET-USER-IMPORT-GUIDE.md` records the
+  isolated MODNet adapter boundary and the implemented user-upload contract;
+  `docs/DOCUMENTATION-MAP.md` links the guide.
+- **VERIFIED / ROUTE:** `POST /api/image-tools/cutout/modnet/import` accepts only
+  multipart file content plus a complete size/SHA-256/MD5 manifest and explicit
+  license confirmation. The response is sanitized and never exposes local paths.
+- **VERIFIED / STORAGE:** `image_tools/cutout_modnet_import.py` writes to the
+  isolated `storage/models/cutout/modnet/` directory, enforces a bounded upload,
+  rejects path/URL and symlink targets, and atomically publishes the fixed
+  `modnet.onnx` target with a non-secret manifest.
+- **VERIFIED / TEST:** `$env:PYTHONPATH='.'; python -m pytest -q
+  tests/test_cutout_modnet.py tests/test_cutout_modnet_import.py
+  tests/test_cutout_modnet_import_route.py tests/test_modnet_model_manager.py
+  tests/test_cutout_registry.py` -> `45 passed`.
+- **VERIFIED / REGRESSION:** `$env:PYTHONPATH='.'; python -m pytest -q` ->
+  `1410 passed` in `75.52s` on 2026-09-04; Python compilation and
+  `git diff --check` also passed.
+- **CURRENT LIMIT:** importing a checkpoint never enables it automatically;
+  status remains `executable=false` until CPU-only runtime probing, fixed-weight
+  provenance, redistribution rights, and real portrait quality evidence are
+  independently accepted. U²-Net default behavior and the shared registry were
+  not changed; no candidate model was downloaded or packaged.
+- **Resume:** if a second executable algorithm is desired, supply a fixed,
+  authorized checkpoint and complete the independent runtime, licensing, and
+  quality review before any registry integration or Release claim.
+
+## Multi-algorithm status recheck (2026-09-04)
+
+- **VERIFIED / LIVE LOCAL LAB:** `GET /api/image-tools/cutout/capabilities`
+  returned HTTP `200`; only `u2net-human-seg-onnx` is
+  `available=true` and `executable=true`. The installed U²-Net checkpoint is
+  `175,997,641` bytes with SHA-256
+  `01eb6a29a5c4d8edb30b56adad9bb3a2a0535338e480724a213e0acfd2d1c73c`.
+- **VERIFIED / REGRESSION:** focused cutout, MODNet import, registry, and
+  precision contracts passed `260` tests; `node tests/test_precision_edit_ui.mjs`
+  and `node tests/test_cutout_model_install_ui.mjs` also passed.
+- **BOUNDARY:** MODNet, InSPyReNet, BiRefNet, and RMBG-2.0 remain
+  `UNVERIFIED`/non-executable. No candidate has complete fixed-weight
+  provenance, redistribution terms, offline CPU evidence, and portrait-edge
+  quality evidence, so none may be enabled or packaged in a Release.
+- **Resume:** parallel work is allowed in isolated adapter, model-evidence,
+  quality-benchmark, and UI/test branches. Integrate serially only after all
+  gates pass; keep U²-Net as the unchanged default during this work.
+
+## MODNet fixed-checkpoint technical probe (2026-09-04)
+
+- **VERIFIED / SOURCE IDENTITY:** the fixed `onnx-community/modnet-webnn`
+  quantized checkpoint at revision
+  `6af52070d14deafc5e55ce6cc4d752a322cdff76` was downloaded to an isolated
+  temporary path. Size is `6,632,188` bytes and SHA-256 is
+  `92e49898c3e05a6d7a944fc67a8cb87c4aad754ffb6ebd949528c7d1105fee3a`.
+- **VERIFIED / TECHNICAL SMOKE:** the existing opt-in MODNet adapter started
+  an ONNX Runtime CPU session and, after the alpha endpoint fix, produced a
+  same-size RGBA PNG with alpha extrema `(0, 255)`. The focused MODNet/import/
+  registry suite passed `33` tests, including a regression for quantized alpha
+  endpoint preservation.
+- **BOUNDARY:** this is technical evidence only. The checkpoint has not yet
+  passed full license-text/republication review, disconnected runtime testing,
+  or authorized human-image quality review (legs, hair, and soft edges). It is
+  still not registered as the default executable algorithm and is not a Release
+  artifact.

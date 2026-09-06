@@ -101,6 +101,7 @@ var precisionResizeSavedPresets = [];
 var precisionResizePresetIdCounter = 0;
 var precisionResizeCapabilityPending = null;
 var precisionEditSession = { source: null, versions: [], selectedVersionId: 'original', baseVersionId: 'original', taskBaseVersionId: null, view: 'after', taskId: null };
+var precisionWorkflowHistoryState = { items: [], selectedWorkflow: null, selectedWorkflowId: '', listRequest: 0, detailRequest: 0, loaded: false, loading: false, filterOpener: null, actionOpener: null };
 var precisionComparePointerId = null;
 var precisionComparePointerTarget = null;
 if (typeof window !== 'undefined' && typeof window.__genboxPrecisionCompareResizeCleanup === 'function') {
@@ -4042,6 +4043,7 @@ function precisionFullscreenVisibleEntry(event) {
   var source = precisionEditSessionEntry(entries, 'original', entries[0]);
   var current = precisionEditSessionEntry(entries, precisionEditSession.selectedVersionId, source);
   var comparisonBase = precisionEditSessionEntry(entries, current && current.parentId || 'original', source);
+  if (event && event.precisionSelectedVersion === true) return current;
   var target = event && event.currentTarget;
   if (target && (target.id === 'precisionAnnotationCanvas' || target.id === 'precisionTextEditor')) {
     return precisionEditSessionEntry(entries, precisionEditSession.baseVersionId, source);
@@ -4139,6 +4141,10 @@ function openPrecisionCanvasImageFullscreen(event) {
   return openViewer();
 }
 
+function openPrecisionSelectedImageFullscreen() {
+  return openPrecisionCanvasImageFullscreen({ precisionSelectedVersion: true });
+}
+
 function renderPrecisionEditSession() {
   var rail = document.getElementById('precisionVersionRail');
   var before = document.getElementById('precisionCompareBefore');
@@ -4182,6 +4188,8 @@ function renderPrecisionSessionShowcase(entries) {
   var gallery = document.getElementById('precisionSessionGallery');
   var count = document.getElementById('precisionSessionResultCount');
   var strip = document.getElementById('precisionPromptStrip');
+  // This renderer intentionally receives normalized current-session entries only.
+  // A later history API can reuse this entry point after it supplies the same shape.
   entries = (entries || []).filter(function(entry) { return entry && entry.data; });
   window.precisionSessionCalendarEntries = entries.slice(1);
   var source = entries[0] || null;
@@ -4202,6 +4210,238 @@ function renderPrecisionSessionShowcase(entries) {
   }).join('');
   renderPrecisionSessionCalendar();
   updatePrecisionSessionDateSummary();
+}
+
+function setPrecisionSessionShowcaseOpen(open, restoreFocus) {
+  var showcase = document.getElementById('precisionSessionShowcase');
+  var trigger = document.getElementById('btnPrecisionSessionShowcaseToggle');
+  var content = document.getElementById('precisionSessionShowcaseContent');
+  if (!showcase || !trigger || !content) return false;
+  var wasOpen = showcase.classList.contains('is-expanded');
+  var nextOpen = !!open;
+  showcase.classList.toggle('is-expanded', nextOpen);
+  trigger.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+  content.setAttribute('aria-hidden', nextOpen ? 'false' : 'true');
+  if (nextOpen) content.removeAttribute('inert');
+  else content.setAttribute('inert', '');
+  if (!nextOpen) {
+    togglePrecisionSessionDatePopover(false);
+    setPrecisionWorkflowHistoryFilterOpen(false);
+    setPrecisionWorkflowHistoryActionOpen(false);
+  }
+  if (nextOpen && !precisionWorkflowHistoryState.loaded) loadPrecisionWorkflowHistory();
+  if (!nextOpen && restoreFocus && wasOpen && typeof trigger.focus === 'function') trigger.focus();
+  return wasOpen;
+}
+
+function togglePrecisionSessionShowcase() {
+  var showcase = document.getElementById('precisionSessionShowcase');
+  if (!showcase) return false;
+  setPrecisionSessionShowcaseOpen(!showcase.classList.contains('is-expanded'));
+  return showcase.classList.contains('is-expanded');
+}
+
+function precisionWorkflowHistoryMediaUrl(value) {
+  var url = String(value || '');
+  return /^\/api\/precision\/workflows\/pw_[a-f0-9]{32}\/versions\/(?:original|pv_[a-f0-9]{24})\/(?:thumb|image)$/.test(url) ? url : '';
+}
+
+function precisionWorkflowHistoryStatus(message) {
+  var status = document.getElementById('precisionWorkflowHistoryStatus');
+  if (status) status.textContent = message || '';
+}
+
+function precisionWorkflowHistoryFilters() {
+  var from = document.getElementById('precisionWorkflowHistoryDateFrom');
+  var to = document.getElementById('precisionWorkflowHistoryDateTo');
+  return {
+    dateFrom: String(from && from.value || ''),
+    dateTo: String(to && to.value || '')
+  };
+}
+
+function setPrecisionWorkflowHistoryFilterOpen(open, restoreFocus) {
+  var trigger = document.getElementById('btnPrecisionWorkflowHistoryFilter');
+  var popover = document.getElementById('precisionWorkflowHistoryFilterPopover');
+  if (!trigger || !popover) return false;
+  var wasOpen = !popover.hidden;
+  var nextOpen = !!open;
+  popover.hidden = !nextOpen;
+  trigger.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+  if (nextOpen) {
+    precisionWorkflowHistoryState.filterOpener = trigger;
+    setPrecisionWorkflowHistoryActionOpen(false);
+    if (!precisionWorkflowHistoryState.loaded) loadPrecisionWorkflowHistory(true);
+    if (typeof popover.focus === 'function') popover.focus();
+  } else if (restoreFocus && wasOpen && precisionWorkflowHistoryState.filterOpener && typeof precisionWorkflowHistoryState.filterOpener.focus === 'function') {
+    precisionWorkflowHistoryState.filterOpener.focus();
+  }
+  return wasOpen;
+}
+
+function togglePrecisionWorkflowHistoryFilter() {
+  var popover = document.getElementById('precisionWorkflowHistoryFilterPopover');
+  if (!popover) return false;
+  setPrecisionWorkflowHistoryFilterOpen(popover.hidden);
+  return !popover.hidden;
+}
+
+function setPrecisionWorkflowHistoryActionOpen(open, restoreFocus) {
+  var popover = document.getElementById('precisionWorkflowHistoryActionPopover');
+  if (!popover) return false;
+  var wasOpen = !popover.hidden;
+  var nextOpen = !!open && !!precisionWorkflowHistoryMediaUrl(precisionWorkflowHistoryState.selectedWorkflow && precisionWorkflowHistoryState.selectedWorkflow.restore && precisionWorkflowHistoryState.selectedWorkflow.restore.image_url);
+  popover.hidden = !nextOpen;
+  if (nextOpen && typeof popover.focus === 'function') popover.focus();
+  if (!nextOpen && restoreFocus && wasOpen && precisionWorkflowHistoryState.actionOpener && typeof precisionWorkflowHistoryState.actionOpener.focus === 'function') precisionWorkflowHistoryState.actionOpener.focus();
+  return wasOpen;
+}
+
+function precisionWorkflowHistoryVersionMarkup(version, resultIndex) {
+  var available = !!(version && version.available);
+  var thumbnail = available ? precisionWorkflowHistoryMediaUrl(version.thumbnail) : '';
+  var label = version && version.kind === 'source'
+    ? i18nText('creator.precision_workflow_history_original')
+    : i18nText('creator.precision_workflow_history_step', { count: resultIndex });
+  return '<span class="precision-workflow-history-version' + (available && thumbnail ? '' : ' is-unavailable') + '" title="' + escAttr(label) + '">'
+    + (thumbnail ? '<img src="' + escAttr(thumbnail) + '" alt="' + escAttr(label) + '" loading="lazy" draggable="false">' : '<span class="precision-workflow-history-missing" aria-hidden="true">—</span>')
+    + '<small>' + escHtml(label) + '</small></span>';
+}
+
+function precisionWorkflowHistoryItemMarkup(workflow) {
+  var workflowId = String(workflow && workflow.workflow_id || '');
+  var versions = Array.isArray(workflow && workflow.versions) ? workflow.versions : [];
+  var summary = workflow && workflow.summary || {};
+  var resultIndex = 0;
+  var versionMarkup = versions.map(function(version, index) {
+    if (version && version.kind === 'result') resultIndex += 1;
+    var arrow = index ? '<span class="precision-workflow-history-arrow" aria-hidden="true">→</span>' : '';
+    return arrow + precisionWorkflowHistoryVersionMarkup(version, resultIndex);
+  }).join('');
+  var updated = String(workflow && workflow.updated_at || '').slice(0, 10);
+  var count = Number(workflow && workflow.edit_count || 0);
+  var latestSize = /^\d{1,5}x\d{1,5}$/.test(String(summary.latest_size || '')) ? String(summary.latest_size) : '';
+  var meta = updated + (updated && count ? ' · ' : '') + i18nText('creator.precision_workflow_history_edits', { count: count }) + (latestSize ? ' · ' + latestSize : '');
+  return '<div class="precision-workflow-history-item" role="listitem"><button type="button" class="precision-workflow-history-select" onclick="selectPrecisionWorkflowHistory(\'' + escAttr(workflowId) + '\',event)"><span class="precision-workflow-history-item-meta"><strong>' + escHtml(updated || i18nText('creator.precision_workflow_history_date_unknown')) + '</strong><small>' + escHtml(meta) + '</small></span><span class="precision-workflow-history-version-row">' + versionMarkup + '</span></button></div>';
+}
+
+function renderPrecisionWorkflowHistory() {
+  var list = document.getElementById('precisionWorkflowHistoryList');
+  if (!list) return;
+  var items = precisionWorkflowHistoryState.items || [];
+  list.innerHTML = items.length ? items.map(precisionWorkflowHistoryItemMarkup).join('') : '<p class="precision-workflow-history-empty">' + escHtml(i18nText('creator.precision_workflow_history_empty')) + '</p>';
+}
+
+function loadPrecisionWorkflowHistory(force) {
+  var filters = precisionWorkflowHistoryFilters();
+  if (!force && precisionWorkflowHistoryState.loading) return false;
+  var request = ++precisionWorkflowHistoryState.listRequest;
+  precisionWorkflowHistoryState.loading = true;
+  precisionWorkflowHistoryStatus(i18nText('creator.precision_workflow_history_loading'));
+  var query = new URLSearchParams({ limit: '30' });
+  if (filters.dateFrom) query.set('date_from', filters.dateFrom);
+  if (filters.dateTo) query.set('date_to', filters.dateTo);
+  return _authFetch('/api/precision/workflows?' + query.toString()).then(function(response) {
+    if (!response.ok) throw new Error('precision_workflow_history_load_failed');
+    return response.json();
+  }).then(function(data) {
+    if (request !== precisionWorkflowHistoryState.listRequest) return false;
+    precisionWorkflowHistoryState.items = Array.isArray(data && data.items) ? data.items : [];
+    precisionWorkflowHistoryState.loaded = true;
+    precisionWorkflowHistoryState.loading = false;
+    if (!precisionWorkflowHistoryState.items.some(function(item) { return item && item.workflow_id === precisionWorkflowHistoryState.selectedWorkflowId; })) {
+      precisionWorkflowHistoryState.selectedWorkflow = null;
+      precisionWorkflowHistoryState.selectedWorkflowId = '';
+      setPrecisionWorkflowHistoryActionOpen(false);
+    }
+    precisionWorkflowHistoryStatus(precisionWorkflowHistoryState.items.length ? i18nText('creator.precision_workflow_history_loaded', { count: precisionWorkflowHistoryState.items.length }) : i18nText('creator.precision_workflow_history_empty'));
+    renderPrecisionWorkflowHistory();
+    return true;
+  }).catch(function() {
+    if (request !== precisionWorkflowHistoryState.listRequest) return false;
+    precisionWorkflowHistoryState.loading = false;
+    precisionWorkflowHistoryStatus(i18nText('creator.precision_workflow_history_load_failed'));
+    renderPrecisionWorkflowHistory();
+    return false;
+  });
+}
+
+function selectPrecisionWorkflowHistory(workflowId, event) {
+  if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+  if (!/^pw_[a-f0-9]{32}$/.test(String(workflowId || ''))) return false;
+  var request = ++precisionWorkflowHistoryState.detailRequest;
+  precisionWorkflowHistoryState.actionOpener = event && event.currentTarget || null;
+  precisionWorkflowHistoryState.selectedWorkflowId = workflowId;
+  precisionWorkflowHistoryState.selectedWorkflow = null;
+  setPrecisionWorkflowHistoryFilterOpen(false);
+  setPrecisionWorkflowHistoryActionOpen(false);
+  precisionWorkflowHistoryStatus(i18nText('creator.precision_workflow_history_loading'));
+  renderPrecisionWorkflowHistory();
+  return _authFetch('/api/precision/workflows/' + encodeURIComponent(workflowId)).then(function(response) {
+    if (!response.ok) throw new Error('precision_workflow_history_detail_failed');
+    return response.json();
+  }).then(function(data) {
+    if (request !== precisionWorkflowHistoryState.detailRequest || precisionWorkflowHistoryState.selectedWorkflowId !== workflowId) return false;
+    var workflow = data && data.workflow;
+    if (!workflow || workflow.workflow_id !== workflowId) throw new Error('precision_workflow_history_detail_invalid');
+    precisionWorkflowHistoryState.selectedWorkflow = workflow;
+    precisionWorkflowHistoryStatus('');
+    renderPrecisionWorkflowHistory();
+    setPrecisionWorkflowHistoryActionOpen(true);
+    return true;
+  }).catch(function() {
+    if (request !== precisionWorkflowHistoryState.detailRequest || precisionWorkflowHistoryState.selectedWorkflowId !== workflowId) return false;
+    precisionWorkflowHistoryState.selectedWorkflow = null;
+    precisionWorkflowHistoryStatus(i18nText('creator.precision_workflow_history_load_failed'));
+    renderPrecisionWorkflowHistory();
+    return false;
+  });
+}
+
+function viewPrecisionWorkflowHistoryImage() {
+  var workflow = precisionWorkflowHistoryState.selectedWorkflow;
+  var imageUrl = precisionWorkflowHistoryMediaUrl(workflow && workflow.restore && workflow.restore.image_url);
+  if (!imageUrl) return false;
+  setPrecisionWorkflowHistoryActionOpen(false);
+  var trigger = document.getElementById('btnPrecisionWorkflowHistoryFilter');
+  if (trigger && typeof trigger.focus === 'function') trigger.focus();
+  return openPrecisionImageFullscreen(imageUrl, i18nText('creator.precision_workflow_history_view_image'), { promptEntries: [] });
+}
+
+function precisionWorkflowHistoryImageDataUrl(url) {
+  return _authFetch(url).then(function(response) {
+    if (!response.ok) throw new Error('precision_workflow_history_restore_fetch_failed');
+    return response.blob();
+  }).then(function(blob) {
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function() { resolve(String(reader.result || '')); };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  });
+}
+
+function restorePrecisionWorkflowHistory() {
+  var workflow = precisionWorkflowHistoryState.selectedWorkflow;
+  var imageUrl = precisionWorkflowHistoryMediaUrl(workflow && workflow.restore && workflow.restore.image_url);
+  if (!imageUrl || !preparePrecisionSourceReplacement()) return false;
+  setPrecisionWorkflowHistoryActionOpen(false);
+  var generation = ++precisionSourceLoadGeneration;
+  precisionWorkflowHistoryStatus(i18nText('creator.precision_workflow_history_restoring'));
+  return precisionWorkflowHistoryImageDataUrl(imageUrl).then(function(dataUrl) {
+    if (generation !== precisionSourceLoadGeneration || !dataUrl) return false;
+    setCreatorWorkbenchMode('image', 'precision');
+    loadPrecisionEditSourceImage(dataUrl, '', { generation: generation, onLoaded: function() {
+      precisionWorkflowHistoryStatus(i18nText('creator.precision_workflow_history_restored'));
+    }, onError: function() {
+      precisionWorkflowHistoryStatus(i18nText('creator.precision_workflow_history_load_failed'));
+    }});
+    return true;
+  }).catch(function() {
+    if (generation === precisionSourceLoadGeneration) precisionWorkflowHistoryStatus(i18nText('creator.precision_workflow_history_load_failed'));
+    return false;
+  });
 }
 
 function precisionCalendarDateKey(date) {
@@ -4420,6 +4660,11 @@ document.addEventListener('click', function(event) {
   if (wrap && !wrap.contains(event.target)) togglePrecisionSessionDatePopover(false);
   var sourceActions = document.getElementById('precisionSourceActions');
   if (sourceActions && !sourceActions.contains(event.target)) setPrecisionSourceMenuOpen(false);
+  var historyFilters = document.querySelector('.precision-workflow-history-filters');
+  if (historyFilters && !historyFilters.contains(event.target)) {
+    setPrecisionWorkflowHistoryFilterOpen(false);
+    setPrecisionWorkflowHistoryActionOpen(false);
+  }
 });
 document.addEventListener('keydown', function(event) {
   if (event.key !== 'Escape') return;
@@ -4429,10 +4674,28 @@ document.addEventListener('keydown', function(event) {
     setPrecisionSourceMenuOpen(false, true);
     return;
   }
+  var historyAction = document.getElementById('precisionWorkflowHistoryActionPopover');
+  if (historyAction && !historyAction.hidden) {
+    event.preventDefault();
+    setPrecisionWorkflowHistoryActionOpen(false, true);
+    return;
+  }
+  var historyFilter = document.getElementById('precisionWorkflowHistoryFilterPopover');
+  if (historyFilter && !historyFilter.hidden) {
+    event.preventDefault();
+    setPrecisionWorkflowHistoryFilterOpen(false, true);
+    return;
+  }
   var datePopover = document.getElementById('precisionSessionDatePopover');
   if (datePopover && !datePopover.hidden) {
     event.preventDefault();
     togglePrecisionSessionDatePopover(false, true);
+    return;
+  }
+  var showcase = document.getElementById('precisionSessionShowcase');
+  if (showcase && showcase.classList.contains('is-expanded')) {
+    event.preventDefault();
+    setPrecisionSessionShowcaseOpen(false, true);
   }
 });
 
@@ -4961,6 +5224,8 @@ function precisionOutputSizeNotices(data) {
   var visit = function(record) {
     if (!record || typeof record !== 'object') return;
     add(precisionOutputSizeNoticeFromRecord(record));
+    visit(record.error_details);
+    visit(record.details);
     var warnings = Array.isArray(record.warnings) ? record.warnings : [];
     warnings.forEach(function(item) {
       if (typeof item === 'string') add(item);

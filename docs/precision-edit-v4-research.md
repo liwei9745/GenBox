@@ -18,6 +18,30 @@
 
 ## Local Cutout Model Installation Contract
 
+## Multi-Algorithm Cutout Registry (2026-09-04)
+
+- **VERIFIED (code):** `image_tools/cutout_registry.py` defines an ordered,
+  capability-probing registry. It keeps the existing
+  `u2net-human-seg-onnx` adapter independent, records per-adapter capability
+  snapshots, isolates adapter exceptions, and only falls back to an adapter
+  whose probe reports both `available=true` and `executable=true`.
+- **UNVERIFIED / unavailable:** `rmbg-2.0` is represented by an explicit
+  `UnavailableCutoutAdapter`. Its descriptor points to the BRIA RMBG-2.0
+  Hugging Face source (`https://huggingface.co/briaai/RMBG-2.0`) and records
+  the expected optional runtime (`torch`, `transformers`, `Pillow`, `numpy`),
+  but does not import those packages or claim local execution.
+- **License and weights boundary:** the RMBG-2.0 repository uses the BRIA
+  RMBG license with non-commercial terms. A redistributable/commercial-use
+  decision has not been made for GenBox, the gated checkpoint has not been
+  downloaded into this workspace, and no independently verified SHA-256 is
+  available (`weight_sha256=null`). Therefore capability remains
+  `UNVERIFIED`, `state=unavailable`, and `executable=false`.
+- **Fallback semantics:** requesting an unavailable algorithm fails closed if
+  no other adapter is executable; when another adapter is ready, registry
+  execution may fall back after recording the requested adapter and bounded
+  failure code. No hidden model substitution is performed by the existing
+  `main.py` route.
+
 - Contract: `genbox-cutout-model-install-v1` with one fixed source identity,
   `rembg-u2net-human-seg-v0.0.0`. The browser supplies no URL, filesystem path,
   size, or digest.
@@ -34,6 +58,17 @@
   The production missing state shows a disabled `来源/授权尚未验证` action.
   Downloader tests retain progress, cancellation, hash-mismatch, and retry
   coverage; ready still offers confirmed deletion of an existing local model.
+- The ready summary is deliberately compact (`本地模型已就绪` / `Local model
+  ready`). Size, SHA-256/MD5 verification, runtime capability gating, source,
+  relative storage path, and rights warnings belong only in the expandable
+  details. Missing, download, verification, corruption, and error states remain
+  explicit in the summary because they require user attention.
+- The in-app documentation identifies the checkpoint as a local person-
+  segmentation dependency, links to the GenBox guide, rembg upstream release,
+  and official U²-Net project, and gives one cross-platform manual placement
+  path: `storage/models/cutout/u2net_human_seg.onnx`. It states that automated
+  download is disabled and that users must independently confirm provenance,
+  authorization, and commercial-use suitability.
 - Refresh resumes the backend-reported active task. Refresh and task polling use
   separate monotonic tokens so stale responses cannot replace newer state.
   Installer state is process/page state and is not saved to browser storage.
@@ -60,8 +95,8 @@
 | Model display filtering and alias/capability separation | `renderPrecisionEditModelPicker()`, `getPrecisionEditModelAuthorizationState()`, `authorizePrecisionEditModel()` in `static/js/app-all.js`; `POST /api/providers/{provider_id}/precision-capability` in `main.py`; `tests/test_precision_edit_ui.mjs` and `tests/test_provider_precision_contract.py` | Show image providers and their models as candidates, but keep display label, alias, and model capability separate. Capability must come from explicit provider/model flags plus explicit user confirmation, not from the visible name | None |
 | Model display dropdown | V4 local implementation keeps sanitized model visibility localStorage while preserving explicit selected-model payload semantics; final P2 fix portals the popover above the sidebar and binds controls from the portaled root | Use a compact multi-select popover with confirm/cancel. Focus enters the menu, Tab loops inside it, Escape/Cancel/OK restore focus to the trigger, long names wrap beside real checkbox targets, and the popover uses the shared `--z-overlay` layer below modal/toast surfaces | Implemented and locally verified 2026-09-02 |
 | Resize output policy and structured prompt | V4 local implementation keeps `precision_output_size_policy` in resize payloads, defaults to `strict`, and derives aspect prompt text in the backend from canonical target size | `fit_crop` is explicit page-session memory only, never localStorage. It is allowed only after one provider call when ratio delta is `<= 5%` and upscale is `<= 1.5`, then GenBox applies center cover crop, LANCZOS, alpha preservation, metadata, and warning. The frontend never sends `precision_aspect_ratio_constraint` and never concatenates the structured aspect prompt | Implemented and locally verified 2026-09-02 |
-| Help document entry layout | `precisionWorkbenchHelp` remains the compact canvas-adjacent popover; V4 adds the top icon+text `文档说明` in-app help dialog/page with translation and UI regression coverage | Keep the compact `?` trigger beside the annotation canvas title, and provide a top-level icon+text `文档说明` action that opens an independent in-app precision-edit help dialog/page | Implemented and locally verified 2026-09-02; user visual acceptance still pending |
-| Responsive and accessible layout | CSS for `.precision-workbench-help-trigger`, `.precision-canvas-shell`, `.precision-compare-stage`, `.precision-task-log-panel`, `.precision-canvas-resize-handle`, and `.precision-model-visibility-menu`; V4 local checks cover viewport and hit-test contracts | Keep mobile touch targets, viewport bounds, aria labels, live regions, and no horizontal overflow. Canvas resize must stay keyboard focusable. Browser acceptance must cover `390x844`, `937x920`, and `1200x800` for the model popover and the user-visible acceptance set for the full workbench | Local Playwright popover checks verified 2026-09-02; real user-led full workbench visual inspection remains UNVERIFIED |
+| Help document entry layout | `precisionWorkbenchHelp` remains the compact canvas-adjacent popover; V4 adds the top icon+text `文档说明` in-app help dialog/page with translation and UI regression coverage | Keep the compact `?` trigger beside the annotation canvas title, and provide a top-level icon+text `文档说明` action that opens an independent in-app precision-edit help dialog/page. The dialog must include local cutout-model purpose, GenBox/upstream/official links, manual placement at `storage/models/cutout/u2net_human_seg.onnx`, disabled-auto-download status, and the user-owned license/commercial-use decision | Implemented locally 2026-09-03; user visual acceptance still pending |
+| Responsive and accessible layout | CSS for `.precision-workbench-help-trigger`, `.precision-canvas-shell`, `.precision-compare-stage`, `.precision-task-log-panel`, `.precision-canvas-resize-handle`, `.precision-model-visibility-menu`, and full-workbench `:fullscreen` roots; V4 local checks cover viewport and hit-test contracts | Keep mobile touch targets, viewport bounds, aria labels, live regions, and no horizontal overflow. Canvas resize must stay keyboard focusable. Fullscreen includes the complete workbench, with stage tools, instruction inputs, and inspector independently reachable by scrolling on small screens. The canvas and compare surface expose the double-click fullscreen hint; annotation selection exposes node/endpoint editing guidance. Browser acceptance must cover `390x844`, `937x920`, and `1200x800` | Static contract implemented 2026-09-03; real user-led fullscreen visual inspection remains UNVERIFIED |
 | State continuity and version browsing | `precisionEditSession`, `renderPrecisionEditSession()`, `selectPrecisionVersion()`, `setPrecisionBaseVersion()`, `appendPrecisionEditVersion()` in `static/js/app-all.js` | Browsing results must only change `selectedVersionId` and `view`. Only an explicit base action may change `baseVersionId` | None |
 | Safety boundaries | `tests/test_generation_error_ui.mjs`, `tests/test_i18n.mjs`, `tests/test_precision_edit_contract.py`, `tests/test_provider_precision_contract.py` | Keep error handling structured and sanitized. Do not let precision-edit text or model errors leak raw provider detail into the UI | Existing redaction gates remain relevant |
 
@@ -84,6 +119,26 @@ The current workbench has a V4-ready state model. Future work should preserve it
 ## Submit Contract
 
 V4 treats submit as two mutually exclusive envelopes.
+
+### Precision strategy and local selection guidance
+
+- Precision Edit exposes three page-session strategies: `fine`, `standard`,
+  and `fast`; `standard` is the default.
+- The strategy is explicit request metadata and a bounded Provider prompt
+  constraint. It does not change the multipart transport profile, model
+  authorization gate, size declaration rules, or version semantics.
+- Selection semantics are explicit: `annotation` is the default, while
+  `local` requires at least one rectangle, ellipse, or brush region.
+- Local selection feather is bounded to `0-64px` and is sent only with
+  `precision_selection_mode=local`. It is model guidance for a soft region
+  boundary, not a verified pixel inpaint mask and not a canvas-wide filter.
+- Every precision edit prompt includes a bounded person/leg protection
+  constraint: preserve complete, continuous, anatomically separate legs,
+  knees, ankles, and feet; do not omit, merge, duplicate, shorten, or
+  arbitrarily crop them. The source framing remains authoritative when a limb
+  is already cropped.
+- These controls are page-session state only. They are retained for single
+  model retry, but are not written to browser storage.
 
 ### Annotated edit
 
@@ -217,6 +272,13 @@ V4 also includes a top-level icon+text action labeled `文档说明`:
 - It opens an independent in-app precision-edit help dialog or page.
 - It is reachable by keyboard, exposes dialog/page semantics, and returns focus to the triggering control on close.
 - It covers the full workflow: load source, annotate, select/move, arrow endpoint scaling, pure size expansion, cutout refine, model confirmation, before/after compare, and safety boundaries.
+- Its cutout-model section explains local-only person segmentation, links to the
+  GenBox installation guide, rembg release, and official U²-Net project, then
+  gives the same relative placement path for Windows, macOS, Linux, and Docker:
+  `storage/models/cutout/u2net_human_seg.onnx`.
+- It says automated download is disabled and does not convert digest matching
+  into provenance, license, or commercial-use evidence; those decisions remain
+  with the user.
 - It may link outward to project documentation, but the primary help experience should be in-app.
 
 ## Responsive and Accessible Contract
@@ -227,6 +289,14 @@ Acceptance standard:
 - canvas shell preserves source aspect ratio
 - resize handle remains at least 44px on touch layouts
 - compare slider remains usable with pointer and keyboard
+- double-clicking the primary canvas toggles the complete workbench fullscreen,
+  while the visible button and Escape remain equivalent exit paths
+- fullscreen roots may be `#panelPrecisionEdit` or `.precision-edit-workspace`;
+  both receive the same bounded, scrollable CSS contract
+- stage tools, instruction textareas, and the inspector remain vertically
+  reachable without horizontal overflow in small-screen fullscreen
+- canvas help text identifies selection-node/arrow-endpoint editing and
+  double-click text editing without relying on pointer-only discovery
 - help popover stays inside the viewport
 - idle task panel still exposes status through aria-live
 - saved preset feedback uses a polite live region

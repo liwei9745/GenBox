@@ -119,10 +119,22 @@ const precisionReplaceAndHelpKeys = [
   'creator.precision_docs_text_body',
   'creator.precision_docs_cutout_title',
   'creator.precision_docs_cutout_body',
+  'creator.precision_docs_cutout_model_title',
+  'creator.precision_docs_cutout_model_purpose',
+  'creator.precision_docs_cutout_model_links_label',
+  'creator.precision_docs_cutout_model_project_guide',
+  'creator.precision_docs_cutout_model_upstream',
+  'creator.precision_docs_cutout_model_official',
+  'creator.precision_docs_cutout_model_step_download',
+  'creator.precision_docs_cutout_model_step_place',
+  'creator.precision_docs_cutout_model_step_verify',
+  'creator.precision_docs_cutout_model_boundary',
   'creator.precision_docs_resize_title',
   'creator.precision_docs_resize_body',
   'creator.precision_docs_versions_title',
   'creator.precision_docs_versions_body',
+  'creator.precision_docs_fullscreen_title',
+  'creator.precision_docs_fullscreen_body',
   'creator.precision_docs_models_title',
   'creator.precision_docs_models_body',
   'creator.precision_config_docs',
@@ -133,6 +145,52 @@ const precisionReplaceAndHelpKeys = [
   'creator.precision_edit_loading_gallery',
   'creator.precision_edit_gallery_empty',
   'creator.precision_edit_gallery_loaded',
+  'creator.precision_session_gallery_show',
+  'creator.precision_workflow_history',
+  'creator.precision_workflow_history_refresh',
+  'creator.precision_workflow_history_filters',
+  'creator.precision_workflow_history_filter_trigger',
+  'creator.precision_workflow_history_filter_title',
+  'creator.precision_workflow_history_action_title',
+  'creator.precision_workflow_history_date_unknown',
+  'creator.precision_workflow_history_id',
+  'creator.precision_workflow_history_id_placeholder',
+  'creator.precision_workflow_history_id_invalid',
+  'creator.precision_workflow_history_loading',
+  'creator.precision_workflow_history_loaded',
+  'creator.precision_workflow_history_load_failed',
+  'creator.precision_workflow_history_empty',
+  'creator.precision_workflow_history_original',
+  'creator.precision_workflow_history_step',
+  'creator.precision_workflow_history_edits',
+  'creator.precision_workflow_history_selected',
+  'creator.precision_workflow_history_view_image',
+  'creator.precision_workflow_history_restore',
+  'creator.precision_workflow_history_restoring',
+  'creator.precision_workflow_history_restored',
+];
+
+const precisionCompactStatusAndAccessibilityKeys = [
+  'creator.cutout_model_ready',
+  'creator.cutout_model_verification',
+  'creator.cutout_model_verification_value',
+  'creator.cutout_model_runtime_probe',
+  'creator.cutout_model_runtime_probe_value',
+  'creator.cutout_capability_refresh',
+  'creator.cutout_capability_refresh_tooltip',
+  'creator.cutout_algorithm_modnet_lab_notice',
+  'creator.precision_fullscreen_label',
+  'creator.precision_image_fullscreen',
+  'creator.precision_image_fullscreen_label',
+  'creator.precision_image_fullscreen_tooltip',
+  'creator.precision_fullscreen_tooltip',
+  'creator.precision_exit_fullscreen_label',
+  'creator.precision_exit_fullscreen_tooltip',
+  'creator.precision_fullscreen_double_click',
+  'creator.precision_fullscreen_hint',
+  'creator.precision_canvas_interaction_hint',
+  'creator.precision_canvas_resize_label',
+  'creator.precision_canvas_resize_tooltip',
 ];
 
 const precisionModelVisibilityKeys = [
@@ -180,6 +238,11 @@ for (const language of ['zh-CN', 'en']) {
     assert.notEqual(value, key, `${key} must exist in ${language}`);
     assert.ok(value.trim(), `${key} must not be empty in ${language}`);
   }
+  for (const key of precisionCompactStatusAndAccessibilityKeys) {
+    const value = i18n.t(key);
+    assert.notEqual(value, key, `${key} must exist in ${language}`);
+    assert.ok(value.trim(), `${key} must not be empty in ${language}`);
+  }
 }
 
 context.window.__genboxLanguage = 'zh-CN';
@@ -194,6 +257,9 @@ assert.equal(i18n.t('creator.precision_docs_text_body'), '文字工具单击画�
 assert.equal(i18n.t('creator.precision_docs_eraser_body'), '橡皮擦可点击删除选中的对象，也可在画笔轨迹上拖动擦除；移动、缩放、擦除和清除都可撤销/重做。');
 assert.equal(i18n.t('creator.precision_model_display_summary', { selected: 2, total: 3 }), '已显示 2/3 个');
 assert.equal(i18n.t('creator.precision_model_menu_hint'), '只影响本机列表可见性；提交仍使用真实模型 ID。');
+assert.equal(i18n.t('creator.cutout_model_ready'), '本地模型已就绪');
+assert.equal(i18n.t('creator.precision_docs_cutout_model_step_place'), '在 GenBox 数据目录下创建对应文件夹，并把文件放到所有系统统一的相对位置：');
+assert.equal(i18n.t('creator.cutout_algorithm_modnet_lab_notice'), '本地实验室（实验性）：人像优化，复杂背景可能误抠');
 context.window.__genboxLanguage = 'en';
 assert.equal(i18n.t('creator.precision_size_preset_limit', { count: 20 }), 'You can save up to 20 size presets.');
 assert.equal(i18n.t('creator.precision_size_preset_saved', { name: 'Landscape cover' }), 'Saved “Landscape cover”.');
@@ -207,6 +273,9 @@ assert.equal(i18n.t('creator.precision_docs_text_body'), 'With the text tool, cl
 assert.equal(i18n.t('creator.precision_docs_eraser_body'), 'The eraser can click to delete the selected object, or drag over brush strokes to erase them. Move, resize, erase, and clear actions all support undo/redo.');
 assert.equal(i18n.t('creator.precision_model_display_all', { count: 3 }), 'All 3 models');
 assert.equal(i18n.t('creator.precision_model_menu_hint'), 'Controls local list visibility only; submissions still use the real model ID.');
+assert.equal(i18n.t('creator.cutout_model_ready'), 'Local model ready');
+assert.equal(i18n.t('creator.precision_docs_cutout_model_boundary'), 'Automated download is currently disabled. GenBox has not verified the model conversion chain, training-data provenance, license, or commercial-use rights. Review the upstream materials and confirm suitability for your use before downloading or using it.');
+assert.equal(i18n.t('creator.cutout_algorithm_modnet_lab_notice'), 'Local lab (experimental): optimized for portraits; complex backgrounds may be cut incorrectly');
 
 assert.deepEqual(warnings, [], 'Known translations must not emit missing-key warnings');
 console.log('prompt, precision resize preset, and cutout i18n assertions passed');

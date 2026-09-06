@@ -20,7 +20,7 @@ The project began as a multi-model image comparison workspace and grew with real
 GenBox is built for visual AI enthusiasts, model evaluators, self-hosting hobbyists, and anyone who wants one interface for OpenAI-compatible services, Gemini, Qwen, Agnes, and other configurable model endpoints.
 
 > [!IMPORTANT]
-> **v2.6.6 is the current stable release for Precision Edit V4 and release-pipeline repairs.** The precision workbench adds editable annotations, second-pass adjustments, size expansion, Before/After/slider comparison, transparent-result previews, and a local cutout/refine framework. Provider capabilities and supported sizes must be explicitly declared or user-confirmed; aliases inherit them only through explicit configuration or a limited user-confirmed compatibility mapping, and missing or ambiguous metadata fails closed. Windows, macOS, Linux, Docker Compose, GHCR, and source distributions have passed their corresponding release verification. [Read the release notes](release-notes-v2.6.6.md)
+> **v2.6.7 is the current stable release.** It adds a collapsible current-session gallery, cross-session workflow review and restore, date/workflow filtering, and compact base-image, display-mode, and image-replacement controls on top of Precision Edit V4. Provider capabilities and supported sizes must still be endpoint-declared or user-confirmed; aliases inherit them only through explicit configuration or a limited user-confirmed compatibility mapping, and missing or ambiguous metadata fails closed. [Read the release notes](release-notes-v2.6.7.md)
 
 > [!NOTE]
 > Remote precision edits are still performed by the Provider you configure, and this release verification made no real Provider request. Packages include NumPy, ONNX Runtime, and the local cutout adapter, but **not the ONNX cutout checkpoint**. Production network download and installation remain disabled because provenance, training-data history, and commercial-use rights are **UNVERIFIED**. An operator-provided model must pass fixed size, hash, and executable checks before cutout becomes available.
@@ -83,7 +83,7 @@ Desktop packages include their runtime. **You do not need to install Python.**
 - GenBox does not include commercial model credits. You need access to the model service you configure.
 - Keep API keys inside your own GenBox. Never post them in issues, screenshots, chat logs, or public diagnostics.
 - Release clients use `http://localhost:8891`; source development uses `8892` by default.
-- The ONNX cutout checkpoint is not included with v2.6.6, and production network installation is disabled. Without a validated local model, cutout remains safely unavailable.
+- The ONNX cutout checkpoint is not included with v2.6.7, and production network installation is disabled. Without a validated local model, cutout remains safely unavailable.
 - Windows clients from v2.4.1 or earlier need one manual ZIP upgrade to v2.5.1. See the [upgrade notes](release-notes-v2.5.1.md#upgrade-safely).
 - chatgpt2api is a third-party reverse-engineering research project. Do not test it with important accounts.
 
@@ -132,7 +132,7 @@ GenBox can guide an isolated deployment, prepare a Tailscale private route, Pull
 <details>
 <summary><strong>Upstream and source-cleanup boundaries</strong></summary>
 
-Sender changes remain in an independent branch and upstream proposal process. Before using an unconfirmed stock chatgpt2api release, verify that it implements GenBox Push v1. Source deletion is off by default and disabled in development. It is permitted only when the user explicitly selects deletion for that action, the sender receives an authenticated `safe_to_delete_source=true` receipt with a matching SHA-256, and the source bytes are rechecked as unchanged. Upstream merge or real-environment behavior cannot be inferred from the successful GenBox v2.6.6 release.
+Sender changes remain in an independent branch and upstream proposal process. Before using an unconfirmed stock chatgpt2api release, verify that it implements GenBox Push v1. Source deletion is off by default and disabled in development. It is permitted only when the user explicitly selects deletion for that action, the sender receives an authenticated `safe_to_delete_source=true` receipt with a matching SHA-256, and the source bytes are rechecked as unchanged. Upstream merge or real-environment behavior cannot be inferred from the successful GenBox v2.6.7 release.
 
 </details>
 
@@ -142,7 +142,7 @@ The README stays focused on the first successful run. Use the [documentation map
 
 | I want to learn about | Start here |
 |---|---|
-| Installation, upgrades, and known issues | [v2.6.6 release notes](release-notes-v2.6.6.md) · [Changelog](CHANGELOG.md) |
+| Installation, upgrades, and known issues | [v2.6.7 release notes](release-notes-v2.6.7.md) · [Changelog](CHANGELOG.md) |
 | Product direction and current boundaries | [Product definition](docs/PRODUCT.md) · [Current status](docs/STATUS.md) |
 | NAS, VPS, Docker, and safe releases | [Development and release lifecycle](docs/DEVELOPMENT-LIFECYCLE.md) |
 | How GenBox connects to chatgpt2api | [Integration contract](docs/INTEGRATION.md) |

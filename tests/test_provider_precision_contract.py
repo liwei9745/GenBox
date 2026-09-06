@@ -2117,6 +2117,7 @@ def test_precision_dispatch_rejects_wrong_preserve_output_size(monkeypatch):
 
 def test_precision_resize_strict_rejects_1376x768_for_1536x864_without_retry(monkeypatch):
     calls = []
+    saved_images = []
     response_image = base64.b64encode(
         _image_bytes(size=(1376, 768))
     ).decode("ascii")
@@ -2133,6 +2134,11 @@ def test_precision_resize_strict_rejects_1376x768_for_1536x864_without_retry(mon
             return _Response(200, {"data": [{"b64_json": response_image}]})
 
     monkeypatch.setattr(providers.httpx, "AsyncClient", lambda **kwargs: Client())
+    monkeypatch.setattr(
+        providers,
+        "_save_image",
+        lambda *args, **kwargs: saved_images.append((args, kwargs)) or "unexpected.png",
+    )
     result = asyncio.run(
         providers._dispatch_generate(
             _provider(supported_sizes=["1536x864"]),
@@ -2147,6 +2153,9 @@ def test_precision_resize_strict_rejects_1376x768_for_1536x864_without_retry(mon
 
     assert result.success is False
     assert result.error_code == "precision_edit_output_size_mismatch"
+    assert "主动使用改变尺寸" not in result.error
+    assert "可更换目标尺寸再次请求" in result.error
+    assert "已由该上游严格验证" not in result.error
     assert result.error_details == {
         "requested_size": "1536x864",
         "actual_size": "1376x768",
@@ -2154,6 +2163,7 @@ def test_precision_resize_strict_rejects_1376x768_for_1536x864_without_retry(mon
         "allowed_policies": ["strict", "fit_crop"],
     }
     assert len(calls) == 1
+    assert saved_images == []
 
 
 def test_precision_resize_fit_crop_converts_once_preserves_alpha_and_records_metadata(monkeypatch):

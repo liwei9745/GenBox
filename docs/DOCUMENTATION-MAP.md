@@ -11,7 +11,7 @@ unlimited development diary. The audience-facing hub is
 | Class | Audience | Source-of-truth rule | Examples |
 |---|---|---|---|
 | User guide | People installing or operating GenBox | Describe shipped workflows and current limitations in task language | [README](../README.md), [client quick start](CLIENT-QUICKSTART.md), [Docker quick start](DOCKER-QUICKSTART.md) |
-| Release-frozen record | People installing or reviewing one exact release | Freeze after publication except for factual corrections | [v2.6.6 Chinese notes](../release-notes-v2.6.6-zh.md), [English notes](../release-notes-v2.6.6.md) |
+| Release-frozen record | People installing or reviewing one exact release | Freeze after publication except for factual corrections | [v2.6.7 Chinese notes](../release-notes-v2.6.7-zh.md), [English notes](../release-notes-v2.6.7.md) |
 | Pinned product or developer contract | Maintainers, contributors, and integrators | Change only when a durable product, architecture, protocol, or safety boundary changes | [product](PRODUCT.md), [architecture](ARCHITECTURE.md), [decisions](DECISIONS.md), [integration](INTEGRATION.md) |
 | Rolling current state | Maintainers and auditors | Replace stale claims with dated evidence; do not infer live state from a plan | [status](STATUS.md), [roadmap](ROADMAP.md), [changelog](../CHANGELOG.md) |
 | Historical evidence | Auditors and people resuming earlier work | Preserve the original scope and evidence label; never use it as the current product claim | Dated `PHASE*`, preflight, review, and handoff documents |
@@ -28,7 +28,7 @@ unlimited development diary. The audience-facing hub is
 | [`docs/CUTOUT-ALGORITHM-FEASIBILITY-20260904.md`](CUTOUT-ALGORITHM-FEASIBILITY-20260904.md) | Cross-algorithm status matrix: U²-Net default, MODNet local-only experiment, and fail-closed candidates | Algorithm capability, quality evidence, authorization boundary, or Release packaging decision changes |
 | [`docs/CUTOUT-INSPYRENET-FEASIBILITY-20260904.md`](CUTOUT-INSPYRENET-FEASIBILITY-20260904.md) | InSPyReNet candidate evidence and fail-closed integration boundary | InSPyReNet checkpoint, dependency, quality, or authorization evidence changes |
 | [`RELEASE_NOTES.md`](../RELEASE_NOTES.md) | Rolling pointer to the latest stable bilingual release notes | A stable release is published or a failed candidate is superseded |
-| [`release-notes-v2.6.6-zh.md`](../release-notes-v2.6.6-zh.md) / [`release-notes-v2.6.6.md`](../release-notes-v2.6.6.md) | Frozen v2.6.6 changes, verification scope, packaging, and limitations | Factual correction only after publication |
+| [`release-notes-v2.6.7-zh.md`](../release-notes-v2.6.7-zh.md) / [`release-notes-v2.6.7.md`](../release-notes-v2.6.7.md) | Frozen v2.6.7 changes, verification scope, packaging, and limitations | Factual correction only after publication |
 | In-app Precision Edit `文档说明` | Task-oriented Precision Edit operation help | Workbench interaction or user terminology changes; keep release scope in the current release notes |
 
 Precision Edit documentation must identify U²-Net as the default verified path.

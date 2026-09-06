@@ -1,10 +1,10 @@
-# GenBox v2.6.6 Release Notes
+# GenBox v2.6.7 Release Notes
 
-This rolling file points to the bilingual v2.6.6 release notes dated
-2026-09-03:
+This rolling file points to the bilingual v2.6.7 release notes dated
+2026-09-06:
 
-- [中文 v2.6.6 发布说明](release-notes-v2.6.6-zh.md)
-- [English v2.6.6 release notes](release-notes-v2.6.6.md)
+- [中文 v2.6.7 发布说明](release-notes-v2.6.7-zh.md)
+- [English v2.6.7 release notes](release-notes-v2.6.7.md)
 
 The v2.6.5 tag was pushed, but both tag workflows failed and created no GitHub
 Release, release assets, or GHCR image. Its versioned notes remain a historical

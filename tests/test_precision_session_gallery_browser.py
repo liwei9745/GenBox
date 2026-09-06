@@ -160,7 +160,16 @@ def test_precision_session_calendar_filter_is_collapsed_and_highlights_result_da
             toggle = page.locator("#precisionSessionDateToggle")
             popover = page.locator("#precisionSessionDatePopover")
             heading = page.locator(".precision-session-showcase-heading")
-            assert "精准改图图库" in heading.inner_text()
+            showcase_toggle = page.locator("#btnPrecisionSessionShowcaseToggle")
+            showcase_content = page.locator("#precisionSessionShowcaseContent")
+            assert "当前会话结果" in heading.inner_text()
+            assert showcase_toggle.get_attribute("aria-expanded") == "false"
+            assert showcase_content.get_attribute("aria-hidden") == "true"
+            assert showcase_content.get_attribute("inert") is not None
+            showcase_toggle.click()
+            assert showcase_toggle.get_attribute("aria-expanded") == "true"
+            assert showcase_content.get_attribute("aria-hidden") == "false"
+            assert showcase_content.get_attribute("inert") is None
             assert toggle.locator("xpath=ancestor::div[contains(@class, 'precision-session-showcase-heading')]").count() == 1
             assert toggle.get_attribute("aria-expanded") == "false"
             assert toggle.get_attribute("aria-haspopup") == "dialog"
@@ -228,7 +237,7 @@ def test_precision_source_menu_and_two_row_toolbar_fit_common_viewports():
             assert "更换图片" in trigger.inner_text()
             trigger.click()
             assert menu.is_visible()
-            assert "本地选择" in menu.inner_text()
+            assert "本地上传" in menu.inner_text()
             assert "从图库选择" in menu.inner_text()
             assert page.evaluate("document.activeElement.id") == "btnPrecisionReplaceLocal"
             page.keyboard.press("ArrowDown")
@@ -308,6 +317,29 @@ def test_loaded_precision_canvas_real_pointer_fullscreen_and_mobile_menu_contrac
 
             for width, height in [(390, 844), (937, 920), (1200, 800)]:
                 page.set_viewport_size({"width": width, "height": height})
+                session_metrics = page.evaluate(
+                    """() => {
+                        const session = document.querySelector('#precisionSessionPanel');
+                        const actions = document.querySelector('.precision-session-fullscreen-actions');
+                        const bounds = (node) => {
+                            const box = node.getBoundingClientRect();
+                            return { left: box.left, right: box.right, width: box.width };
+                        };
+                        return {
+                            session: bounds(session),
+                            sessionClientWidth: session.clientWidth,
+                            sessionScrollWidth: session.scrollWidth,
+                            actions: bounds(actions),
+                            children: Array.from(actions.querySelectorAll('button')).map(bounds),
+                        };
+                    }"""
+                )
+                assert session_metrics["sessionScrollWidth"] <= session_metrics["sessionClientWidth"] + 1
+                assert session_metrics["actions"]["left"] >= session_metrics["session"]["left"] - 1
+                assert session_metrics["actions"]["right"] <= session_metrics["session"]["right"] + 1
+                for control in session_metrics["children"]:
+                    assert control["left"] >= session_metrics["session"]["left"] - 1
+                    assert control["right"] <= session_metrics["session"]["right"] + 1
                 canvas = page.locator("#precisionAnnotationCanvas")
                 canvas.scroll_into_view_if_needed()
                 box = canvas.bounding_box()
@@ -329,6 +361,36 @@ def test_loaded_precision_canvas_real_pointer_fullscreen_and_mobile_menu_contrac
                 assert page.evaluate("window.precisionViewZoom") == 140
                 assert page.evaluate("document.querySelector('#precisionCanvasShell').scrollLeft") > 0
                 page.evaluate("setPrecisionViewZoom(100, { resetScroll: true })")
+
+                page.evaluate(
+                    """() => {
+                        precisionEditSession.source.prompt = 'original prompt';
+                        precisionEditSession.versions = [{
+                            id: 'viewer-version-1', label: '1',
+                            data: precisionEditSession.source.data,
+                            prompt: 'first edit prompt',
+                            createdAt: '2026-09-05T10:00:00Z'
+                        }];
+                        precisionEditSession.selectedVersionId = 'viewer-version-1';
+                        precisionEditSession.view = 'before';
+                        renderPrecisionEditSession();
+                    }"""
+                )
+
+                image_fullscreen = page.locator("#btnPrecisionImageFullscreen")
+                assert image_fullscreen.is_visible()
+                image_fullscreen.click()
+                page.wait_for_function("!document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
+                assert page.locator("#precisionImageFullscreenImg").get_attribute("src").startswith("data:image/svg+xml")
+                prompt_entries = page.locator("#precisionImageFullscreenPromptHistory .precision-image-fullscreen-prompt-entry")
+                assert prompt_entries.count() == 2
+                assert prompt_entries.nth(0).inner_text().startswith("原图提示词")
+                assert "original prompt" in prompt_entries.nth(0).inner_text()
+                assert prompt_entries.nth(1).inner_text().startswith("改图 1 提示词")
+                assert "first edit prompt" in prompt_entries.nth(1).inner_text()
+                assert page.locator("#precisionImageFullscreenPromptHistory .selected").count() == 1
+                page.keyboard.press("Escape")
+                page.wait_for_function("document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
 
                 page.evaluate("setPrecisionEditTool('brush')")
                 object_count = page.evaluate("window.precisionEditObjects.length")

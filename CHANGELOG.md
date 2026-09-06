@@ -4,6 +4,42 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.7] - 2026-09-06
+
+### Added
+
+- Precision Edit now keeps a privacy-safe cross-session workflow history. Users
+  can browse visual edit chains, filter by date or workflow, view a result, or
+  restore a validated historical image to the workbench for another edit.
+- The current-session gallery is available below the annotation tools. It starts
+  as a compact "show Precision Edit gallery" control and expands without moving
+  the workbench controls out of reach.
+
+### Changed
+
+- The version, display-mode controls, base-image action, and image replacement
+  action share a compact workbench control row. Image replacement expands into
+  local-file and media-library choices while preserving keyboard and task-state
+  behavior.
+- Wide workbenches keep edit-strategy and selection-semantics controls on one
+  line; narrow windows wrap them safely.
+
+### Security
+
+- Workflow-history APIs expose only sanitized identifiers, dimensions, dates,
+  and local application media URLs. Prompts, filenames, filesystem paths,
+  hashes, logs, credentials, base64 payloads, and image metadata are excluded.
+
+### Verification And Boundaries
+
+- Local verification passed 1,440 Python tests, the Precision Edit UI and
+  i18n Node tests, JavaScript syntax validation, and whitespace validation.
+- **USER-CONFIRMED 2026-09-06:** two real Precision Edit results completed in
+  the local development lab. This does not claim that every third-party
+  provider alias, remote endpoint, or output size is universally supported.
+- ONNX cutout checkpoints remain external to the release artifacts. Their
+  provenance and commercial-use rights are not established by this release.
+
 ## [2.6.6] - 2026-09-03
 
 ### Added

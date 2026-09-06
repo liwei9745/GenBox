@@ -3238,7 +3238,8 @@ async def _gen_openai_precision_edit(
                 (
                     f"图片编辑模型返回了 {output_size[0]}x{output_size[1]}，"
                     f"但当前尺寸策略要求 {expected_size[0]}x{expected_size[1]}。"
-                    "结果未接管主画布；请切换支持该尺寸的模型，或主动使用改变尺寸。"
+                    "结果未接管主画布；可更换目标尺寸再次请求，"
+                    "或由用户主动切换为本地适配。"
                 ),
                 details=mismatch_details,
             )

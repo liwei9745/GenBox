@@ -1868,6 +1868,9 @@ def _check_rate_limit(client_ip: str, endpoint_type: str = "api") -> bool:
 generation_history: dict = {}
 generation_counter = 0
 HISTORY_FILE = STORAGE_DIR / "history.jsonl"
+PRECISION_WORKFLOW_SCHEMA = "genbox-precision-workflow-v1"
+PRECISION_WORKFLOW_ID_RE = re.compile(r"^pw_[a-f0-9]{32}$")
+PRECISION_VERSION_ID_RE = re.compile(r"^pv_[a-f0-9]{24}$")
 
 # 连续生图会话状态（内存存储）
 continuous_sessions: dict = {}  # {session_id: {"images": [...], "prompts": [...], "context": "..."}}
@@ -2007,6 +2010,377 @@ def _save_history_entry(entry: dict):
     """追加一条历史记录到 history.jsonl"""
     with open(HISTORY_FILE, "a", encoding="utf-8") as fh:
         fh.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def _precision_data_url_sha256(value: object) -> str:
+    """Hash a validated image data URL without retaining its bytes."""
+    raw = str(value or "")
+    encoded = raw.split(",", 1)[1] if "," in raw else raw
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError, TypeError):
+        return ""
+    return hashlib.sha256(payload).hexdigest() if payload else ""
+
+
+def _precision_history_metadata(entry: object) -> dict:
+    if not isinstance(entry, dict):
+        return {}
+    metadata = entry.get("precision_workflow")
+    if not isinstance(metadata, dict) or metadata.get("schema") != PRECISION_WORKFLOW_SCHEMA:
+        return {}
+    workflow_id = str(metadata.get("workflow_id") or "")
+    if not PRECISION_WORKFLOW_ID_RE.fullmatch(workflow_id):
+        return {}
+    return metadata
+
+
+def _precision_legacy_workflow_id(generation_id: object) -> str:
+    digest = hashlib.sha256(f"legacy:{generation_id}".encode("utf-8")).hexdigest()
+    return f"pw_{digest[:32]}"
+
+
+def _precision_version_id(generation_id: object, result_key: object) -> str:
+    digest = hashlib.sha256(
+        f"{generation_id}:{result_key}".encode("utf-8")
+    ).hexdigest()
+    return f"pv_{digest[:24]}"
+
+
+def _precision_history_gallery_file(local_path: object) -> Optional[Path]:
+    raw = str(local_path or "")
+    if not raw:
+        return None
+    filename = PureWindowsPath(raw).name if "\\" in raw else PurePosixPath(raw).name
+    try:
+        return _resolve_gallery_file(filename)
+    except HTTPException:
+        return None
+
+
+def _precision_gallery_file_sha256(path: Optional[Path]) -> str:
+    if path is None:
+        return ""
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+def _precision_result_artifact(entry: dict, result_key: str, result: dict) -> dict:
+    metadata = _precision_history_metadata(entry)
+    outputs = metadata.get("outputs") if isinstance(metadata.get("outputs"), dict) else {}
+    stored = outputs.get(result_key) if isinstance(outputs.get(result_key), dict) else {}
+    sha256 = str(stored.get("sha256") or "")
+    path = _precision_history_gallery_file(result.get("local_path"))
+    if path is None and isinstance(stored.get("filename"), str):
+        path = _precision_history_gallery_file(stored["filename"])
+    if path is None and re.fullmatch(r"[a-f0-9]{64}", sha256):
+        recovered_filename = _precision_find_gallery_source(sha256)
+        if recovered_filename:
+            path = _precision_history_gallery_file(recovered_filename)
+    if not re.fullmatch(r"[a-f0-9]{64}", sha256):
+        sha256 = _precision_gallery_file_sha256(path)
+
+    width = stored.get("width")
+    height = stored.get("height")
+    if not isinstance(width, int) or not isinstance(height, int) or width <= 0 or height <= 0:
+        width = height = None
+        if path is not None:
+            try:
+                with Image.open(path) as image:
+                    width, height = image.size
+            except Exception:
+                width = height = None
+    return {
+        "sha256": sha256,
+        "filename": path.name if path is not None else None,
+        "available": path is not None,
+        "width": width,
+        "height": height,
+    }
+
+
+def _precision_success_results(entry: dict):
+    results = entry.get("results")
+    if not isinstance(results, dict):
+        return
+    for result_key in sorted(results):
+        result = results.get(result_key)
+        if isinstance(result, dict) and result.get("success"):
+            yield str(result_key), result
+
+
+def _precision_find_parent_result(source_sha256: str) -> Optional[tuple[str, str, dict]]:
+    matches = []
+    for generation_id, entry in list(generation_history.items()):
+        if not isinstance(entry, dict) or entry.get("mode") != "precision_edit":
+            continue
+        for result_key, result in _precision_success_results(entry):
+            artifact = _precision_result_artifact(entry, result_key, result)
+            if artifact["sha256"] == source_sha256:
+                matches.append((str(entry.get("created_at") or ""), str(generation_id), result_key, artifact))
+    if not matches:
+        return None
+    _created_at, generation_id, result_key, artifact = max(matches)
+    return generation_id, result_key, artifact
+
+
+def _precision_existing_workflow_id(parent_generation_id: str) -> str:
+    parent = generation_history.get(parent_generation_id)
+    parent_metadata = _precision_history_metadata(parent)
+    if parent_metadata:
+        return str(parent_metadata["workflow_id"])
+    for entry in list(generation_history.values()):
+        metadata = _precision_history_metadata(entry)
+        if str(metadata.get("parent_generation_id") or "") == parent_generation_id:
+            return str(metadata["workflow_id"])
+    return _precision_legacy_workflow_id(parent_generation_id)
+
+
+def _precision_find_gallery_source(source_sha256: str) -> Optional[str]:
+    try:
+        candidates = sorted(GALLERY_DIR.glob("*.png"), reverse=True)
+    except OSError:
+        return None
+    for candidate in candidates:
+        try:
+            path = _resolve_gallery_file(candidate.name)
+        except HTTPException:
+            continue
+        if _precision_gallery_file_sha256(path) == source_sha256:
+            return path.name
+    return None
+
+
+def _prepare_precision_workflow_metadata(generation_input: dict) -> dict:
+    image = generation_input["images"][0]
+    source_sha256 = _precision_data_url_sha256(image.get("value"))
+    parent = _precision_find_parent_result(source_sha256) if source_sha256 else None
+    if parent:
+        parent_generation_id, parent_result_key, parent_artifact = parent
+        workflow_id = _precision_existing_workflow_id(parent_generation_id)
+        input_filename = parent_artifact.get("filename")
+    else:
+        parent_generation_id = None
+        parent_result_key = None
+        workflow_id = f"pw_{uuid.uuid4().hex}"
+        input_filename = _precision_find_gallery_source(source_sha256) if source_sha256 else None
+    return {
+        "schema": PRECISION_WORKFLOW_SCHEMA,
+        "workflow_id": workflow_id,
+        "source_sha256": source_sha256,
+        "source_width": image.get("width"),
+        "source_height": image.get("height"),
+        "input_gallery_filename": input_filename,
+        "parent_generation_id": parent_generation_id,
+        "parent_result_key": parent_result_key,
+        "outputs": {},
+    }
+
+
+def _finalize_precision_workflow_metadata(task: dict) -> dict:
+    metadata = dict(task.get("precision_workflow") or {})
+    outputs = {}
+    entry_view = {"precision_workflow": metadata}
+    for result_key, result in _precision_success_results(task):
+        artifact = _precision_result_artifact(entry_view, result_key, result)
+        outputs[result_key] = {
+            "sha256": artifact["sha256"],
+            "filename": artifact["filename"],
+            "width": artifact["width"],
+            "height": artifact["height"],
+        }
+    metadata["outputs"] = outputs
+    return metadata
+
+
+def _precision_normalize_timestamp(value: object) -> str:
+    if not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(float(value)):
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        except (OSError, OverflowError, ValueError):
+            return ""
+    text = str(value or "").strip()
+    if not text or len(text) > 64:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(text[:-1] + "+00:00" if text.endswith("Z") else text)
+    except ValueError:
+        return ""
+    if parsed.tzinfo is None:
+        return parsed.isoformat(timespec="seconds")
+    return parsed.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _precision_entry_timestamp(entry: dict, result: Optional[dict] = None) -> str:
+    if isinstance(result, dict):
+        finished_at = _precision_normalize_timestamp(result.get("finished_at"))
+        if finished_at:
+            return finished_at
+    return _precision_normalize_timestamp(entry.get("created_at"))
+
+
+def _precision_source_artifact(metadata: dict) -> dict:
+    filename = metadata.get("input_gallery_filename")
+    path = None
+    if isinstance(filename, str) and filename:
+        try:
+            path = _resolve_gallery_file(filename)
+        except HTTPException:
+            path = None
+    width = metadata.get("source_width")
+    height = metadata.get("source_height")
+    return {
+        "filename": path.name if path is not None else None,
+        "available": path is not None,
+        "width": width if isinstance(width, int) and width > 0 else None,
+        "height": height if isinstance(height, int) and height > 0 else None,
+    }
+
+
+def _precision_workflow_projection_data() -> tuple[List[dict], dict]:
+    entries = {
+        str(generation_id): entry
+        for generation_id, entry in list(generation_history.items())
+        if isinstance(entry, dict) and entry.get("mode") == "precision_edit"
+    }
+    assignments = {}
+    for generation_id, entry in entries.items():
+        metadata = _precision_history_metadata(entry)
+        if metadata:
+            assignments[generation_id] = str(metadata["workflow_id"])
+    changed = True
+    while changed:
+        changed = False
+        for generation_id, entry in entries.items():
+            metadata = _precision_history_metadata(entry)
+            parent_generation_id = str(metadata.get("parent_generation_id") or "")
+            workflow_id = assignments.get(generation_id)
+            if workflow_id and parent_generation_id in entries and parent_generation_id not in assignments:
+                assignments[parent_generation_id] = workflow_id
+                changed = True
+    for generation_id in entries:
+        assignments.setdefault(generation_id, _precision_legacy_workflow_id(generation_id))
+
+    grouped = defaultdict(list)
+    for generation_id, entry in entries.items():
+        grouped[assignments[generation_id]].append((generation_id, entry))
+
+    projections = []
+    file_index = {}
+    for workflow_id, workflow_entries in grouped.items():
+        workflow_entries.sort(key=lambda item: _precision_entry_timestamp(item[1]))
+        generation_ids = {generation_id for generation_id, _entry in workflow_entries}
+        _root_generation_id, root_entry = next(
+            (
+                (generation_id, entry)
+                for generation_id, entry in workflow_entries
+                if str(_precision_history_metadata(entry).get("parent_generation_id") or "") not in generation_ids
+            ),
+            workflow_entries[0],
+        )
+        root_metadata = _precision_history_metadata(root_entry)
+        source_artifact = _precision_source_artifact(root_metadata)
+        source_created_at = _precision_entry_timestamp(root_entry)
+        source_version = {
+            "version_id": "original",
+            "parent_version_id": None,
+            "kind": "source",
+            "created_at": source_created_at,
+            "available": source_artifact["available"],
+            "width": source_artifact["width"],
+            "height": source_artifact["height"],
+            "thumbnail": None,
+            "image_url": None,
+        }
+        if source_artifact["available"]:
+            source_version["thumbnail"] = f"/api/precision/workflows/{workflow_id}/versions/original/thumb"
+            source_version["image_url"] = f"/api/precision/workflows/{workflow_id}/versions/original/image"
+            file_index[(workflow_id, "original")] = source_artifact["filename"]
+
+        versions = []
+        result_version_ids = {}
+        for generation_id, entry in workflow_entries:
+            for result_key, _result in _precision_success_results(entry):
+                result_version_ids[(generation_id, result_key)] = _precision_version_id(generation_id, result_key)
+        for generation_id, entry in workflow_entries:
+            metadata = _precision_history_metadata(entry)
+            parent_generation_id = str(metadata.get("parent_generation_id") or "")
+            parent_result_key = str(metadata.get("parent_result_key") or "")
+            parent_version_id = result_version_ids.get((parent_generation_id, parent_result_key), "original")
+            for result_key, result in _precision_success_results(entry):
+                artifact = _precision_result_artifact(entry, result_key, result)
+                version_id = result_version_ids[(generation_id, result_key)]
+                version = {
+                    "version_id": version_id,
+                    "parent_version_id": parent_version_id,
+                    "kind": "result",
+                    "created_at": _precision_entry_timestamp(entry, result),
+                    "available": artifact["available"],
+                    "width": artifact["width"],
+                    "height": artifact["height"],
+                    "thumbnail": None,
+                    "image_url": None,
+                }
+                if artifact["available"]:
+                    version["thumbnail"] = f"/api/precision/workflows/{workflow_id}/versions/{version_id}/thumb"
+                    version["image_url"] = f"/api/precision/workflows/{workflow_id}/versions/{version_id}/image"
+                    file_index[(workflow_id, version_id)] = artifact["filename"]
+                versions.append(version)
+
+        if not versions:
+            continue
+        versions.sort(key=lambda item: (item["created_at"], item["version_id"]))
+        all_versions = [source_version, *versions]
+        dated = [item["created_at"] for item in all_versions if item["created_at"]]
+        available_versions = [item for item in versions if item["available"]]
+        latest_available = available_versions[-1] if available_versions else None
+        latest_size = None
+        if latest_available and latest_available["width"] and latest_available["height"]:
+            latest_size = f"{latest_available['width']}x{latest_available['height']}"
+        projections.append({
+            "workflow_id": workflow_id,
+            "created_at": min(dated) if dated else "",
+            "updated_at": max(dated) if dated else "",
+            "edit_count": len(versions),
+            "thumbnail": latest_available["thumbnail"] if latest_available else None,
+            "summary": {
+                "edit_count": len(versions),
+                "available_version_count": len(available_versions),
+                "source_available": source_artifact["available"],
+                "latest_size": latest_size,
+            },
+            "versions": all_versions,
+            "restore": ({
+                "workflow_id": workflow_id,
+                "version_id": latest_available["version_id"],
+                "image_url": latest_available["image_url"],
+            } if latest_available else None),
+        })
+    projections.sort(key=lambda item: (item["updated_at"], item["workflow_id"]), reverse=True)
+    return projections, file_index
+
+
+def _precision_filter_date(value: str, field: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        datetime.strptime(text, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "precision_workflow_date_invalid", "field": field},
+        ) from None
+    return text
+
+
+def _precision_validate_workflow_id(workflow_id: str) -> str:
+    value = str(workflow_id or "")
+    if not PRECISION_WORKFLOW_ID_RE.fullmatch(value):
+        raise HTTPException(status_code=404, detail="工作流不存在")
+    return value
 
 
 # 启动时加载历史
@@ -3402,6 +3776,11 @@ async def generate(req: GenerateRequest, request: Request):
 
     generation_counter += 1
     gen_id = f"gen_{generation_counter:04d}_{uuid.uuid4().hex[:6]}"
+    precision_workflow = (
+        await asyncio.to_thread(_prepare_precision_workflow_metadata, generation_input)
+        if mode == "precision_edit"
+        else None
+    )
 
     # LLM 优化提示词（仅对文生图模式）
     original_prompt = req.prompt
@@ -3516,6 +3895,7 @@ async def generate(req: GenerateRequest, request: Request):
         "continuous_id": req.continuous_id,
         "system_prompt": req.system_prompt,
         "original_prompt": req.prompt,
+        "precision_workflow": precision_workflow,
         # ── 尺寸自适应 ──
         "upscale_to": req.upscale_to,
         "upscale_method": req.upscale_method,
@@ -3739,7 +4119,7 @@ async def _process_image_gen_impl(gen_id: str):
         task["continuous_id"] = cid
 
     # 记录历史
-    generation_history[gen_id] = {
+    history_entry = {
         "generation_id": gen_id,
         "prompt": task["prompt"],
         "system_prompt": task.get("system_prompt"),
@@ -3753,7 +4133,10 @@ async def _process_image_gen_impl(gen_id: str):
         "elapsed_seconds": elapsed,
         "group_timings": group_timings,
     }
-    _save_history_entry(generation_history[gen_id])
+    if task["mode"] == "precision_edit":
+        history_entry["precision_workflow"] = _finalize_precision_workflow_metadata(task)
+    generation_history[gen_id] = history_entry
+    _save_history_entry(history_entry)
 
     ok_count = sum(1 for r in task["results"].values() if r.get("success"))
     _write_log("generate", f"生图完成: {ok_count}/{len(task['providers'])} 成功 ({elapsed}s)", {"gen_id": gen_id})
@@ -4311,6 +4694,126 @@ async def gallery_image_base64(filename: str):
     )
     data = _b64.b64encode(payload).decode()
     return {"filename": filename, "data": f"data:{mime_type};base64,{data}"}
+
+
+@app.get("/api/precision/workflows")
+async def precision_workflows(
+    date_from: str = "",
+    date_to: str = "",
+    workflow_id: str = "",
+    limit: int = 50,
+):
+    """Return a prompt-free, path-free projection of persisted precision edits."""
+    if limit < 1 or limit > 200:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "precision_workflow_limit_invalid", "field": "limit"},
+        )
+    normalized_from = _precision_filter_date(date_from, "date_from")
+    normalized_to = _precision_filter_date(date_to, "date_to")
+    if normalized_from and normalized_to and normalized_from > normalized_to:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "precision_workflow_date_range_invalid"},
+        )
+    if workflow_id and not PRECISION_WORKFLOW_ID_RE.fullmatch(workflow_id):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "precision_workflow_id_invalid", "field": "workflow_id"},
+        )
+
+    items, _file_index = await asyncio.to_thread(_precision_workflow_projection_data)
+    if workflow_id:
+        items = [item for item in items if item["workflow_id"] == workflow_id]
+    if normalized_from or normalized_to:
+        items = [
+            item
+            for item in items
+            if any(
+                (not normalized_from or version["created_at"][:10] >= normalized_from)
+                and (not normalized_to or version["created_at"][:10] <= normalized_to)
+                for version in item["versions"]
+                if version.get("created_at")
+            )
+        ]
+    return {"items": items[:limit], "total": len(items)}
+
+
+@app.get("/api/precision/workflows/{workflow_id}")
+async def precision_workflow(workflow_id: str):
+    workflow_id = _precision_validate_workflow_id(workflow_id)
+    items, _file_index = await asyncio.to_thread(_precision_workflow_projection_data)
+    for item in items:
+        if item["workflow_id"] == workflow_id:
+            return {"workflow": item}
+    raise HTTPException(status_code=404, detail="工作流不存在")
+
+
+def _precision_workflow_version_filename(workflow_id: str, version_id: str) -> str:
+    workflow_id = _precision_validate_workflow_id(workflow_id)
+    if version_id != "original" and not PRECISION_VERSION_ID_RE.fullmatch(str(version_id or "")):
+        raise HTTPException(status_code=404, detail="工作流版本不存在")
+    _items, file_index = _precision_workflow_projection_data()
+    filename = file_index.get((workflow_id, version_id))
+    if not filename:
+        raise HTTPException(status_code=404, detail="工作流版本不存在")
+    return filename
+
+
+def _load_precision_workflow_media(filename: str, *, thumbnail: bool) -> tuple[bytes, str]:
+    """Re-encode gallery pixels so PNG prompt metadata never crosses this API."""
+    _path, payload, _mime_type, _prompt = _load_gallery_image_payload(filename)
+    try:
+        with Image.open(io.BytesIO(payload)) as source:
+            source.load()
+            image = source.copy()
+        try:
+            image.info.clear()
+            if thumbnail:
+                image.thumbnail((320, 320), Image.Resampling.LANCZOS)
+            output = io.BytesIO()
+            image.save(output, format="PNG")
+            return output.getvalue(), "image/png"
+        finally:
+            image.close()
+    except Exception:
+        raise HTTPException(
+            status_code=415,
+            detail={
+                "code": "precision_workflow_image_invalid",
+                "message": "workflow image is not readable",
+            },
+        ) from None
+
+
+@app.get("/api/precision/workflows/{workflow_id}/versions/{version_id}/thumb")
+async def precision_workflow_thumbnail(workflow_id: str, version_id: str, request: Request):
+    filename = await asyncio.to_thread(
+        _precision_workflow_version_filename,
+        workflow_id,
+        version_id,
+    )
+    payload, mime_type = await asyncio.to_thread(
+        _load_precision_workflow_media,
+        filename,
+        thumbnail=True,
+    )
+    return _memory_media_response(request, payload, mime_type)
+
+
+@app.get("/api/precision/workflows/{workflow_id}/versions/{version_id}/image")
+async def precision_workflow_image(workflow_id: str, version_id: str, request: Request):
+    filename = await asyncio.to_thread(
+        _precision_workflow_version_filename,
+        workflow_id,
+        version_id,
+    )
+    payload, mime_type = await asyncio.to_thread(
+        _load_precision_workflow_media,
+        filename,
+        thumbnail=False,
+    )
+    return _memory_media_response(request, payload, mime_type)
 
 
 @app.get("/api/history")
