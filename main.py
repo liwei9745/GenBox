@@ -70,6 +70,8 @@ from PIL import Image
 
 from config import (
     cfg_mgr, BASE_DIR, GALLERY_DIR, STORAGE_DIR, PrecisionEditProfile, ProviderConfig, ProvidersConfig,
+    PRECISION_GPT_IMAGE_2_FLEXIBLE_SIZE_POLICY,
+    documented_precision_model_size_presets,
     gpt_image_2_size_error,
     is_prod_mode, get_admin_key, verify_admin_key, generate_admin_key, reset_admin_key,
     normalize_precision_capability_size, precision_capability_size_declaration,
@@ -1553,6 +1555,17 @@ def _precision_model_declared_sizes(provider, selected_model: str) -> set[str]:
     return set(resolution.supported_sizes)
 
 
+def _precision_model_allows_flexible_sizes(provider, selected_model: str) -> bool:
+    """Allow the GPT Image 2 envelope only after an explicit persisted opt-in."""
+    resolution = _provider_precision_model_resolution(provider, selected_model)
+    return bool(
+        resolution.structure_valid
+        and resolution.precision_edit_confirmed
+        and resolution.size_declaration_valid
+        and resolution.flexible_sizes
+    )
+
+
 def _validate_precision_edit_size_authorization(
     provider_ids: List[str],
     all_providers: dict,
@@ -1562,16 +1575,20 @@ def _validate_precision_edit_size_authorization(
     if generation_input.get("precision_size_mode") != "resize":
         return
     target = generation_input.get("precision_target_size")
+    output_size_policy = str(
+        generation_input.get("precision_output_size_policy") or "strict"
+    )
     settings = provider_settings if isinstance(provider_settings, dict) else {}
     unsupported = []
     for provider_id in provider_ids:
         provider = all_providers.get(provider_id)
         setting = settings.get(provider_id) if isinstance(settings.get(provider_id), dict) else {}
         model = str(setting.get("model") or "").strip()
+        flexible_sizes = _precision_model_allows_flexible_sizes(provider, model) if provider else False
         protocol_model = bool(
             provider
             and precision_model_uses_gpt_image_2_size_contract(provider, model)
-        )
+        ) or flexible_sizes
         if protocol_model:
             protocol_error = gpt_image_2_size_error(target)
             if protocol_error:
@@ -1583,13 +1600,19 @@ def _validate_precision_edit_size_authorization(
                 })
                 continue
         sizes = _precision_model_declared_sizes(provider, model) if provider else set()
+        if flexible_sizes:
+            # The policy itself is an explicit operator confirmation that this
+            # OpenAI-compatible model accepts the documented GPT Image 2
+            # dimension envelope. The protocol validation above remains the
+            # hard boundary; this is not an unrestricted arbitrary-size grant.
+            continue
         if not sizes:
             unsupported.append({
                 "id": provider_id,
                 "model": model,
                 "reason": "precision_edit_size_capability_unknown",
             })
-        elif target not in sizes:
+        elif output_size_policy == "strict" and target not in sizes:
             unsupported.append({
                 "id": provider_id,
                 "model": model,
@@ -1713,6 +1736,7 @@ class PrecisionCapabilityReq(BaseModel):
     enabled: bool
     confirmed: bool = False
     size: Optional[str] = None
+    flexible_sizes: Optional[bool] = None
     compatibility_profile: Optional[str] = None
 
 
@@ -2153,6 +2177,56 @@ def _precision_find_gallery_source(source_sha256: str) -> Optional[str]:
     return None
 
 
+def _precision_workflow_annotation_snapshot(generation_input: dict) -> Optional[dict]:
+    """Persist only the validated, structured edit record needed for restore."""
+    if not isinstance(generation_input, dict) or generation_input.get("precision_canvas_only"):
+        return None
+    contract = str(generation_input.get("annotation_contract") or "")
+    annotations = generation_input.get("annotations")
+    if contract not in PRECISION_ANNOTATION_CONTRACTS or not isinstance(annotations, list):
+        return None
+    # Validation already normalized this input. JSON round-tripping prevents a
+    # later task mutation from changing the durable history snapshot.
+    return {
+        "annotation_contract": contract,
+        "annotations": _json.loads(_json.dumps(annotations, ensure_ascii=True)),
+        "precision_strategy": str(generation_input.get("precision_strategy") or "standard"),
+        "precision_selection_mode": str(generation_input.get("precision_selection_mode") or "annotation"),
+        "precision_selection_feather": generation_input.get("precision_selection_feather", 0),
+    }
+
+
+def _precision_project_annotation_snapshot(metadata: dict) -> Optional[dict]:
+    """Fail closed when an on-disk history record has an invalid snapshot."""
+    raw = metadata.get("annotation_snapshot") if isinstance(metadata, dict) else None
+    if not isinstance(raw, dict):
+        return None
+    contract = str(raw.get("annotation_contract") or "")
+    if contract not in PRECISION_ANNOTATION_CONTRACTS:
+        return None
+    try:
+        annotations = _validate_precision_annotations(raw.get("annotations"), contract)
+    except HTTPException:
+        return None
+    strategy = str(raw.get("precision_strategy") or "standard")
+    selection_mode = str(raw.get("precision_selection_mode") or "annotation")
+    feather = raw.get("precision_selection_feather", 0)
+    if strategy not in PRECISION_STRATEGIES or selection_mode not in PRECISION_SELECTION_MODES:
+        return None
+    if isinstance(feather, bool) or not isinstance(feather, (int, float)):
+        return None
+    feather = float(feather)
+    if not math.isfinite(feather) or feather < 0 or feather > MAX_PRECISION_SELECTION_FEATHER:
+        return None
+    return {
+        "annotation_contract": contract,
+        "annotations": annotations,
+        "precision_strategy": strategy,
+        "precision_selection_mode": selection_mode,
+        "precision_selection_feather": feather,
+    }
+
+
 def _prepare_precision_workflow_metadata(generation_input: dict) -> dict:
     image = generation_input["images"][0]
     source_sha256 = _precision_data_url_sha256(image.get("value"))
@@ -2176,6 +2250,7 @@ def _prepare_precision_workflow_metadata(generation_input: dict) -> dict:
         "parent_generation_id": parent_generation_id,
         "parent_result_key": parent_result_key,
         "outputs": {},
+        "annotation_snapshot": _precision_workflow_annotation_snapshot(generation_input),
     }
 
 
@@ -2239,7 +2314,7 @@ def _precision_source_artifact(metadata: dict) -> dict:
     }
 
 
-def _precision_workflow_projection_data() -> tuple[List[dict], dict]:
+def _precision_workflow_projection_data(*, include_annotation_snapshots: bool = False) -> tuple[List[dict], dict]:
     entries = {
         str(generation_id): entry
         for generation_id, entry in list(generation_history.items())
@@ -2323,6 +2398,10 @@ def _precision_workflow_projection_data() -> tuple[List[dict], dict]:
                     "thumbnail": None,
                     "image_url": None,
                 }
+                if include_annotation_snapshots:
+                    snapshot = _precision_project_annotation_snapshot(metadata)
+                    if snapshot is not None:
+                        version["annotation_snapshot"] = snapshot
                 if artifact["available"]:
                     version["thumbnail"] = f"/api/precision/workflows/{workflow_id}/versions/{version_id}/thumb"
                     version["image_url"] = f"/api/precision/workflows/{workflow_id}/versions/{version_id}/image"
@@ -2339,6 +2418,16 @@ def _precision_workflow_projection_data() -> tuple[List[dict], dict]:
         latest_size = None
         if latest_available and latest_available["width"] and latest_available["height"]:
             latest_size = f"{latest_available['width']}x{latest_available['height']}"
+        restore = ({
+            "workflow_id": workflow_id,
+            "version_id": latest_available["version_id"],
+            "image_url": latest_available["image_url"],
+        } if latest_available else None)
+        if include_annotation_snapshots and restore is not None:
+            snapshot = latest_available.get("annotation_snapshot")
+            if snapshot is not None:
+                restore["annotation_snapshot"] = snapshot
+                restore["base_version_id"] = latest_available["parent_version_id"]
         projections.append({
             "workflow_id": workflow_id,
             "created_at": min(dated) if dated else "",
@@ -2352,11 +2441,7 @@ def _precision_workflow_projection_data() -> tuple[List[dict], dict]:
                 "latest_size": latest_size,
             },
             "versions": all_versions,
-            "restore": ({
-                "workflow_id": workflow_id,
-                "version_id": latest_available["version_id"],
-                "image_url": latest_available["image_url"],
-            } if latest_available else None),
+            "restore": restore,
         })
     projections.sort(key=lambda item: (item["updated_at"], item["workflow_id"]), reverse=True)
     return projections, file_index
@@ -2553,6 +2638,97 @@ async def runtime_status():
     return JSONResponse(payload, headers={"Cache-Control": "no-store"})
 
 
+def _public_precision_size_catalog(provider: ProviderConfig) -> List[dict]:
+    """Project strict-size choices without converting documentation into support.
+
+    ``documented_presets`` is descriptive data for the model-size menu.  The
+    only values a caller may enable for a strict provider request are copied
+    into ``strict_selectable_sizes`` from the selected provider's explicit,
+    validated ``supported_sizes`` record.
+    """
+    extra = provider.extra if isinstance(provider.extra, dict) else {}
+    model_capabilities = extra.get("model_capabilities")
+    capability_models = list(model_capabilities) if isinstance(model_capabilities, dict) else []
+    model_ids = []
+    for candidate in list(provider.models or []) + [provider.model] + capability_models:
+        model_id = str(candidate or "").strip()
+        if model_id and model_id not in model_ids:
+            model_ids.append(model_id)
+
+    catalog = []
+    for model_id in model_ids:
+        resolution = _provider_precision_model_resolution(provider, model_id)
+        canonical_model = resolution.canonical_model if resolution.structure_valid else ""
+        provider_ready = bool(
+            getattr(provider, "type", "") == "image"
+            and getattr(provider, "enabled", False)
+            and str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower() == "openai"
+            and isinstance(getattr(provider, "capabilities", None), dict)
+            and provider.capabilities.get("precision_edit") is True
+        )
+        declared_sizes = (
+            list(resolution.supported_sizes)
+            if provider_ready
+            and resolution.structure_valid
+            and resolution.precision_edit_confirmed
+            and resolution.size_declaration_valid
+            else []
+        )
+        capability_record = resolution.capability if isinstance(resolution.capability, dict) else {}
+        protocol = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
+        if protocol not in {"openai", "gemini", "qwen", "volc_ark", "volc_ark_plan"}:
+            protocol = "unknown"
+        if provider_ready and resolution.structure_valid and resolution.precision_edit_confirmed:
+            # The current backend contract implements source-preserving edit and
+            # resize. More specific semantics (mask/inpaint/outpaint) must be
+            # explicitly declared by a future provider adapter.
+            operations = capability_record.get("operations")
+            if not isinstance(operations, list) or not all(
+                isinstance(item, str) and item in {"edit", "inpaint", "outpaint", "resize"}
+                for item in operations
+            ):
+                operations = ["edit", "resize"]
+            input_contract = (
+                "image_plus_annotation"
+                if not capability_record.get("input_contract")
+                else str(capability_record["input_contract"])
+            )
+            evidence = "explicit_provider_capability"
+            status = "ready"
+        else:
+            operations = []
+            input_contract = "unknown"
+            evidence = "unverified"
+            status = "unknown"
+        native_size = "exact_list" if declared_sizes else "unknown"
+        catalog.append({
+            "model": model_id,
+            "canonical_model": canonical_model,
+            "documented_presets": list(documented_precision_model_size_presets(canonical_model)),
+            "declared_sizes": declared_sizes,
+            "strict_selectable_sizes": list(declared_sizes),
+            "precision_capability": {
+                "status": status,
+                "provider": str(getattr(provider, "id", "") or ""),
+                "model": model_id,
+                "canonical_model": canonical_model,
+                "protocol": protocol,
+                "operations": operations,
+                "input_contract": input_contract,
+                "output_contract": "image_result" if status == "ready" else "unknown",
+                "native_size": native_size,
+                "size_policy": (
+                    ["native_strict", "provider_native_then_local_fit", "local_only"]
+                    if status == "ready"
+                    else ["local_only"]
+                ),
+                "evidence": evidence,
+                "dispatch_authorized": bool(status == "ready" and declared_sizes),
+            },
+        })
+    return catalog
+
+
 @app.get("/api/providers")
 async def list_providers():
     """获取所有 Provider 配置（API Key 脱敏）"""
@@ -2567,6 +2743,7 @@ async def list_providers():
         d["key_count"] = len(p.get_effective_keys())
         extra = p.extra if isinstance(p.extra, dict) else {}
         d["model_capabilities"] = extra.get("model_capabilities", {})
+        d["precision_size_catalog"] = _public_precision_size_catalog(p)
         # API Key 脱敏
         keys = p.get_effective_keys()
         if keys:
@@ -2595,6 +2772,7 @@ async def get_provider(provider_id: str):
         if p.id == provider_id:
             d = p.model_dump(exclude={"api_key", "api_keys"})
             d["has_key"] = bool(p.get_effective_keys() or p.get_active_endpoints())
+            d["precision_size_catalog"] = _public_precision_size_catalog(p)
             keys = p.get_effective_keys()
             if keys:
                 d["api_key_masked"] = keys[0][:4] + "****" + keys[0][-4:] if len(keys[0]) > 8 else "****"
@@ -2640,6 +2818,7 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
     """Persist an explicit, per-model user confirmation for precision editing."""
     model = str(req.model or "").strip()
     size_requested = "size" in req.model_fields_set
+    flexible_sizes_requested = "flexible_sizes" in req.model_fields_set
     compatibility_profile = req.compatibility_profile
     if compatibility_profile is not None and compatibility_profile != PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE:
         raise HTTPException(
@@ -2649,7 +2828,7 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
                 "message": "Compatibility profile is not supported",
             },
         )
-    if compatibility_profile is not None and (size_requested or not req.enabled):
+    if compatibility_profile is not None and (size_requested or flexible_sizes_requested or not req.enabled):
         raise HTTPException(
             status_code=400,
             detail={
@@ -2668,13 +2847,21 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
                     "message": "Size must be a supported WIDTHxHEIGHT value",
                 },
             )
+    if flexible_sizes_requested and not req.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "precision_flexible_size_request_invalid",
+                "message": "Flexible-size policy can be changed only while precision editing remains enabled",
+            },
+        )
     provider = next((p for p in cfg_mgr.config.providers if p.id == provider_id), None)
     if provider is None:
         raise HTTPException(status_code=404, detail={"code": "provider_not_found", "message": "Provider not found"})
     known_models = {str(item).strip() for item in (provider.models or [provider.model]) if str(item).strip()}
     if not model or model not in known_models:
         raise HTTPException(status_code=400, detail={"code": "precision_model_invalid", "message": "Model must belong to the selected provider"})
-    if (req.enabled or size_requested or compatibility_profile is not None) and not req.confirmed:
+    if (req.enabled or size_requested or flexible_sizes_requested or compatibility_profile is not None) and not req.confirmed:
         raise HTTPException(status_code=400, detail={"code": "precision_confirmation_required", "message": "Explicit user confirmation is required"})
     capabilities = dict(provider.capabilities or {})
     extra = dict(provider.extra or {})
@@ -2697,7 +2884,7 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
     capability_model = resolution.canonical_model if resolution.structure_valid else model
     capability_record = dict(resolution.capability or selected)
 
-    if size_requested:
+    if size_requested or flexible_sizes_requested:
         if getattr(provider, "type", "") != "image":
             raise HTTPException(status_code=400, detail={"code": "precision_provider_not_image", "message": "Provider must be an image provider"})
         if not getattr(provider, "enabled", False):
@@ -2713,7 +2900,7 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
         # gpt-image-2 has a stricter upstream size envelope than the generic
         # WIDTHxHEIGHT capability contract.  Apply it to both the canonical
         # model and explicitly reviewed aliases that resolve to that model.
-        if req.enabled and resolution.structure_valid and capability_model == PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE:
+        if size_requested and req.enabled and resolution.structure_valid and capability_model == PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE:
             protocol_error = gpt_image_2_size_error(normalized_size)
             if protocol_error:
                 raise HTTPException(
@@ -2726,24 +2913,38 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
                 )
 
         supported_sizes = list(resolution.supported_sizes) if resolution.size_declaration_valid else []
-        if req.enabled:
-            if normalized_size not in supported_sizes:
-                if len(supported_sizes) >= MAX_PRECISION_SUPPORTED_SIZES:
+        if size_requested:
+            if req.enabled:
+                if normalized_size not in supported_sizes:
+                    if len(supported_sizes) >= MAX_PRECISION_SUPPORTED_SIZES:
+                        raise HTTPException(
+                            status_code=400,
+                            detail={
+                                "code": "precision_size_limit_exceeded",
+                                "message": "Model supported size list is full",
+                                "max_sizes": MAX_PRECISION_SUPPORTED_SIZES,
+                            },
+                        )
+                    supported_sizes.append(normalized_size)
+            else:
+                supported_sizes = [item for item in supported_sizes if item != normalized_size]
+
+            for legacy_field in ("supportedSizes", "sizes", "dimensions"):
+                capability_record.pop(legacy_field, None)
+            capability_record["supported_sizes"] = supported_sizes
+        if flexible_sizes_requested:
+            if req.flexible_sizes:
+                if not supported_sizes or any(gpt_image_2_size_error(size) for size in supported_sizes):
                     raise HTTPException(
                         status_code=400,
                         detail={
-                            "code": "precision_size_limit_exceeded",
-                            "message": "Model supported size list is full",
-                            "max_sizes": MAX_PRECISION_SUPPORTED_SIZES,
+                            "code": "precision_flexible_size_profile_required",
+                            "message": "Flexible sizes require a confirmed GPT Image 2-compatible declared size",
                         },
                     )
-                supported_sizes.append(normalized_size)
-        else:
-            supported_sizes = [item for item in supported_sizes if item != normalized_size]
-
-        for legacy_field in ("supportedSizes", "sizes", "dimensions"):
-            capability_record.pop(legacy_field, None)
-        capability_record["supported_sizes"] = supported_sizes
+                capability_record["size_policy"] = PRECISION_GPT_IMAGE_2_FLEXIBLE_SIZE_POLICY
+            else:
+                capability_record.pop("size_policy", None)
         model_capabilities[capability_model] = capability_record
     elif req.enabled and compatibility_profile is not None:
         canonical_resolution = resolve_precision_model_capability(
@@ -2806,8 +3007,8 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
     provider.extra = extra
     cfg_mgr.save(cfg_mgr.config)
     _write_log("provider", "精准改图模型能力已更新", {"provider_id": provider_id, "model": model, "enabled": req.enabled})
-    if size_requested:
-        return {
+    if size_requested or flexible_sizes_requested:
+        result = {
             "ok": True,
             "provider_id": provider_id,
             "model": model,
@@ -2815,6 +3016,9 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
             "size": normalized_size,
             "supported_sizes": supported_sizes,
         }
+        if flexible_sizes_requested:
+            result["flexible_sizes"] = bool(req.flexible_sizes)
+        return result
     result = {"ok": True, "provider_id": provider_id, "model": model, "enabled": req.enabled}
     if compatibility_profile is not None:
         result["compatibility_profile"] = compatibility_profile
@@ -4742,7 +4946,10 @@ async def precision_workflows(
 @app.get("/api/precision/workflows/{workflow_id}")
 async def precision_workflow(workflow_id: str):
     workflow_id = _precision_validate_workflow_id(workflow_id)
-    items, _file_index = await asyncio.to_thread(_precision_workflow_projection_data)
+    items, _file_index = await asyncio.to_thread(
+        _precision_workflow_projection_data,
+        include_annotation_snapshots=True,
+    )
     for item in items:
         if item["workflow_id"] == workflow_id:
             return {"workflow": item}
@@ -8384,13 +8591,15 @@ def _first_run_setup() -> None:
 def prepare_runtime_environment(executable_data_dir: Path, bundle_dir: Path) -> Optional[Path]:
     """Reload runtime environment from user data, falling back to bundle defaults."""
     from dotenv import load_dotenv
-    from config import PROCESS_ENV_GENBOX_PORT
+    from config import PROCESS_ENV_APP_MODE, PROCESS_ENV_GENBOX_PORT
 
     executable_env = Path(executable_data_dir) / ".env"
     bundle_env = Path(bundle_dir) / ".env"
     selected_env = executable_env if executable_env.is_file() else bundle_env
     if selected_env.is_file():
         load_dotenv(selected_env, override=True)
+    if PROCESS_ENV_APP_MODE is not None:
+        os.environ["APP_MODE"] = PROCESS_ENV_APP_MODE
     if PROCESS_ENV_GENBOX_PORT is not None:
         os.environ["GENBOX_PORT"] = PROCESS_ENV_GENBOX_PORT
 

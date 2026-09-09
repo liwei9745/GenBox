@@ -222,6 +222,60 @@ def test_precision_workflow_api_filters_by_any_version_date_and_id(isolate_preci
     assert client.get("/api/precision/workflows", params={"workflow_id": "../../secret"}).status_code == 422
 
 
+def test_precision_workflow_detail_exposes_validated_annotation_restore_snapshot_only_on_detail(
+    isolate_precision_workflow_history,
+):
+    gallery = isolate_precision_workflow_history
+    source_path = gallery / "source.png"
+    result_path = gallery / "result.png"
+    source_bytes = _png(source_path)
+    result_bytes = _png(result_path)
+    workflow_id = "pw_" + "c" * 32
+    annotation_snapshot = {
+        "annotation_contract": main.PRECISION_ANNOTATION_CONTRACT_V3,
+        "annotations": [{
+            "type": "ellipse", "label": 1, "instruction": "Make the badge blue.",
+            "x": 0.2, "y": 0.2, "width": 0.3, "height": 0.2,
+        }],
+        "precision_strategy": "fine",
+        "precision_selection_mode": "annotation",
+        "precision_selection_feather": 0,
+    }
+    main.generation_history["gen_snapshot"] = {
+        "generation_id": "gen_snapshot",
+        "mode": "precision_edit",
+        "created_at": "2026-09-03 08:00:00",
+        "results": {"provider": _result(result_path, prompt="private")},
+        "precision_workflow": {
+            **_workflow_metadata(
+                workflow_id,
+                source_bytes=source_bytes,
+                source_filename=source_path.name,
+                outputs={"provider": {
+                    "sha256": hashlib.sha256(result_bytes).hexdigest(),
+                    "filename": result_path.name,
+                    "width": 18,
+                    "height": 12,
+                }},
+            ),
+            "annotation_snapshot": annotation_snapshot,
+        },
+    }
+
+    client = TestClient(main.app)
+    listing = client.get("/api/precision/workflows")
+    assert listing.status_code == 200
+    assert "annotation_snapshot" not in json.dumps(listing.json())
+
+    detail = client.get(f"/api/precision/workflows/{workflow_id}")
+    assert detail.status_code == 200
+    workflow = detail.json()["workflow"]
+    version = workflow["versions"][1]
+    assert version["annotation_snapshot"] == annotation_snapshot
+    assert workflow["restore"]["base_version_id"] == "original"
+    assert workflow["restore"]["annotation_snapshot"] == annotation_snapshot
+
+
 def test_legacy_precision_history_is_a_safe_single_step_workflow(isolate_precision_workflow_history):
     gallery = isolate_precision_workflow_history
     result_path = gallery / "legacy_prompt_fragment.png"

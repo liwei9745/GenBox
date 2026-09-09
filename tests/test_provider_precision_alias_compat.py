@@ -121,16 +121,28 @@ def test_precision_preserve_alias_enforces_canonical_protocol_even_when_declared
     assert error[0] == expected_code
 
 
-def test_precision_preserve_rejects_unknown_model_before_http(monkeypatch):
+def test_precision_preserve_allows_confirmed_model_without_optional_size_list(monkeypatch):
     provider = _alias_provider(alias_of=None)
     provider.extra["model_capabilities"]["gpt-image2-b"].pop("supported_sizes")
-    constructions = []
+    calls = []
+    response_image = _data_url().split(",", 1)[1]
 
-    def forbidden_client(**kwargs):
-        constructions.append(kwargs)
-        raise AssertionError("unknown precision size must fail before HTTP")
+    class Response:
+        status_code = 200
 
-    monkeypatch.setattr(providers.httpx, "AsyncClient", forbidden_client)
+        def json(self):
+            return {"data": [{"b64_json": response_image}]}
+
+    class Client:
+        async def post(self, url, **kwargs):
+            calls.append((url, kwargs))
+            return Response()
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(providers.httpx, "AsyncClient", lambda **kwargs: Client())
+    monkeypatch.setattr(providers, "_save_image", lambda *args, **kwargs: "gallery/result.png")
     source = _data_url()
     result = asyncio.run(
         providers._dispatch_generate(
@@ -158,9 +170,9 @@ def test_precision_preserve_rejects_unknown_model_before_http(monkeypatch):
         )
     )
 
-    assert result.success is False
-    assert "precision_edit_size_capability_unknown" in result.error
-    assert constructions == []
+    assert result.success is True
+    assert calls[0][1]["data"]["model"] == "gpt-image2-b"
+    assert calls[0][1]["data"]["size"] == "1024x1024"
 
 
 @pytest.mark.parametrize("alias_field", ["alias_of", "canonical_model"])

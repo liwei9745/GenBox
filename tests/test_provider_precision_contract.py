@@ -374,6 +374,85 @@ def test_gpt_image_2_legal_size_still_requires_explicit_declaration():
     )
 
 
+def test_gpt_image_2_confirmed_whitelist_rejects_unverified_2k_and_4k_presets():
+    """A model without the opt-in policy must enforce its empirical whitelist."""
+    provider = _provider(
+        model="gpt-image2-bc",
+        supported_sizes=["2048x1152", "1152x2048"],
+    )
+
+    assert providers._precision_size_error(
+        provider, "gpt-image2-bc", "resize", "2048x1152", ""
+    ) is None
+    assert providers._precision_size_error(
+        provider, "gpt-image2-bc", "resize", "1152x2048", ""
+    ) is None
+    for unverified_size in ("3840x1648", "3840x2160", "2544x1088"):
+        assert providers._precision_size_error(
+            provider, "gpt-image2-bc", "resize", unverified_size, ""
+        ) == (
+            "precision_edit_target_size_not_declared",
+            "the selected model has not declared this target size",
+        )
+
+
+def test_crop_fit_allows_a_legal_target_outside_the_strict_whitelist():
+    provider = _provider(
+        model="gpt-image2-bc",
+        supported_sizes=["2048x1152", "1152x2048"],
+    )
+
+    assert providers._precision_size_error(
+        provider,
+        "gpt-image2-bc",
+        "resize",
+        "3840x1648",
+        "",
+        "strict",
+    ) == (
+        "precision_edit_target_size_not_declared",
+        "the selected model has not declared this target size",
+    )
+    assert providers._precision_size_error(
+        provider,
+        "gpt-image2-bc",
+        "resize",
+        "3840x1648",
+        "",
+        "fit_crop",
+    ) is None
+
+
+@pytest.mark.parametrize(
+    "target_size",
+    [
+        "1024x1024", "1168x656", "656x1168", "1024x768", "768x1024", "1008x672", "672x1008", "1344x576", "576x1344",
+        "2048x2048", "2048x1152", "1152x2048", "2048x1536", "1536x2048", "2016x1344", "1344x2016", "2544x1088", "1088x2544",
+        "2880x2880", "3840x2160", "2160x3840", "3328x2480", "2480x3328", "3520x2352", "2352x3520", "3840x1648", "1648x3840",
+        "1536x864",
+    ],
+)
+def test_flexible_gpt_image_2_policy_accepts_every_legal_tier_ratio_and_custom_size(target_size):
+    provider = _provider(model="gateway-gpt-image-2", supported_sizes=["2048x1152"])
+    provider.extra["model_capabilities"]["gateway-gpt-image-2"]["size_policy"] = "gpt_image_2_flexible"
+
+    assert providers._precision_size_error(
+        provider, "gateway-gpt-image-2", "resize", target_size, ""
+    ) is None
+
+
+def test_flexible_gpt_image_2_policy_still_rejects_illegal_custom_size():
+    provider = _provider(model="gateway-gpt-image-2", supported_sizes=["2048x1152"])
+    provider.extra["model_capabilities"]["gateway-gpt-image-2"]["size_policy"] = "gpt_image_2_flexible"
+
+    assert providers._precision_size_error(
+        provider, "gateway-gpt-image-2", "resize", "1920x1080", ""
+    ) == (
+        "precision_target_size_alignment_invalid",
+        "gpt-image-2 dimensions must be divisible by 16",
+    )
+
+
 def test_gpt_image_2_rejects_illegal_size_even_when_declared():
     provider = _provider(model="gpt-image-2", supported_sizes=["1920x1080"])
     assert providers._precision_size_error(
@@ -1051,19 +1130,14 @@ def test_precision_profile_enum_rejects_arbitrary_transport_values():
 
 
 @pytest.mark.parametrize("retry_status", [429, 503])
-def test_precision_retryable_status_retries_same_profile_then_succeeds(monkeypatch, retry_status):
+def test_precision_retryable_status_is_not_replayed(monkeypatch, retry_status):
     calls = []
     sleeps = []
-    response_image = _data_url().split(",", 1)[1]
-    responses = [
-        _RetryResponse(retry_status, text="temporary failure"),
-        _Response(200, {"data": [{"b64_json": response_image}]}),
-    ]
 
     class Client:
         async def post(self, url, **kwargs):
             calls.append((url, kwargs))
-            return responses.pop(0)
+            return _RetryResponse(retry_status, text="temporary failure")
 
         async def aclose(self):
             return None
@@ -1073,20 +1147,18 @@ def test_precision_retryable_status_retries_same_profile_then_succeeds(monkeypat
 
     monkeypatch.setattr(providers.httpx, "AsyncClient", lambda **kwargs: Client())
     monkeypatch.setattr(providers.asyncio, "sleep", no_sleep)
-    monkeypatch.setattr(providers, "_save_image", lambda *args, **kwargs: "gallery/result.png")
-
     result = asyncio.run(
         providers._dispatch_generate(_provider(), "strict edit", "openai", **_v2_kwargs())
     )
 
-    assert result.success is True
-    assert len(calls) == 2
+    assert result.success is False
+    assert result.error_code == "precision_edit_upstream_error"
+    assert len(calls) == 1
     assert {url for url, _ in calls} == {"https://provider.example.test/v1/images/edits"}
     assert [[name for name, _ in request["files"]] for _, request in calls] == [
         ["image", "image"],
-        ["image", "image"],
     ]
-    assert sleeps == [0.25]
+    assert sleeps == []
 
 
 @pytest.mark.parametrize("retry_status", [429, 503])
@@ -1094,7 +1166,7 @@ def test_precision_retryable_status_retries_same_profile_then_succeeds(monkeypat
     "profile",
     [None, PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE],
 )
-def test_precision_retryable_status_exhausts_after_three_attempts(monkeypatch, retry_status, profile):
+def test_precision_retryable_status_stops_after_one_attempt(monkeypatch, retry_status, profile):
     calls = []
     sleeps = []
     request_kwargs = _single_profile_kwargs() if profile else _v2_kwargs()
@@ -1125,8 +1197,8 @@ def test_precision_retryable_status_exhausts_after_three_attempts(monkeypatch, r
     assert result.success is False
     assert "precision_edit_upstream_error" in result.error
     assert f"HTTP {retry_status}" in result.error
-    assert len(calls) == 3
-    assert sleeps == [0.25, 0.5]
+    assert len(calls) == 1
+    assert sleeps == []
 
 
 @pytest.mark.parametrize(
@@ -1178,7 +1250,7 @@ def test_precision_4xx_is_not_retried(monkeypatch, profile):
         ),
     ],
 )
-def test_precision_multi_endpoint_shares_one_three_post_budget(
+def test_precision_multi_endpoint_stops_after_one_non_replayable_post(
     monkeypatch,
     retry_status,
     profile,
@@ -1223,17 +1295,16 @@ def test_precision_multi_endpoint_shares_one_three_post_budget(
     )
 
     assert result.success is False
-    assert len(calls) == 3
+    assert result.error_code == "precision_edit_upstream_error"
+    assert len(calls) == 1
     assert [url for url, _ in calls] == [
         "https://endpoint-1.example.test/v1/images/edits",
-        "https://endpoint-2.example.test/v1/images/edits",
-        "https://endpoint-2.example.test/v1/images/edits",
     ]
     assert all(
         [name for name, _ in request["files"]] == expected_fields
         for _, request in calls
     )
-    assert sleeps == [0.25]
+    assert sleeps == []
 
 
 @pytest.mark.parametrize(
@@ -2115,6 +2186,59 @@ def test_precision_dispatch_rejects_wrong_preserve_output_size(monkeypatch):
     assert "precision_edit_output_size_mismatch" in result.error
 
 
+def test_precision_preserve_rejects_recent_2048x864_upstream_result_with_recovery_facts(monkeypatch):
+    """The 2026-09-07 failure remains a post-transport strict-size rejection."""
+    calls = []
+    response_image = _data_url(size=(12, 8)).split(",", 1)[1]
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, **kwargs):
+            calls.append((url, kwargs))
+            return _Response(200, {"data": [{"b64_json": response_image}]})
+
+    # Keep the fixture small while reproducing the exact dimensions from the
+    # latest laboratory failure: source 1792x768, upstream result 2048x864.
+    monkeypatch.setattr(providers, "_image_dimensions", lambda _data: (1792, 768))
+    monkeypatch.setattr(
+        providers,
+        "_inspect_precision_output",
+        lambda _data: ((2048, 864), "PNG", False),
+    )
+    saved_images = []
+    monkeypatch.setattr(
+        providers,
+        "_save_image",
+        lambda *args, **kwargs: saved_images.append(args) or "unexpected.png",
+    )
+    monkeypatch.setattr(providers.httpx, "AsyncClient", lambda **kwargs: Client())
+
+    result = asyncio.run(
+        providers._dispatch_generate(
+            _provider(),
+            "strict edit",
+            "openai",
+            **_v2_kwargs(),
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "precision_edit_output_size_mismatch"
+    assert result.error_details == {
+        "requested_size": "1792x768",
+        "actual_size": "2048x864",
+        "aspect_ratio_delta": pytest.approx(0.01587302),
+        "allowed_policies": ["strict"],
+    }
+    assert len(calls) == 1, "the failure must be classified after an upstream response"
+    assert saved_images == [], "strict mismatch must not replace the editable base"
+
+
 def test_precision_resize_strict_rejects_1376x768_for_1536x864_without_retry(monkeypatch):
     calls = []
     saved_images = []
@@ -2492,6 +2616,44 @@ def test_precision_upstream_error_exposes_only_structured_transport_facts(monkey
         "model": "mock-edit-1",
         "profile": "/images/edits",
         "status_code": 503,
+    }
+
+
+def test_precision_read_error_closes_client_and_reports_non_replay_facts(monkeypatch):
+    calls = []
+    closed = []
+
+    class Client:
+        async def post(self, url, **_kwargs):
+            calls.append(url)
+            raise providers.httpx.ReadError(
+                "synthetic upstream closed response",
+                request=providers.httpx.Request("POST", url),
+            )
+
+        async def aclose(self):
+            closed.append(True)
+
+    monkeypatch.setattr(providers.httpx, "AsyncClient", lambda **_kwargs: Client())
+    result = asyncio.run(
+        providers._dispatch_generate(
+            _provider(),
+            "strict edit",
+            "openai",
+            **_v2_kwargs(),
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "precision_edit_connection_error"
+    assert calls == ["https://provider.example.test/v1/images/edits"]
+    assert closed == [True]
+    assert result.error_details == {
+        "model": "mock-edit-1",
+        "profile": "/images/edits",
+        "transport_stage": "response_read",
+        "transport_error": "ReadError",
+        "automatic_retry": "suppressed_non_idempotent_image_edit",
     }
 
 

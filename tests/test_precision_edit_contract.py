@@ -227,6 +227,41 @@ def test_endpoint_only_provider_is_reported_as_configured(monkeypatch):
     assert payload["providers"][0]["has_key"] is True
 
 
+def test_precision_size_catalog_separates_documentation_from_strict_gateway_choices(monkeypatch):
+    provider = ProviderConfig(
+        id="catalog-provider",
+        name="Catalog provider",
+        type="image",
+        api_key="test-key",
+        model="relay-gpt-image-2",
+        models=["relay-gpt-image-2"],
+        enabled=True,
+        endpoint_type="openai",
+        capabilities={"precision_edit": True},
+        extra={
+            "model_capabilities": {
+                "relay-gpt-image-2": {"alias_of": "gpt-image-2"},
+                "gpt-image-2": {
+                    "precision_edit": True,
+                    "supported_sizes": ["2048x1152", "1152x2048"],
+                },
+            }
+        },
+    )
+    monkeypatch.setattr(main.cfg_mgr.config, "providers", [provider])
+
+    payload = asyncio.run(main.list_providers())
+    catalog = payload["providers"][0]["precision_size_catalog"]
+    entry = next(item for item in catalog if item["model"] == "relay-gpt-image-2")
+
+    assert entry["canonical_model"] == "gpt-image-2"
+    assert {item["size"] for item in entry["documented_presets"]} >= {
+        "1024x1024", "1536x1024", "1024x1536", "2560x1440", "3840x2160"
+    }
+    assert entry["strict_selectable_sizes"] == ["2048x1152", "1152x2048"]
+    assert "2560x1440" not in entry["strict_selectable_sizes"]
+
+
 
 def test_precision_edit_accepts_annotation_v1_and_normalizes_objects():
     normalized = main._validate_generation_request_inputs(_precision_request())
@@ -1087,6 +1122,44 @@ def test_precision_resize_rejects_unknown_or_undeclared_size_before_task(monkeyp
         assert caught.value.detail["code"] == "precision_edit_size_unsupported"
         assert caught.value.detail["providers"][0]["reason"] == reason
     assert process_calls == []
+
+
+def test_precision_crop_fit_allows_a_legal_target_outside_the_strict_whitelist(monkeypatch):
+    provider = _provider(supported_sizes=["64x64"])
+    observed = {}
+
+    async def fake_process(generation_id):
+        observed["generation_id"] = generation_id
+
+    monkeypatch.setattr(
+        main,
+        "cfg_mgr",
+        SimpleNamespace(
+            config=SimpleNamespace(providers=[provider]),
+            get_image_providers=lambda: [provider],
+        ),
+    )
+    monkeypatch.setattr(main, "_check_rate_limit", lambda *_args: True)
+    monkeypatch.setattr(main, "_process_image_gen", fake_process)
+
+    response = asyncio.run(
+        main.generate(
+            _precision_resize_only_request(
+                precision_target_size="80x64",
+                precision_output_size_policy="fit_crop",
+            ),
+            _route_request(),
+        )
+    )
+    generation_id = response["generation_id"]
+    try:
+        task = main.image_tasks[generation_id]
+        assert observed["generation_id"] == generation_id
+        assert task["kwargs"]["precision_target_size"] == "80x64"
+        assert task["kwargs"]["precision_output_size_policy"] == "fit_crop"
+    finally:
+        main.image_tasks.pop(generation_id, None)
+        main.image_task_handles.pop(generation_id, None)
 
 
 def test_precision_edit_allows_valid_request_with_explicitly_capable_mock_provider(monkeypatch):
@@ -2007,6 +2080,86 @@ def test_precision_capability_confirms_and_revokes_model_size_without_leaking_se
     assert revoked["supported_sizes"] == ["1024x1024"]
     assert provider.extra["model_capabilities"]["edit-1"]["precision_edit"] is True
     assert saved == [config, config, config]
+
+
+def test_precision_capability_flexible_sizes_authorizes_legal_envelope_and_can_be_revoked(monkeypatch):
+    provider = ProviderConfig(
+        id="custom",
+        name="Custom",
+        type="image",
+        api_key="test-key",
+        model="gateway-gpt-image-2",
+        models=["gateway-gpt-image-2"],
+        enabled=True,
+        endpoint_type="openai",
+        capabilities={"precision_edit": True},
+        extra={
+            "model_capabilities": {
+                "gateway-gpt-image-2": {
+                    "precision_edit": True,
+                    "supported_sizes": ["2048x1152"],
+                }
+            }
+        },
+    )
+    config = SimpleNamespace(providers=[provider])
+    monkeypatch.setattr(main, "cfg_mgr", SimpleNamespace(config=config, save=lambda _value: None))
+
+    enabled = asyncio.run(
+        main.set_precision_capability(
+            "custom",
+            main.PrecisionCapabilityReq(
+                model="gateway-gpt-image-2",
+                enabled=True,
+                confirmed=True,
+                flexible_sizes=True,
+            ),
+        )
+    )
+    assert enabled["flexible_sizes"] is True
+    assert provider.extra["model_capabilities"]["gateway-gpt-image-2"]["size_policy"] == "gpt_image_2_flexible"
+
+    main._validate_precision_edit_size_authorization(
+        ["custom"],
+        {"custom": provider},
+        {"custom": {"model": "gateway-gpt-image-2"}},
+        {"precision_size_mode": "resize", "precision_target_size": "3328x2480"},
+    )
+    with pytest.raises(HTTPException) as rejected:
+        main._validate_precision_edit_size_authorization(
+            ["custom"],
+            {"custom": provider},
+            {"custom": {"model": "gateway-gpt-image-2"}},
+            {"precision_size_mode": "resize", "precision_target_size": "1920x1080"},
+        )
+    assert rejected.value.detail["code"] == "precision_edit_size_unsupported"
+    assert rejected.value.detail["providers"][0]["reason"] == "precision_target_size_alignment_invalid"
+
+    disabled = asyncio.run(
+        main.set_precision_capability(
+            "custom",
+            main.PrecisionCapabilityReq(
+                model="gateway-gpt-image-2",
+                enabled=True,
+                confirmed=True,
+                flexible_sizes=False,
+            ),
+        )
+    )
+    assert disabled["flexible_sizes"] is False
+    assert "size_policy" not in provider.extra["model_capabilities"]["gateway-gpt-image-2"]
+    with pytest.raises(HTTPException) as revoked:
+        main._validate_precision_edit_size_authorization(
+            ["custom"],
+            {"custom": provider},
+            {"custom": {"model": "gateway-gpt-image-2"}},
+            {
+                "precision_size_mode": "resize",
+                "precision_target_size": "3328x2480",
+                "precision_output_size_policy": "strict",
+            },
+        )
+    assert revoked.value.detail["providers"][0]["reason"] == "precision_edit_target_size_not_declared"
 
 
 @pytest.mark.parametrize(

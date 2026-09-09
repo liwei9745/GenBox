@@ -386,6 +386,41 @@ def test_runtime_environment_preserves_explicit_process_port(monkeypatch, tmp_pa
     assert main.os.environ["APP_MODE"] == "dev"
 
 
+def test_runtime_environment_preserves_explicit_process_dev_mode(monkeypatch, tmp_path):
+    executable_data_dir = tmp_path / "executable-data"
+    bundle_dir = tmp_path / "bundle"
+    executable_data_dir.mkdir()
+    bundle_dir.mkdir()
+    (executable_data_dir / ".env").write_text(
+        "APP_MODE=prod\nGENBOX_PORT=19001\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("APP_MODE", "dev")
+    monkeypatch.setattr(config, "PROCESS_ENV_APP_MODE", "dev")
+    monkeypatch.setattr(config, "PROCESS_ENV_GENBOX_PORT", None)
+
+    main.prepare_runtime_environment(executable_data_dir, bundle_dir)
+
+    assert main.os.environ["APP_MODE"] == "dev"
+    assert main.os.environ["GENBOX_PORT"] == "19001"
+
+
+def test_runtime_environment_uses_env_mode_without_explicit_process_override(
+    monkeypatch, tmp_path
+):
+    executable_data_dir = tmp_path / "executable-data"
+    bundle_dir = tmp_path / "bundle"
+    executable_data_dir.mkdir()
+    bundle_dir.mkdir()
+    (executable_data_dir / ".env").write_text("APP_MODE=prod\n", encoding="utf-8")
+    monkeypatch.setenv("APP_MODE", "dev")
+    monkeypatch.setattr(config, "PROCESS_ENV_APP_MODE", None)
+    monkeypatch.setattr(config, "PROCESS_ENV_GENBOX_PORT", None)
+
+    main.prepare_runtime_environment(executable_data_dir, bundle_dir)
+
+    assert main.os.environ["APP_MODE"] == "prod"
+
+
 def test_explicit_process_dev_mode_skips_first_run_write_and_starts_local(
     monkeypatch
 ):
@@ -1111,6 +1146,22 @@ def test_frontend_never_persists_admin_key_in_browser_storage():
                     "prompt",
                 ):
                     assert forbidden not in visibility_writer
+                continue
+            if key_expression == "PRECISION_INSPECTOR_WIDTH_STORAGE_KEY":
+                assert script.name == "app-all.js"
+                assert (
+                    "var PRECISION_INSPECTOR_WIDTH_STORAGE_KEY = "
+                    "'genbox_precision_inspector_width_v1';"
+                ) in source
+                inspector_writer = _extract_js_function(
+                    source, "setPrecisionInspectorWidth"
+                )
+                inspector_reader = _extract_js_function(
+                    source, "bindPrecisionInspectorResizeHandle"
+                )
+                assert "String(Math.round(value))" in inspector_writer
+                assert "Number(localStorage.getItem(PRECISION_INSPECTOR_WIDTH_STORAGE_KEY))" in inspector_reader
+                assert "Number.isFinite(saved) && saved > 0" in inspector_reader
                 continue
             if store == "localStorage":
                 assert key_expression in allowed_local_keys | allowed_dynamic_local_keys, (

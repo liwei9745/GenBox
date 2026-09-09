@@ -16,8 +16,11 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 # Capture trusted process injection before any dotenv file can mutate os.environ.
-# Runtime reloads may override other values, but an orchestrator-provided
-# container port must remain authoritative over a host-facing .env value.
+# Runtime reloads may override other values, but orchestrator-provided runtime
+# mode and container port must remain authoritative over .env values.
+PROCESS_ENV_APP_MODE = (
+    os.environ["APP_MODE"] if "APP_MODE" in os.environ else None
+)
 PROCESS_ENV_GENBOX_PORT = (
     os.environ["GENBOX_PORT"] if "GENBOX_PORT" in os.environ else None
 )
@@ -103,6 +106,8 @@ class PrecisionEditProfile(str, Enum):
 PRECISION_EDIT_CAPABILITY = "precision_edit"
 PRECISION_MODEL_ALIAS_FIELDS = ("alias_of", "canonical_model")
 PRECISION_MODEL_SIZE_FIELDS = ("supported_sizes", "supportedSizes", "sizes", "dimensions")
+PRECISION_MODEL_SIZE_POLICY_FIELD = "size_policy"
+PRECISION_GPT_IMAGE_2_FLEXIBLE_SIZE_POLICY = "gpt_image_2_flexible"
 PRECISION_MODEL_ALIAS_MAX_DEPTH = 1
 PRECISION_MODEL_DEFAULT_MAX_OUTPUT_PIXELS = 64 * 1024 * 1024
 
@@ -122,6 +127,81 @@ GPT_IMAGE_2_CANONICAL_PRESETS = {
     "4k": "3840x2160",
 }
 
+# This is a documentation catalogue, not a provider capability grant.  The
+# public GPT Image 2 documentation names the three standard GPT Image sizes,
+# gives 1536x864 as a flexible-size example, recommends QHD as a dependable
+# upper target, and labels UHD-class requests as experimental.  A gateway can
+# still return a different canvas, so strict dispatch must continue to use
+# only the selected connection's explicit ``supported_sizes`` declaration.
+GPT_IMAGE_2_DOCUMENTED_SIZE_PRESETS = (
+    {
+        "id": "standard-square",
+        "size": "1024x1024",
+        "tier": "standard",
+        "ratio": "1:1",
+        "evidence": "official_standard",
+        "experimental": False,
+    },
+    {
+        "id": "standard-landscape",
+        "size": "1536x1024",
+        "tier": "standard",
+        "ratio": "3:2",
+        "evidence": "official_standard",
+        "experimental": False,
+    },
+    {
+        "id": "standard-portrait",
+        "size": "1024x1536",
+        "tier": "standard",
+        "ratio": "2:3",
+        "evidence": "official_standard",
+        "experimental": False,
+    },
+    {
+        "id": "flexible-example-landscape",
+        "size": "1536x864",
+        "tier": "flexible",
+        "ratio": "16:9",
+        "evidence": "official_example",
+        "experimental": False,
+    },
+    {
+        "id": "qhd-landscape",
+        "size": "2560x1440",
+        "tier": "2k",
+        "ratio": "16:9",
+        "evidence": "official_recommended",
+        "experimental": False,
+    },
+    {
+        "id": "uhd-landscape",
+        "size": "3840x2160",
+        "tier": "4k",
+        "ratio": "16:9",
+        "evidence": "official_experimental",
+        "experimental": True,
+    },
+)
+
+GPT_IMAGE_DOCUMENTED_STANDARD_MODELS = frozenset(
+    {"gpt-image-1", "gpt-image-1.5", "gpt-image-1-mini"}
+)
+
+
+def documented_precision_model_size_presets(canonical_model: object) -> Tuple[Dict[str, Any], ...]:
+    """Return non-authorizing model-documentation presets for one canonical model.
+
+    This helper deliberately does not infer gateway support.  Consumers must
+    intersect any display catalogue with persisted model capability metadata
+    before enabling a strict resize submission.
+    """
+    if canonical_model in GPT_IMAGE_DOCUMENTED_STANDARD_MODELS:
+        return tuple(item for item in GPT_IMAGE_2_DOCUMENTED_SIZE_PRESETS if item["tier"] == "standard")
+    if canonical_model != "gpt-image-2":
+        return ()
+    return tuple(dict(item) for item in GPT_IMAGE_2_DOCUMENTED_SIZE_PRESETS)
+
 
 @dataclass(frozen=True)
 class PrecisionModelCapabilityResolution:
@@ -136,6 +216,7 @@ class PrecisionModelCapabilityResolution:
     precision_edit_confirmed: bool = False
     size_declaration_present: bool = False
     size_declaration_valid: bool = False
+    flexible_sizes: bool = False
     reason: str = "precision_model_unknown"
 
 
@@ -243,6 +324,23 @@ def precision_capability_size_declaration(
     return True, True, first_sizes, ""
 
 
+def precision_capability_flexible_size_policy(capability: object) -> Tuple[bool, bool, str]:
+    """Read the opt-in flexible-size policy without treating unknown values as safe.
+
+    The policy is intentionally separate from ``supported_sizes``: a precise
+    whitelist remains the default for every model, while the GPT Image 2
+    envelope can be explicitly enabled only after operator confirmation.
+    """
+    if not isinstance(capability, dict):
+        return False, False, "precision_size_policy_invalid"
+    if PRECISION_MODEL_SIZE_POLICY_FIELD not in capability:
+        return True, False, ""
+    value = capability.get(PRECISION_MODEL_SIZE_POLICY_FIELD)
+    if value == PRECISION_GPT_IMAGE_2_FLEXIBLE_SIZE_POLICY:
+        return True, True, ""
+    return False, False, "precision_size_policy_invalid"
+
+
 def _precision_model_alias_target(capability: object) -> Tuple[Optional[str], str]:
     if not isinstance(capability, dict):
         return None, ""
@@ -329,6 +427,7 @@ def resolve_precision_model_capability(
         canonical,
         max_output_pixels=max_output_pixels,
     )
+    policy_valid, flexible_sizes, policy_reason = precision_capability_flexible_size_policy(canonical)
     precision_confirmed = canonical.get(PRECISION_EDIT_CAPABILITY) is True
     reason = ""
     if not precision_confirmed:
@@ -337,6 +436,8 @@ def resolve_precision_model_capability(
         reason = "precision_size_declaration_missing"
     elif not size_valid:
         reason = size_reason
+    elif not policy_valid:
+        reason = policy_reason
 
     return PrecisionModelCapabilityResolution(
         selected_model=model_id,
@@ -348,6 +449,7 @@ def resolve_precision_model_capability(
         precision_edit_confirmed=precision_confirmed,
         size_declaration_present=size_present,
         size_declaration_valid=size_valid,
+        flexible_sizes=flexible_sizes and policy_valid,
         reason=reason,
     )
 

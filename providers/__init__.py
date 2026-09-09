@@ -32,6 +32,7 @@ from io import BytesIO
 from config import (
     cfg_mgr,
     GALLERY_DIR,
+    PRECISION_GPT_IMAGE_2_FLEXIBLE_SIZE_POLICY,
     gpt_image_2_size_error,
     PrecisionEditProfile,
     ProviderConfig,
@@ -459,9 +460,12 @@ class PrecisionEditTransportProfile:
 
 @dataclass
 class PrecisionEditPostBudget:
-    """One bounded POST allowance shared by all endpoints for one edit operation."""
+    """One non-replayable POST allowance shared by an edit operation."""
 
-    remaining: int = 3
+    # Image edits are non-idempotent. A 429/5xx or a transport failure can
+    # occur after the provider has accepted the multipart request, so never
+    # replay it through a retry loop or a different configured endpoint.
+    remaining: int = 1
 
     def consume(self) -> bool:
         if self.remaining <= 0:
@@ -1349,6 +1353,8 @@ def _precision_transport_error_details(
     model_id: str,
     transport_profile: PrecisionEditTransportProfile | None,
     exc: BaseException,
+    *,
+    connection_failure: bool = False,
 ) -> dict[str, Any]:
     """Expose bounded, non-secret transport facts for precision diagnostics."""
     response = getattr(exc, "response", None)
@@ -1359,6 +1365,26 @@ def _precision_transport_error_details(
     }
     if isinstance(status_code, int):
         details["status_code"] = status_code
+    if connection_failure:
+        if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)):
+            stage = "connect"
+        elif isinstance(exc, (httpx.ReadError, httpx.ReadTimeout)):
+            stage = "response_read"
+        elif isinstance(exc, (httpx.WriteError, httpx.WriteTimeout)):
+            stage = "request_write"
+        else:
+            stage = "transport"
+        # A multipart image-edit POST can have reached the upstream before a
+        # read/write failure is raised. Surface only stable diagnostic facts and
+        # make the non-replay decision explicit; never infer that the model was
+        # unavailable or that the request was definitely not processed.
+        details.update(
+            {
+                "transport_stage": stage,
+                "transport_error": type(exc).__name__,
+                "automatic_retry": "suppressed_non_idempotent_image_edit",
+            }
+        )
     return details
 
 
@@ -1681,6 +1707,19 @@ def _precision_model_has_size_declaration(cfg: ProviderConfig, model_id: str) ->
     return resolution.structure_valid and resolution.size_declaration_present
 
 
+def _precision_model_allows_flexible_sizes(cfg: ProviderConfig, model_id: str) -> bool:
+    """Return true only for a persisted, explicitly confirmed GPT Image 2 policy."""
+    resolution = _precision_model_capability_resolution(cfg, model_id)
+    return bool(
+        resolution.structure_valid
+        and resolution.precision_edit_confirmed
+        and resolution.size_declaration_valid
+        and resolution.flexible_sizes
+        and isinstance(resolution.capability, dict)
+        and resolution.capability.get("size_policy") == PRECISION_GPT_IMAGE_2_FLEXIBLE_SIZE_POLICY
+    )
+
+
 def precision_model_uses_gpt_image_2_size_contract(
     cfg: ProviderConfig,
     model_id: str,
@@ -1735,15 +1774,16 @@ def _precision_preserve_source_size_error(
             "the selected model has no explicit supported size list",
         )
     if not resolution.size_declaration_present:
+        # Preserve mode does not let the user choose a new output canvas. The
+        # source image is forwarded at its existing dimensions, so an absent
+        # optional size declaration must not block a confirmed image-edit
+        # model. Explicit resize mode remains fail-closed in _precision_size_error.
         if selected_declares_alias:
             return (
                 "precision_edit_source_size_not_declared",
                 f"the selected model does not declare the source size {source_size}",
             )
-        return (
-            "precision_edit_size_capability_unknown",
-            "the selected model has no explicit supported size list",
-        )
+        return None
     if not resolution.size_declaration_valid:
         return (
             "precision_edit_size_capability_unknown",
@@ -1764,6 +1804,7 @@ def _precision_size_error(
     mode: str,
     target: str,
     generic_size: str = "",
+    output_size_policy: str = "strict",
 ) -> tuple[str, str] | None:
     if mode == "preserve":
         if target or generic_size not in {"", "auto"}:
@@ -1771,16 +1812,28 @@ def _precision_size_error(
         return None
     if mode != "resize":
         return "precision_size_mode_invalid", "unsupported precision size mode"
+    if output_size_policy not in PRECISION_OUTPUT_SIZE_POLICIES:
+        return (
+            "precision_output_size_policy_invalid",
+            "precision_output_size_policy must be strict or fit_crop",
+        )
     if _normalize_precision_size(target) is None:
         return "precision_target_size_invalid", "resize mode requires a valid WIDTHxHEIGHT target"
-    if precision_model_uses_gpt_image_2_size_contract(cfg, model_id):
+    flexible_sizes = _precision_model_allows_flexible_sizes(cfg, model_id)
+    if precision_model_uses_gpt_image_2_size_contract(cfg, model_id) or flexible_sizes:
         protocol_error = gpt_image_2_size_error(target)
         if protocol_error:
             return protocol_error
     declared = _precision_model_declared_sizes(cfg, model_id)
     if not declared:
         return "precision_edit_size_capability_unknown", "the selected model has no explicit supported size list"
-    if target not in declared:
+    if flexible_sizes:
+        return None
+    # Strict dimensions are an empirical upstream contract.  Crop-to-fit is
+    # deliberately different: it still requires a verified model and a valid
+    # capability declaration, but permits a legal target that GenBox will
+    # locally fit/crop if the upstream returns a nearby canvas.
+    if output_size_policy == "strict" and target not in declared:
         return "precision_edit_target_size_not_declared", "the selected model has not declared this target size"
     return None
 
@@ -2023,7 +2076,14 @@ async def _dispatch_precision_edit(
             "precision_canvas_only_resize_required",
             "precision_edit without annotations requires precision_size_mode=resize",
         )
-    size_error = _precision_size_error(cfg, model_id, size_mode, target_size, generic_size)
+    size_error = _precision_size_error(
+        cfg,
+        model_id,
+        size_mode,
+        target_size,
+        generic_size,
+        output_size_policy,
+    )
     if size_error:
         return _precision_edit_failure(cfg, size_error[0], size_error[1])
     resize_prompt = str(kwargs.get("precision_resize_prompt") or "").strip()
@@ -2316,6 +2376,23 @@ async def _http_post_with_retry(
                 pass
             raise
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+            try:
+                await close_client(client)
+            except Exception:
+                pass
+            last_exc = e
+            if (
+                retry_transport_errors
+                and attempt < max_retries - 1
+                and (post_budget is None or not post_budget.exhausted)
+            ):
+                await asyncio.sleep(retry_delay * (2 ** attempt))
+                continue
+            raise
+        except httpx.HTTPError as e:
+            # ReadError and WriteError are not subclasses of ReadTimeout. They
+            # still own a client created for this attempt, so close it before
+            # returning the structured precision-edit transport diagnosis.
             try:
                 await close_client(client)
             except Exception:
@@ -3057,7 +3134,14 @@ async def _gen_openai_precision_edit(
             precision_selection_feather,
         )
     )
-    size_error = _precision_size_error(cfg, model_id, size_mode, target_size, generic_size)
+    size_error = _precision_size_error(
+        cfg,
+        model_id,
+        size_mode,
+        target_size,
+        generic_size,
+        output_size_policy,
+    )
     if size_error:
         return _precision_edit_failure(cfg, size_error[0], size_error[1])
     if size_mode == "preserve":
@@ -3102,7 +3186,7 @@ async def _gen_openai_precision_edit(
             files=files,
             data=data_dict,
             timeout=180.0,
-            max_retries=3,
+            max_retries=1,
             retry_delay=0.25,
             retry_transport_errors=False,
             post_budget=_precision_post_budget or PrecisionEditPostBudget(),
@@ -3127,7 +3211,13 @@ async def _gen_openai_precision_edit(
             cfg,
             "precision_edit_connection_error",
             f"无法完成图片编辑请求（{_provider_exception_text(exc, cfg)}）。请检查端点连通性后重试",
-            details=_precision_transport_error_details(cfg, model_id, transport_profile, exc),
+            details=_precision_transport_error_details(
+                cfg,
+                model_id,
+                transport_profile,
+                exc,
+                connection_failure=True,
+            ),
         )
     except ProviderResponseValidationError as exc:
         return _precision_edit_failure(
