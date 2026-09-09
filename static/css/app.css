@@ -5658,6 +5658,22 @@ body.dock-auto-hide.dock-pinned .dock-reveal-handle span {
   line-height: 1.25;
 }
 
+#pageGenerate.precision-workbench .precision-size-heading-copy { text-align: center; justify-items: center; }
+#pageGenerate.precision-workbench .precision-start-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+#pageGenerate.precision-workbench .precision-smart-start-hint { grid-column: 1 / -1; }
+.precision-quick-navigation .precision-docs-steps { padding-left: 24px; }
+.precision-quick-navigation li { margin-bottom: 10px; }
+.precision-quick-navigation li p { margin: 4px 0 0; }
+.precision-quick-navigation button { max-width: 100%; white-space: normal; }
+.precision-quick-nav-target:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+
 #pageGenerate.precision-workbench .precision-size-heading,
 #pageGenerate.precision-workbench .precision-size-heading > div:first-child {
   display: grid;

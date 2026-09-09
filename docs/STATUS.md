@@ -1,5 +1,26 @@
 # Current Project Status
 
+## 2026-09-10 Precision Quick Start
+
+- **IMPLEMENTED:** Short model, size/composition and smart-tool instructions
+  appear in the inspector. The size heading is centered. Local cutout/refinement
+  is distinguished from online AI removal; trial authorization remains scoped
+  and never submits a request.
+- **IMPLEMENTED:** The precision guide now starts with five clickable navigation
+  steps. First entry opens it once per browser storage profile; dismissal stores
+  only the non-sensitive `seen` flag. Blocked storage falls back to once per JS
+  session. Visible dialogs defer navigation; offscreen closed drawers do not.
+  Leaving precision before the timer fires does not open the guide elsewhere.
+- **VERIFIED:** Node syntax, precision UI and version-metadata assertions passed.
+  Ten synthetic Playwright scenarios passed (including first-entry/replay,
+  keyboard focus, blocked storage, visible-modal deferral and mobile layout);
+  518 precision/workflow/provider/setup-security tests passed. No paid upstream
+  request was made. Screenshots and temporary outputs are excluded from Git.
+- **RESUME:** Refresh the owned 8895 lab after restart and request combined UI
+  acceptance for the instructions, first-use guide, model grouping/scroll and
+  version dimensions/time. Target-model presets remain USER-CONFIRMED; other
+  vendors still need separate authorized real trials and manual acceptance.
+
 ## 2026-09-09 Precision UI Checkpoint And Grouped Model Visibility
 
 - **USER-CONFIRMED:** The user accepted the target-model size presets.

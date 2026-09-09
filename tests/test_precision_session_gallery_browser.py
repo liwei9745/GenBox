@@ -618,6 +618,7 @@ def test_loaded_precision_canvas_real_pointer_fullscreen_and_mobile_menu_contrac
         with sync_playwright() as playwright:
             browser = _launch_browser(playwright, headless=os.environ.get("GENBOX_HEADED") != "1")
             page = browser.new_page(viewport={"width": 390, "height": 844})
+            page.add_init_script("localStorage.setItem('genbox_precision_quick_start_v1', 'seen');")
             page.route("**/api/**", lambda route: route.fulfill(status=404, json={"detail": "test only"}))
             page.goto(f"http://127.0.0.1:{server.server_port}/static/index.html", wait_until="domcontentloaded")
             page.evaluate(

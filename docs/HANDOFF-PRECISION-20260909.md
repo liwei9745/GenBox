@@ -50,14 +50,20 @@ precision/workflow `224 passed`; provider contracts `253 passed`; setup security
 
 ## Next Work
 
+- 2026-09-10: Short inspector instructions and a five-step clickable quick-start
+  guide are implemented. First precision entry opens the guide; dismissal is
+  stored as a non-sensitive browser flag and Guide remains available for replay.
+  Local cutout/refinement and online AI removal are explicitly distinguished.
+  Node checks, ten synthetic browser scenarios and 518 focused Python tests pass.
+  These changes await combined UI acceptance, not real-model compatibility signoff.
 - The user has accepted target-model size presets. The model-first inspector,
   per-version dimensions/time and grouped model visibility await combined UI
   acceptance in the owned `8895` laboratory.
 - Grouped visibility edits are draft-only until Confirm; selection changes
   retain the existing DOM, focused checkbox and list scroll. Group names are
   name-based navigation and never authorize a model or certify its capability.
-- Local checkpoints: backend `95e06f2`, frontend `ccdd45c`. Grouping is a
-  separate follow-up commit. Unrelated untracked files remain untouched.
+- Local checkpoints: backend `95e06f2`, frontend `ccdd45c`, grouping `67978be`.
+  Unrelated untracked files remain untouched.
 - Latest local regression: Node syntax/UI/version-metadata checks passed,
   nine synthetic browser scenarios passed, and 518 focused Python tests passed.
 - Other vendors' edit/size linkage needs subsequent independent verification

@@ -722,6 +722,7 @@ function switchSubTab(mode) {
     return;
   }
   if (mode !== 'precision_edit' && precisionWorkbench) {
+    cancelPrecisionQuickStart();
     setCreatorWorkbenchMode('image', 'multi');
     if (mode === 't2i') return;
   }
@@ -749,6 +750,7 @@ function switchSubTab(mode) {
   updatePrecisionEditControls();
   hideEnhance();
   if(getVisibleAppPage()==='generate')updateAppRoute('generate');
+  if (mode === 'precision_edit') schedulePrecisionQuickStart();
 }
 
 // Precision edit needs a larger, stable annotation surface. Keep the normal
@@ -2391,6 +2393,55 @@ function bindPrecisionWorkbenchHelp() {
   });
 }
 
+var precisionQuickStartShown = false;
+var precisionQuickStartTimer = null;
+
+function schedulePrecisionQuickStart() {
+  if (precisionQuickStartShown || precisionQuickStartTimer !== null) return;
+  try { if (window.localStorage.getItem('genbox_precision_quick_start_v1') === 'seen') return; } catch (error) {}
+  precisionQuickStartTimer = setTimeout(function() {
+    precisionQuickStartTimer = null;
+    var panel = document.getElementById('panelPrecisionEdit');
+    if (currentMode !== 'precision_edit' || getVisibleAppPage() !== 'generate' || !panel || !panel.getClientRects().length || precisionSourceTaskIsActive()) return;
+    var overlays = document.querySelectorAll('[aria-modal="true"], .modal-overlay, #setupWizard, #welcomePage, #loginPage, #onboardingTour');
+    if (Array.prototype.some.call(overlays, function(element) {
+      var style = getComputedStyle(element);
+      var rect = element.getBoundingClientRect();
+      return element.getClientRects().length && style.display !== 'none' && style.visibility !== 'hidden'
+        && rect.width > 0 && rect.height > 0 && rect.left < window.innerWidth && rect.right > 0
+        && rect.top < window.innerHeight && rect.bottom > 0;
+    })) {
+      schedulePrecisionQuickStart();
+      return;
+    }
+    if (openPrecisionDocsDialog()) precisionQuickStartShown = true;
+  }, 500);
+}
+
+function navigatePrecisionQuickStart(area) {
+  var selectors = {
+    model: '#precisionModelPicker', source: '#precisionCanvasShell',
+    size: '.precision-size-tool', generate: '#precisionGalleryCommandBar',
+    local: '.precision-quick-tools'
+  };
+  if (!Object.prototype.hasOwnProperty.call(selectors, area)) return false;
+  var target = document.querySelector(selectors[area]);
+  if (!target) return false;
+  closePrecisionDocsDialog(false);
+  if (area === 'model') target.open = true;
+  target.classList.add('precision-quick-nav-target');
+  var previousTabindex = target.getAttribute('tabindex');
+  target.setAttribute('tabindex', '-1');
+  target.scrollIntoView({ block: 'center', behavior: 'auto' });
+  target.focus({ preventScroll: true });
+  target.addEventListener('blur', function cleanup() {
+    target.classList.remove('precision-quick-nav-target');
+    if (previousTabindex === null) target.removeAttribute('tabindex');
+    else target.setAttribute('tabindex', previousTabindex);
+  }, { once: true });
+  return true;
+}
+
 function precisionDocsFocusable(dialog) {
   if (!dialog || !dialog.querySelectorAll) return [];
   return Array.prototype.filter.call(dialog.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])'), function(element) {
@@ -2425,8 +2476,18 @@ function closePrecisionDocsDialog(returnFocus) {
   dialog.setAttribute('aria-hidden', 'true');
   if (document.body) document.body.classList.remove('precision-docs-open');
   dialog._precisionReturnFocus = null;
+  precisionQuickStartShown = true;
+  try { window.localStorage.setItem('genbox_precision_quick_start_v1', 'seen'); } catch (error) {}
   if (returnFocus !== false && restore && typeof restore.focus === 'function') restore.focus();
   return true;
+}
+
+function cancelPrecisionQuickStart() {
+  if (precisionQuickStartTimer !== null) {
+    clearTimeout(precisionQuickStartTimer);
+    precisionQuickStartTimer = null;
+  }
+  closePrecisionDocsDialog(false);
 }
 
 function bindPrecisionDocsDialog() {
@@ -15192,7 +15253,7 @@ function setCreatorWorkbenchMode(kind,mode){
     if(mode!=='single')mode='multi';
     var normalPage=document.getElementById(kind==='image'?'pageGenerate':'pageVideo');
     if(normalPage)normalPage.classList.remove('precision-workbench');
-    if(kind==='image'&&currentMode==='precision_edit')switchSubTab('t2i');
+    if(kind==='image'&&currentMode==='precision_edit'){ cancelPrecisionQuickStart(); switchSubTab('t2i'); }
   }
   if(kind==='image')setPrecisionFocusMode(mode==='precision');
   localStorage.setItem('igs_'+kind+'_workbench',mode);

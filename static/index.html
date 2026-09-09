@@ -724,6 +724,7 @@
                     <section class="precision-edit-actions" aria-label="主体处理" data-i18n-aria-label="creator.precision_subject_actions">
                       <section class="precision-quick-tools" aria-labelledby="precisionQuickToolsTitle">
                         <div class="precision-quick-heading"><span class="param-label" id="precisionQuickToolsTitle" data-i18n="creator.precision_quick_tools">智能处理</span><small class="sr-only" data-i18n="creator.precision_quick_hint">先选功能，再在画布上圈出位置。</small></div>
+                        <p class="precision-start-hint precision-smart-start-hint" data-i18n="creator.precision_start_local">人物抠图、边缘精修在本地完成，可切换算法比较效果；AI 消除需涂选区域，再用所选在线模型生成。</p>
                         <div class="precision-action-group"><span data-i18n="creator.precision_ai_remove">AI 消除</span><div><button type="button" class="btn-ghost" onclick="startPrecisionAiErase('people')" data-i18n="creator.precision_remove_people">消除路人</button><button type="button" class="btn-ghost" onclick="startPrecisionAiErase('watermark')" data-i18n="creator.precision_remove_watermark">消除水印</button></div></div>
                         <div class="precision-action-group"><span data-i18n="creator.precision_manual_selection">手动选区</span><div><button type="button" class="btn-ghost" onclick="setPrecisionEditTool('brush')" data-i18n="creator.precision_edit_brush">涂抹</button></div></div>
                         <section class="precision-guidance-controls precision-guidance-pill" id="precisionGuidanceCard" data-state="collapsed" aria-labelledby="precisionGuidanceTitle">
@@ -842,6 +843,7 @@
                       <section class="precision-size-tool" aria-labelledby="precisionSizeTitle">
                         <div class="precision-size-heading">
                           <div class="precision-size-heading-copy"><span class="param-label" id="precisionSizeTitle" data-i18n="creator.precision_size_title">智能扩图与画布适配</span><small id="precisionSizeHint" class="sr-only" data-i18n="creator.precision_size_preserve_hint">默认保持原图尺寸和比例，不会套用文生图设置。</small></div>
+                          <p class="precision-start-hint" data-i18n="creator.precision_start_size">改变尺寸：1. 选尺寸方式（模型尺寸严格匹配；裁切适配会本地裁切缩放）；2. 选预设，按提示授权试用；3. 选构图说明并按需修改。加载底图后即可点击“生成图片”。</p>
                           <div class="precision-size-modes" role="group" aria-label="画布尺寸模式" data-i18n-aria-label="creator.precision_size_title">
                             <button type="button" id="btnPrecisionSizePreserve" class="btn-secondary" aria-pressed="true" onclick="setPrecisionSizeMode('preserve')" data-i18n="creator.precision_size_preserve">保持原图</button>
                             <button type="button" id="btnPrecisionSizeResize" class="btn-ghost" aria-pressed="false" onclick="setPrecisionSizeMode('resize')" data-i18n="creator.precision_size_resize">改变尺寸</button>
@@ -903,6 +905,7 @@
                     <details class="precision-model-picker" id="precisionModelPicker" aria-labelledby="precisionModelPickerTitle">
                       <summary class="precision-model-summary" id="btnPrecisionModelPickerToggle"><span class="param-label" id="precisionModelPickerTitle" data-i18n="creator.precision_edit_model_picker">选择模型</span><span class="precision-model-summary-caret" aria-hidden="true">⌄</span></summary>
                       <div class="precision-model-picker-body">
+                      <p class="precision-start-hint" data-i18n="creator.precision_start_model">第一步：选模型端点 → 在“显示模型”中勾选并确定 → 选择编辑模型。显示“待确认”时，仅在确认支持改图后启用；没有端点请先到“模型设置”配置。</p>
                       <label for="precisionEditProviderEndpoint">
                         <span class="precision-picker-label" data-i18n="creator.precision_edit_endpoint_select">模型端点</span>
                         <select id="precisionEditProviderEndpoint" onchange="selectPrecisionEditEndpoint()" disabled><option value="" data-i18n="creator.precision_edit_no_endpoint">暂无可用端点</option></select>
@@ -1706,6 +1709,17 @@
     </header>
     <div class="precision-docs-body" id="precisionDocsBody" tabindex="0">
       <p id="precisionDocsIntro" class="precision-docs-intro" data-i18n="creator.precision_docs_intro">在一个工作台中完成轻量批注、透明抠图、纯尺寸扩图和版本比较；这里不会提供图层栈或全局滤镜。</p>
+      <section class="precision-quick-navigation" aria-labelledby="precisionQuickNavigationTitle">
+        <h3 id="precisionQuickNavigationTitle" data-i18n="creator.precision_start_title">快速上手</h3>
+        <p data-i18n="creator.precision_start_nav_hint">按顺序完成前四步；点击步骤可定位操作区，不会提交任务。以后可从“文档说明”再次打开。</p>
+        <ol class="precision-docs-steps">
+          <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('model')" data-i18n="creator.precision_start_nav_model">选择模型</button><p data-i18n="creator.precision_start_model">第一步：选模型端点 → 在“显示模型”中勾选并确定 → 选择编辑模型。显示“待确认”时，仅在确认支持改图后启用；没有端点请先到“模型设置”配置。</p></li>
+          <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('source')" data-i18n="creator.precision_start_nav_source">加载底图</button><p data-i18n="creator.precision_start_source">本地上传或从图库选择一张图。局部改图时，用画笔或形状标出位置，并填写修改说明。</p></li>
+          <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('size')" data-i18n="creator.precision_start_nav_size">尺寸与构图</button><p data-i18n="creator.precision_start_size">改变尺寸：1. 选尺寸方式（模型尺寸严格匹配；裁切适配会本地裁切缩放）；2. 选预设，按提示授权试用；3. 选构图说明并按需修改。加载底图后即可点击“生成图片”。</p></li>
+          <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('generate')" data-i18n="creator.precision_start_nav_generate">生成与查看</button><p data-i18n="creator.precision_start_generate">检查底图和说明后，点击“生成图片”提交一次在线请求，可能计费；失败不会自动重试。完成后切换版本查看尺寸、时间及前后对比。</p></li>
+          <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('local')" data-i18n="creator.precision_start_nav_local">可选：本地处理</button><p data-i18n="creator.precision_start_local">人物抠图、边缘精修在本地完成，可切换算法比较效果；AI 消除需涂选区域，再用所选在线模型生成。</p></li>
+        </ol>
+      </section>
       <section aria-labelledby="precisionDocsShapes"><h3 id="precisionDocsShapes" data-i18n="creator.precision_docs_shapes_title">形状与二次编辑</h3><p data-i18n="creator.precision_docs_shapes_body">用椭圆、矩形、箭头或画笔标出修改位置。切换到“选择/移动”后可拖动已有批注；形状使用控制点缩放，箭头直接拖动起点或终点。按住 Alt 再绘制可避免误选已有形状。</p></section>
       <section aria-labelledby="precisionDocsEraser"><h3 id="precisionDocsEraser" data-i18n="creator.precision_docs_eraser_title">橡皮擦与历史</h3><p data-i18n="creator.precision_docs_eraser_body">橡皮擦可点击删除选中的对象，也可在画笔轨迹上拖动擦除；移动、缩放、擦除和清除都可撤销/重做。</p></section>
       <section aria-labelledby="precisionDocsText"><h3 id="precisionDocsText" data-i18n="creator.precision_docs_text_title">文字批注</h3><p data-i18n="creator.precision_docs_text_body">文字工具单击画布添加文字；切到“选择/移动”后可拖动移动，双击已有文字可再次编辑，选中后可调整字号和颜色。</p></section>
@@ -1726,10 +1740,10 @@
         </ol>
         <p class="precision-docs-warning" data-i18n="creator.precision_docs_cutout_model_boundary">当前自动下载未启用。模型转换链、训练数据来源、授权与商业使用权利尚未由 GenBox 验证；下载或使用前请自行阅读上游资料并确认适用于你的场景。</p>
       </section>
-      <section aria-labelledby="precisionDocsResize"><h3 id="precisionDocsResize" data-i18n="creator.precision_docs_resize_title">纯尺寸扩图</h3><p data-i18n="creator.precision_docs_resize_body">无需批注也可开启“改变尺寸”，填写目标宽高和构图说明后提交。请求只携带底图、目标尺寸与构图说明；模型必须明确声明支持该尺寸。</p></section>
-      <section aria-labelledby="precisionDocsVersions"><h3 id="precisionDocsVersions" data-i18n="creator.precision_docs_versions_title">版本与对比</h3><p data-i18n="creator.precision_docs_versions_body">版本栏只切换浏览结果，不会自动替换底图。“修改前”显示当前版本的父版本，“修改后”显示所选版本，“对比”可拖动分隔线。只有“设为下一次底图”会改变后续编辑基准。</p></section>
+      <section aria-labelledby="precisionDocsResize"><h3 id="precisionDocsResize" data-i18n="creator.precision_docs_resize_title">纯尺寸扩图</h3><p data-i18n="creator.precision_docs_resize_body">无需批注也可开启“改变尺寸”。“模型尺寸”优先使用当前模型已声明的原生尺寸；未声明候选需要逐项用户授权试用，实际输出仍须严格校验。“裁切适配”使用常用修图尺寸，模型完成一次改图后由 GenBox 在本地裁切缩放到目标尺寸。</p></section>
+      <section aria-labelledby="precisionDocsVersions"><h3 id="precisionDocsVersions" data-i18n="creator.precision_docs_versions_title">版本与对比</h3><p data-i18n="creator.precision_docs_versions_body">版本栏用于浏览结果；“修改前”显示父版本，“修改后”显示所选版本，“对比”可拖动分隔线。左下角显示对应图片的实际尺寸及可用的版本时间（不是拍摄时间）。生成完成后会把新结果设为下一次底图；也可手动选择旧版本并点“设为下一次底图”。从工作流恢复可继续编辑。</p></section>
       <section aria-labelledby="precisionDocsFullscreen"><h3 id="precisionDocsFullscreen" data-i18n="creator.precision_docs_fullscreen_title">全屏与节点编辑</h3><p data-i18n="creator.precision_docs_fullscreen_body">双击主画布可进入或退出完整工作台全屏，也可使用“全屏”按钮；按 Esc 可退出。选择已有标注后拖动控制节点可调整形状和箭头端点，双击文字可再次编辑。</p></section>
-      <section aria-labelledby="precisionDocsModels"><h3 id="precisionDocsModels" data-i18n="creator.precision_docs_models_title">模型筛选</h3><p data-i18n="creator.precision_docs_models_body">显示模型菜单只控制列表可见性并保存在本机；取消会还原打开前选择。别名仅用于显示，提交始终使用真实模型 ID；精准改图能力与尺寸能力必须由端点明确声明或由你确认，不会从名称猜测。</p></section>
+      <section aria-labelledby="precisionDocsModels"><h3 id="precisionDocsModels" data-i18n="creator.precision_docs_models_title">模型筛选</h3><p data-i18n="creator.precision_docs_models_body">先选模型端点，再用“显示模型”按系列勾选常用模型，点“确定”保存到本机；“取消”丢弃本次修改。分组不代表支持改图。选择编辑模型后，尺寸状态随当前端点和模型更新；授权试用仅对该端点、模型和尺寸有效，不会自动生成，也不保证上游成功。失败或 503 不等于尺寸不支持；检查原因后再决定是否手动重试。</p></section>
     </div>
     <footer class="precision-docs-footer"><button type="button" class="btn-primary" id="precisionDocsDone" onclick="closePrecisionDocsDialog()" data-i18n="common.done">完成</button></footer>
   </div>
