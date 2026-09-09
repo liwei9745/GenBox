@@ -4834,6 +4834,39 @@ body.dock-auto-hide.dock-pinned .dock-reveal-handle span {
   line-height: 1.35;
   cursor: pointer;
 }
+.precision-model-visibility-group { min-width: 0; }
+.precision-model-visibility-group + .precision-model-visibility-group {
+  margin-top: 5px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.precision-model-visibility-group-heading {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 4px;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.precision-model-visibility-group-heading input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.precision-model-group-count {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+.precision-model-visibility-group .precision-model-visibility-option { padding-left: 12px; }
+.precision-model-visibility-list { overscroll-behavior: contain; }
 .precision-model-visibility-option input {
   width: 16px;
   height: 16px;

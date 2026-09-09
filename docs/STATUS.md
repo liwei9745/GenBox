@@ -1,6 +1,6 @@
 # Current Project Status
 
-## 2026-09-09 Precision UI Checkpoint And Pending Acceptance
+## 2026-09-09 Precision UI Checkpoint And Grouped Model Visibility
 
 - **USER-CONFIRMED:** The user accepted the target-model size presets.
   UI acceptance is deferred until the model-visibility grouping and scroll
@@ -10,13 +10,26 @@
   disclosure), size, smart tools. Workflow restore retains per-version
   dimensions and timestamps; decoded image dimensions correct stale metadata.
   Version timestamps do not claim to be original photo capture times.
-- **VERIFIED:** JavaScript syntax, precision UI and version-metadata Node
-  suites, eight synthetic browser scenarios and 518 focused Python tests passed
-  in the preceding local verification. This is not paid upstream E2E evidence.
-- **RESUME:** Complete grouped model visibility and preserve checkbox focus/
-  scroll; rerun tests, restart the owned lab, then request combined UI UAT.
-  Keep existing changes, temporary test outputs and screenshots out of unrelated
-  commits. Keep strict output checking and the no-replay image-edit POST guard.
+- **CHECKPOINTS:** `95e06f2` preserves backend precision-size/workflow contracts;
+  `ccdd45c` preserves the model-first workbench, gallery/cutout/canvas changes,
+  version metadata and their tests. These are local commits, not a release or
+  upstream push; unrelated untracked files and screenshots were excluded.
+- **FIXED:** Model visibility now groups IDs by name family, with group
+  checkboxes, selected counts and indeterminate state. This is navigation only,
+  not a capability claim. Individual/group/all draft changes update existing
+  nodes without rebuilding the menu, preserving checkbox focus and list scroll.
+  Only Confirm saves local visibility preferences; Cancel discards the draft.
+- **VERIFIED:** `node --check static/js/app-all.js`,
+  `node tests/test_precision_edit_ui.mjs`,
+  `node tests/test_precision_version_metadata.mjs`,
+  nine synthetic browser scenarios (including desktop/mobile grouping, scroll,
+  focus, cancel, empty selection and provider isolation), and 518 focused Python
+  tests passed. `git diff --check` passed. No paid upstream request was made.
+- **RESUME:** After the owned lab restart, request combined UI UAT for grouping,
+  scroll retention, inspector arrangement and per-version dimensions/time.
+  Other vendors' actual edit/size linkage remains pending separate testing and
+  explicit authorization for any paid request. Keep strict output checking and
+  the no-replay image-edit POST guard; exclude temporary outputs from commits.
 
 ## 2026-09-09 User-Authorized Precision Size Trials And Resize UI
 

@@ -50,8 +50,18 @@ precision/workflow `224 passed`; provider contracts `253 passed`; setup security
 
 ## Next Work
 
-- Conduct user acceptance for the title/mode selector and the exact size trial
-  flow in the owned `8895` laboratory.
+- The user has accepted target-model size presets. The model-first inspector,
+  per-version dimensions/time and grouped model visibility await combined UI
+  acceptance in the owned `8895` laboratory.
+- Grouped visibility edits are draft-only until Confirm; selection changes
+  retain the existing DOM, focused checkbox and list scroll. Group names are
+  name-based navigation and never authorize a model or certify its capability.
+- Local checkpoints: backend `95e06f2`, frontend `ccdd45c`. Grouping is a
+  separate follow-up commit. Unrelated untracked files remain untouched.
+- Latest local regression: Node syntax/UI/version-metadata checks passed,
+  nine synthetic browser scenarios passed, and 518 focused Python tests passed.
+- Other vendors' edit/size linkage needs subsequent independent verification
+  and manual acceptance; it is not covered by target-model preset acceptance.
 - Only after explicit approval, run one real precision-edit trial for a chosen
   model and size; record sanitized model, target, actual output, and outcome.
 - Keep temporary `.pytest-tmp-*` outputs and screenshots out of any eventual

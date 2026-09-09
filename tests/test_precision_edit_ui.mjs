@@ -851,6 +851,7 @@ const visibilityMenuSource = [
   extractFunction('copyPrecisionModelVisibilityState'),
   extractFunction('precisionModelVisibilityLabel'),
   extractFunction('precisionModelVisibilityRecords'),
+  extractFunction('precisionModelVisibilityGroups'),
   extractFunction('precisionModelVisibilityState'),
   extractFunction('precisionModelVisibilityIsVisible'),
   extractFunction('precisionModelVisibilitySelectedCount'),
@@ -869,6 +870,8 @@ const visibilityMenuSource = [
   extractFunction('cancelPrecisionModelVisibilityMenu'),
   extractFunction('precisionModelVisibilityMenuRecords'),
   extractFunction('setPrecisionModelVisibilityDraft'),
+  extractFunction('setPrecisionModelVisibilityGroupDraft'),
+  extractFunction('refreshPrecisionModelVisibilityDraft'),
   extractFunction('setAllPrecisionModelVisibilityDraft'),
   extractFunction('confirmPrecisionModelVisibilityMenu'),
 ].join('\n');
@@ -1024,7 +1027,32 @@ vm.runInContext(`
   };
 `, visibilityMenuContext);
 const visibilityMenuTest = visibilityMenuContext.visibilityMenuTest;
+const familyFixture = visibilityMenuContext.precisionModelVisibilityGroups([
+  { id: 'GPT-Image-test' }, { id: 'nano-banana-test' }, { id: 'gemini-test' },
+  { id: 'seedream-test' }, { id: 'seedance-test' }, { id: 'grok-imagine-video-test' },
+  { id: 'grok-imagine-image-test' }, { id: 'qwen-image-test' },
+  { id: 'gpt-text-test' }, { id: 'custom-model', alias: 'GPT Image' },
+  { id: 'gpt-image-blocked', unavailable: true }
+]);
+assert.deepEqual(JSON.parse(JSON.stringify(familyFixture.map(group => [group.id, group.records.map(record => record.id)]))), [
+  ['gpt-image', ['GPT-Image-test']],
+  ['gemini', ['nano-banana-test', 'gemini-test']],
+  ['grok-image', ['grok-imagine-image-test']],
+  ['qwen', ['qwen-image-test']],
+  ['seedream', ['seedream-test']],
+  ['video', ['seedance-test', 'grok-imagine-video-test']],
+  ['chat', ['gpt-text-test']],
+  ['other', ['custom-model']],
+], 'Display groups use IDs, preserve records, exclude unavailable entries and do not infer capability from aliases.');
 vm.runInContext("precisionEditModelVisibility = { 'endpoint-a::model-b': false }; precisionModelVisibilityMenuOpen = true; precisionModelVisibilityMenuProviderId = 'endpoint-a'; precisionModelVisibilityDraft = copyPrecisionModelVisibilityState(precisionEditModelVisibility);", visibilityMenuContext);
+assert.equal(visibilityMenuTest.setPrecisionModelVisibilityDraft('endpoint-b::model-a', false), false, 'A draft checkbox cannot modify another endpoint.');
+assert.equal(visibilityMenuTest.setPrecisionModelVisibilityDraft('endpoint-a::blocked-model', true), false, 'A draft checkbox cannot reveal a capability-disabled record.');
+assert.equal(visibilityMenuContext.setPrecisionModelVisibilityGroupDraft('absent', false), false);
+assert.equal(visibilityMenuContext.setPrecisionModelVisibilityGroupDraft('other', true), true);
+assert.equal(visibilityMenuContext.precisionModelVisibilitySelectedCount(
+  visibilityMenuContext.precisionModelVisibilityMenuRecords(), 'endpoint-a', visibilityMenuContext.precisionModelVisibilityDraft
+), 2, 'Group selection includes only the active provider and available models.');
+vm.runInContext("precisionModelVisibilityDraft = copyPrecisionModelVisibilityState(precisionEditModelVisibility);", visibilityMenuContext);
 assert.equal(visibilityMenuTest.precisionModelVisibilitySelectedCount(visibilityMenuContext.findProvider('endpoint-a').models.map((model) => ({ id: model.id, alias: model.alias || '', unavailable: model.id === 'blocked-model' })), 'endpoint-a', visibilityMenuContext.precisionModelVisibilityDraft), 1, 'Draft visibility must count only available checked models.');
 expect(visibilityMenuTest.setPrecisionModelVisibilityDraft('endpoint-a::model-a', false), 'Draft checkbox changes should be accepted before commit.');
 assert.equal(visibilityMenuStoredValues.has(visibilityKey), false, 'Draft visibility changes must not write localStorage before confirmation.');

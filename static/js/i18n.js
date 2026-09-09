@@ -2185,6 +2185,8 @@
   MESSAGES['creator.precision_model_display_all'] = {"zh-CN":"全部 {count} 个模型","en":"All {count} models"};
   MESSAGES['creator.precision_model_display_summary'] = {"zh-CN":"已显示 {selected}/{total} 个","en":"Showing {selected} of {total}"};
   MESSAGES['creator.precision_model_menu_title'] = {"zh-CN":"显示模型","en":"Displayed models"};
+  MESSAGES['creator.precision_model_group_video'] = {"zh-CN":"视频系列","en":"Video families"};
+  MESSAGES['creator.precision_model_group_chat'] = {"zh-CN":"GPT / Grok / 其他系列","en":"GPT / Grok / Other families"};
   MESSAGES['creator.precision_model_menu_hint'] = {"zh-CN":"只影响本机列表可见性；提交仍使用真实模型 ID。","en":"Controls local list visibility only; submissions still use the real model ID."};
   MESSAGES['creator.precision_model_select_all'] = {"zh-CN":"全选","en":"Select all"};
   MESSAGES['creator.precision_model_clear'] = {"zh-CN":"清空","en":"Clear"};

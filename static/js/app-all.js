@@ -8987,6 +8987,26 @@ function precisionModelVisibilityRecords(records) {
   return (records || []).filter(function(record) { return record && !record.unavailable; });
 }
 
+function precisionModelVisibilityGroups(records) {
+  // Name-based navigation only; groups never grant editing capability.
+  var families = [
+    { id: 'gpt-image', label: 'GPT Image', match: /^gpt[-_]?image/i },
+    { id: 'gemini', label: 'Gemini / Nano Banana / Imagen', match: /^(gemini|nano[-_ ]?banana|imagen)/i },
+    { id: 'grok-image', label: 'Grok Image', match: /^grok-imagine-image/i },
+    { id: 'qwen', label: 'Qwen / Wanx', match: /^(qwen|wanx)/i },
+    { id: 'seedream', label: 'Seedream / SeedEdit', match: /^(doubao[-_])?(seedream|seededit)/i },
+    { id: 'video', label: i18nText('creator.precision_model_group_video'), match: /^(seedance|doubao[-_]seedance|veo|kling|wan[-_0-9]|sora|hailuo|happy[-_]horse|grok-imagine-video)/i },
+    { id: 'chat', label: i18nText('creator.precision_model_group_chat'), match: /^(gpt[-_]|grok[-_]|o[134][-_.]|claude|deepseek)/i },
+    { id: 'other', label: i18nText('common.other'), match: /./ }
+  ];
+  families.forEach(function(group) { group.records = []; });
+  precisionModelVisibilityRecords(records).forEach(function(record) {
+    var group = families.find(function(family) { return family.match.test(String(record.id || '')); });
+    (group || families[families.length - 1]).records.push(record);
+  });
+  return families.filter(function(group) { return group.records.length; });
+}
+
 function precisionModelVisibilityState() {
   return precisionModelVisibilityDraft || precisionEditModelVisibility;
 }
@@ -9194,10 +9214,57 @@ function precisionModelVisibilityMenuRecords() {
 
 function setPrecisionModelVisibilityDraft(key, visible) {
   if (!precisionModelVisibilityDraft || !isPrecisionModelVisibilityStorageKey(key)) return false;
+  var records = precisionModelVisibilityRecords(precisionModelVisibilityMenuRecords());
+  if (!records.some(function(record) {
+    return precisionModelVisibilityStorageKey(precisionModelVisibilityMenuProviderId, record.id) === key;
+  })) return false;
   if (visible === false) precisionModelVisibilityDraft[key] = false;
   else delete precisionModelVisibilityDraft[key];
-  renderPrecisionEditModelPicker();
+  refreshPrecisionModelVisibilityDraft();
   return true;
+}
+
+function setPrecisionModelVisibilityGroupDraft(groupId, visible) {
+  if (!precisionModelVisibilityDraft) return false;
+  var group = precisionModelVisibilityGroups(precisionModelVisibilityMenuRecords()).find(function(item) { return item.id === groupId; });
+  if (!group) return false;
+  group.records.forEach(function(record) {
+    var key = precisionModelVisibilityStorageKey(precisionModelVisibilityMenuProviderId, record.id);
+    if (!key) return;
+    if (visible === false) precisionModelVisibilityDraft[key] = false;
+    else delete precisionModelVisibilityDraft[key];
+  });
+  refreshPrecisionModelVisibilityDraft();
+  return true;
+}
+
+function refreshPrecisionModelVisibilityDraft() {
+  var menu = document.getElementById('precisionModelVisibilityMenu');
+  if (!menu || !precisionModelVisibilityDraft) return;
+  var providerId = precisionModelVisibilityMenuProviderId;
+  var records = precisionModelVisibilityRecords(precisionModelVisibilityMenuRecords());
+  var state = precisionModelVisibilityDraft;
+  // Keep the existing nodes, scroll container and focused checkbox intact.
+  menu.querySelectorAll('[data-precision-model-visibility]').forEach(function(input) {
+    input.checked = state[input.dataset.precisionModelVisibility] !== false;
+  });
+  precisionModelVisibilityGroups(records).forEach(function(group) {
+    var selected = precisionModelVisibilitySelectedCount(group.records, providerId, state);
+    var inputs = menu.querySelectorAll('[data-precision-model-visibility-group="' + group.id + '"]');
+    inputs.forEach(function(input) {
+      input.checked = selected === group.records.length;
+      input.indeterminate = selected > 0 && selected < group.records.length;
+      input.disabled = !group.records.some(function(record) { return !!precisionModelVisibilityStorageKey(providerId, record.id); });
+    });
+    menu.querySelectorAll('[data-precision-model-group-count="' + group.id + '"]').forEach(function(count) {
+      count.textContent = selected + '/' + group.records.length;
+    });
+  });
+  var selectedCount = precisionModelVisibilitySelectedCount(records, providerId, state);
+  menu.querySelectorAll('[data-precision-model-visibility-action="confirm"]').forEach(function(button) { button.disabled = selectedCount < 1; });
+  menu.querySelectorAll('.precision-model-visibility-footer > [role="status"]').forEach(function(status) {
+    status.textContent = selectedCount < 1 ? i18nText('creator.precision_model_keep_one') : precisionModelVisibilitySummary(records, providerId, state);
+  });
 }
 
 function setAllPrecisionModelVisibilityDraft(visible) {
@@ -9208,7 +9275,7 @@ function setAllPrecisionModelVisibilityDraft(visible) {
     if (visible === false) precisionModelVisibilityDraft[key] = false;
     else delete precisionModelVisibilityDraft[key];
   });
-  renderPrecisionEditModelPicker();
+  refreshPrecisionModelVisibilityDraft();
   return true;
 }
 
@@ -9217,7 +9284,7 @@ function confirmPrecisionModelVisibilityMenu() {
   var providerId = precisionModelVisibilityMenuProviderId;
   var records = precisionModelVisibilityMenuRecords();
   if (precisionModelVisibilitySelectedCount(records, precisionModelVisibilityMenuProviderId, precisionModelVisibilityDraft) < 1) {
-    renderPrecisionEditModelPicker();
+    refreshPrecisionModelVisibilityDraft();
     return false;
   }
   precisionEditModelVisibility = copyPrecisionModelVisibilityState(precisionModelVisibilityDraft);
@@ -9259,11 +9326,16 @@ function renderPrecisionModelVisibility(records, providerId) {
     (menuOpen ? '<div id="' + menuId + '" class="precision-model-visibility-menu" role="dialog" aria-labelledby="precisionModelVisibilityTitle">' +
       '<div class="precision-model-visibility-menu-head"><strong id="precisionModelVisibilityTitle">' + escHtml(i18nText('creator.precision_model_menu_title')) + '</strong><span>' + escHtml(i18nText('creator.precision_model_menu_hint')) + '</span></div>' +
       '<div class="precision-model-visibility-actions"><button type="button" data-precision-model-visibility-action="all">' + escHtml(i18nText('creator.precision_model_select_all')) + '</button><button type="button" data-precision-model-visibility-action="clear">' + escHtml(i18nText('creator.precision_model_clear')) + '</button></div>' +
-      '<div class="precision-model-visibility-list" role="group" aria-label="' + escAttr(i18nText('creator.precision_model_display')) + '">' + visibleRecords.map(function(record) {
+      '<div class="precision-model-visibility-list" role="group" aria-label="' + escAttr(i18nText('creator.precision_model_display')) + '">' + precisionModelVisibilityGroups(visibleRecords).map(function(group) {
+        return '<section class="precision-model-visibility-group" aria-labelledby="precisionModelGroup-' + group.id + '">' +
+          '<label class="precision-model-visibility-group-heading"><input type="checkbox" data-precision-model-visibility-group="' + group.id + '">' +
+          '<span id="precisionModelGroup-' + group.id + '">' + escHtml(group.label) + '</span><span class="precision-model-group-count" data-precision-model-group-count="' + group.id + '"></span></label>' +
+          group.records.map(function(record) {
     var key = precisionModelVisibilityStorageKey(providerId, record.id);
     var checked = precisionModelVisibilityIsVisible(providerId, record, state);
     var label = precisionModelVisibilityLabel(record);
     return '<label class="precision-model-visibility-option" title="' + escAttr(label) + '"><input type="checkbox" ' + (checked ? 'checked' : '') + (key ? ' data-precision-model-visibility="' + escAttr(key) + '"' : ' disabled') + '><span title="' + escAttr(label) + '">' + escHtml(label) + '</span></label>';
+          }).join('') + '</section>';
       }).join('') + '</div>' +
       '<div class="precision-model-visibility-footer"><span role="status">' + escHtml(selectedCount < 1 ? i18nText('creator.precision_model_keep_one') : precisionModelVisibilitySummary(visibleRecords, providerId, state)) + '</span><div><button type="button" data-precision-model-visibility-action="cancel">' + escHtml(i18nText('common.cancel')) + '</button><button type="button" class="btn-primary" data-precision-model-visibility-action="confirm" ' + (selectedCount < 1 ? 'disabled' : '') + '>' + escHtml(i18nText('creator.precision_model_apply')) + '</button></div></div>' +
     '</div>' : '');
@@ -9282,6 +9354,10 @@ function renderPrecisionModelVisibility(records, providerId) {
   menuRoot.querySelectorAll('[data-precision-model-visibility]').forEach(function(input) {
     input.addEventListener('change', function() { setPrecisionModelVisibilityDraft(input.dataset.precisionModelVisibility, input.checked); });
   });
+  menuRoot.querySelectorAll('[data-precision-model-visibility-group]').forEach(function(input) {
+    input.addEventListener('change', function() { setPrecisionModelVisibilityGroupDraft(input.dataset.precisionModelVisibilityGroup, input.checked); });
+  });
+  refreshPrecisionModelVisibilityDraft();
   menuRoot.querySelectorAll('[data-precision-model-visibility-action]').forEach(function(button) {
     button.addEventListener('click', function(event) {
       if (event && event.stopPropagation) event.stopPropagation();
