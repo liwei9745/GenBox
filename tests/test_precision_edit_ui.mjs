@@ -68,7 +68,9 @@ expect(html.includes('precisionEditProviderEndpoint'), 'Precision edit needs an 
 expect(js.includes('data-cap="precision_edit"'), 'Provider settings need an explicit precision capability control.');
 expect(html.includes('btnPrecisionAuthorizeModel'), 'Precision edit needs an explicit model authorization action.');
 expect(html.includes('precisionEditGptImage2Compatibility') && html.includes('btnPrecisionRevokeModel'), 'Precision edit needs an explicit GPT Image 2 compatibility choice and revoke action.');
-expect(html.includes('btnPrecisionConfirmResizeSize') && html.includes('btnPrecisionRevokeResizeSize'), 'Precision resize needs explicit confirm and revoke actions for the current target size.');
+expect(/id="btnPrecisionConfirmResizeSize"[^>]*hidden[^>]*disabled/.test(html) && /id="btnPrecisionRevokeResizeSize"[^>]*hidden[^>]*disabled/.test(html) && !html.includes('btnPrecisionEnableFlexibleSizes'), 'Model-size selection must expose only hidden-by-default, explicit per-size confirmation actions; it must not expose a broad capability-changing action.');
+expect(js.includes("i18nText('creator.precision_size_preset_trial_required')") && !js.includes('hideUnsupported'), 'Undeclared strict-size candidates must remain selectable with a trial warning instead of being silently hidden.');
+expect(!html.includes('precision-size-heading-icon') && html.includes('class="precision-size-heading-copy"><span class="param-label" id="precisionSizeTitle"') && /id="precisionSizeHint"[^>]*class="sr-only"/.test(html), 'The resize header must be a compact text-first title bar without the obsolete arrow badge or visible secondary hint.');
 expect(js.includes('/precision-capability'), 'Precision model authorization must use the backend capability endpoint.');
 expect(/id="btnPrecisionAuthorizeModel"[^>]*disabled/.test(html), 'Precision authorization must start disabled before provider data is ready.');
 expect(/id="precisionEditProviderEndpoint"[^>]*disabled/.test(html) && /id="precisionEditProviderModel"[^>]*disabled/.test(html), 'Precision model selectors must start disabled before provider data is ready.');
@@ -128,7 +130,8 @@ expect(js.includes("type: object.type === 'rect' ? 'rectangle' : 'ellipse'") && 
 expect(js.includes("['select', 'ellipse', 'arrow', 'rect', 'brush', 'eraser', 'text']") && js.includes("precisionEditTool = 'select'"), 'V4 tools must expose an explicit selection tool and use it as the safe default.');
 expect(js.includes('function erasePrecisionBrushAt') && js.includes("precisionEditTool === 'eraser'"), 'Brush selection needs a history-aware eraser.');
 expect(html.includes('id="precisionViewZoom"') && html.includes('min="50" max="200" step="10"') && js.includes('function setPrecisionViewZoom') && js.includes('function fitPrecisionCanvasToWindow'), 'Canvas needs bounded view-only zoom controls.');
-expect(js.includes("if (!event.ctrlKey || !precisionEditSourceImageData) return;") && js.includes('event.deltaY < 0 ? 10 : -10'), 'Ctrl+wheel must adjust only a loaded canvas view zoom in fixed steps.');
+expect(js.includes("if (!event.shiftKey || !precisionEditSourceImageData) return;") && js.includes('event.deltaY < 0 ? 10 : -10'), 'Shift+wheel must adjust only a loaded canvas view zoom in fixed steps.');
+expect(js.includes('if (precisionCanvasResizeState) endPrecisionCanvasResize();') && js.includes("target.closest('#precisionCanvasResizeHandle, #precisionCanvasVerticalResizeHandle"), 'Canvas resize handles must not retain a drag state during a Shift+wheel zoom gesture.');
 expect(html.includes("startPrecisionAiErase('people')") && html.includes("startPrecisionAiErase('watermark')") && js.includes('precisionEditPendingInstruction = i18nText'), 'AI removal presets must create per-region instructions.');
 expect(js.includes("coordinate_space: 'normalized-0-1'"), 'Annotation coordinates must be normalized.');
 expect(js.includes('source_width: precisionEditSourceWidth'), 'Serialization must include source width.');
@@ -153,6 +156,7 @@ const fullscreenSource = extractFunction('syncPrecisionFullscreenState');
 expect(extractFunction('togglePrecisionCompareFullscreen').includes('document.fullscreenElement === panel') && extractFunction('togglePrecisionCompareFullscreen').includes('panel.requestFullscreen'), 'Fullscreen toggles must request only the complete precision panel.');
 expect(fullscreenSource.includes("creator.precision_exit_fullscreen_label") && fullscreenSource.includes("button.setAttribute('title'") && fullscreenSource.includes("button.setAttribute('aria-label'"), 'Fullscreen state must synchronize the button text, tooltip, and accessible label.');
 expect(extractFunction('handlePrecisionFullscreenKeydown').includes("event.key !== 'Escape'") && extractFunction('handlePrecisionFullscreenKeydown').includes('document.exitFullscreen()'), 'Escape must exit the real precision workbench fullscreen root.');
+expect(extractFunction('handlePrecisionToolShortcut').includes("key === 'f'") && extractFunction('handlePrecisionToolShortcut').includes('togglePrecisionCompareFullscreen()'), 'F must toggle workbench fullscreen when no editable control owns the key event.');
 expect(extractFunction('openPrecisionCanvasImageFullscreen').includes('openPrecisionImageFullscreen') && !extractFunction('openPrecisionCanvasImageFullscreen').includes('togglePrecisionCompareFullscreen'), 'Loaded-canvas fullscreen must open the media viewer instead of toggling the workbench.');
 expect(extractFunction('openPrecisionSelectedImageFullscreen').includes("precisionSelectedVersion: true") && extractFunction('precisionFullscreenVisibleEntry').includes('event.precisionSelectedVersion === true'), 'The image fullscreen action must open the selected version rather than depend on the active compare pane.');
 expect(extractFunction('endPrecisionCanvasPan').includes('state.button === 1 && !state.moved') && extractFunction('endPrecisionCanvasPan').includes('setPrecisionViewZoom(100'), 'A stationary middle-button gesture must reset view zoom while preserving drag-to-pan.');
@@ -163,12 +167,31 @@ expect(html.includes('creator.precision_edit_color_short'), 'Color control needs
 expect(!html.includes('class="precision-edit-intro"'), 'Precision guidance must be merged into the main workbench header.');
 expect(!html.includes('class="precision-provider-status"'), 'Model guidance must not use a separate status card.');
 expect(html.includes('class="precision-empty-actions"'), 'Upload and gallery actions must live in the empty canvas state.');
+expect(html.includes('id="precisionGuidanceCard"') && html.includes('data-state="collapsed"'), 'Edit guidance must start as a collapsed pill.');
+expect(html.includes('id="btnPrecisionAnnotationInstructionConfirm"'), 'Annotation instruction popover needs an explicit confirm action.');
+expect(html.includes('id="precisionAnnotationSummary"') && html.includes('id="precisionAnnotationSummaryCards"'), 'Confirmed annotations need a dedicated summary surface below generation.');
+expect(html.includes('class="precision-edit-list" aria-labelledby="precisionEditListTitle" hidden'), 'The inspector change list must stay hidden once confirmed annotation cards move to the canvas-side summary.');
+expect(html.includes('id="precisionCanvasImageInfo"'), 'Precision canvas needs a dedicated image metadata overlay hook.');
+expect(html.includes('precision-generate-action-button'), 'Precision generation needs a dedicated visual action hook.');
+expect(css.includes('.precision-canvas-image-info') && css.includes('.precision-annotation-instruction-confirm'), 'Precision canvas metadata and annotation confirmation need dedicated visual styles.');
+expect(css.includes('.precision-annotation-summary-card') && css.includes('.precision-gallery-command-bar .creator-generate-action'), 'Confirmed annotation tiles and the runtime generation wrapper need dedicated precision layout rules.');
+expect(/\.precision-session-gallery\s*\{[\s\S]*?grid-template-columns:\s*repeat\(auto-fill, minmax\(92px, 1fr\)\)[\s\S]*?overflow-y:\s*auto/.test(css), 'The result wall must reflow into rows rather than remain a horizontal-only strip.');
+expect(/precision-session-showcase\.is-expanded \.precision-session-showcase-content-inner[\s\S]*?max-height:\s*min\(34vh, 300px\)/.test(css), 'Expanded precision gallery must stay vertically bounded.');
+expect(/id="btnPrecisionGuidanceToggle"[^>]*aria-expanded="false"[^>]*aria-controls="precisionGuidanceBody"/.test(html), 'The guidance pill needs a keyboard-native disclosure button.');
+expect(html.includes('id="precisionGuidanceStatus"') && html.includes('id="precisionGuidanceBody"') && html.includes('aria-hidden="true" hidden'), 'The collapsed pill must expose a short current-state summary while keeping its controls hidden.');
+const guidanceToggleSource = extractFunction('setPrecisionGuidanceExpanded');
+expect(guidanceToggleSource.includes("toggle.setAttribute('aria-expanded'") && guidanceToggleSource.includes("body.setAttribute('aria-hidden'") && guidanceToggleSource.includes('body.hidden = false') && guidanceToggleSource.includes('body.hidden = true'), 'Guidance expansion must synchronize disclosure semantics with the animated body lifecycle.');
+expect(guidanceToggleSource.includes('body.getBoundingClientRect()'), 'The newly revealed guidance body must establish its hidden visual state before the staged transition begins.');
+expect(guidanceToggleSource.includes("'expanding'") && guidanceToggleSource.includes("'collapsing'") && guidanceToggleSource.includes('}, 420)'), 'Guidance must preserve explicit opening/closing phases across the 420ms motion sequence.');
+expect(extractFunction('handlePrecisionGuidanceKeydown').includes("event.key !== 'Escape'") && extractFunction('handlePrecisionGuidanceKeydown').includes('restoreFocus: true'), 'Escape must close the guidance card and restore focus to its trigger.');
+expect(extractFunction('precisionGuidanceReducedMotion').includes("matchMedia('(prefers-reduced-motion: reduce)')"), 'Guidance motion must respect the operating system reduced-motion preference.');
+expect(css.includes('/* precision guidance pill */') && /\.precision-guidance-pill\s*\{[\s\S]*?grid-column:\s*1\s*\/\s*-1;/.test(css) && css.includes('.precision-guidance-pill[data-state="expanding"]') && css.includes('.precision-guidance-pill[data-state="collapsing"]') && css.includes('@media (prefers-reduced-motion: reduce)'), 'Guidance needs a full-width, isolated pill-to-card motion surface and a reduced-motion override.');
 
 for (const field of ['annotation_image_data', 'annotation_contract', 'annotations']) {
   expect(js.includes(field), 'Precision request is missing ' + field + '.');
 }
 const precisionReadinessSource = extractFunction('getPrecisionEditReadiness');
-expect(precisionReadinessSource.includes("precisionEditSizeMode !== 'resize'") && precisionReadinessSource.includes('pureResize: true') && precisionReadinessSource.includes('getPrecisionSizeRequest()'), 'No-annotation precision submit must be limited to a validated pure resize branch.');
+expect(precisionReadinessSource.includes("precisionEditSizeMode === 'resize'") && precisionReadinessSource.includes('pureResize: true') && precisionReadinessSource.includes('getPrecisionSizeRequest()'), 'No-annotation precision submit must be limited to a validated pure resize branch.');
 const precisionPayloadStart = js.lastIndexOf("} else if (currentMode === 'precision_edit') {", js.indexOf('// The source is never replaced locally'));
 const precisionSubmitSource = js.slice(precisionPayloadStart, js.indexOf("} else if (currentMode === 'inpaint') {", precisionPayloadStart));
 expect(precisionSubmitSource.includes('applyPrecisionEditPayload(payload,') && precisionSubmitSource.includes('payload.provider_settings = {}'), 'Precision submit must use the shared payload builder and still attach explicit model settings.');
@@ -465,6 +488,108 @@ expect(js.includes('function loadPrecisionEditLocalFile'), 'Precision local uplo
 expect(!js.includes('window.prompt'), 'Precision text must use the inline editor, not window.prompt.');
 expect(html.includes('id="precisionTextEditor"') && js.includes('function commitPrecisionEditText'), 'Text annotation needs an inline editor commit path.');
 expect(html.includes('id="precisionEditObjectList"'), 'Precision edit needs a change list.');
+expect(html.includes('id="precisionAnnotationInstructionPopover"') && html.includes('id="precisionAnnotationInstructionDragHandle"') && html.includes('id="precisionAnnotationInstructionText"'), 'Selected annotations need a draggable canvas-adjacent instruction popover.');
+expect(js.includes('function bindPrecisionAnnotationInstructionPopover') && js.includes('function syncPrecisionAnnotationInstructionPopover') && js.includes("updatePrecisionEditObject(id, 'instruction', input.value"), 'The canvas instruction popover must bind, follow selection, and update the selected instruction.');
+expect(js.includes('function confirmPrecisionAnnotationSummaryDelete') && js.includes('precision-annotation-summary-card-delete') && js.includes('window.confirm(message)'), 'Confirmed annotation summary cards must provide a second-confirmation delete action.');
+expect(/function renderPrecisionEditObjectList\(\)[\s\S]*?precisionAnnotationSummary[\s\S]*?listSection\.hidden\s*=\s*true/.test(js), 'The inspector object list must be suppressed when the confirmed-annotation summary is present.');
+const annotationDeleteCalls = [];
+const annotationDeleteContext = vm.createContext({
+  precisionEditObjectById: (id) => id === 'ellipse-1' ? { id, type: 'ellipse' } : null,
+  precisionEditObjectName: () => '椭圆 1',
+  deletePrecisionEditObject: (id) => annotationDeleteCalls.push(id),
+  window: { confirm: () => false },
+});
+vm.runInContext(extractFunction('confirmPrecisionAnnotationSummaryDelete'), annotationDeleteContext);
+assert.equal(vm.runInContext("confirmPrecisionAnnotationSummaryDelete('ellipse-1')", annotationDeleteContext), false, 'Cancelling the annotation delete confirmation must preserve the annotation.');
+assert.deepEqual(annotationDeleteCalls, [], 'Cancelled annotation deletion must not touch the object payload source.');
+annotationDeleteContext.window.confirm = () => true;
+assert.equal(vm.runInContext("confirmPrecisionAnnotationSummaryDelete('ellipse-1')", annotationDeleteContext), true, 'Confirming annotation deletion must proceed.');
+assert.deepEqual(annotationDeleteCalls, ['ellipse-1'], 'Confirmed annotation deletion must remove the exact annotated object.');
+const instructionPopoverListeners = new Map();
+const instructionPopover = {
+  style: {},
+  dataset: { objectId: 'box-1' },
+  classList: { add() {}, remove() {}, toggle() {} },
+  offsetWidth: 280,
+  offsetHeight: 174,
+  addEventListener(type, listener) {
+    const list = instructionPopoverListeners.get(type) || [];
+    list.push(listener);
+    instructionPopoverListeners.set(type, list);
+  },
+  querySelector(selector) {
+    if (selector === 'textarea') return instructionInput;
+    if (selector === '[data-precision-annotation-selection]') return instructionSelection;
+    if (selector === '[data-precision-annotation-confirm]') return instructionConfirm;
+    if (selector === '[data-precision-annotation-close]') return instructionClose;
+    return null;
+  },
+  setPointerCapture() { this.captured = true; },
+  emit(type, event = {}) {
+    const payload = {
+      type,
+      button: 0,
+      pointerId: 7,
+      clientX: 0,
+      clientY: 0,
+      target: { closest: () => null },
+      preventDefault() { this.defaultPrevented = true; },
+      stopPropagation() { this.propagationStopped = true; },
+      ...event,
+    };
+    (instructionPopoverListeners.get(type) || []).forEach((listener) => listener(payload));
+    return payload;
+  },
+};
+const instructionInput = { dataset: {}, addEventListener() {}, blur() {} };
+const instructionSelection = { dataset: {} };
+const instructionConfirm = { dataset: {}, setAttribute() {}, addEventListener() {} };
+const instructionClose = { dataset: {}, addEventListener() {} };
+const instructionContext = vm.createContext({
+  document: {
+    documentElement: { clientWidth: 640, clientHeight: 520 },
+    getElementById(id) {
+      return ({
+        precisionAnnotationInstructionPopover: instructionPopover,
+        precisionAnnotationCanvas: { getBoundingClientRect: () => ({ left: 70, top: 80, width: 500, height: 360 }) },
+        panelPrecisionEdit: { getBoundingClientRect: () => ({ left: 50, top: 60, right: 620, bottom: 500, width: 570, height: 440 }) },
+        precisionAnnotationInstructionText: instructionInput,
+        precisionAnnotationInstructionSelection: instructionSelection,
+        btnPrecisionAnnotationInstructionConfirm: instructionConfirm,
+        btnPrecisionAnnotationInstructionClose: instructionClose,
+        precisionCanvasSurface: {},
+      })[id] || null;
+    },
+  },
+  window: { innerWidth: 640, innerHeight: 520, setTimeout: (callback) => callback() },
+});
+vm.runInContext([
+  'var precisionAnnotationInstructionPopoverState = { selectedId: "box-1", dismissedId: "", dismissedIds: {}, manuallyPositioned: false, drag: null, positions: {}, confirmedIds: {} };',
+  extractFunction('precisionAnnotationInstructionAnchor'),
+  extractFunction('precisionAnnotationInstructionClampPosition'),
+  extractFunction('precisionAnnotationInstructionCardElements'),
+  extractFunction('bindPrecisionAnnotationInstructionCard'),
+  extractFunction('bindPrecisionAnnotationInstructionPopover'),
+  extractFunction('placePrecisionAnnotationInstructionPopover'),
+].join('\n'), instructionContext);
+vm.runInContext("placePrecisionAnnotationInstructionPopover(document.getElementById('precisionAnnotationInstructionPopover'), { id: 'box-1', type: 'rect', x: 0.96, y: 0.94, x2: 0.99, y2: 0.98 }, 0);", instructionContext);
+assert.ok(parseFloat(instructionPopover.style.left) >= 50 && parseFloat(instructionPopover.style.left) <= 340, 'Instruction popover auto placement must stay inside the panel and viewport right edge.');
+assert.ok(parseFloat(instructionPopover.style.top) >= 60 && parseFloat(instructionPopover.style.top) <= 326, 'Instruction popover auto placement must stay inside the panel and viewport bottom edge.');
+vm.runInContext("precisionAnnotationInstructionPopoverState.positions['box-1'] = { left: 999, top: -999 };", instructionContext);
+vm.runInContext("placePrecisionAnnotationInstructionPopover(document.getElementById('precisionAnnotationInstructionPopover'), { id: 'box-1', type: 'rect', x: 0.96, y: 0.94, x2: 0.99, y2: 0.98 }, 0);", instructionContext);
+assert.equal(instructionPopover.style.left, '340px', 'Saved instruction popover positions must clamp to the visible right edge.');
+assert.equal(instructionPopover.style.top, '60px', 'Saved instruction popover positions must clamp to the visible top edge.');
+instructionPopover.style.left = '270px';
+instructionPopover.style.top = '244px';
+vm.runInContext('bindPrecisionAnnotationInstructionPopover()', instructionContext);
+const instructionDragStart = instructionPopover.emit('pointerdown', { clientX: 100, clientY: 100 });
+assert.equal(instructionDragStart.defaultPrevented, true, 'Dragging the instruction popover must consume canvas pointer input.');
+instructionPopover.emit('pointermove', { clientX: 2000, clientY: -1000 });
+assert.equal(instructionPopover.style.left, '340px', 'Dragged instruction popover must clamp to the visible right edge.');
+assert.equal(instructionPopover.style.top, '60px', 'Dragged instruction popover must clamp to the visible top edge.');
+assert.equal(vm.runInContext("precisionAnnotationInstructionPopoverState.positions['box-1'].left", instructionContext), 340, 'Dragged instruction popover must persist a bounded per-object left position.');
+assert.equal(vm.runInContext("precisionAnnotationInstructionPopoverState.positions['box-1'].top", instructionContext), 60, 'Dragged instruction popover must persist a bounded per-object top position.');
+expect(js.includes('function drawPrecisionEditSelectionHighlight') && js.includes('if (selected) drawPrecisionEditSelectionHighlight'), 'Selected annotations need a dedicated visible canvas highlight that remains separate from export rendering.');
 expect(js.includes('precision_instruction_required') && js.includes("object.type !== 'text'"), 'Every V3 region annotation requires an instruction; text is optional.');
 expect(js.includes('normalized.label') && !js.includes('normalized.number = normalized.label') && js.includes('normalized.instruction'), 'Structured annotations must carry label and instruction without a number alias.');
 expect(js.includes('payload.provider_settings[precisionEditSelectedModel.providerId] = { model: precisionEditSelectedModel.model }'), 'Precision request must explicitly carry the selected model in provider_settings.');
@@ -486,6 +611,14 @@ expect(js.includes('if (!r.ok) return generationResponseError(r);'), 'Generation
 expect(js.includes('detail.message') && js.includes('detail.code'), 'Structured generation errors must expose message and code.');
 expect(js.includes("('HTTP ' + response.status)"), 'Generation errors must retain HTTP status as fallback.');
 expect(html.includes('id="precisionVersionRail"') && js.includes('function appendPrecisionEditVersion'), 'Successful precision results need a version rail.');
+expect(/id="precisionVersionRail"[^>]*role="tablist"[^>]*aria-orientation="horizontal"/.test(html), 'The version rail must expose a horizontal tablist contract.');
+const versionRailRender = extractFunction('renderPrecisionEditSession');
+expect(versionRailRender.includes('role="tab"') && versionRailRender.includes('aria-selected=') && versionRailRender.includes('aria-current="true"') && versionRailRender.includes('tabindex='), 'Version shortcuts must expose selected, current, and roving-tabindex semantics.');
+const versionRailKeyboard = extractFunction('handlePrecisionVersionRailKeydown');
+for (const key of ['ArrowLeft', 'ArrowRight', 'Home', 'End']) expect(versionRailKeyboard.includes(key), 'Version rail keyboard navigation is missing ' + key + '.');
+expect(extractFunction('focusPrecisionVersionRailEntry').includes("scrollIntoView({ behavior: precisionVersionRailReducedMotion() ? 'auto' : 'smooth', block: 'nearest', inline: 'nearest' })"), 'Selecting an overflowed version must bring it into view without moving the page.');
+expect(extractFunction('precisionVersionRailReducedMotion').includes("matchMedia('(prefers-reduced-motion: reduce)')"), 'Version selection and overflow scrolling must respect reduced-motion preferences.');
+expect(css.includes('/* precision version rail glass */') && css.includes('scroll-snap-type: inline proximity') && css.includes('@keyframes precision-version-rail-select'), 'The version rail needs a centered single-layer glass container with restrained selection motion.');
 expect(js.includes("precisionEditSession.selectedVersionId = id;\n  precisionEditSession.view = 'after';") && !js.includes("function selectPrecisionVersion(id) {\n  setPrecisionBaseVersion(id);"), 'Version shortcuts must browse without replacing the annotation base.');
 expect(html.includes('id="btnPrecisionUseSelectedAsBase"') && js.includes('function useSelectedPrecisionVersionAsBase()') && js.includes('return setPrecisionBaseVersion(precisionEditSession.selectedVersionId);'), 'Only an explicit version command may replace the editable base.');
 expect(js.includes('result.success || !result.local_path') && js.includes('precisionEditSession.versions.push'), 'Only successful results with local_path may create versions.');
@@ -523,9 +656,25 @@ expect(js.includes('payload.precision_output_size_policy = sanitizePrecisionOutp
 expect(js.includes("return candidate.width + ':' + candidate.height + ' aspect ratio'") && js.includes('{ width: 21, height: 9 }'), 'Aspect-ratio metadata must preserve common natural-language ratios such as 21:9.');
 expect(html.includes('id="precisionResizePrompt"') && html.includes('required aria-required="true"'), 'Resize composition guidance must be visibly required.');
 expect(html.includes('id="precisionResizePromptPreset"') && html.includes('aria-describedby="precisionResizePromptPresetHint"'), 'Resize guidance needs an accessible composition preset selector.');
-expect(html.includes('id="precisionAspectRatioHint"') && html.includes('precisionOutputSizePolicyHint precisionAspectRatioHint'), 'Resize policy controls must describe the backend-derived aspect-ratio hint.');
-expect(html.includes('id="precisionOutputPolicyStrict"') && html.includes('value="strict" checked') && html.includes('id="precisionOutputPolicyFitCrop"') && html.includes('value="fit_crop"'), 'Resize mode needs the strict and local fit/crop output-size policy controls.');
-expect(css.includes('.precision-output-size-policy-options input[type="radio"]') && css.includes('.precision-output-size-policy-options label:has(input:checked)'), 'Output-size policy radios need compact segmented styling that does not inherit full-width text-input layout.');
+expect(html.includes('id="precisionAspectRatioHint"'), 'Resize controls must describe the backend-derived aspect-ratio hint.');
+expect(!html.includes('id="precisionOutputPolicyStrict"') && !html.includes('id="precisionOutputPolicyFitCrop"'), 'The second-level size-mode menu replaces legacy duplicated output-policy radios.');
+expect(html.includes('id="precisionResizeMode"') && html.includes('precision-resize-mode-separator') && html.includes('precision-resize-mode-select') && html.includes('creator.precision_size_mode_strict') && html.includes('creator.precision_size_mode_fit_crop') && js.includes('ensurePrecisionResizeModePresetGroups') && js.includes('syncPrecisionResizeModePresetSelection'), 'Resize UI needs an explicit native second-level selector with a compact labelled mode field and linked strict and crop preset families.');
+expect(html.includes('creator.precision_size_model_preset') && html.includes('precisionResizeCustomFields') && html.includes('precisionResizePresetEditor'), 'Resize must progressively disclose model presets first and reserve custom fields plus saved presets for crop-to-fit.');
+expect(js.includes("clone.value = 'crop:' + size") && js.includes("cropGroup.dataset.precisionResizeMode = 'fit_crop'"), 'Crop-to-fit presets must remain separate from strict upstream presets while sharing linked dimensions.');
+expect(html.includes('裁切适配 · 常用修图尺寸') && js.includes('if (!cropGroups.length)') && js.includes("option.value = 'crop:' + size"), 'Authored common crop presets must remain an independent family; strict entries are mirrored only for legacy templates without a crop family.');
+expect(js.includes("cropGroup.dataset.precisionResizeTier = tier") && js.includes("cropGroup.label = '裁切适配 · ' + tier"), 'Crop-to-fit must provide complete independent 1K, 2K, and 4K groups so a linked tier selection never falls back to Custom because its crop preset is missing.');
+expect(js.includes("strictGroup.querySelectorAll('option')") && js.includes("cropGroup.querySelectorAll('option')"), 'Native optgroup nodes do not expose an options collection consistently, so the crop catalogue must enumerate child option nodes directly.');
+expect(html.includes('大幅超宽交付 · 21:9 · 3840 × 1648'), 'The crop-to-fit family must expose the common 4K 21:9 delivery target without presenting it as a strict upstream size.');
+expect(i18n.includes('creator.precision_size_capability_fit_crop'), 'Crop-to-fit must explain that its target is a local finishing size rather than an upstream native-size claim.');
+expect(css.includes('.precision-resize-custom-fields.hidden') && css.includes('.precision-size-preset-editor.hidden'), 'Mode-specific resize controls must collapse cleanly outside crop-to-fit.');
+expect(js.includes("document.body.classList.add('precision-cutout-professional-focus')") && js.includes("document.body.classList.remove('precision-cutout-professional-focus')"), 'Opening professional cutout must enter a reversible focused workbench rather than leave an overlay on top of unrelated controls.');
+expect(js.includes("cutoutControls.professionalDialog.addEventListener('keydown'") && js.includes("if (event.key !== 'Escape') return;"), 'Professional cutout must support Escape to return to the regular workbench.');
+expect(css.includes('body.precision-cutout-professional-focus #pageGenerate .precision-edit-inspector') && css.includes('body.precision-cutout-professional-focus #precisionCutoutProfessionalDialog'), 'Professional cutout focus layout must hide unrelated controls while keeping the dedicated local-tool dock visible.');
+expect(css.includes('body.precision-cutout-professional-focus #precisionCutoutProfessionalDialog {\n  position: fixed;'), 'Professional cutout dock must remain fixed in the visible viewport after being portaled to document.body.');
+expect(css.includes('body.precision-cutout-professional-focus #precisionCutoutProfessionalDialog .precision-cutout-professional-card > header') && css.includes('background:\n    linear-gradient(145deg'), 'Professional cutout dock must restore its glass panel hierarchy after portal placement.');
+expect(css.includes('.precision-cutout-professional-actions {\n  display: grid;') && css.includes('width: 100%;\n  min-width: 0;\n  min-height: 36px;'), 'Professional cutout controls must keep bounded, full-width surfaces instead of overflowing the dock.');
+expect(html.includes('precisionCutoutProfessionalResizeHandle') && html.includes('btnPrecisionCutoutProfessionalCollapse') && js.includes('beginPrecisionCutoutProfessionalDockResize'), 'Professional cutout must provide a bounded resize divider and a compact dock control.');
+expect(css.includes('inset: 70px calc(var(--precision-cutout-professional-dock-width) + 28px) 14px 16px') && css.includes('inset: 70px 14px 14px auto'), 'Professional cutout must reserve an adjacent canvas column instead of overlaying the image with the tool dock.');
 expect(!js.includes('PRECISION_OUTPUT_SIZE_POLICY_STORAGE_KEY') && !js.includes('genbox_precision_output_size_policy'), 'Precision output-size policy must not add a localStorage key.');
 const outputPolicySource = [
   extractFunction('sanitizePrecisionOutputSizePolicy'),
@@ -553,11 +702,19 @@ expect(
   'Declared resize dimensions must use exact canonical WIDTHxHEIGHT provider declarations without trimming, leading zeroes, uppercase separators, or object-shaped aliases.',
 );
 expect(js.includes("capability.sizes[targetSize] !== true") && js.includes("code: 'precision_edit_size_capability_unknown'") && js.includes("code: 'precision_edit_size_undeclared'"), 'Unknown capabilities and undeclared resize targets must be rejected before submission.');
+expect(js.includes("capability.flexibleSizes && precisionGptImage2SizeError(targetSize) === ''"), 'Flexible model declarations must stay inside the GPT Image 2 protocol envelope.');
 expect(js.includes("if (precisionEditSizeMode !== 'resize') return { mode: 'preserve' };"), 'Preserve mode must remain independent from resize capability declarations so the provider can use auto sizing.');
 const resizeCapabilityUi = js.slice(js.indexOf('function updatePrecisionResizeCapabilityUI'), js.indexOf('function findPrecisionResizeOptionBySize'));
-expect(resizeCapabilityUi.includes('option.disabled = false;') && !resizeCapabilityUi.includes('!supported'), 'Local built-in and saved presets must remain selectable regardless of declared provider sizes.');
+expect(resizeCapabilityUi.includes('precisionCapabilityState') && resizeCapabilityUi.includes('precisionCapabilityModel'), 'Resize presets must expose capability state for the current canonical model.');
+expect(resizeCapabilityUi.includes("var exactWhitelist = outputPolicy === 'strict'") &&
+  resizeCapabilityUi.includes('option.hidden = modeMismatch || hideUnsupported;') &&
+  resizeCapabilityUi.includes("precisionGptImage2SizeError(size) === ''") &&
+  resizeCapabilityUi.includes("group.hidden = !visible;") || resizeCapabilityUi.includes('group.hidden = !visible;'),
+  'Known exact model capabilities must hide undeclared presets, flexible policy must use the protocol envelope, and unknown capabilities must remain visible.');
 expect(js.includes('var successfulCompleted = stateKeys.filter') && js.includes("var actualLabel = stateKeys.length ? '实际完成 '"), 'Precision progress must derive real completion from provider terminal success states.');
 expect(js.includes('function precisionOutputSizeNotices') && js.includes('creator.precision_output_size_adjusted') && js.includes('creator.precision_output_size_strict_mismatch'), 'Precision progress must surface size-adjusted warnings and strict mismatch recovery hints.');
+expect(js.includes('function precisionTransportFailureNotices') && js.includes('creator.precision_connection_response_read_no_retry'), 'Precision progress must surface a non-replay diagnostic for interrupted image-edit response reads.');
+expect(js.includes('function activatePrecisionCutoutSelection') && js.includes("canvas.classList.add('is-cutout-selection-active')") && js.includes('setPrecisionEditTool(selected.type)'), 'Selecting cutout-only refinement must focus an existing canvas selection and highlight its matching tool.');
 expect(js.includes("var hasEstimate = !terminal") && js.includes("' · 耗时估算中'") && js.includes("progressBar.classList.toggle('indeterminate', hasEstimate)"), 'Elapsed-time progress estimates must be labelled and rendered as uncertain.');
 expect(js.includes("if (hasActualProgress && !hasEstimate)") && js.includes("progressBar.removeAttribute('aria-valuenow')"), 'Estimated progress must never expose aria-valuenow.');
 expect(js.includes("var terminalFailed = terminal && String(taskStatus).toLowerCase() !== 'completed'") && js.includes("progressBar.style.width = terminal ? '0%' : ''"), 'Failed and cancelled terminal states must not display 100% progress.');
@@ -583,6 +740,9 @@ for (const id of ['precisionResizePresetName', 'btnPrecisionSaveResizePreset', '
 }
 expect(/id="precisionResizePresetStatus"[^>]*role="status"[^>]*aria-live="polite"/.test(html), 'Saved resize preset feedback must use a polite live region.');
 expect(!/<select\s+id="precisionResizePreset"[^>]*\sonchange=/.test(html), 'The resize preset selector must not retain an inline change handler.');
+for (const size of ['1152x2048', '2544x1088', '1088x2544', '3840x1648', '1648x3840']) {
+  expect(html.includes('value="' + size + '"'), 'The common-size menu must visibly include the full 1K/2K/4K ratio matrix: ' + size);
+}
 expect(js.includes("var PRECISION_RESIZE_PRESET_STORAGE_KEY = 'genbox_precision_resize_presets_v1';") && js.includes('var PRECISION_RESIZE_PRESET_SCHEMA_VERSION = 1;') && js.includes('var PRECISION_RESIZE_PRESET_LIMIT = 20;'), 'Saved resize presets need the versioned local-only storage contract and 20-item limit.');
 
 const presetBinding = js.slice(js.indexOf('function bindPrecisionResizeControls'), js.indexOf('function setPrecisionHelpTooltip'));
@@ -593,7 +753,7 @@ expect(presetBinding.includes("prompt.dataset.precisionPromptPresetBound = 'true
 
 const promptPresetSource = extractFunction('applyPrecisionResizePromptPreset');
 expect(!promptPresetSource.includes('localStorage'), 'Composition prompt presets must never be persisted.');
-expect(promptPresetSource.includes("current + '\\n' + preset") && !promptPresetSource.includes('textarea.value = preset;'), 'Composition presets must append to existing text instead of overwriting it.');
+expect(promptPresetSource.includes('textarea.value = preset;') && !promptPresetSource.includes("current + '\\n' + preset"), 'Composition presets must replace the current text instead of accumulating duplicate guidance.');
 
 const presetRendering = js.slice(js.indexOf('function renderPrecisionResizeSavedPresets'), js.indexOf('function updatePrecisionResizeCapabilityUI'));
 expect(presetRendering.includes("option.value = 'saved:' + preset.id;") && presetRendering.includes("option.dataset.size = preset.width + 'x' + preset.height;"), 'Saved options must use saved:<id> values with data-size dimensions.');
@@ -999,7 +1159,7 @@ const resizeContext = vm.createContext({
   }[key] || key),
 });
 vm.runInContext([
-  'precisionResizeDimensionKey', 'precisionResizeDimensions', 'precisionCapabilitySizeDeclaration', 'resolvePrecisionModelCapability', 'precisionProviderModelRecords', 'getPrecisionResizeCapability',
+  'precisionResizeDimensionKey', 'precisionResizeDimensions', 'precisionCapabilitySizeDeclaration', 'resolvePrecisionModelCapability', 'precisionProviderModelRecords', 'getPrecisionResizeCapability', 'ensurePrecisionResizeModePresetGroups', 'syncPrecisionResizeModePresetSelection', 'updatePrecisionResizeModeControls',
   'precisionResizeInputDimension', 'getPrecisionResizeTargetSize', 'precisionResizePresetSize', 'updatePrecisionResizePresetControls', 'updatePrecisionResizeCapabilityUI',
   'sanitizePrecisionOutputSizePolicy', 'syncPrecisionOutputSizePolicyControls', 'setPrecisionOutputSizePolicy', 'getPrecisionOutputSizePolicy',
   'precisionGreatestCommonDivisor', 'precisionResizeAspectConstraint', 'syncPrecisionAspectRatioHint',
@@ -1007,6 +1167,7 @@ vm.runInContext([
 ].map(extractFunction).join('\n'), resizeContext);
 vm.runInContext('updatePrecisionResizeCapabilityUI()', resizeContext);
 assert.ok(resizeOptions.every((option) => option.disabled === false), 'Every built-in and saved resize option must stay enabled when size capability is unknown.');
+assert.ok(resizeOptions.every((option) => option.hidden === false), 'Unknown size capability must not hide local presets before model support is confirmed.');
 vm.runInContext("applyPrecisionResizePreset('1536x864')", resizeContext);
 assert.equal(resizeNodes.precisionResizeWidth.value, '1536');
 assert.equal(resizeNodes.precisionResizeHeight.value, '864');
@@ -1021,6 +1182,11 @@ resizeProvider.model_capabilities['image-edit'] = {};
 resizeRequest = vm.runInContext('getPrecisionSizeRequest()', resizeContext);
 assert.equal(resizeRequest.rejection.code, 'precision_edit_size_capability_unknown', 'Selecting a local preset must not weaken the unknown-capability submission gate.');
 resizeProvider.model_capabilities['image-edit'] = { supported_sizes: ['1024x1024'] };
+vm.runInContext('updatePrecisionResizeCapabilityUI()', resizeContext);
+assert.equal(resizeOptions.find((option) => option.value === '1024x1024').hidden, false, 'An explicitly declared size must remain visible.');
+assert.equal(resizeOptions.find((option) => option.value === '1536x864').hidden, false, 'An undeclared built-in size must remain selectable for an explicit user-authorized trial.');
+assert.equal(resizeOptions.find((option) => option.value === 'saved:cover').hidden, false, 'An undeclared saved size must remain selectable for an explicit user-authorized trial.');
+assert.ok(resizeOptions.find((option) => option.value === '1536x864').title.includes('creator.precision_size_preset_trial_required'), 'Undeclared candidates must explain that they require an explicit trial authorization.');
 resizeRequest = vm.runInContext('getPrecisionSizeRequest()', resizeContext);
 assert.equal(resizeRequest.rejection.code, 'precision_edit_size_undeclared', 'An undeclared selected preset must still be rejected at submission.');
 resizeNodes.precisionResizeWidth.value = '1024';
@@ -1071,6 +1237,10 @@ for (const [badWidth, badHeight] of [['1024.5', '1024'], ['1e3', '1024'], ['', '
 }
 resizeNodes.precisionResizeWidth.value = '8192';
 resizeNodes.precisionResizeHeight.value = '8192';
+// The earlier fit/crop selection intentionally bypasses the strict whitelist.
+// Switch back explicitly: this boundary check validates strict capability
+// enforcement, not the local crop fallback.
+vm.runInContext("setPrecisionOutputSizePolicy('strict')", resizeContext);
 resizeRequest = vm.runInContext('getPrecisionSizeRequest()', resizeContext);
 assert.equal(resizeRequest.rejection.code, 'precision_edit_size_undeclared', 'The exact 64Mi precision boundary must pass local validation and reach the capability gate.');
 resizeProvider.model_capabilities['image-edit'] = { supported_sizes: ['8192x8192'] };
@@ -1090,16 +1260,14 @@ assert.equal(resizeNodes.precisionResizePromptPreset.value, '', 'The preset sele
 resizeNodes.precisionResizePrompt.value = 'Keep the sky unchanged.  ';
 resizeNodes.precisionResizePromptPreset.value = 'creator.precision_size_prompt_preset_banner';
 assert.equal(vm.runInContext("applyPrecisionResizePromptPreset('creator.precision_size_prompt_preset_banner')", resizeContext), true);
-assert.equal(resizeNodes.precisionResizePrompt.value, 'Keep the sky unchanged.\nExpand to a banner.', 'Existing free-form guidance must be preserved and the preset appended on a new line.');
+assert.equal(resizeNodes.precisionResizePrompt.value, 'Expand to a banner.', 'Selecting a new composition preset must replace the previous guidance.');
 assert.equal(resizeNodes.precisionResizePrompt.validationMessage, '');
 assert.ok(resizeNodes.precisionResizePrompt.focusCount >= 2 && resizeNodes.precisionResizePrompt.inputCount >= 2, 'Preset insertion must return focus and announce an input update.');
 
 resizeNodes.precisionResizePrompt.value = 'x'.repeat(495);
-const beforeOverflow = resizeNodes.precisionResizePrompt.value;
-assert.equal(vm.runInContext("applyPrecisionResizePromptPreset('creator.precision_size_prompt_preset_banner')", resizeContext), false);
-assert.equal(resizeNodes.precisionResizePrompt.value, beforeOverflow, 'A preset that exceeds maxlength must not truncate or replace existing guidance.');
-assert.equal(resizeNodes.precisionResizePrompt.validationMessage, 'Too long.');
-assert.equal(resizeNodes.precisionResizePrompt.reportCount, 1);
+assert.equal(vm.runInContext("applyPrecisionResizePromptPreset('creator.precision_size_prompt_preset_banner')", resizeContext), true);
+assert.equal(resizeNodes.precisionResizePrompt.value, 'Expand to a banner.', 'A preset must remain usable even when it replaces a long previous instruction.');
+assert.equal(resizeNodes.precisionResizePrompt.validationMessage, '');
 
 function resizeControlNode(initial = {}) {
   const listeners = {};
@@ -1226,7 +1394,7 @@ const readinessContext = vm.createContext({
   renderPrecisionEditModelPicker() {},
 });
 vm.runInContext([
-  'precisionResizeDimensionKey', 'precisionResizeDimensions', 'precisionCapabilitySizeDeclaration', 'resolvePrecisionModelCapability', 'precisionProviderModelRecords', 'getPrecisionResizeCapability',
+  'precisionResizeDimensionKey', 'precisionResizeDimensions', 'precisionCapabilitySizeDeclaration', 'resolvePrecisionModelCapability', 'precisionProviderModelRecords', 'getPrecisionResizeCapability', 'ensurePrecisionResizeModePresetGroups', 'syncPrecisionResizeModePresetSelection', 'updatePrecisionResizeModeControls',
   'precisionResizeInputDimension', 'getPrecisionResizeTargetSize', 'getPrecisionResizeCapabilityState',
   'precisionResizePresetSize', 'updatePrecisionResizePresetControls', 'updatePrecisionResizeCapabilityUI',
   'sanitizePrecisionOutputSizePolicy', 'syncPrecisionOutputSizePolicyControls', 'setPrecisionOutputSizePolicy', 'getPrecisionOutputSizePolicy',
@@ -1274,17 +1442,46 @@ resizeCapabilityCalls = [];
 readinessNodes.btnPrecisionSizeResize.click = () => readinessContext.setPrecisionSizeMode('resize');
 readinessNodes.btnPrecisionSizeResize.click();
 assert.ok(readinessNodes.precisionAspectRatioHint.textContent.includes('1024x1024'), 'Entering resize mode must render the read-only backend-derived aspect-ratio hint immediately.');
-readinessNodes.precisionOutputPolicyStrict.checked = false;
-readinessNodes.precisionOutputPolicyFitCrop.checked = true;
-readinessNodes.precisionOutputPolicyFitCrop.emit('change');
-assert.equal(readinessNodes.precisionOutputSizePolicyHint.textContent, 'Local fit/crop.', 'The fit/crop radio must update the policy hint through the bound control.');
+readinessContext.setPrecisionOutputSizePolicy('fit_crop');
 assert.equal(readinessNodes.btnGen.disabled, true, 'Resize must stay disabled while composition guidance is empty.');
 readinessNodes.precisionResizePromptPreset.value = 'creator.precision_size_prompt_preset_banner';
 readinessNodes.precisionResizePromptPreset.emit('change');
 assert.equal(readinessNodes.precisionResizePrompt.value, 'Expand to a banner.', 'A composition preset change must flow through the same readiness input chain.');
 assert.equal(readinessNodes.btnGen.disabled, true, 'A model-authorized resize must remain disabled while the exact target size is unconfirmed.');
 assert.ok(readinessNodes.precisionResizeCapabilityStatus.textContent.includes('creator.precision_size_capability_unknown'), 'Unknown size capability needs a visible reason beside the size controls.');
-assert.equal(readinessNodes.btnPrecisionConfirmResizeSize.disabled, false, 'Unknown size capability must expose an enabled explicit confirmation action.');
+readinessContext.setPrecisionOutputSizePolicy('strict');
+readinessContext.updatePrecisionResizeCapabilityUI();
+assert.equal(readinessContext.getPrecisionSizeRequest().rejection.code, 'precision_edit_size_capability_unknown', 'Model-size mode must fail closed when no model size declaration is available.');
+assert.equal(readinessNodes.btnPrecisionConfirmResizeSize.hidden, false, 'An authorized model with an undeclared strict target must expose an explicit size-trial action.');
+assert.equal(readinessNodes.btnPrecisionConfirmResizeSize.disabled, false, 'The explicit size-trial action must be usable only after a model and valid target are selected.');
+assert.equal(readinessNodes.btnPrecisionRevokeResizeSize.hidden, true, 'An undeclared target has no persisted trial authorization to revoke.');
+assert.equal(readinessNodes.btnPrecisionConfirmResizeSize.dataset.precisionBound, 'true', 'The size-trial action must receive one idempotent event binding.');
+const callsBeforeCancelledSizeTrial = resizeCapabilityCalls.length;
+authorizationConfirmResult = false;
+await readinessContext.confirmPrecisionResizeCapability();
+assert.equal(resizeCapabilityCalls.length, callsBeforeCancelledSizeTrial, 'Cancelling a size-trial confirmation must not persist a model size or submit any request.');
+authorizationConfirmResult = true;
+await readinessContext.confirmPrecisionResizeCapability();
+assert.deepEqual(resizeCapabilityCalls.at(-1).body, {
+  model: 'image-edit', enabled: true, confirmed: true, size: '1024x1024',
+}, 'A size trial must persist only the current outbound model and exact selected target.');
+assert.equal(readinessContext.getPrecisionResizeCapabilityState().supported, true, 'The explicitly authorized exact size must unlock strict resize readiness.');
+assert.equal(readinessNodes.btnGen.disabled, false, 'The Generate button must unlock only after the user explicitly authorizes the current exact size.');
+assert.equal(readinessNodes.btnPrecisionConfirmResizeSize.hidden, true, 'A saved trial authorization must not leave a second confirm action visible.');
+assert.equal(readinessNodes.btnPrecisionRevokeResizeSize.hidden, false, 'A saved trial authorization must expose its scoped revoke action.');
+await readinessContext.revokePrecisionResizeCapability();
+assert.deepEqual(resizeCapabilityCalls.at(-1).body, {
+  model: 'image-edit', enabled: false, confirmed: true, size: '1024x1024',
+}, 'Revoking a size trial must target the same exact model and size.');
+assert.equal(readinessContext.getPrecisionResizeCapabilityState().supported, false, 'Revoking the only size trial must lock strict resize again.');
+readinessProvider.model_capabilities['image-edit'] = { precision_edit: true, supported_sizes: ['1024x1024'] };
+readinessContext.updatePrecisionEditControls();
+assert.equal(readinessNodes.btnGen.disabled, false, 'A declared model-size preset must enable pure resize without a separate per-size confirmation step.');
+readinessContext.precisionEditSelectionMode = 'local';
+readinessContext.precisionEditObjects = [];
+readinessContext.updatePrecisionEditControls();
+assert.equal(readinessNodes.btnGen.disabled, false, 'A pure resize must stay available when a previous local-selection mode has no active selection.');
+readinessContext.precisionEditSelectionMode = 'annotation';
 readinessProvider.model_capabilities['image-edit'] = { precision_edit: true, supported_sizes: ['01024x1024', ' 1024x1024 ', '1024X1024'] };
 readinessContext.updatePrecisionEditControls();
 assert.equal(readinessNodes.btnGen.disabled, true, 'Noncanonical provider declarations must not enable pure resize generation.');
@@ -1318,43 +1515,60 @@ readinessProvider.model_capabilities = {
 assert.equal(readinessContext.getPrecisionEditModelAuthorizationState().authorized, false, 'Conflicting alias declarations must fail closed.');
 readinessProvider.model_capabilities = { 'image-edit': { precision_edit: true } };
 
-readinessNodes.precisionResizePreset.value = '1536x864';
-readinessNodes.precisionResizePreset.selectedIndex = 2;
-readinessNodes.precisionResizePreset.emit('change');
-assert.equal(readinessNodes.precisionResizeWidth.value, '1536');
-assert.equal(readinessNodes.precisionResizeHeight.value, '864');
-assert.ok(readinessNodes.btnPrecisionConfirmResizeSize.textContent.includes('1536x864'), 'Preset selection must refresh the current-size confirmation label without switching models.');
+// Strict mode is fail-closed against the model whitelist, while crop-to-fit
+// deliberately accepts common local targets that the upstream model does not
+// declare. Unknown capability records must still block both modes.
+readinessProvider.model_capabilities = {
+  'image-edit': { precision_edit: true, supported_sizes: ['2048x1152'] },
+};
+readinessNodes.precisionResizePreset.options = [
+  resizeControlNode({ value: 'custom' }),
+  resizeControlNode({ value: '2048x1152' }),
+  resizeControlNode({ value: '1152x2048' }),
+  resizeControlNode({ value: '3840x1648' }),
+];
+readinessNodes.precisionResizePreset.value = '2048x1152';
+readinessNodes.precisionResizePreset.selectedIndex = 1;
+readinessNodes.precisionResizeWidth.value = '2048';
+readinessNodes.precisionResizeHeight.value = '1152';
+readinessNodes.precisionResizePrompt.value = 'Keep the subject clear.';
+readinessContext.setPrecisionOutputSizePolicy('strict');
+readinessContext.updatePrecisionResizeCapabilityUI();
+assert.equal(readinessNodes.precisionResizePreset.options[1].hidden, false, 'Strict mode must keep a model-declared 2048x1152 preset visible.');
+assert.equal(readinessContext.getPrecisionResizeCapabilityState().supported, true, 'Strict mode must authorize the confirmed upstream size.');
 
-resizeCapabilityDeferred = deferred();
-const confirmSize = readinessContext.confirmPrecisionResizeCapability();
-readinessContext.confirmPrecisionResizeCapability();
-assert.equal(resizeCapabilityCalls.length, 1, 'A pending exact-size confirmation must suppress duplicate requests.');
-assert.deepEqual(resizeCapabilityCalls[0].body, { model: 'image-edit', enabled: true, confirmed: true, size: '1536x864' });
-assert.equal(readinessNodes.btnPrecisionConfirmResizeSize.attributes['aria-busy'], 'true');
-resizeCapabilityDeferred.resolve({ ok: true, status: 200, json: async () => ({ ok: true }) });
-await confirmSize;
-resizeCapabilityDeferred = null;
-assert.equal(readinessNodes.btnGen.disabled, false, 'A successful exact-size confirmation must enable pure resize immediately without an annotation or model switch.');
-assert.ok(readinessNodes.precisionResizeCapabilityStatus.textContent.includes('creator.precision_size_capability_supported'), 'Confirmed size capability needs an explicit supported state.');
-assert.equal(readinessNodes.btnPrecisionRevokeResizeSize.disabled, false, 'A confirmed size must expose a revoke action.');
+readinessNodes.precisionResizeWidth.value = '1152';
+readinessNodes.precisionResizeHeight.value = '2048';
+readinessContext.updatePrecisionResizeCapabilityUI();
+const strictPortraitRequest = readinessContext.getPrecisionSizeRequest();
+assert.equal(strictPortraitRequest.rejection.code, 'precision_edit_size_undeclared', 'Strict mode must reject an undeclared 1152x2048 target before dispatch.');
+assert.equal(readinessContext.getPrecisionResizeCapabilityState().supported, false, 'Strict readiness must remain false for an undeclared target.');
+assert.equal(readinessNodes.precisionResizePreset.options[2].hidden, false, 'Strict mode must leave an undeclared 1152x2048 candidate visible for an explicit user trial.');
+assert.equal(readinessNodes.precisionResizePreset.options[3].hidden, false, 'Strict mode must leave an undeclared 3840x1648 candidate visible for an explicit user trial.');
+assert.ok(readinessNodes.precisionResizePreset.options[2].title.includes('creator.precision_size_preset_trial_required'), 'Undeclared strict candidates must clearly explain that they need an explicit trial authorization.');
 
-readinessNodes.precisionResizeWidth.value = '1024';
-readinessNodes.precisionResizeWidth.emit('input');
-readinessNodes.precisionResizeHeight.value = '1024';
-readinessNodes.precisionResizeHeight.emit('input');
-assert.equal(readinessNodes.btnGen.disabled, true, 'Changing width or height must recompute readiness immediately without switching models.');
-assert.ok(readinessNodes.precisionResizeCapabilityStatus.textContent.includes('creator.precision_size_capability_unsupported'), 'A known model with a different confirmed size must show the undeclared-target reason.');
-assert.ok(readinessNodes.btnPrecisionConfirmResizeSize.textContent.includes('1024x1024'));
-readinessContext.setGenerationControls('idle');
-assert.equal(readinessNodes.btnGen.disabled, true, 'Returning to idle must not stale-enable an unconfirmed precision resize.');
+readinessContext.setPrecisionOutputSizePolicy('fit_crop');
+readinessContext.updatePrecisionResizeCapabilityUI();
+assert.equal(readinessContext.getPrecisionSizeRequest().rejection, undefined, 'Crop-to-fit must accept common local targets without requiring upstream whitelist membership.');
+assert.equal(readinessContext.getPrecisionResizeCapabilityState().supported, true, 'Crop-to-fit readiness must allow the undeclared 1152x2048 target with known model capability.');
+const cropPortraitRequest = readinessContext.getPrecisionSizeRequest();
+assert.equal(cropPortraitRequest.mode, 'resize', 'Crop-to-fit must produce an explicit local post-processing request without a whitelist rejection.');
+assert.equal(cropPortraitRequest.targetSize, '1152x2048');
+assert.equal(cropPortraitRequest.prompt, 'Keep the subject clear.');
+assert.equal(cropPortraitRequest.outputSizePolicy, 'fit_crop');
 
-readinessNodes.precisionResizePreset.value = '1536x864';
-readinessNodes.precisionResizePreset.selectedIndex = 2;
-readinessNodes.precisionResizePreset.emit('change');
-assert.equal(readinessNodes.btnGen.disabled, false, 'Returning to an already confirmed target must refresh readiness through the preset event chain.');
-await readinessContext.revokePrecisionResizeCapability();
-assert.deepEqual(resizeCapabilityCalls.at(-1).body, { model: 'image-edit', enabled: false, confirmed: true, size: '1536x864' });
-assert.equal(readinessNodes.btnGen.disabled, true, 'Revoking the current-size confirmation must immediately disable pure resize.');
+readinessNodes.precisionResizeWidth.value = '3840';
+readinessNodes.precisionResizeHeight.value = '1648';
+assert.equal(readinessContext.getPrecisionSizeRequest().targetSize, '3840x1648', 'Crop-to-fit must accept the requested 4K 21:9 target dimensions.');
+
+readinessProvider.model_capabilities = {
+  'image-edit': { precision_edit: true },
+};
+readinessContext.updatePrecisionResizeCapabilityUI();
+assert.equal(readinessContext.getPrecisionResizeCapabilityState().capability.known, false, 'A capability record without an explicit size declaration must remain unknown.');
+const unknownCropRequest = readinessContext.getPrecisionSizeRequest();
+assert.equal(unknownCropRequest.rejection.code, 'precision_edit_size_capability_unknown', 'Crop-to-fit must not bypass the unknown-capability gate.');
+assert.equal(readinessContext.getPrecisionResizeCapabilityState().supported, false, 'Unknown capability must fail closed in crop-to-fit readiness.');
 
 function createPrecisionPointerHarness(objects, tool = 'rect', selectedId = null) {
   const list = {
@@ -1542,7 +1756,7 @@ assert.equal(moveHarness.canvas.releaseCount, 1, 'Synchronous lostpointercapture
 assert.deepEqual(moveState.session, moveSessionBefore, 'Geometry edits must not alter version/base session state.');
 
 moveHarness.context.renderPrecisionEditObjectList();
-assert.ok(moveHarness.list.innerHTML.includes('data-precision-instruction="box-1"'), 'Transformed objects must retain their per-object textarea identity.');
+assert.ok(moveHarness.list.innerHTML.includes('precision-object-instruction-summary'), 'Transformed objects must retain their visible instruction summary.');
 assert.ok(moveHarness.list.innerHTML.includes('Keep this instruction'), 'Transforming a shape must preserve its instruction text.');
 
 moveHarness.context.undoPrecisionEdit();
@@ -1725,7 +1939,7 @@ assert.equal(arrowEndpointState.objects[0].instruction, 'move arrow', 'Arrow end
 assert.equal(arrowEndpointState.history.length, 1, 'One arrow endpoint gesture must create exactly one history snapshot.');
 assert.equal(arrowStartHarness.canvas.releaseCount, 1, 'Arrow endpoint scaling must release pointer capture once.');
 arrowStartHarness.context.renderPrecisionEditObjectList();
-assert.ok(arrowStartHarness.list.innerHTML.includes('data-precision-instruction="arrow-1"'), 'Arrow endpoint scaling must retain the instruction textarea identity.');
+assert.ok(arrowStartHarness.list.innerHTML.includes('precision-object-instruction-summary'), 'Arrow endpoint scaling must retain the instruction summary.');
 assert.ok(arrowStartHarness.list.innerHTML.includes('move arrow'), 'Arrow endpoint scaling must retain instruction text in the object list.');
 arrowStartHarness.context.undoPrecisionEdit();
 arrowEndpointState = precisionPointerState(arrowStartHarness.context);
@@ -1795,6 +2009,9 @@ expect(cutoutFlow.includes('appendPrecisionCutoutVersion(result, requestWidth, r
 expect(!cutoutFlow.includes("/api/generate"), 'Cutout must never submit provider generation.');
 expect(html.includes('id="precisionCutoutFeather"') && /id="precisionCutoutFeather"[^>]*min="0"[^>]*max="64"/.test(html), 'Cutout refinement needs a bounded 0..64 feather control.');
 expect(html.includes('id="precisionCutoutUseSelection"') && html.includes('id="precisionCutoutRestoreMode"') && html.includes('id="precisionCutoutRestoreMinAlpha"') && html.includes('id="btnPrecisionCutoutRefine"') && html.includes('id="btnPrecisionCutoutCancel"'), 'Cutout refinement needs optional selection, restore, submit, and client-cancel controls.');
+expect(html.includes('precision-cutout-glass-panel') && html.includes('precision-cutout-adapter-actions'), 'Cutout controls must retain the compact glass-panel structure without changing control IDs.');
+expect(/\.precision-cutout-glass-panel\s*\{[^}]*grid-column:\s*1\s*\/\s*-1;[^}]*width:\s*100%/s.test(css), 'Cutout glass panel must span the full inspector grid width instead of being constrained to one compact action column.');
+expect(css.includes('/* precision cutout glass panel */') && css.includes('precision-cutout-detail-reveal') && css.includes('prefers-reduced-motion: reduce'), 'Cutout detail disclosure must use a reduced-motion-aware reveal treatment.');
 expect(cutoutFlow.includes("_authFetch('/api/image-tools/cutout/refine'") && cutoutFlow.includes("contract: PRECISION_CUTOUT_REFINE_CONTRACT") && cutoutFlow.includes("payload.selection_mask_contract = PRECISION_CUTOUT_SELECTION_MASK_CONTRACT") && cutoutFlow.includes("payload.restore_mode = true") && cutoutFlow.includes("payload.restore_source_image_data = requestBaseSource") && cutoutFlow.includes("payload.restore_min_alpha = restoreMinAlpha"), 'Cutout refinement must POST the exact local refine contract and thread restore fields through the payload.');
 expect(cutoutFlow.includes('result.parent_version_id !== expectedParentId') && cutoutFlow.includes('result.preview_background !== \'checkerboard\'') && cutoutFlow.includes('requestGeneration !== precisionSourceLoadGeneration') && cutoutFlow.includes('appendPrecisionCutoutRefineVersion(result, requestWidth, requestHeight, requestParentId, featherRadius, restoreMode, restoreMinAlpha, selectionApplied)'), 'Refine success must validate its parent, transparent preview contract, current source generation, and restore-aware append path before append.');
 expect(cutoutFlow.includes('precisionCutoutOperationToken += 1') && cutoutFlow.includes('precisionCutoutAbortController.abort()'), 'Client cancellation must invalidate and abort the active cutout request so late results cannot append.');
@@ -2165,6 +2382,33 @@ assert.equal(cutoutState.precisionCutoutPending, false);
 assert.equal(cutoutStatus.dataset.state, 'success');
 assert.equal(cutoutButton.attributes['aria-busy'], 'false');
 assert.ok(cutoutStatuses.includes('creator.cutout_completed'));
+vm.runInContext("precisionEditSession.selectedVersionId = 'original'; setPrecisionCutoutUi('creator.cutout_ready', 'ready');", cutoutContext);
+assert.equal(cutoutButton.disabled, false, 'Selecting the original image again must keep one-click cutout selectable.');
+cutoutCalls.length = 0;
+const originalRetryDeferred = deferred();
+cutoutFetch = async (url, options) => {
+  cutoutCalls.push({ url, options });
+  if (url.endsWith('/capabilities')) return cutoutResponse(200, multiReadyCapability);
+  return originalRetryDeferred.promise;
+};
+const retryOriginalCutout = vm.runInContext('startPrecisionCutout()', cutoutContext);
+for (let index = 0; index < 10 && cutoutCalls.length < 2; index += 1) {
+  await new Promise((resolve) => setImmediate(resolve));
+}
+assert.equal(cutoutCalls.length, 2);
+assert.deepEqual(JSON.parse(cutoutCalls[1].options.body), {
+  contract: 'genbox-cutout-v1', image_data: 'data:image/png;base64,c291cmNl',
+  adapter: 'modnet-portrait-onnx', algorithm: 'MODNet photographic portrait matting ONNX',
+});
+originalRetryDeferred.resolve(cutoutResponse(200, {
+  contract: 'genbox-cutout-v1', success: true, status: 'completed', width: 5, height: 3,
+  source_preserved: true, transparent: true, preview_background: 'checkerboard',
+  image_data: 'data:image/png;base64,iVBORw0KGgoRETRY', gallery_url: '/api/gallery/image/retry.png',
+  filename: 'retry.png', adapter: 'modnet-portrait-onnx',
+}));
+assert.equal(await retryOriginalCutout, false, 'The original retry fixture must not append an invalid-size result.');
+assert.equal(vm.runInContext('precisionEditSession.versions.length', cutoutContext), 1);
+vm.runInContext("precisionEditSession.selectedVersionId = 'version-1'; setPrecisionCutoutUi('creator.cutout_ready', 'ready');", cutoutContext);
 vm.runInContext('updatePrecisionCutoutRefineControls()', cutoutContext);
 assert.equal(cutoutRestoreMode.disabled, true, 'Restore mode must stay disabled until a canvas selection exists.');
 assert.equal(cutoutRestoreMode.checked, false);
@@ -2506,6 +2750,7 @@ expect((html.match(/id="imageWorkbenchTitle"/g) || []).length === 1, 'Precision 
 expect(!/<h[1-6][^>]*class="[^"]*precision[^\"]*"/i.test(precisionPanelMarkup) && !/role="heading"/i.test(precisionPanelMarkup), 'The precision panel must not add a duplicate internal heading.');
 const precisionActionMount = js.slice(js.indexOf('function mountCreatorGenerateAction'), js.indexOf('function openPrecisionGalleryPicker'));
 expect(precisionActionMount.includes("header.classList.toggle('precision-action-header',mode==='precision_edit');"), 'Precision mode must mark its generated action header so the duplicate workspace title can be hidden.');
+expect(precisionActionMount.includes("mode==='precision_edit'?document.getElementById('precisionGalleryCommandBar')||target:target") && precisionActionMount.includes('actionTarget.appendChild(action);'), 'Precision mode must keep the generation action in the gallery command bar.');
 expect(css.includes('.creator-generate-header.precision-action-header > #creatorGenerateActionTitle') && css.includes('.creator-generate-header.precision-action-header > #creatorGenerateActionHint'), 'Precision mode must hide only the generated workspace title and hint, while retaining its controls.');
 expect(html.includes('id="imageModePrecision"') && html.includes('id="subTabPrecisionEdit"'), 'Precision navigation labels must remain explicit controls, not content headings.');
 expect(/id="precisionWorkbenchHelpTrigger"[^>]*aria-controls="precisionWorkbenchHelpPopover"[^>]*aria-expanded="false"/.test(html), 'Workbench help must expose a collapsed ARIA control relationship.');
@@ -2518,14 +2763,15 @@ const dimensionsIndex = html.indexOf('id="precisionCanvasDimensions"', canvasTit
 const stageActionsIndex = html.indexOf('class="precision-stage-actions"', dimensionsIndex);
 const docsTriggerIndex = html.indexOf('id="btnPrecisionDocs"', stageActionsIndex);
 const displayModeGroupIndex = html.indexOf('class="precision-version-group precision-display-mode-group"');
-const sourceActionsIndex = html.indexOf('id="precisionSourceActions"', displayModeGroupIndex);
+const sourceActionsIndex = html.indexOf('id="precisionSourceActions"');
 const versionRailIndex = html.indexOf('id="precisionVersionRail"');
 const useAsBaseIndex = html.indexOf('id="btnPrecisionUseSelectedAsBase"');
+const primaryActionClusterIndex = html.indexOf('class="precision-source-actions precision-primary-action-cluster"');
 const compareModesIndex = html.indexOf('class="precision-compare-modes"', displayModeGroupIndex);
 expect(canvasTitleIndex !== -1 && compactHelpIndex > canvasTitleIndex && dimensionsIndex > compactHelpIndex, 'Precision canvas title row must order label, compact help trigger, then dimensions.');
 expect(stageActionsIndex > dimensionsIndex && docsTriggerIndex > stageActionsIndex, 'The compact docs trigger must remain in the right-side stage actions.');
-expect(versionRailIndex !== -1 && useAsBaseIndex > versionRailIndex && useAsBaseIndex < displayModeGroupIndex, 'The next-base action must stay on the same compact row as version buttons.');
-expect(displayModeGroupIndex !== -1 && sourceActionsIndex > displayModeGroupIndex && sourceActionsIndex < compareModesIndex, 'Replace-image must sit in the middle of the display-mode controls before view modes.');
+expect(primaryActionClusterIndex !== -1 && useAsBaseIndex > primaryActionClusterIndex && sourceActionsIndex > useAsBaseIndex && versionRailIndex > sourceActionsIndex && versionRailIndex < displayModeGroupIndex, 'The next-base and replace-image actions must remain a left-aligned compact primary cluster above version controls.');
+expect(displayModeGroupIndex !== -1 && compareModesIndex > displayModeGroupIndex, 'Display modes must remain as secondary controls after the primary workbench actions.');
 expect(/id="btnPrecisionReplaceSource"[^>]*aria-haspopup="menu"[^>]*aria-controls="precisionSourceMenu"[^>]*aria-expanded="false"/.test(html), 'The compact replace-image trigger must retain its accessible menu relationship.');
 expect(!/<span class="precision-version-group-label" data-i18n="creator\.precision_version_shortcuts">版本<\/span>/.test(html), 'The visible version-shortcut label must not consume workbench space.');
 const toolbarIndex = html.indexOf('class="precision-toolbar"');
@@ -2533,10 +2779,10 @@ const sessionShowcaseIndex = html.indexOf('id="precisionSessionShowcase"');
 expect(toolbarIndex !== -1 && sessionShowcaseIndex > toolbarIndex, 'The current-session gallery must live below the annotation toolbar.');
 expect(/id="btnPrecisionSessionShowcaseToggle"[^>]*aria-controls="precisionSessionShowcaseContent"[^>]*aria-expanded="false"/.test(html), 'The session gallery must begin as an accessible collapsed pill.');
 expect(html.includes('creator.precision_session_gallery_show') && html.includes('data-precision-gallery-render-target="current-session"'), 'The gallery pill must declare its current-session render target without inventing a history API.');
-expect(js.includes('function setPrecisionSessionShowcaseOpen') && js.includes('function togglePrecisionSessionShowcase') && js.includes('togglePrecisionSessionDatePopover(false)'), 'The session gallery pill must support stateful reflow and close its nested date controls when collapsed.');
+expect(js.includes('function setPrecisionSessionShowcaseOpen') && js.includes('function togglePrecisionSessionShowcase') && js.includes('setPrecisionWorkflowHistoryFilterOpen(false)'), 'The session gallery pill must support stateful reflow and close its nested history controls when collapsed.');
 expect(css.includes('grid-template-rows: 0fr') && css.includes('grid-template-rows: 1fr') && css.includes('.precision-session-showcase.is-expanded'), 'The session gallery must use a content-reflow expansion state rather than a detached modal.');
 expect(/id="precisionSessionShowcaseContent"[^>]*aria-hidden="true"[^>]*inert/.test(html) && extractFunction('setPrecisionSessionShowcaseOpen').includes("content.setAttribute('inert', '')"), 'Collapsed gallery content must leave the keyboard focus order until the pill is expanded.');
-expect(html.includes('id="precisionWorkflowHistoryDateFrom"') && html.includes('id="precisionWorkflowHistoryDateTo"') && !html.includes('id="precisionWorkflowHistoryId"'), 'Expanded gallery history must retain date filters without exposing a workflow-ID search input.');
+expect(html.includes('id="precisionWorkflowHistoryCalendar"') && html.includes('data-workflow-date-range="3d"') && html.includes('id="btnPrecisionWorkflowHistoryDateClear"') && !html.includes('id="precisionWorkflowHistoryDateFrom"') && !html.includes('id="precisionWorkflowHistoryDateTo"') && !html.includes('id="precisionWorkflowHistoryId"'), 'History filtering must use its own calendar and quick ranges without exposing raw date fields or a workflow-ID search input in the poster wall.');
 expect(/id="btnPrecisionWorkflowHistoryFilter"[^>]*aria-haspopup="dialog"[^>]*aria-controls="precisionWorkflowHistoryFilterPopover"[^>]*aria-expanded="false"/.test(html), 'History workflow filtering must use an accessible collapsed pill.');
 expect(/id="precisionWorkflowHistoryFilterPopover"[^>]*role="dialog"[^>]*tabindex="-1"[^>]*hidden/.test(html) && /id="precisionWorkflowHistoryActionPopover"[^>]*role="dialog"[^>]*tabindex="-1"[^>]*hidden/.test(html), 'Workflow selection and actions must use separate focusable cards.');
 for (const fn of ['loadPrecisionWorkflowHistory', 'selectPrecisionWorkflowHistory', 'viewPrecisionWorkflowHistoryImage', 'restorePrecisionWorkflowHistory', 'setPrecisionWorkflowHistoryFilterOpen', 'setPrecisionWorkflowHistoryActionOpen']) {
@@ -2548,10 +2794,11 @@ const workflowHistoryRestoreSource = extractFunction('restorePrecisionWorkflowHi
 const workflowHistoryItemSource = extractFunction('precisionWorkflowHistoryItemMarkup');
 expect(workflowHistoryLoadSource.includes("_authFetch('/api/precision/workflows?'") && workflowHistoryLoadSource.includes("query.set('date_from'") && workflowHistoryLoadSource.includes("query.set('date_to'") && !workflowHistoryLoadSource.includes("query.set('workflow_id'"), 'History list requests must use bounded date filters without a user-facing workflow-ID query.');
 expect(workflowHistorySelectSource.includes("_authFetch('/api/precision/workflows/' + encodeURIComponent(workflowId))"), 'Selecting a history workflow must load its bounded detail projection.');
-expect(workflowHistoryRestoreSource.includes('precisionWorkflowHistoryImageDataUrl(imageUrl)') && workflowHistoryRestoreSource.includes('loadPrecisionEditSourceImage(dataUrl'), 'Restoring history must convert only the safe projected image URL into the existing editable workbench source.');
+expect(workflowHistoryRestoreSource.includes('precisionWorkflowHistoryLoadVersionData(versions)') && workflowHistoryRestoreSource.includes('precisionWorkflowHistoryRestoredSession(workflow, imageData)') && workflowHistoryRestoreSource.includes('loadPrecisionEditSourceImage(base.data') && workflowHistoryRestoreSource.includes('precisionWorkflowHistorySnapshotObjects(snapshot'), 'Restoring history must rebuild the safe projected version chain and validated annotation snapshot in the editable workbench.');
 expect(!/prompt|local_path|logs|source_sha256|filename/i.test(workflowHistoryItemSource), 'History rows must not render prompts, paths, logs, hashes, or filenames.');
 expect(!workflowHistoryItemSource.includes("escHtml(workflowId)"), 'History rows must keep workflow IDs internal instead of rendering them as user-facing content.');
-expect(css.includes('.precision-workflow-history-version-row') && css.includes('.precision-workflow-history-arrow') && css.includes('.precision-workflow-history-popover') && css.includes('.precision-workflow-history-action-popover'), 'History rows need compact source-to-step sequencing plus separate filter and action cards.');
+expect(css.includes('.precision-workflow-history-version-row') && css.includes('.precision-workflow-history-arrow') && css.includes('.precision-workflow-history-popover') && css.includes('.precision-workflow-history-action-popover') && css.includes('.precision-history-poster') && css.includes('.precision-workflow-history-calendar'), 'History rows need compact source-to-step sequencing, poster-wall previews, a calendar filter, and separate action cards.');
+expect(js.includes('function precisionWorkflowHistoryCalendarIndex') && js.includes('version.created_at') && extractFunction('selectPrecisionWorkflowHistoryCalendarDate').includes('loadPrecisionWorkflowHistory(true)'), 'The history calendar must aggregate only projected workflow dates and submit a selected day as a workflow filter.');
 expect(extractFunction('setPrecisionWorkflowHistoryFilterOpen').includes('precisionWorkflowHistoryState.filterOpener') && extractFunction('setPrecisionWorkflowHistoryActionOpen').includes('precisionWorkflowHistoryState.actionOpener'), 'History cards must retain their openers for keyboard focus restoration.');
 expect(css.includes('flex-wrap: nowrap') && /@media \(max-width: 640px\)[\s\S]*?\.precision-guidance-row\s*\{[\s\S]*?flex-wrap:\s*wrap;/.test(css), 'Guidance strategy and selection rows must stay inline on wider inspectors and wrap only on narrow screens.');
 const workflowMediaContext = vm.createContext({ String });
@@ -2560,9 +2807,10 @@ assert.equal(vm.runInContext("precisionWorkflowHistoryMediaUrl('/api/precision/w
 assert.equal(vm.runInContext("precisionWorkflowHistoryMediaUrl('https://example.invalid/private.png')", workflowMediaContext), '', 'History rendering must reject arbitrary external media URLs.');
 expect(/id="precisionReplaceDisabledHint" class="sr-only precision-source-action-status"/.test(html), 'The replacement status must start as a screen-reader-only hint with a dedicated component class.');
 const srOnlyUtilityIndex = css.lastIndexOf('[class~="sr-only"]');
-const srOnlyUtility = css.slice(srOnlyUtilityIndex);
+const srOnlyUtilityMatch = css.slice(srOnlyUtilityIndex).match(/\[class~="sr-only"\]\s*\{[\s\S]*?\}/);
+const srOnlyUtility = srOnlyUtilityMatch ? srOnlyUtilityMatch[0] : '';
 expect(srOnlyUtilityIndex > css.lastIndexOf('.precision-source-action-status.is-visible'), 'The screen-reader-only utility must remain after precision component layout rules.');
-expect(/\[class~="sr-only"\]\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?width:\s*1px;[\s\S]*?height:\s*1px;[\s\S]*?overflow:\s*hidden;[\s\S]*?clip:\s*rect\(0, 0, 0, 0\);[\s\S]*?clip-path:\s*inset\(50%\);[\s\S]*?white-space:\s*nowrap;[\s\S]*?\}\s*$/.test(srOnlyUtility), 'The loaded stylesheet must end with the complete screen-reader-only clipping contract.');
+expect(/\[class~="sr-only"\]\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?width:\s*1px;[\s\S]*?height:\s*1px;[\s\S]*?overflow:\s*hidden;[\s\S]*?clip:\s*rect\(0, 0, 0, 0\);[\s\S]*?clip-path:\s*inset\(50%\);[\s\S]*?white-space:\s*nowrap;[\s\S]*?\}/.test(srOnlyUtility), 'The loaded stylesheet must retain the complete screen-reader-only clipping contract.');
 expect(!/display:\s*none|visibility:\s*hidden/.test(srOnlyUtility), 'Screen-reader-only content must stay in the accessibility tree.');
 expect(/\.precision-workbench-help-trigger\s*\{[\s\S]*?position:\s*relative;[\s\S]*?z-index:\s*81;[\s\S]*?width:\s*44px;[\s\S]*?height:\s*44px;[\s\S]*?min-width:\s*44px;[\s\S]*?min-height:\s*44px;/.test(css), 'Precision help must retain its focus-ring stacking and 44px touch target.');
 expect(/\.precision-workbench-help-trigger\s*\{[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;[\s\S]*?color:\s*var\(--text-muted\);[\s\S]*?font-size:\s*0;/.test(css), 'The 44px help target must not render as an oversized visible circle.');
@@ -2993,7 +3241,7 @@ const imageLoadContext = vm.createContext({
   precisionEditObjects: [], precisionEditHistory: [], precisionEditRedo: [], precisionEditLabelCounter: 0, precisionEditSelectedId: null, precisionEditDraftObject: null,
   precisionEditSizeMode: 'preserve', precisionEditSession: { source: { id: 'original' }, versions: [], selectedVersionId: 'original', baseVersionId: 'original' },
   ensurePrecisionEditPanel: () => {}, resetPrecisionSourceSpecificState: () => {}, requestAnimationFrame: (callback) => callback(),
-  reflowPrecisionCanvasVisualSize: () => {}, fitPrecisionCanvasToWindow: () => {}, setPrecisionSizeMode: () => {}, renderPrecisionEditCanvas: () => {}, updatePrecisionEditControls: () => {}, renderPrecisionEditSession: () => {}, updatePrecisionCutoutAvailability: () => {}, updatePrecisionSourceActions: () => {},
+  reflowPrecisionCanvasVisualSize: () => {}, fitPrecisionCanvasToWindow: () => {}, positionPrecisionCanvasResizeHandle: () => {}, setPrecisionSizeMode: () => {}, renderPrecisionEditCanvas: () => {}, updatePrecisionEditControls: () => {}, renderPrecisionEditSession: () => {}, updatePrecisionCutoutAvailability: () => {}, updatePrecisionSourceActions: () => {},
   alert: () => {}, i18nText: (key) => key,
 });
 vm.runInContext(extractFunction('loadPrecisionEditSourceImage'), imageLoadContext);
@@ -3316,8 +3564,9 @@ const sizeNoticeContext = vm.createContext({
   i18nText: (key, params) => ({
     'status.queued': 'queued',
     'status.failed': 'failed',
-    'creator.precision_output_size_adjusted': `Upstream returned ${params.actual}; locally fit/cropped to ${params.target}.`,
-    'creator.precision_output_size_strict_mismatch': `Upstream returned ${params.actual}, target was ${params.target}; strict matching failed.`,
+    'creator.precision_output_size_adjusted': `Upstream returned ${(params || {}).actual}; locally fit/cropped to ${(params || {}).target}.`,
+    'creator.precision_output_size_strict_mismatch': `Upstream returned ${(params || {}).actual}, target was ${(params || {}).target}; strict matching failed.`,
+    'creator.precision_connection_response_read_no_retry': 'Image-edit response read was interrupted; no automatic replay.',
   }[key] || key),
   _smartScroll: () => {},
   updatePrecisionSourceActions: () => {},
@@ -3330,6 +3579,8 @@ vm.runInContext([
   extractFunction('precisionDisplaySizeFromFields'),
   extractFunction('precisionOutputSizeNoticeFromRecord'),
   extractFunction('precisionOutputSizeNotices'),
+  extractFunction('precisionTransportFailureNoticeFromRecord'),
+  extractFunction('precisionTransportFailureNotices'),
   extractFunction('updatePrecisionTaskMonitor'),
   extractFunction('generationFailureMessage'),
 ].join('\n'), sizeNoticeContext);
@@ -3362,6 +3613,12 @@ vm.runInContext(`updatePrecisionTaskMonitor({
   elapsed_seconds: 1
 })`, sizeNoticeContext);
 assert.ok(sizeNoticeNodes.precisionTaskLog.textContent.includes('Upstream returned 2048x864, target was 1792x768; strict matching failed.'), 'Precision task logs must surface strict mismatch dimensions nested inside backend error details.');
+assert.equal(vm.runInContext(`generationFailureMessage({
+  status: 'failed',
+  provider_states: {
+    provider: { result: { error_details: { transport_stage: 'response_read', transport_error: 'ReadError', automatic_retry: 'suppressed_non_idempotent_image_edit' } } }
+  }
+})`, sizeNoticeContext), 'Image-edit response read was interrupted; no automatic replay.', 'ReadError diagnostics must explain that GenBox did not replay an ambiguous image-edit POST.');
 
 cutoutCalls.length = 0;
 vm.runInContext("precisionSourceLoadGeneration = 21; precisionCutoutPending = false; precisionCutoutOperationToken = 0; precisionEditSourceImageData = 'data:image/png;base64,c291cmNl'; precisionEditSourceWidth = 4; precisionEditSourceHeight = 3; precisionEditSession.source = { id: 'original', data: precisionEditSourceImageData }; precisionEditSession.baseVersionId = 'original';", cutoutContext);

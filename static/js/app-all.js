@@ -80,6 +80,17 @@ var precisionEditIdCounter = 0;
 var precisionEditLabelCounter = 0;
 var precisionEditTextDraftPoint = null;
 var precisionEditTextEditingId = null;
+var precisionAnnotationInstructionPopoverState = {
+  selectedId: '',
+  dismissedId: '',
+  manuallyPositioned: false,
+  drag: null,
+  // Keep a viewport position per annotation so switching between objects does
+  // not force every instruction card back over the image.
+  positions: {},
+  confirmedIds: {},
+  dismissedIds: {}
+};
 var PRECISION_MODEL_VISIBILITY_STORAGE_KEY = 'genbox_precision_model_visibility_v1';
 var PRECISION_MODEL_VISIBILITY_KEY_PATTERN = /^[A-Za-z0-9._:@-]{1,80}::[A-Za-z0-9._:@-]{1,160}$/;
 var PRECISION_MODEL_VISIBILITY_FORBIDDEN_PATTERN = /(api[_-]?key|apikey|secret|token|credential|password|bearer|base[_-]?url|prompt|error|userinfo|cookie|authorization)/i;
@@ -92,6 +103,7 @@ var precisionEditSelectedModel = { providerId: '', model: '' };
 var precisionEditStrategy = 'standard';
 var precisionEditSelectionMode = 'annotation';
 var precisionSelectionFeather = 0;
+var precisionGuidanceTransitionTimer = null;
 var precisionEditSizeMode = 'preserve';
 var precisionOutputSizePolicy = 'strict';
 var PRECISION_RESIZE_PRESET_STORAGE_KEY = 'genbox_precision_resize_presets_v1';
@@ -101,7 +113,7 @@ var precisionResizeSavedPresets = [];
 var precisionResizePresetIdCounter = 0;
 var precisionResizeCapabilityPending = null;
 var precisionEditSession = { source: null, versions: [], selectedVersionId: 'original', baseVersionId: 'original', taskBaseVersionId: null, view: 'after', taskId: null };
-var precisionWorkflowHistoryState = { items: [], selectedWorkflow: null, selectedWorkflowId: '', listRequest: 0, detailRequest: 0, loaded: false, loading: false, filterOpener: null, actionOpener: null };
+var precisionWorkflowHistoryState = { items: [], calendarItems: [], selectedWorkflow: null, selectedWorkflowId: '', listRequest: 0, detailRequest: 0, loaded: false, loading: false, filterOpener: null, actionOpener: null };
 var precisionComparePointerId = null;
 var precisionComparePointerTarget = null;
 if (typeof window !== 'undefined' && typeof window.__genboxPrecisionCompareResizeCleanup === 'function') {
@@ -131,6 +143,12 @@ var precisionTaskMonitorElapsedSeconds = null;
 var precisionTaskMonitorTerminal = false;
 var precisionTaskMonitorTimer = null;
 var precisionCanvasResizeState = null;
+var precisionCanvasVerticalResizeState = null;
+var precisionCanvasVerticalResizeRestore = null;
+var precisionAutoBaseVersionTarget = '';
+var precisionAutoBaseVersionTimer = null;
+var precisionInspectorResizeState = null;
+var PRECISION_INSPECTOR_WIDTH_STORAGE_KEY = 'genbox_precision_inspector_width_v1';
 // View-only interaction state. These values never enter annotation payloads.
 var precisionCanvasPanState = null;
 var precisionCanvasSpaceHeld = false;
@@ -152,6 +170,13 @@ var precisionCutoutModelMutationPending = false;
 var precisionCutoutModelDetailsPreference = null;
 var precisionCutoutSelectedAdapter = '';
 var precisionCutoutAdapterDetailsExpanded = false;
+var precisionCutoutMode = 'simple';
+var precisionCutoutProfessionalOpener = null;
+var precisionCutoutProfessionalHome = null;
+var precisionCutoutProfessionalDockWidth = 410;
+var precisionCutoutProfessionalDockCollapsed = false;
+var precisionCutoutProfessionalDockResizeState = null;
+var precisionCutoutProfessionalDockObserver = null;
 
 // 生图数量: {provider_id: int}
 var providerQuantities = {};
@@ -864,6 +889,17 @@ function ensurePrecisionEditPanel() {
 
   var existing = document.getElementById('panelPrecisionEdit');
   if (!existing) return null;
+  var inspector = document.getElementById('precisionInspectorResizeHandle');
+  inspector = inspector && inspector.parentNode;
+  if (inspector && inspector.dataset.precisionSectionsOrdered !== 'true') {
+    var sectionOrder = ['#precisionTaskMonitor', '.precision-model-picker', '.precision-edit-actions', '.precision-quick-tools'];
+    var sections = sectionOrder.map(function(selector) { return inspector.querySelector(selector); });
+    if (sections.every(Boolean)) {
+      sections.forEach(function(section) { inspector.appendChild(section); });
+      inspector.dataset.precisionSectionsOrdered = 'true';
+    }
+  }
+  ensurePrecisionSessionShowcaseControls();
   var surface = document.getElementById('precisionCanvasSurface');
   if (surface && surface.dataset.precisionFullscreenBound !== 'true') {
     surface.dataset.precisionFullscreenBound = 'true';
@@ -882,6 +918,11 @@ function ensurePrecisionEditPanel() {
     canvas.addEventListener('keyup', handlePrecisionEditCanvasKeyup);
     canvas.addEventListener('blur', resetPrecisionCanvasKeyboardState);
     setPrecisionEditTool(precisionEditTool);
+  }
+  var precisionShortcutRoot = document.documentElement;
+  if (precisionShortcutRoot && !precisionShortcutRoot.dataset.precisionToolShortcutBound) {
+    precisionShortcutRoot.dataset.precisionToolShortcutBound = 'true';
+    document.addEventListener('keydown', handlePrecisionToolShortcut, true);
   }
   [['precisionToolSelect', 'select'], ['precisionToolEllipse', 'ellipse'], ['precisionToolArrow', 'arrow'], ['precisionToolRect', 'rect'], ['precisionToolBrush', 'brush'], ['precisionToolEraser', 'eraser'], ['precisionToolText', 'text']].forEach(function(binding) {
     var button = document.getElementById(binding[0]);
@@ -920,6 +961,7 @@ function ensurePrecisionEditPanel() {
     textEditor.addEventListener('pointerdown', handlePrecisionTextEditorPointerdown);
     textEditor.addEventListener('pointerup', handlePrecisionTextEditorPointerup);
   }
+  bindPrecisionAnnotationInstructionPopover();
   var zoom = document.getElementById('precisionViewZoom');
   var zoomFit = document.getElementById('btnPrecisionZoomFit');
   if (undo && !undo.onclick) undo.onclick = undoPrecisionEdit;
@@ -935,6 +977,68 @@ function ensurePrecisionEditPanel() {
     cutout.dataset.precisionBound = 'true';
     cutout.addEventListener('click', startPrecisionCutout);
   }
+  if (cutoutControls.simpleButton && cutoutControls.simpleButton.dataset.precisionBound !== 'true') {
+    cutoutControls.simpleButton.dataset.precisionBound = 'true';
+    cutoutControls.simpleButton.addEventListener('click', startPrecisionCutout);
+  }
+  if (cutoutControls.professionalRunButton && cutoutControls.professionalRunButton.dataset.precisionBound !== 'true') {
+    cutoutControls.professionalRunButton.dataset.precisionBound = 'true';
+    cutoutControls.professionalRunButton.addEventListener('click', startPrecisionCutout);
+  }
+  if (cutoutControls.simpleModeButton && cutoutControls.simpleModeButton.dataset.precisionBound !== 'true') {
+    cutoutControls.simpleModeButton.dataset.precisionBound = 'true';
+    cutoutControls.simpleModeButton.addEventListener('click', function() { setPrecisionCutoutMode('simple'); });
+  }
+  if (cutoutControls.professionalModeButton && cutoutControls.professionalModeButton.dataset.precisionBound !== 'true') {
+    cutoutControls.professionalModeButton.dataset.precisionBound = 'true';
+    cutoutControls.professionalModeButton.addEventListener('click', openPrecisionCutoutProfessionalDialog);
+  }
+  if (cutoutControls.professionalOpenButton && cutoutControls.professionalOpenButton.dataset.precisionBound !== 'true') {
+    cutoutControls.professionalOpenButton.dataset.precisionBound = 'true';
+    cutoutControls.professionalOpenButton.addEventListener('click', openPrecisionCutoutProfessionalDialog);
+  }
+  if (cutoutControls.professionalCloseButton && cutoutControls.professionalCloseButton.dataset.precisionBound !== 'true') {
+    cutoutControls.professionalCloseButton.dataset.precisionBound = 'true';
+    cutoutControls.professionalCloseButton.addEventListener('click', closePrecisionCutoutProfessionalDialog);
+  }
+  bindPrecisionCutoutProfessionalDock();
+  if (cutoutControls.professionalDialog && cutoutControls.professionalDialog.dataset.precisionBound !== 'true') {
+    cutoutControls.professionalDialog.dataset.precisionBound = 'true';
+    cutoutControls.professionalDialog.addEventListener('keydown', function(event) {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      closePrecisionCutoutProfessionalDialog();
+    });
+  }
+  if (cutoutControls.professionalAlgorithm && cutoutControls.professionalAlgorithm.dataset.precisionBound !== 'true') {
+    cutoutControls.professionalAlgorithm.dataset.precisionBound = 'true';
+    cutoutControls.professionalAlgorithm.addEventListener('change', function() { setPrecisionCutoutSelectedAdapter(cutoutControls.professionalAlgorithm.value); });
+  }
+  if (cutoutControls.professionalRefreshButton && cutoutControls.professionalRefreshButton.dataset.precisionBound !== 'true') {
+    cutoutControls.professionalRefreshButton.dataset.precisionBound = 'true';
+    cutoutControls.professionalRefreshButton.addEventListener('click', refreshPrecisionCutoutSetup);
+  }
+  if (cutoutControls.professionalFeather && cutoutControls.professionalFeather.dataset.precisionBound !== 'true') {
+    cutoutControls.professionalFeather.dataset.precisionBound = 'true';
+    cutoutControls.professionalFeather.addEventListener('input', function() { if (cutoutControls.feather) cutoutControls.feather.value = cutoutControls.professionalFeather.value; updatePrecisionCutoutRefineControls(); });
+  }
+  if (cutoutControls.professionalUseSelection && cutoutControls.professionalUseSelection.dataset.precisionBound !== 'true') {
+    cutoutControls.professionalUseSelection.dataset.precisionBound = 'true';
+    cutoutControls.professionalUseSelection.addEventListener('change', function() { if (cutoutControls.useSelection) { cutoutControls.useSelection.checked = cutoutControls.professionalUseSelection.checked; if (cutoutControls.useSelection.checked) activatePrecisionCutoutSelection(); } updatePrecisionCutoutRefineControls(); });
+  }
+  if (cutoutControls.professionalRestoreMode && cutoutControls.professionalRestoreMode.dataset.precisionBound !== 'true') {
+    cutoutControls.professionalRestoreMode.dataset.precisionBound = 'true';
+    cutoutControls.professionalRestoreMode.addEventListener('change', function() { if (cutoutControls.restoreMode) cutoutControls.restoreMode.checked = cutoutControls.professionalRestoreMode.checked; updatePrecisionCutoutRefineControls(); });
+  }
+  if (cutoutControls.professionalRestoreMinAlpha && cutoutControls.professionalRestoreMinAlpha.dataset.precisionBound !== 'true') {
+    cutoutControls.professionalRestoreMinAlpha.dataset.precisionBound = 'true';
+    cutoutControls.professionalRestoreMinAlpha.addEventListener('input', function() { if (cutoutControls.restoreMinAlpha) cutoutControls.restoreMinAlpha.value = cutoutControls.professionalRestoreMinAlpha.value; updatePrecisionCutoutRefineControls(); });
+  }
+  if (cutoutControls.professionalRefineButton && cutoutControls.professionalRefineButton.dataset.precisionBound !== 'true') {
+    cutoutControls.professionalRefineButton.dataset.precisionBound = 'true';
+    cutoutControls.professionalRefineButton.addEventListener('click', startPrecisionCutoutRefine);
+  }
   if (cutoutRefine && cutoutRefine.dataset.precisionBound !== 'true') {
     cutoutRefine.dataset.precisionBound = 'true';
     cutoutRefine.addEventListener('click', startPrecisionCutoutRefine);
@@ -949,7 +1053,10 @@ function ensurePrecisionEditPanel() {
   }
   if (cutoutUseSelection && cutoutUseSelection.dataset.precisionBound !== 'true') {
     cutoutUseSelection.dataset.precisionBound = 'true';
-    cutoutUseSelection.addEventListener('change', updatePrecisionCutoutRefineControls);
+    cutoutUseSelection.addEventListener('change', function() {
+      if (cutoutUseSelection.checked) activatePrecisionCutoutSelection();
+      updatePrecisionCutoutRefineControls();
+    });
   }
   if (cutoutAdapterSelect && cutoutAdapterSelect.dataset.precisionBound !== 'true') {
     cutoutAdapterSelect.dataset.precisionBound = 'true';
@@ -968,6 +1075,17 @@ function ensurePrecisionEditPanel() {
     precisionSelectionFeatherInput.dataset.precisionBound = 'true';
     precisionSelectionFeatherInput.addEventListener('input', updatePrecisionSelectionFeather);
   }
+  var precisionGuidanceCard = document.getElementById('precisionGuidanceCard');
+  var precisionGuidanceToggle = document.getElementById('btnPrecisionGuidanceToggle');
+  if (precisionGuidanceToggle && precisionGuidanceToggle.dataset.precisionBound !== 'true') {
+    precisionGuidanceToggle.dataset.precisionBound = 'true';
+    precisionGuidanceToggle.addEventListener('click', togglePrecisionGuidance);
+  }
+  if (precisionGuidanceCard && precisionGuidanceCard.dataset.precisionEscapeBound !== 'true') {
+    precisionGuidanceCard.dataset.precisionEscapeBound = 'true';
+    document.addEventListener('keydown', handlePrecisionGuidanceKeydown);
+  }
+  updatePrecisionGuidanceSummary();
   if (cutoutModelInstall && cutoutModelInstall.dataset.precisionBound !== 'true') {
     cutoutModelInstall.dataset.precisionBound = 'true';
     cutoutModelInstall.addEventListener('click', requestPrecisionCutoutModelInstall);
@@ -1052,6 +1170,8 @@ function ensurePrecisionEditPanel() {
   if (typeof setPrecisionEditStrategy === 'function') setPrecisionEditStrategy(precisionEditStrategy);
   if (typeof setPrecisionEditSelectionMode === 'function') setPrecisionEditSelectionMode(precisionEditSelectionMode);
   bindPrecisionCanvasResizeHandle();
+  bindPrecisionCanvasVerticalResizeHandle();
+  bindPrecisionInspectorResizeHandle();
   bindPrecisionHelpTooltips();
   bindPrecisionWorkbenchHelp();
   bindPrecisionDocsDialog();
@@ -1065,6 +1185,11 @@ function ensurePrecisionEditPanel() {
     sessionCalendar.dataset.precisionBound = 'true';
     sessionCalendar.addEventListener('keydown', handlePrecisionSessionCalendarKeydown);
   }
+  var workflowCalendar = document.getElementById('precisionWorkflowHistoryCalendar');
+  if (workflowCalendar && workflowCalendar.dataset.precisionBound !== 'true') {
+    workflowCalendar.dataset.precisionBound = 'true';
+    workflowCalendar.addEventListener('keydown', handlePrecisionWorkflowHistoryCalendarKeydown);
+  }
   var cutoutModelPanel = cutoutControls.modelPanel;
   if (cutoutModelPanel && cutoutModelPanel.dataset.precisionModelBound !== 'true') {
     cutoutModelPanel.dataset.precisionModelBound = 'true';
@@ -1074,20 +1199,30 @@ function ensurePrecisionEditPanel() {
   if (zoomShell && zoomShell.dataset.precisionZoomBound !== 'true') {
     zoomShell.dataset.precisionZoomBound = 'true';
     zoomShell.addEventListener('wheel', function(event) {
-      if (!event.ctrlKey || !precisionEditSourceImageData) return;
+      if (!event.shiftKey || !precisionEditSourceImageData) return;
+      var target = event.target;
+      if (target && target.closest && target.closest('#precisionCanvasResizeHandle, #precisionCanvasVerticalResizeHandle, #precisionAnnotationInstructionPopover, #precisionTextEditor')) {
+        if (precisionCanvasResizeState) endPrecisionCanvasResize();
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (!precisionCanvasZoomHotspotContains(event, zoomShell)) return;
       event.preventDefault();
+      event.stopPropagation();
       setPrecisionViewZoom(precisionViewZoom + (event.deltaY < 0 ? 10 : -10), event);
-    }, { passive: false });
-    zoomShell.addEventListener('wheel', function(event) {
-      if (event.ctrlKey || !precisionEditSourceImageData) return;
-      event.preventDefault();
-      setPrecisionViewZoom(precisionViewZoom + (event.deltaY < 0 ? 10 : -10), event);
-    }, { passive: false });
+    }, { passive: false, capture: true });
     zoomShell.addEventListener('mousedown', function(event) {
       if (event.button !== 1 || !precisionEditSourceImageData) return;
       event.preventDefault();
+      event.stopPropagation();
       setPrecisionViewZoom(100, { resetScroll: true });
-    });
+    }, true);
+    zoomShell.addEventListener('auxclick', function(event) {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
   }
   var compareStage = document.getElementById('precisionCompareStage');
   if (compareStage) bindPrecisionCompareEvents(compareStage);
@@ -1100,6 +1235,18 @@ function ensurePrecisionEditPanel() {
   syncPrecisionFullscreenState();
   updatePrecisionEditControls();
   return existing;
+}
+
+function precisionCanvasZoomHotspotContains(event, shell) {
+  if (!event || !shell || typeof shell.getBoundingClientRect !== 'function') return false;
+  var rect = shell.getBoundingClientRect();
+  var width = Math.max(1, rect.width || shell.clientWidth || 0);
+  var height = Math.max(1, rect.height || shell.clientHeight || 0);
+  var hotspotWidth = width * 0.1;
+  var hotspotHeight = height * 0.1;
+  var left = rect.left + (width - hotspotWidth) / 2;
+  var top = rect.top + (height - hotspotHeight) / 2;
+  return Number(event.clientX) >= left && Number(event.clientX) <= left + hotspotWidth && Number(event.clientY) >= top && Number(event.clientY) <= top + hotspotHeight;
 }
 
 function precisionResizeDimensionKey(width, height) {
@@ -1174,7 +1321,10 @@ function applyPrecisionResizeTierRatio() {
   if (width) width.value = parts[0];
   if (height) height.value = parts[1];
   var preset = document.getElementById('precisionResizePreset');
-  if (preset) preset.value = size;
+  if (preset) {
+    var presetValue = getPrecisionOutputSizePolicy() === 'fit_crop' ? 'crop:' + size : size;
+    preset.value = presetValue;
+  }
   syncPrecisionAspectRatioHint();
   updatePrecisionResizePresetControls();
   updatePrecisionEditControls();
@@ -1241,7 +1391,7 @@ function resolvePrecisionModelCapability(provider, selectedModel) {
     return {
       selectedModel: model, canonicalModel: canonicalModel || '', capability: null, sizes: {},
       aliasDepth: aliasDepth || 0, structureValid: false, precisionEditConfirmed: false,
-      sizeDeclarationPresent: false, sizeDeclarationValid: false, reason: reason
+      sizeDeclarationPresent: false, sizeDeclarationValid: false, flexibleSizes: false, reason: reason
     };
   };
   if (!model || model !== model.trim() || !capabilities || typeof capabilities !== 'object' || Array.isArray(capabilities)) {
@@ -1284,12 +1434,16 @@ function resolvePrecisionModelCapability(provider, selectedModel) {
     }
   }
   var sizeDeclaration = precisionCapabilitySizeDeclaration(canonical);
+  var hasSizePolicy = Object.prototype.hasOwnProperty.call(canonical, 'size_policy');
+  var policyValid = !hasSizePolicy || canonical.size_policy === 'gpt_image_2_flexible';
+  var flexibleSizes = policyValid && canonical.size_policy === 'gpt_image_2_flexible';
   var precisionEditConfirmed = canonical.precision_edit === true;
   return {
     selectedModel: model, canonicalModel: canonicalModel, capability: canonical, sizes: sizeDeclaration.sizes,
     aliasDepth: aliasDepth, structureValid: true, precisionEditConfirmed: precisionEditConfirmed,
     sizeDeclarationPresent: sizeDeclaration.present, sizeDeclarationValid: sizeDeclaration.valid,
-    reason: !precisionEditConfirmed ? 'precision_edit_unconfirmed' : sizeDeclaration.reason
+    flexibleSizes: flexibleSizes,
+    reason: !precisionEditConfirmed ? 'precision_edit_unconfirmed' : (!policyValid ? 'precision_size_policy_invalid' : sizeDeclaration.reason)
   };
 }
 
@@ -1297,11 +1451,23 @@ function getPrecisionResizeCapability() {
   var provider = findProvider(precisionEditSelectedModel.providerId);
   var model = precisionEditSelectedModel.model;
   var resolution = resolvePrecisionModelCapability(provider, model);
+  var catalogSizes = {};
+  var catalog = provider && Array.isArray(provider.precision_size_catalog)
+    ? provider.precision_size_catalog : [];
+  var catalogEntry = catalog.find(function(entry) {
+    return entry && (entry.model === model || entry.canonical_model === resolution.canonicalModel);
+  });
+  if (catalogEntry && Array.isArray(catalogEntry.strict_selectable_sizes)) {
+    precisionResizeDimensions(catalogEntry.strict_selectable_sizes, catalogSizes);
+  }
+  var sizes = Object.keys(catalogSizes).length ? catalogSizes
+    : (resolution.structureValid && resolution.sizeDeclarationValid ? resolution.sizes : {});
   return {
-    known: !!(resolution.structureValid && resolution.sizeDeclarationValid),
-    declared: !!(resolution.structureValid && resolution.sizeDeclarationPresent),
-    sizes: resolution.structureValid && resolution.sizeDeclarationValid ? resolution.sizes : {},
-    canonicalModel: resolution.canonicalModel || ''
+    known: !!(resolution.structureValid && ((resolution.sizeDeclarationValid && resolution.reason !== 'precision_size_policy_invalid') || Object.keys(catalogSizes).length)),
+    declared: !!(Object.keys(catalogSizes).length || (resolution.structureValid && resolution.sizeDeclarationPresent)),
+    sizes: sizes,
+    canonicalModel: resolution.canonicalModel || '',
+    flexibleSizes: !!resolution.flexibleSizes
   };
 }
 
@@ -1330,11 +1496,16 @@ function getPrecisionResizeCapabilityState() {
   var targetSize = getPrecisionResizeTargetSize();
   var authorization = getPrecisionEditModelAuthorizationState();
   var capability = getPrecisionResizeCapability();
+  var outputPolicy = getPrecisionOutputSizePolicy();
   return {
     targetSize: targetSize,
     authorization: authorization,
     capability: capability,
-    supported: !!(targetSize && authorization.authorized && capability.sizes[targetSize] === true)
+    supported: !!(targetSize && authorization.authorized && capability.known && (
+      outputPolicy === 'fit_crop' ||
+      (capability.flexibleSizes && precisionGptImage2SizeError(targetSize) === '') ||
+      capability.sizes[targetSize] === true
+    ))
   };
 }
 
@@ -1454,6 +1625,30 @@ function syncPrecisionOutputSizePolicyControls() {
   if (hint) hint.textContent = i18nText(precisionOutputSizePolicy === 'fit_crop'
     ? 'creator.precision_output_size_policy_fit_crop_hint'
     : 'creator.precision_output_size_policy_strict_hint');
+  var mode = document.getElementById('precisionResizeMode');
+  if (mode) mode.value = precisionOutputSizePolicy;
+  var modeHint = document.getElementById('precisionResizeModeHint');
+  if (modeHint) modeHint.textContent = i18nText(precisionOutputSizePolicy === 'fit_crop'
+    ? 'creator.precision_size_mode_fit_crop_hint'
+    : 'creator.precision_size_mode_strict_hint');
+  updatePrecisionResizeModeControls();
+}
+
+// The selected size policy is the second step in the resize flow. Model sizes
+// are a fail-closed preset list; custom dimensions and saved presets belong
+// exclusively to the local crop-to-fit branch.
+function updatePrecisionResizeModeControls() {
+  var policy = sanitizePrecisionOutputSizePolicy(precisionOutputSizePolicy);
+  var preset = document.getElementById('precisionResizePreset');
+  var selected = preset && preset.options ? preset.options[preset.selectedIndex] : null;
+  var isCrop = policy === 'fit_crop';
+  var isCustom = !!(selected && selected.value === 'custom');
+  var label = document.getElementById('precisionResizePresetLabel');
+  var customFields = document.getElementById('precisionResizeCustomFields');
+  var editor = document.getElementById('precisionResizePresetEditor');
+  if (label) label.textContent = i18nText(isCrop ? 'creator.precision_size_crop_preset' : 'creator.precision_size_model_preset');
+  if (customFields) customFields.classList.toggle('hidden', !isCrop || !isCustom);
+  if (editor) editor.classList.toggle('hidden', !isCrop);
 }
 
 function setPrecisionOutputSizePolicy(value) {
@@ -1464,8 +1659,14 @@ function setPrecisionOutputSizePolicy(value) {
 }
 
 function getPrecisionOutputSizePolicy() {
+  // The visible second-level mode select is the single source of truth. The
+  // legacy radio controls remain hidden for compatibility with older callers
+  // and must never override the current mode.
+  var mode = document.getElementById('precisionResizeMode');
+  if (mode && mode.value) return sanitizePrecisionOutputSizePolicy(mode.value);
   var checked = document.querySelector ? document.querySelector('input[name="precisionOutputSizePolicy"]:checked') : null;
-  return sanitizePrecisionOutputSizePolicy(checked ? checked.value : precisionOutputSizePolicy);
+  if (checked && checked.value) return sanitizePrecisionOutputSizePolicy(checked.value);
+  return sanitizePrecisionOutputSizePolicy(precisionOutputSizePolicy);
 }
 
 function precisionGreatestCommonDivisor(a, b) {
@@ -1540,6 +1741,7 @@ function renderPrecisionResizeSavedPresets(preferredValue) {
     option.value = 'saved:' + preset.id;
     option.textContent = preset.name + ' · ' + preset.width + ' × ' + preset.height;
     option.dataset.precisionSavedPreset = 'true';
+    option.dataset.precisionResizeMode = 'fit_crop';
     option.dataset.size = preset.width + 'x' + preset.height;
     select.appendChild(option);
   });
@@ -1549,63 +1751,212 @@ function renderPrecisionResizeSavedPresets(preferredValue) {
   updatePrecisionResizePresetControls();
 }
 
+// Strict and crop-to-fit presets are deliberately independent families. Strict
+// presets describe sizes the upstream model may natively return; crop presets
+// are common local finishing sizes. Older templates that do not yet include a
+// crop family are upgraded by mirroring strict entries as a compatibility
+// fallback only.
+function ensurePrecisionResizeModePresetGroups() {
+  var select = document.getElementById('precisionResizePreset');
+  if (!select || (select.dataset && select.dataset.precisionModeGroups === 'true')) return;
+  if (typeof select.querySelectorAll !== 'function' || typeof select.appendChild !== 'function') return;
+  var strictGroups = Array.prototype.slice.call(select.querySelectorAll('optgroup')).filter(function(group) {
+    return !group.dataset || group.dataset.precisionResizeMode !== 'fit_crop';
+  });
+  strictGroups.forEach(function(group) { group.dataset.precisionResizeMode = 'strict'; });
+  var cropGroups = Array.prototype.slice.call(select.querySelectorAll('optgroup[data-precision-resize-mode="fit_crop"]'));
+  // Author-provided crop entries remain the source of truth. Namespace their
+  // values so the same pixel size can exist in both branches without the
+  // browser picking a hidden strict option when the mode changes.
+  cropGroups.forEach(function(group) {
+    Array.prototype.slice.call(group.options || group.querySelectorAll('option')).forEach(function(option) {
+      var size = precisionResizePresetSize(option.value, option);
+      if (!size) return;
+      option.value = 'crop:' + size;
+      option.dataset.size = size;
+      option.dataset.precisionCropPreset = 'true';
+    });
+  });
+  // The crop branch has its own 1K/2K/4K catalogue. The compact "common
+  // sizes" group omitted many tier/ratio pairs, so a tier selection could
+  // point at a missing crop: value and fall back to Custom. These are local
+  // crop presets only; they never expand the strict upstream whitelist.
+  strictGroups.forEach(function(strictGroup) {
+    var tierMatch = /\b([124]K)\b/i.exec(String(strictGroup.label || ''));
+    var tier = tierMatch ? tierMatch[1].toUpperCase() : '';
+    if (!tier) return;
+    var cropGroup = cropGroups.find(function(group) {
+      return group.dataset && group.dataset.precisionResizeTier === tier;
+    });
+    if (!cropGroup) {
+      cropGroup = document.createElement('optgroup');
+      cropGroup.label = '裁切适配 · ' + tier;
+      cropGroup.dataset.precisionResizeMode = 'fit_crop';
+      cropGroup.dataset.precisionResizeTier = tier;
+      select.appendChild(cropGroup);
+      cropGroups.push(cropGroup);
+    }
+    Array.prototype.slice.call(strictGroup.options || strictGroup.querySelectorAll('option')).forEach(function(option) {
+      var size = precisionResizePresetSize(option.value, option);
+      if (!size) return;
+      var cropValue = 'crop:' + size;
+      var exists = Array.prototype.some.call(cropGroup.options || cropGroup.querySelectorAll('option'), function(candidate) {
+        return candidate.value === cropValue;
+      });
+      if (exists) return;
+      var clone = option.cloneNode(true);
+      clone.value = cropValue;
+      clone.dataset.size = size;
+      clone.dataset.precisionCropPreset = 'true';
+      clone.dataset.precisionResizeMode = 'fit_crop';
+      cropGroup.appendChild(clone);
+    });
+  });
+  if (!cropGroups.length) {
+    strictGroups.forEach(function(group) {
+    var cropGroup = document.createElement('optgroup');
+    cropGroup.label = '裁切适配 · ' + String(group.label || '').replace(/^(严格尺寸|模型尺寸)\s*·\s*/, '');
+    cropGroup.dataset.precisionResizeMode = 'fit_crop';
+    Array.prototype.slice.call(group.options || group.querySelectorAll('option')).forEach(function(option) {
+      var size = precisionResizePresetSize(option.value, option);
+      if (!size) return;
+      var clone = option.cloneNode(true);
+      clone.value = 'crop:' + size;
+      clone.dataset.size = size;
+      clone.dataset.precisionCropPreset = 'true';
+      cropGroup.appendChild(clone);
+    });
+    select.appendChild(cropGroup);
+    });
+  }
+  if (select.dataset) select.dataset.precisionModeGroups = 'true';
+}
+
+function syncPrecisionResizeModePresetSelection(policy) {
+  var select = document.getElementById('precisionResizePreset');
+  if (!select) return;
+  var value = String(select.value || 'custom');
+  var size = precisionResizePresetSize(value, select.options[select.selectedIndex]);
+  if (!size) return;
+  var desired = policy === 'fit_crop' ? 'crop:' + size : size;
+  if (desired === value) return;
+  var target = Array.prototype.find.call(select.options || [], function(option) { return option.value === desired; });
+  if (target && !target.hidden) select.value = desired;
+}
+
 function updatePrecisionResizeCapabilityUI() {
   var select = document.getElementById('precisionResizePreset');
+  ensurePrecisionResizeModePresetGroups();
   var capability = getPrecisionResizeCapability();
   var options = select && select.options || [];
+  var outputPolicy = getPrecisionOutputSizePolicy();
+  syncPrecisionResizeModePresetSelection(outputPolicy);
+  // A strict-size declaration controls generation readiness, not which
+  // candidate sizes a user may inspect and explicitly authorize. Hiding an
+  // undeclared preset made new upstream model variants impossible to try even
+  // after the user had checked their endpoint documentation. The action gate
+  // below still keeps Generate disabled until a scoped confirmation is saved.
+  var selectedOption = select && select.options ? select.options[select.selectedIndex] : null;
   for (var i = 0; i < options.length; i++) {
     var option = options[i];
     var size = precisionResizePresetSize(option.value, option);
     var custom = option.value === 'custom';
-    var supported = capability.known && !!size && capability.sizes[size] === true;
-    // Presets are local form helpers, not provider capability grants. Keep every
-    // built-in and saved option selectable; submission still checks the exact
-    // target through getPrecisionSizeRequest().
+    var optionMode = option.dataset && option.dataset.precisionResizeMode
+      ? option.dataset.precisionResizeMode
+      : option.parentNode && option.parentNode.dataset
+        ? option.parentNode.dataset.precisionResizeMode : '';
+    var modeMismatch = outputPolicy === 'fit_crop'
+      ? (optionMode === 'strict')
+      : (optionMode === 'fit_crop');
+    var supported = (custom && outputPolicy === 'fit_crop') || outputPolicy === 'fit_crop' || (capability.flexibleSizes
+      ? !!size && precisionGptImage2SizeError(size) === ''
+      : capability.known && !!size && capability.sizes[size] === true);
+    var capabilityState = custom || outputPolicy === 'fit_crop'
+      ? 'local'
+      : !capability.known
+        ? 'unknown'
+        : supported ? 'supported' : 'needs-authorization';
+    option.hidden = modeMismatch;
     option.disabled = false;
-    option.title = custom || supported ? '' : i18nText(
-      capability.known ? 'creator.precision_size_preset_undeclared' : 'creator.precision_size_preset_unconfirmed'
-    );
+    option.title = custom || supported ? '' : i18nText('creator.precision_size_preset_trial_required');
+    option.dataset.precisionCapabilityState = capabilityState;
+    option.dataset.precisionCapabilityModel = capability.canonicalModel || '';
+    if (size && !optionMode) option.dataset.precisionResizeMode = 'strict';
+  }
+  // Switching between strict and crop-to-fit can hide the active option.
+  // Keep its dimensions in the number fields while selecting a visible helper.
+  if (selectedOption && selectedOption.hidden && select) {
+    var visibleOption = Array.prototype.find.call(options, function(option) {
+      return !option.hidden && option.value !== 'custom';
+    });
+    select.value = visibleOption ? visibleOption.value : 'custom';
+    if (visibleOption) applyPrecisionResizePreset(visibleOption.value);
+  }
+  // Collapse empty built-in groups so a strict model does not show blank 1K,
+  // 2K, or 4K headings after filtering. Saved options are appended directly
+  // to the select and therefore do not need group handling.
+  if (select && select.querySelectorAll) {
+    Array.prototype.forEach.call(select.querySelectorAll('optgroup'), function(group) {
+      var children = group.options || group.querySelectorAll('option');
+      var groupMode = group.dataset.precisionResizeMode || 'strict';
+      var visible = groupMode === outputPolicy && Array.prototype.some.call(children || [], function(option) { return !option.hidden; });
+      group.hidden = !visible;
+    });
   }
   if (select) select.disabled = false;
+  updatePrecisionResizeModeControls();
   updatePrecisionResizePresetControls();
   var status = document.getElementById('precisionResizeCapabilityStatus');
-  var confirmSize = document.getElementById('btnPrecisionConfirmResizeSize');
-  var revokeSize = document.getElementById('btnPrecisionRevokeResizeSize');
-  if (!status && !confirmSize && !revokeSize) return;
+  if (!status) return;
   var state = getPrecisionResizeCapabilityState();
   var pending = precisionResizeCapabilityPending;
   var pendingCurrent = !!(pending && pending.providerId === state.authorization.providerId &&
     pending.model === state.authorization.model && pending.size === state.targetSize);
   var messageKey = 'creator.precision_size_capability_model_required';
-  var showConfirm = false;
-  var showRevoke = false;
   if (precisionEditSizeMode === 'resize') {
     if (!state.targetSize) messageKey = 'creator.precision_size_capability_invalid';
     else if (!state.authorization.authorized) messageKey = 'creator.precision_size_capability_model_required';
-    else if (state.supported) {
-      messageKey = 'creator.precision_size_capability_supported';
-      showRevoke = true;
+    else if (outputPolicy === 'fit_crop') {
+      // Crop-to-fit requires a confirmed model contract, but its target is a
+      // local finishing size rather than a claim that the upstream natively
+      // supports that exact resolution. Never offer per-size authorization in
+      // this mode because it would incorrectly mutate the strict whitelist.
+      messageKey = state.capability.known
+        ? 'creator.precision_size_capability_fit_crop'
+        : 'creator.precision_size_capability_unknown';
+    } else if (state.supported) {
+      messageKey = state.capability.flexibleSizes
+        ? 'creator.precision_size_capability_flexible'
+        : 'creator.precision_size_capability_supported';
     } else {
       messageKey = state.capability.known ? 'creator.precision_size_capability_unsupported' : 'creator.precision_size_capability_unknown';
-      showConfirm = true;
     }
   }
   if (pendingCurrent) messageKey = pending.enabled ? 'creator.precision_size_confirming' : 'creator.precision_size_revoking';
   if (status) {
     status.textContent = i18nText(messageKey, { size: state.targetSize || '' });
-    status.dataset.state = pendingCurrent ? 'pending' : state.supported ? 'supported' : showConfirm ? 'unconfirmed' : 'blocked';
+    status.dataset.state = pendingCurrent ? 'pending'
+      : outputPolicy === 'fit_crop' && state.supported ? 'crop-fit'
+      : state.supported ? 'supported' : 'blocked';
   }
-  if (confirmSize) {
-    confirmSize.textContent = i18nText('creator.precision_size_confirm_action', { size: state.targetSize || '' });
-    confirmSize.classList.toggle('hidden', !showConfirm);
-    confirmSize.disabled = !showConfirm || !!pending;
-    confirmSize.setAttribute('aria-busy', pendingCurrent && pending.enabled ? 'true' : 'false');
+  // A model-size grant is deliberately scoped to the current provider, model,
+  // and exact target size.  It is an explicit user-authorized experiment, not
+  // an inferred capability from a different model or an automatic retry.
+  var canManageExactSize = precisionEditSizeMode === 'resize' &&
+    outputPolicy === 'strict' && state.targetSize && state.authorization.authorized;
+  var confirmAction = document.getElementById('btnPrecisionConfirmResizeSize');
+  var revokeAction = document.getElementById('btnPrecisionRevokeResizeSize');
+  if (confirmAction) {
+    var canConfirm = !!(canManageExactSize && !state.supported && !pendingCurrent);
+    confirmAction.hidden = !canManageExactSize || state.supported;
+    confirmAction.disabled = !canConfirm;
+    confirmAction.textContent = i18nText('creator.precision_size_confirm_action', { size: state.targetSize || '' });
   }
-  if (revokeSize) {
-    revokeSize.textContent = i18nText('creator.precision_size_revoke_action', { size: state.targetSize || '' });
-    revokeSize.classList.toggle('hidden', !showRevoke);
-    revokeSize.disabled = !showRevoke || !!pending;
-    revokeSize.setAttribute('aria-busy', pendingCurrent && !pending.enabled ? 'true' : 'false');
+  if (revokeAction) {
+    var canRevoke = !!(canManageExactSize && state.supported && !pendingCurrent && !state.capability.flexibleSizes);
+    revokeAction.hidden = !canManageExactSize || !state.supported || state.capability.flexibleSizes;
+    revokeAction.disabled = !canRevoke;
+    revokeAction.textContent = i18nText('creator.precision_size_revoke_action', { size: state.targetSize || '' });
   }
 }
 
@@ -1654,6 +2005,45 @@ function revokePrecisionResizeCapability() {
   return submitPrecisionResizeCapability(false);
 }
 
+function submitPrecisionFlexibleSizes(enabled) {
+  if (precisionResizeCapabilityPending) return Promise.resolve(false);
+  var state = getPrecisionResizeCapabilityState();
+  if (!state.authorization.authorized || !state.capability.known || state.capability.flexibleSizes === enabled) return Promise.resolve(false);
+  var confirmKey = enabled ? 'creator.precision_size_flexible_enable_dialog' : 'creator.precision_size_flexible_disable_dialog';
+  if (!confirm(i18nText(confirmKey))) return Promise.resolve(false);
+  var request = { providerId: state.authorization.providerId, model: state.authorization.model, flexibleSizes: enabled };
+  precisionResizeCapabilityPending = request;
+  updatePrecisionEditControls();
+  return _authFetch('/api/providers/' + encodeURIComponent(request.providerId) + '/precision-capability', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: request.model, enabled: true, confirmed: true, flexible_sizes: enabled })
+  }).then(function(response) {
+    if (!response.ok) throw new Error('precision_flexible_size_capability_save_failed');
+    return response.json();
+  }).then(function() {
+    return loadProviders();
+  }).then(function() {
+    if (precisionResizeCapabilityPending === request) precisionResizeCapabilityPending = null;
+    updatePrecisionEditControls();
+    setStatus(i18nText(enabled ? 'creator.precision_size_flexible_enabled' : 'creator.precision_size_flexible_disabled'));
+    return true;
+  }).catch(function() {
+    if (precisionResizeCapabilityPending === request) precisionResizeCapabilityPending = null;
+    updatePrecisionEditControls();
+    setStatus(i18nText('creator.precision_size_capability_save_failed'));
+    return false;
+  });
+}
+
+function enablePrecisionFlexibleSizes() {
+  return submitPrecisionFlexibleSizes(true);
+}
+
+function disablePrecisionFlexibleSizes() {
+  return submitPrecisionFlexibleSizes(false);
+}
+
 function findPrecisionResizeOptionBySize(size) {
   var select = document.getElementById('precisionResizePreset');
   if (!select || !size) return null;
@@ -1664,6 +2054,10 @@ function findPrecisionResizeOptionBySize(size) {
 }
 
 function savePrecisionResizePreset() {
+  if (getPrecisionOutputSizePolicy() !== 'fit_crop') {
+    setPrecisionResizePresetStatus('creator.precision_size_preset_crop_only', null, 'error');
+    return;
+  }
   var nameInput = document.getElementById('precisionResizePresetName');
   var name = normalizePrecisionResizePresetName(nameInput && nameInput.value);
   if (!name) {
@@ -1759,6 +2153,15 @@ function resetPrecisionResizePresets() {
 function bindPrecisionResizeControls() {
   precisionOutputSizePolicy = sanitizePrecisionOutputSizePolicy(precisionOutputSizePolicy);
   syncPrecisionOutputSizePolicyControls();
+  var modeSelect = document.getElementById('precisionResizeMode');
+  if (modeSelect && modeSelect.dataset.precisionBound !== 'true') {
+    modeSelect.dataset.precisionBound = 'true';
+    modeSelect.addEventListener('change', function() {
+      setPrecisionOutputSizePolicy(this.value);
+      updatePrecisionResizeCapabilityUI();
+      updatePrecisionEditControls();
+    });
+  }
   ['precisionOutputPolicyStrict', 'precisionOutputPolicyFitCrop'].forEach(function(id) {
     var input = document.getElementById(id);
     if (!input || input.dataset.precisionBound === 'true') return;
@@ -1822,6 +2225,8 @@ function bindPrecisionResizeControls() {
   var remove = document.getElementById('btnPrecisionDeleteResizePreset');
   var reset = document.getElementById('btnPrecisionResetResizePresets');
   var name = document.getElementById('precisionResizePresetName');
+  var confirmSize = document.getElementById('btnPrecisionConfirmResizeSize');
+  var revokeSize = document.getElementById('btnPrecisionRevokeResizeSize');
   if (save && save.dataset.precisionBound !== 'true') {
     save.dataset.precisionBound = 'true';
     save.addEventListener('click', savePrecisionResizePreset);
@@ -1841,6 +2246,14 @@ function bindPrecisionResizeControls() {
       event.preventDefault();
       savePrecisionResizePreset();
     });
+  }
+  if (confirmSize && confirmSize.dataset.precisionBound !== 'true') {
+    confirmSize.dataset.precisionBound = 'true';
+    confirmSize.addEventListener('click', confirmPrecisionResizeCapability);
+  }
+  if (revokeSize && revokeSize.dataset.precisionBound !== 'true') {
+    revokeSize.dataset.precisionBound = 'true';
+    revokeSize.addEventListener('click', revokePrecisionResizeCapability);
   }
   renderPrecisionResizeSavedPresets();
   if (typeof syncPrecisionResizeTierRatioFromSize === 'function') {
@@ -2066,6 +2479,34 @@ function precisionCanvasResizeLimits(shell) {
   return { min: min, max: max, maxHeight: maxHeight, stageWidth: stageWidth };
 }
 
+function positionPrecisionCanvasResizeHandle() {
+  var shell = document.getElementById('precisionCanvasShell');
+  var handle = document.getElementById('precisionCanvasResizeHandle');
+  var parent = handle && handle.offsetParent;
+  if (!shell || !handle || !parent || shell.classList.contains('is-empty') || !shell.getBoundingClientRect || !parent.getBoundingClientRect) return;
+  var shellRect = shell.getBoundingClientRect();
+  var parentRect = parent.getBoundingClientRect();
+  var width = handle.offsetWidth || 44;
+  var height = handle.offsetHeight || 44;
+  var left;
+  var top;
+  if (parent === shell) {
+    // The handle is an absolutely positioned child of the scroll container.
+    // Convert the visible lower-right corner back into the container's content
+    // coordinate system so zoom/pan scroll offsets cannot carry it away.
+    left = Math.max(0, (shell.scrollLeft || 0) + (shell.clientWidth || shellRect.width) - width);
+    top = Math.max(0, (shell.scrollTop || 0) + (shell.clientHeight || shellRect.height) - height);
+  } else {
+    // Keep this robust if a future wrapper becomes the offset parent.
+    left = Math.max(0, shellRect.left + (shell.clientLeft || 0) + (shell.clientWidth || shellRect.width) - parentRect.left - (parent.clientLeft || 0) + (parent.scrollLeft || 0) - width);
+    top = Math.max(0, shellRect.top + (shell.clientTop || 0) + (shell.clientHeight || shellRect.height) - parentRect.top - (parent.clientTop || 0) + (parent.scrollTop || 0) - height);
+  }
+  handle.style.right = 'auto';
+  handle.style.bottom = 'auto';
+  handle.style.left = left + 'px';
+  handle.style.top = top + 'px';
+}
+
 function applyPrecisionCanvasVisualSize(width) {
   var shell = document.getElementById('precisionCanvasShell');
   var surface = document.getElementById('precisionCanvasSurface');
@@ -2081,6 +2522,10 @@ function applyPrecisionCanvasVisualSize(width) {
     surface.style.width = precisionViewZoom + '%';
     surface.style.aspectRatio = precisionEditSourceWidth + ' / ' + precisionEditSourceHeight;
   }
+  var schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(callback) { callback(); };
+  schedule(function() {
+    if (typeof positionPrecisionCanvasResizeHandle === 'function') positionPrecisionCanvasResizeHandle();
+  });
 }
 
 function reflowPrecisionCanvasVisualSize(force) {
@@ -2146,7 +2591,11 @@ function bindPrecisionCanvasResizeHandle() {
   var stage = shell && shell.closest ? shell.closest('.precision-edit-stage-column') : null;
   var reflow = function() {
     if (!precisionCanvasResizeState) reflowPrecisionCanvasVisualSize(false);
+    if (typeof positionPrecisionCanvasResizeHandle === 'function') positionPrecisionCanvasResizeHandle();
   };
+  if (shell && typeof positionPrecisionCanvasResizeHandle === 'function') {
+    shell.addEventListener('scroll', positionPrecisionCanvasResizeHandle, { passive: true });
+  }
   if (stage && typeof ResizeObserver === 'function') {
     handle._precisionCanvasResizeObserver = new ResizeObserver(reflow);
     handle._precisionCanvasResizeObserver.observe(stage);
@@ -2155,9 +2604,246 @@ function bindPrecisionCanvasResizeHandle() {
   window.addEventListener('orientationchange', reflow);
 }
 
+function precisionCanvasVerticalResizeLimits(stage) {
+  var rect = stage && stage.getBoundingClientRect ? stage.getBoundingClientRect() : null;
+  var available = rect && rect.height ? rect.height : (window.innerHeight || 0);
+  var minimumGallery = Math.min(220, Math.max(120, available * 0.24));
+  var min = Math.min(Math.max(220, available * 0.32), Math.max(180, available - minimumGallery));
+  var max = Math.max(min, available - minimumGallery);
+  return { min: min, max: max, available: available, minimumGallery: minimumGallery };
+}
+
+function setPrecisionCanvasVerticalSize(height) {
+  var panel = document.getElementById('panelPrecisionEdit');
+  var stage = document.querySelector('#panelPrecisionEdit .precision-edit-stage-column');
+  var shell = document.getElementById('precisionCanvasShell');
+  var showcase = document.getElementById('precisionSessionShowcase');
+  if (!panel || document.fullscreenElement !== panel || !stage || !shell) return false;
+  var limits = precisionCanvasVerticalResizeLimits(stage);
+  var value = Math.max(limits.min, Math.min(limits.max, Number(height) || limits.min));
+  if (!precisionCanvasVerticalResizeRestore) {
+    precisionCanvasVerticalResizeRestore = {
+      shellHeight: shell.style.height,
+      shellFlexBasis: shell.style.flexBasis,
+      stageCanvasSize: stage.style.getPropertyValue('--precision-canvas-vertical-size'),
+      stageGallerySize: stage.style.getPropertyValue('--precision-session-gallery-size')
+    };
+  }
+  stage.style.setProperty('--precision-canvas-vertical-size', Math.round(value) + 'px');
+  stage.style.setProperty('--precision-session-gallery-size', Math.round(Math.max(limits.minimumGallery, limits.available - value)) + 'px');
+  shell.style.height = Math.round(value) + 'px';
+  shell.style.flexBasis = Math.round(value) + 'px';
+  if (showcase) showcase.style.setProperty('--precision-session-gallery-size', Math.round(Math.max(limits.minimumGallery, limits.available - value)) + 'px');
+  var handle = document.getElementById('precisionCanvasVerticalResizeHandle');
+  if (handle) {
+    handle.setAttribute('aria-valuemin', String(Math.round(limits.min)));
+    handle.setAttribute('aria-valuemax', String(Math.round(limits.max)));
+    handle.setAttribute('aria-valuenow', String(Math.round(value)));
+  }
+  return value;
+}
+
+function clearPrecisionCanvasVerticalSize() {
+  var stage = document.querySelector('#panelPrecisionEdit .precision-edit-stage-column');
+  var shell = document.getElementById('precisionCanvasShell');
+  var showcase = document.getElementById('precisionSessionShowcase');
+  var restore = precisionCanvasVerticalResizeRestore;
+  if (stage) {
+    stage.style.setProperty('--precision-canvas-vertical-size', restore ? restore.stageCanvasSize : '');
+    stage.style.setProperty('--precision-session-gallery-size', restore ? restore.stageGallerySize : '');
+  }
+  if (showcase) showcase.style.removeProperty('--precision-session-gallery-size');
+  if (shell && restore) {
+    shell.style.height = restore.shellHeight;
+    shell.style.flexBasis = restore.shellFlexBasis;
+  }
+  precisionCanvasVerticalResizeRestore = null;
+}
+
+function beginPrecisionCanvasVerticalResize(event) {
+  var handle = event && event.currentTarget;
+  var panel = document.getElementById('panelPrecisionEdit');
+  var stage = handle && handle.closest ? handle.closest('.precision-edit-stage-column') : null;
+  var shell = document.getElementById('precisionCanvasShell');
+  if (!event || event.isPrimary === false || (event.button !== undefined && event.button !== 0) || !handle || !panel || document.fullscreenElement !== panel || !stage || !shell) return;
+  if (precisionCanvasVerticalResizeState) endPrecisionCanvasVerticalResize();
+  var rect = shell.getBoundingClientRect();
+  precisionCanvasVerticalResizeState = { pointerId: event.pointerId, startY: event.clientY, startHeight: rect.height || shell.clientHeight, handle: handle, stage: stage };
+  stage.classList.add('is-canvas-vertical-resizing');
+  if (handle.setPointerCapture) { try { handle.setPointerCapture(event.pointerId); } catch (ignore) {} }
+  window.addEventListener('pointermove', continuePrecisionCanvasVerticalResize, { passive: false });
+  window.addEventListener('pointerup', endPrecisionCanvasVerticalResize);
+  window.addEventListener('pointercancel', endPrecisionCanvasVerticalResize);
+  event.preventDefault();
+}
+
+function continuePrecisionCanvasVerticalResize(event) {
+  var state = precisionCanvasVerticalResizeState;
+  if (!state || state.pointerId !== event.pointerId) return;
+  setPrecisionCanvasVerticalSize(state.startHeight + event.clientY - state.startY);
+  event.preventDefault();
+}
+
+function endPrecisionCanvasVerticalResize(event) {
+  var state = precisionCanvasVerticalResizeState;
+  if (!state || (event && event.pointerId !== undefined && state.pointerId !== event.pointerId)) return;
+  precisionCanvasVerticalResizeState = null;
+  window.removeEventListener('pointermove', continuePrecisionCanvasVerticalResize);
+  window.removeEventListener('pointerup', endPrecisionCanvasVerticalResize);
+  window.removeEventListener('pointercancel', endPrecisionCanvasVerticalResize);
+  if (state.stage) state.stage.classList.remove('is-canvas-vertical-resizing');
+  if (state.handle && state.handle.releasePointerCapture) {
+    try { state.handle.releasePointerCapture(state.pointerId); } catch (ignore) {}
+  }
+}
+
+function bindPrecisionCanvasVerticalResizeHandle() {
+  var handle = document.getElementById('precisionCanvasVerticalResizeHandle');
+  if (!handle || handle.dataset.precisionResizeBound === 'true') return;
+  handle.dataset.precisionResizeBound = 'true';
+  handle.addEventListener('pointerdown', beginPrecisionCanvasVerticalResize);
+  handle.addEventListener('lostpointercapture', endPrecisionCanvasVerticalResize);
+  handle.addEventListener('keydown', function(event) {
+    var panel = document.getElementById('panelPrecisionEdit');
+    if (!panel || document.fullscreenElement !== panel) return;
+    var stage = handle.closest ? handle.closest('.precision-edit-stage-column') : null;
+    var shell = document.getElementById('precisionCanvasShell');
+    if (!stage || !shell) return;
+    var limits = precisionCanvasVerticalResizeLimits(stage);
+    var current = shell.getBoundingClientRect ? shell.getBoundingClientRect().height : shell.clientHeight;
+    var next = current;
+    if (event.key === 'ArrowUp') next -= 24;
+    else if (event.key === 'ArrowDown') next += 24;
+    else if (event.key === 'Home') next = limits.min;
+    else if (event.key === 'End') next = limits.max;
+    else return;
+    setPrecisionCanvasVerticalSize(next);
+    event.preventDefault();
+  });
+}
+
+function precisionInspectorResizeLimits(workspace) {
+  var total = workspace && workspace.getBoundingClientRect ? workspace.getBoundingClientRect().width : 0;
+  if (!total) total = workspace && workspace.clientWidth || window.innerWidth || 1280;
+  var min = Math.min(300, Math.max(220, total * 0.28));
+  var max = Math.max(min, Math.min(560, total * 0.52));
+  return { min: min, max: max, total: total };
+}
+
+function setPrecisionInspectorWidth(width, persist) {
+  var workspace = document.querySelector('#pageGenerate.precision-workbench .precision-edit-workspace') || document.querySelector('.precision-edit-workspace');
+  if (!workspace) return false;
+  var limits = precisionInspectorResizeLimits(workspace);
+  var value = Math.max(limits.min, Math.min(limits.max, Number(width) || limits.min));
+  workspace.style.setProperty('--precision-inspector-width', value + 'px');
+  var handle = document.getElementById('precisionInspectorResizeHandle');
+  if (handle) {
+    handle.setAttribute('aria-valuemin', String(Math.round(limits.min)));
+    handle.setAttribute('aria-valuemax', String(Math.round(limits.max)));
+    handle.setAttribute('aria-valuenow', String(Math.round(value)));
+  }
+  if (persist !== false) {
+    try { localStorage.setItem(PRECISION_INSPECTOR_WIDTH_STORAGE_KEY, String(Math.round(value))); } catch (error) {}
+  }
+  return value;
+}
+
+function beginPrecisionInspectorResize(event) {
+  var handle = event && event.currentTarget;
+  var workspace = handle && handle.closest ? handle.closest('.precision-edit-workspace') : null;
+  var inspector = handle && handle.closest ? handle.closest('.precision-edit-inspector') : null;
+  if (!event || event.isPrimary === false || (event.button !== undefined && event.button !== 0) || !workspace || !inspector) return;
+  if (window.matchMedia && window.matchMedia('(max-width: 900px)').matches) return;
+  var rect = inspector.getBoundingClientRect();
+  precisionInspectorResizeState = { pointerId: event.pointerId, startX: event.clientX, startWidth: rect.width || inspector.clientWidth, handle: handle, workspace: workspace };
+  workspace.classList.add('is-inspector-resizing');
+  if (handle.setPointerCapture) { try { handle.setPointerCapture(event.pointerId); } catch (ignore) {} }
+  window.addEventListener('pointermove', continuePrecisionInspectorResize, { passive: false });
+  window.addEventListener('pointerup', endPrecisionInspectorResize);
+  window.addEventListener('pointercancel', endPrecisionInspectorResize);
+  event.preventDefault();
+}
+
+function continuePrecisionInspectorResize(event) {
+  var state = precisionInspectorResizeState;
+  if (!state || state.pointerId !== event.pointerId) return;
+  setPrecisionInspectorWidth(state.startWidth - (event.clientX - state.startX));
+  event.preventDefault();
+}
+
+function endPrecisionInspectorResize(event) {
+  var state = precisionInspectorResizeState;
+  if (!state || (event && event.pointerId !== undefined && state.pointerId !== event.pointerId)) return;
+  precisionInspectorResizeState = null;
+  window.removeEventListener('pointermove', continuePrecisionInspectorResize);
+  window.removeEventListener('pointerup', endPrecisionInspectorResize);
+  window.removeEventListener('pointercancel', endPrecisionInspectorResize);
+  if (state.workspace) state.workspace.classList.remove('is-inspector-resizing');
+  if (state.handle && state.handle.releasePointerCapture) {
+    try { state.handle.releasePointerCapture(state.pointerId); } catch (ignore) {}
+  }
+}
+
+function bindPrecisionInspectorResizeHandle() {
+  var handle = document.getElementById('precisionInspectorResizeHandle');
+  if (!handle || handle.dataset.precisionResizeBound === 'true') return;
+  handle.dataset.precisionResizeBound = 'true';
+  handle.addEventListener('pointerdown', beginPrecisionInspectorResize);
+  handle.addEventListener('lostpointercapture', endPrecisionInspectorResize);
+  handle.addEventListener('keydown', function(event) {
+    var workspace = handle.closest ? handle.closest('.precision-edit-workspace') : null;
+    if (!workspace || (window.matchMedia && window.matchMedia('(max-width: 900px)').matches)) return;
+    var inspector = document.querySelector('#pageGenerate.precision-workbench .precision-edit-inspector') || document.querySelector('.precision-edit-inspector');
+    var current = inspector && inspector.getBoundingClientRect ? inspector.getBoundingClientRect().width : 0;
+    var limits = precisionInspectorResizeLimits(workspace);
+    var next = current;
+    if (event.key === 'ArrowLeft') next -= 24;
+    else if (event.key === 'ArrowRight') next += 24;
+    else if (event.key === 'Home') next = limits.min;
+    else if (event.key === 'End') next = limits.max;
+    else return;
+    setPrecisionInspectorWidth(next);
+    event.preventDefault();
+  });
+  var saved = null;
+  try { saved = Number(localStorage.getItem(PRECISION_INSPECTOR_WIDTH_STORAGE_KEY)); } catch (error) {}
+  if (Number.isFinite(saved) && saved > 0) setPrecisionInspectorWidth(saved, false);
+  var reflow = function() {
+    if (precisionInspectorResizeState) return;
+    var workspace = handle.closest ? handle.closest('.precision-edit-workspace') : null;
+    var inspector = handle.closest ? handle.closest('.precision-edit-inspector') : null;
+    if (!workspace || !inspector || (window.matchMedia && window.matchMedia('(max-width: 900px)').matches)) return;
+    var current = inspector.getBoundingClientRect ? inspector.getBoundingClientRect().width : inspector.clientWidth;
+    if (current) setPrecisionInspectorWidth(current, false);
+  };
+  window.addEventListener('resize', reflow);
+  window.addEventListener('orientationchange', reflow);
+}
+
 function getPrecisionCutoutControls() {
   return {
     button: document.getElementById('btnPrecisionCutout'),
+    simpleButton: document.getElementById('btnPrecisionCutoutSimple'),
+    professionalRunButton: document.getElementById('btnPrecisionCutoutProfessionalRun'),
+    simpleAlgorithm: document.getElementById('precisionCutoutSimpleAlgorithm'),
+    simpleModeButton: document.getElementById('btnPrecisionCutoutSimpleMode'),
+    professionalModeButton: document.getElementById('btnPrecisionCutoutProfessionalMode'),
+    professionalOpenButton: document.getElementById('btnPrecisionCutoutProfessionalOpen'),
+    professionalDialog: document.getElementById('precisionCutoutProfessionalDialog'),
+    professionalCloseButton: document.getElementById('btnPrecisionCutoutProfessionalClose'),
+    professionalCollapseButton: document.getElementById('btnPrecisionCutoutProfessionalCollapse'),
+    professionalResizeHandle: document.getElementById('precisionCutoutProfessionalResizeHandle'),
+    professionalAlgorithm: document.getElementById('precisionCutoutProfessionalAlgorithm'),
+    professionalAlgorithmStatus: document.getElementById('precisionCutoutProfessionalAlgorithmStatus'),
+    professionalRefreshButton: document.getElementById('btnPrecisionCutoutProfessionalRefresh'),
+    professionalFeather: document.getElementById('precisionCutoutProfessionalFeather'),
+    professionalFeatherValue: document.getElementById('precisionCutoutProfessionalFeatherValue'),
+    professionalUseSelection: document.getElementById('precisionCutoutProfessionalUseSelection'),
+    professionalRestoreMode: document.getElementById('precisionCutoutProfessionalRestoreMode'),
+    professionalRestoreMinAlpha: document.getElementById('precisionCutoutProfessionalRestoreMinAlpha'),
+    professionalRestoreMinAlphaValue: document.getElementById('precisionCutoutProfessionalRestoreMinAlphaValue'),
+    professionalRefineHint: document.getElementById('precisionCutoutProfessionalRefineHint'),
+    professionalRefineButton: document.getElementById('btnPrecisionCutoutProfessionalRefine'),
     refineButton: document.getElementById('btnPrecisionCutoutRefine'),
     cancelButton: document.getElementById('btnPrecisionCutoutCancel'),
     feather: document.getElementById('precisionCutoutFeather'),
@@ -2226,6 +2912,20 @@ function setPrecisionSourceMenuOpen(open, restoreFocus) {
   menu.hidden = !nextOpen;
   trigger.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
   if (nextOpen) {
+    // Keep the compact source chooser within the viewport when the left action
+    // cluster is close to a narrow viewport edge.
+    if (menu.style) {
+      menu.style.left = '';
+      menu.style.right = '';
+    }
+    if (menu.style && typeof menu.getBoundingClientRect === 'function') {
+      var menuRect = menu.getBoundingClientRect();
+      var viewportWidth = Math.max(document.documentElement && document.documentElement.clientWidth || 0, window.innerWidth || 0);
+      if (viewportWidth && menuRect.right > viewportWidth) {
+        menu.style.left = Math.min(0, viewportWidth - menuRect.right - 8) + 'px';
+      }
+      if (menuRect.left < 0) menu.style.left = '0px';
+    }
     var first = menu.querySelector && menu.querySelector('[role="menuitem"]:not(:disabled)');
     if (first && typeof first.focus === 'function') first.focus();
   } else if (restoreFocus && wasOpen && typeof trigger.focus === 'function') {
@@ -2382,6 +3082,7 @@ function resetPrecisionSourceSpecificState(generation) {
   precisionCanvasSpaceHeld = false;
   precisionEditIdCounter = 0;
   precisionEditLabelCounter = 0;
+  if (typeof resetPrecisionAnnotationInstructionPopover === 'function') resetPrecisionAnnotationInstructionPopover();
   precisionComparePointerId = null;
   precisionComparePointerTarget = null;
   precisionEditSizeMode = 'preserve';
@@ -2403,6 +3104,7 @@ function resetPrecisionSourceSpecificState(generation) {
   var rail = document.getElementById('precisionVersionRail');
   var before = document.getElementById('precisionCompareBefore');
   var after = document.getElementById('precisionCompareAfter');
+  var imageInfo = document.getElementById('precisionCanvasImageInfo');
   if (resizePreset) resizePreset.value = 'custom';
   if (resizePromptPreset) resizePromptPreset.value = '';
   if (selectionFeather) selectionFeather.value = '0';
@@ -2411,6 +3113,7 @@ function resetPrecisionSourceSpecificState(generation) {
   if (rail) rail.textContent = '';
   if (before) before.removeAttribute('src');
   if (after) after.removeAttribute('src');
+  if (imageInfo) { imageInfo.hidden = true; imageInfo.textContent = ''; }
 }
 
 function loadPrecisionEditLocalFile(event) {
@@ -2521,9 +3224,11 @@ function loadPrecisionEditSourceImage(dataUrl, prompt, options) {
     if (baseImage) baseImage.classList.add('hidden');
     if (empty) empty.classList.add('hidden');
     if (dimensions) dimensions.textContent = width + ' × ' + height;
+    if (typeof updatePrecisionCanvasImageInfo === 'function') updatePrecisionCanvasImageInfo();
     requestAnimationFrame(function() {
       reflowPrecisionCanvasVisualSize(true);
       fitPrecisionCanvasToWindow();
+      if (typeof positionPrecisionCanvasResizeHandle === 'function') positionPrecisionCanvasResizeHandle();
     });
     if (precisionEditSizeMode === 'preserve') setPrecisionSizeMode('preserve');
     if (prompt) {
@@ -2532,7 +3237,7 @@ function loadPrecisionEditSourceImage(dataUrl, prompt, options) {
     }
     if (!options.preserveSession) {
       precisionEditSession = {
-        source: { id: 'original', label: i18nText('creator.precision_original'), data: dataUrl, prompt: String(prompt || ''), createdAt: new Date().toISOString() },
+        source: { id: 'original', label: i18nText('creator.precision_original'), data: dataUrl, width: width, height: height, prompt: String(prompt || ''), createdAt: options.createdAt || options.created_at || new Date().toISOString() },
         versions: [], selectedVersionId: 'original', baseVersionId: 'original', taskBaseVersionId: null, view: 'after', taskId: null, sourceGeneration: generation
       };
       updatePrecisionTaskMonitor(null);
@@ -2554,6 +3259,88 @@ function loadPrecisionEditSourceImage(dataUrl, prompt, options) {
   };
   source.src = dataUrl;
   return generation;
+}
+
+function precisionVersionDimensions(entry) {
+  if (!entry) return null;
+  if (entry.data && entry.data === precisionEditSourceImageData && precisionEditSourceWidth > 0 && precisionEditSourceHeight > 0) {
+    entry.width = precisionEditSourceWidth;
+    entry.height = precisionEditSourceHeight;
+    entry.dimensionsData = entry.data;
+  }
+  if (entry.data && entry.dimensionsData !== entry.data && entry.dimensionsLoadingData !== entry.data) {
+    var data = entry.data;
+    var image = new Image();
+    entry.dimensionsLoadingData = data;
+    image.onload = function() {
+      if (entry.data !== data) return;
+      entry.dimensionsData = data;
+      entry.dimensionsLoadingData = '';
+      if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+        entry.width = image.naturalWidth;
+        entry.height = image.naturalHeight;
+      }
+      updatePrecisionCanvasImageInfo();
+    };
+    image.onerror = function() {
+      if (entry.data !== data) return;
+      entry.dimensionsData = data;
+      entry.dimensionsLoadingData = '';
+    };
+    image.src = data;
+  }
+  return Number.isInteger(entry.width) && entry.width > 0 && Number.isInteger(entry.height) && entry.height > 0
+    ? { width: entry.width, height: entry.height } : null;
+}
+
+function precisionVersionDisplayTime(value) {
+  if (value === null || value === undefined || value === '') return '';
+  var text = String(value).trim();
+  var naive = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?)?$/.exec(text);
+  if (naive) {
+    var parts = [Number(naive[1]), Number(naive[2]), Number(naive[3]), Number(naive[4] || 0), Number(naive[5] || 0), Number(naive[6] || 0)];
+    var check = new Date(0);
+    check.setUTCFullYear(parts[0], parts[1] - 1, parts[2]);
+    check.setUTCHours(parts[3], parts[4], parts[5], 0);
+    if (check.getUTCFullYear() !== parts[0] || check.getUTCMonth() + 1 !== parts[1] || check.getUTCDate() !== parts[2] ||
+        check.getUTCHours() !== parts[3] || check.getUTCMinutes() !== parts[4] || check.getUTCSeconds() !== parts[5]) return '';
+    return naive[1] + '-' + naive[2] + '-' + naive[3] + ' ' + (naive[4] || '00') + ':' + (naive[5] || '00') + ':' + (naive[6] || '00');
+  }
+  var date = typeof value === 'number' && Number.isFinite(value)
+    ? new Date(value > 100000000000 ? value : value * 1000)
+    : /(?:Z|[+-]\d{2}:?\d{2})$/i.test(text) ? new Date(text) : null;
+  if (!date || !Number.isFinite(date.getTime())) return '';
+  var pad = function(part) { return String(part).padStart(2, '0'); };
+  return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' +
+    pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds());
+}
+
+function precisionVersionInfoText(entry) {
+  if (!entry) return '';
+  var dimensions = precisionVersionDimensions(entry);
+  var parts = [String(entry.label || (entry.id === 'original' ? '原图' : entry.id))];
+  parts.push(dimensions ? dimensions.width + ' × ' + dimensions.height : '尺寸待确认');
+  var timestamp = precisionVersionDisplayTime(entry.createdAt || entry.created_at || '');
+  if (timestamp) parts.push('版本时间 ' + timestamp);
+  if (entry.transparent === true) parts.push('透明背景');
+  return parts.join(' · ');
+}
+
+function updatePrecisionCanvasImageInfo() {
+  var info = document.getElementById('precisionCanvasImageInfo');
+  if (!info || !precisionEditSession.source) {
+    if (info) { info.hidden = true; info.textContent = ''; }
+    return;
+  }
+  var entries = precisionEditSessionEntries();
+  var entry = precisionEditSessionEntry(entries, precisionEditSession.selectedVersionId, precisionEditSession.source);
+  var base = precisionEditSessionEntry(entries, entry.parentId || 'original', precisionEditSession.source);
+  var view = precisionEditSession.view;
+  info.textContent = view === 'before' ? precisionVersionInfoText(base)
+    : view === 'compare' && base.id !== entry.id
+      ? precisionVersionInfoText(base) + ' | ' + precisionVersionInfoText(entry)
+      : precisionVersionInfoText(entry);
+  info.hidden = false;
 }
 
 function updatePrecisionStrokeWidthValue() {
@@ -2628,6 +3415,7 @@ function setPrecisionViewZoom(value, anchor) {
         var maxScrollTop = Math.max(0, (nextRect.height || 0) - shellHeight);
         shell.scrollLeft = resetScroll ? 0 : Math.max(0, Math.min(maxScrollLeft, anchorRatioX * (nextRect.width || 0) - viewportX));
         shell.scrollTop = resetScroll ? 0 : Math.max(0, Math.min(maxScrollTop, anchorRatioY * (nextRect.height || 0) - viewportY));
+        if (typeof positionPrecisionCanvasResizeHandle === 'function') positionPrecisionCanvasResizeHandle();
       });
     }
   }
@@ -2772,6 +3560,24 @@ function handlePrecisionEditCanvasKeydown(event) {
     event.preventDefault();
     setPrecisionViewZoom(precisionViewZoom + (key === '-' || key === '_' ? -10 : 10));
   }
+}
+
+function handlePrecisionToolShortcut(event) {
+  if (!event || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+  var panel = document.getElementById('panelPrecisionEdit');
+  if (!panel || panel.hidden || panel.classList.contains('hidden')) return;
+  var target = event.target;
+  if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT|OPTION|BUTTON)$/.test(String(target.tagName || '').toUpperCase()))) return;
+  var key = String(event.key || '').toLowerCase();
+  if (key === 'f') {
+    togglePrecisionCompareFullscreen();
+    event.preventDefault();
+    return;
+  }
+  var tool = ({ v: 'select', o: 'ellipse', a: 'arrow', r: 'rect', b: 'brush', e: 'eraser', t: 'text' })[key];
+  if (!tool) return;
+  setPrecisionEditTool(tool);
+  event.preventDefault();
 }
 
 function handlePrecisionEditCanvasKeyup(event) {
@@ -3680,7 +4486,7 @@ function drawPrecisionEditObject(context, object, width, height, selected) {
   context.save();
   var objectColor = /^#[0-9a-f]{6}$/i.test(object.color || '') ? object.color : '#ef4444';
   var objectStrokeWidth = Math.max(2, Math.min(16, Number(object.strokeWidth) || 5));
-  context.strokeStyle = selected ? '#f59e0b' : objectColor;
+  context.strokeStyle = objectColor;
   context.fillStyle = objectColor;
   context.lineWidth = objectStrokeWidth;
   context.lineJoin = 'round';
@@ -3719,12 +4525,84 @@ function drawPrecisionEditObject(context, object, width, height, selected) {
     var textWidth = context.measureText(object.text).width;
     context.fillStyle = 'rgba(0,0,0,0.7)';
     context.fillRect(x - 5, y - 4, textWidth + 10, fontSize + 8);
-    context.fillStyle = selected ? '#fbbf24' : objectColor;
+    context.fillStyle = objectColor;
     context.fillText(object.text, x, y);
   }
+  if (selected) drawPrecisionEditSelectionHighlight(context, object, width, height, objectStrokeWidth);
   drawPrecisionEditLabel(context, object, width, height, selected);
   if (selected && precisionEditIsBoxShape(object)) drawPrecisionEditHandles(context, object, width, height);
   else if (selected && precisionEditIsTransformable(object)) drawPrecisionEditHandles(context, object, width, height);
+  context.restore();
+}
+
+function drawPrecisionEditSelectionHighlight(context, object, width, height, strokeWidth) {
+  var accent = '#38bdf8';
+  var glow = 'rgba(56, 189, 248, 0.2)';
+  var outline = Math.max(2, Math.min(8, strokeWidth + 2));
+  var pad = Math.max(5, outline * 1.5);
+  var x = Number(object.x) * width;
+  var y = Number(object.y) * height;
+  var x2 = (object.x2 === undefined ? object.x : Number(object.x2)) * width;
+  var y2 = (object.y2 === undefined ? object.y : Number(object.y2)) * height;
+  context.save();
+  context.lineJoin = 'round';
+  context.lineCap = 'round';
+  context.strokeStyle = accent;
+  context.fillStyle = glow;
+  context.lineWidth = outline;
+  context.setLineDash([Math.max(5, outline * 2), Math.max(4, outline * 1.25)]);
+  if (object.type === 'rect') {
+    var left = Math.min(x, x2) - pad;
+    var top = Math.min(y, y2) - pad;
+    var rectWidth = Math.abs(x2 - x) + pad * 2;
+    var rectHeight = Math.abs(y2 - y) + pad * 2;
+    context.fillRect(left, top, rectWidth, rectHeight);
+    context.strokeRect(left, top, rectWidth, rectHeight);
+  } else if (object.type === 'ellipse') {
+    var radiusX = Math.max(1, Math.abs(x2 - x) / 2) + pad;
+    var radiusY = Math.max(1, Math.abs(y2 - y) / 2) + pad;
+    context.beginPath();
+    context.ellipse((x + x2) / 2, (y + y2) / 2, radiusX, radiusY, 0, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+  } else if (object.type === 'brush') {
+    var points = object.points || [];
+    if (points.length) {
+      context.setLineDash([]);
+      context.strokeStyle = 'rgba(56, 189, 248, 0.42)';
+      context.lineWidth = strokeWidth + pad * 2;
+      context.beginPath();
+      context.moveTo(points[0].x * width, points[0].y * height);
+      points.slice(1).forEach(function(point) { context.lineTo(point.x * width, point.y * height); });
+      context.stroke();
+      context.strokeStyle = accent;
+      context.lineWidth = outline;
+      context.beginPath();
+      context.moveTo(points[0].x * width, points[0].y * height);
+      points.slice(1).forEach(function(point) { context.lineTo(point.x * width, point.y * height); });
+      context.stroke();
+    }
+  } else if (object.type === 'arrow') {
+    context.setLineDash([]);
+    context.strokeStyle = 'rgba(56, 189, 248, 0.42)';
+    context.lineWidth = strokeWidth + pad * 2;
+    context.beginPath();
+    context.moveTo(x, y);
+    context.lineTo(x2, y2);
+    context.stroke();
+    context.strokeStyle = accent;
+    context.lineWidth = outline;
+    context.beginPath();
+    context.moveTo(x, y);
+    context.lineTo(x2, y2);
+    context.stroke();
+  } else if (object.type === 'text') {
+    var fontSize = Math.max(12, Math.min(96, Number(object.fontSize) || Math.round(Math.min(width, height) * 0.035)));
+    context.font = '600 ' + fontSize + 'px sans-serif';
+    var textWidth = context.measureText(object.text || '').width;
+    context.fillRect(x - pad, y - pad, textWidth + pad * 2, fontSize + pad * 2);
+    context.strokeRect(x - pad, y - pad, textWidth + pad * 2, fontSize + pad * 2);
+  }
   context.restore();
 }
 
@@ -3796,7 +4674,7 @@ function selectPrecisionEditObject(id) {
   precisionEditSelectedId = precisionEditObjectById(id) ? id : null;
   renderPrecisionEditCanvas();
   updatePrecisionEditControls();
-  focusPrecisionEditInstruction(id);
+  syncPrecisionAnnotationInstructionPopover();
 }
 
 function syncPrecisionEditStyleControls() {
@@ -3824,8 +4702,436 @@ function updatePrecisionSelectedStyle(input, field, value) {
 
 function focusPrecisionEditInstruction(id) {
   requestAnimationFrame(function() {
-    var input = document.querySelector('[data-precision-instruction="' + id + '"]');
+    if (!precisionEditObjectById(id)) return;
+    precisionEditSelectedId = id;
+    syncPrecisionAnnotationInstructionPopover({ focus: true, force: true });
+    var input = document.getElementById('precisionAnnotationInstructionText');
     if (input) input.focus();
+  });
+}
+
+function resetPrecisionAnnotationInstructionPopover() {
+  precisionAnnotationInstructionPopoverState = {
+    selectedId: '', dismissedId: '', manuallyPositioned: false, drag: null,
+    positions: {}, confirmedIds: {}, dismissedIds: {}
+  };
+  var popover = document.getElementById('precisionAnnotationInstructionPopover');
+  if (!popover) return;
+  Array.prototype.slice.call(document.querySelectorAll('[data-precision-annotation-instruction-card="true"]')).forEach(function(card) { card.remove(); });
+  popover.hidden = true;
+  popover.setAttribute('aria-hidden', 'true');
+  syncPrecisionAnnotationSummary();
+  popover.removeAttribute('data-object-id');
+}
+
+function precisionAnnotationInstructionAnchor(object) {
+  if (!object) return { x: 0.5, y: 0.5 };
+  var x = Number(object.x);
+  var y = Number(object.y);
+  var x2 = Number(object.x2);
+  var y2 = Number(object.y2);
+  if (object.type === 'brush' && Array.isArray(object.points) && object.points.length) {
+    var last = object.points[object.points.length - 1];
+    x = Number(last.x);
+    y = Number(last.y);
+  } else if (object.type === 'rect' || object.type === 'ellipse' || object.type === 'arrow') {
+    x = Number.isFinite(x2) ? Math.max(x, x2) : x;
+    y = Number.isFinite(y2) ? Math.max(y, y2) : y;
+  }
+  return {
+    x: Math.max(0, Math.min(1, Number.isFinite(x) ? x : 0.5)),
+    y: Math.max(0, Math.min(1, Number.isFinite(y) ? y : 0.5))
+  };
+}
+
+function precisionAnnotationInstructionCardElements(popover) {
+  return {
+    input: popover && popover.querySelector('textarea'),
+    selection: popover && popover.querySelector('[data-precision-annotation-selection], #precisionAnnotationInstructionSelection'),
+    confirm: popover && popover.querySelector('[data-precision-annotation-confirm], #btnPrecisionAnnotationInstructionConfirm'),
+    close: popover && popover.querySelector('[data-precision-annotation-close], #btnPrecisionAnnotationInstructionClose')
+  };
+}
+
+function precisionAnnotationInstructionClampPosition(popover, left, top) {
+  var panel = document.getElementById('panelPrecisionEdit');
+  if (!popover || !panel || !panel.getBoundingClientRect) return null;
+  var rect = panel.getBoundingClientRect();
+  var viewportWidth = Math.max(document.documentElement && document.documentElement.clientWidth || 0, window.innerWidth || 0);
+  var viewportHeight = Math.max(document.documentElement && document.documentElement.clientHeight || 0, window.innerHeight || 0);
+  var padding = 12;
+  var width = Math.max(220, popover.offsetWidth || 280);
+  var height = Math.max(150, popover.offsetHeight || 174);
+  var minLeft = Math.max(padding, rect.left);
+  var maxLeft = Math.max(minLeft, Math.min(viewportWidth - padding, rect.right) - width);
+  var minTop = Math.max(padding, rect.top);
+  var maxTop = Math.max(minTop, Math.min(viewportHeight - padding, rect.bottom) - height);
+  return {
+    left: Math.max(minLeft, Math.min(Number(left) || minLeft, maxLeft)),
+    top: Math.max(minTop, Math.min(Number(top) || minTop, maxTop)),
+    width: width,
+    height: height
+  };
+}
+
+function placePrecisionAnnotationInstructionPopover(popover, object, index) {
+  // Keep the original one-argument call shape for focused UI contracts and
+  // existing callers; multi-card rendering supplies its own card explicitly.
+  if (!object) {
+    object = popover;
+    popover = document.getElementById('precisionAnnotationInstructionPopover');
+  }
+  var canvas = document.getElementById('precisionAnnotationCanvas');
+  var panel = document.getElementById('panelPrecisionEdit');
+  if (!popover || !canvas || !panel || !canvas.getBoundingClientRect || !panel.getBoundingClientRect) return;
+  var panelRect = panel.getBoundingClientRect();
+  var canvasRect = canvas.getBoundingClientRect();
+  if (!panelRect.width || !panelRect.height || !canvasRect.width || !canvasRect.height) return;
+  var viewportWidth = Math.max(document.documentElement && document.documentElement.clientWidth || 0, window.innerWidth || 0);
+  var viewportHeight = Math.max(document.documentElement && document.documentElement.clientHeight || 0, window.innerHeight || 0);
+  var padding = 12;
+  var width = Math.max(220, popover.offsetWidth || 280);
+  var height = Math.max(150, popover.offsetHeight || 174);
+  var minLeft = Math.max(padding, panelRect.left);
+  var maxLeft = Math.max(minLeft, Math.min(viewportWidth - padding, panelRect.right) - width);
+  var minTop = Math.max(padding, panelRect.top);
+  var maxTop = Math.max(minTop, Math.min(viewportHeight - padding, panelRect.bottom) - height);
+  var clampPosition = function(left, top) {
+    return {
+      left: Math.max(minLeft, Math.min(Number(left) || minLeft, maxLeft)),
+      top: Math.max(minTop, Math.min(Number(top) || minTop, maxTop)),
+      width: width,
+      height: height
+    };
+  };
+  var state = precisionAnnotationInstructionPopoverState;
+  var saved = object && state.positions && state.positions[object.id];
+  if (saved && Number.isFinite(Number(saved.left)) && Number.isFinite(Number(saved.top))) {
+    var savedPosition = clampPosition(saved.left, saved.top);
+    popover.style.left = savedPosition.left + 'px';
+    popover.style.top = savedPosition.top + 'px';
+    state.positions[object.id] = savedPosition;
+    return;
+  }
+  var anchor = precisionAnnotationInstructionAnchor(object);
+  var anchorLeft = canvasRect.left + anchor.x * canvasRect.width;
+  var anchorTop = canvasRect.top + anchor.y * canvasRect.height;
+  var offsets = [
+    [14, 14], [width + 26, 14], [14, height + 26], [-width - 26, 14],
+    [14, -height - 26], [width + 26, height + 26], [-width - 26, height + 26],
+    [width + 26, -height - 26], [-width - 26, -height - 26]
+  ];
+  var candidates = offsets.slice((Number(index) || 0) % offsets.length).concat(offsets.slice(0, (Number(index) || 0) % offsets.length));
+  var position = null;
+  candidates.some(function(offset) {
+    var candidate = clampPosition(anchorLeft + offset[0], anchorTop + offset[1]);
+    var overlaps = Object.keys(state.positions || {}).some(function(otherId) {
+      if (otherId === object.id) return false;
+      var other = state.positions[otherId];
+      if (!other || !Number.isFinite(Number(other.left)) || !Number.isFinite(Number(other.top))) return false;
+      var otherWidth = Math.max(220, Number(other.width) || width);
+      var otherHeight = Math.max(150, Number(other.height) || height);
+      return candidate.left < Number(other.left) + otherWidth + 12 && candidate.left + width + 12 > Number(other.left) && candidate.top < Number(other.top) + otherHeight + 12 && candidate.top + height + 12 > Number(other.top);
+    });
+    if (!overlaps) {
+      position = candidate;
+      return true;
+    }
+    return false;
+  });
+  position = position || clampPosition(anchorLeft + 14, anchorTop + 14);
+  popover.style.left = position.left + 'px';
+  popover.style.top = position.top + 'px';
+  state.positions[object.id] = position;
+}
+
+function precisionAnnotationInstructionCardForObject(template, objectId) {
+  if (template && template.dataset.objectId === objectId) return template;
+  return document.querySelector('[data-precision-annotation-instruction-card="true"][data-object-id="' + String(objectId).replace(/"/g, '\\"') + '"]');
+}
+
+function createPrecisionAnnotationInstructionCard(template, objectId) {
+  var card = template.cloneNode(true);
+  var suffix = String(objectId).replace(/[^A-Za-z0-9_-]/g, '-');
+  var title = card.querySelector('#precisionAnnotationInstructionTitle');
+  var selection = card.querySelector('#precisionAnnotationInstructionSelection');
+  var input = card.querySelector('#precisionAnnotationInstructionText');
+  var label = card.querySelector('label[for="precisionAnnotationInstructionText"]');
+  var confirm = card.querySelector('#btnPrecisionAnnotationInstructionConfirm');
+  var close = card.querySelector('#btnPrecisionAnnotationInstructionClose');
+  var handle = card.querySelector('#precisionAnnotationInstructionDragHandle');
+  card.removeAttribute('id');
+  card.dataset.precisionAnnotationInstructionCard = 'true';
+  card.dataset.objectId = objectId;
+  card.dataset.precisionBound = '';
+  if (title) title.id = 'precisionAnnotationInstructionTitle-' + suffix;
+  if (selection) { selection.id = 'precisionAnnotationInstructionSelection-' + suffix; selection.dataset.precisionAnnotationSelection = 'true'; }
+  if (input) {
+    input.id = 'precisionAnnotationInstructionText-' + suffix;
+    input.dataset.precisionAnnotationInput = 'true';
+    // The original textarea is styled through its legacy ID. Preserve the
+    // essential dimensions for clones without widening the stylesheet scope.
+    input.style.width = '100%';
+    input.style.minHeight = '66px';
+    input.style.resize = 'vertical';
+  }
+  if (label && input) label.htmlFor = input.id;
+  if (confirm) { confirm.removeAttribute('id'); confirm.dataset.precisionAnnotationConfirm = 'true'; }
+  if (close) { close.removeAttribute('id'); close.dataset.precisionAnnotationClose = 'true'; }
+  if (handle) handle.removeAttribute('id');
+  card.setAttribute('aria-labelledby', title ? title.id : '');
+  card.setAttribute('aria-describedby', selection ? selection.id : '');
+  template.insertAdjacentElement('afterend', card);
+  return card;
+}
+
+function syncPrecisionAnnotationInstructionCard(popover, object, index, options) {
+  var state = precisionAnnotationInstructionPopoverState;
+  var elements = precisionAnnotationInstructionCardElements(popover);
+  if (!popover || !elements.input) return;
+  var dismissed = state.dismissedIds && state.dismissedIds[object.id];
+  if (dismissed && !(options && options.force && object.id === precisionEditSelectedId)) {
+    popover.hidden = true;
+    popover.setAttribute('aria-hidden', 'true');
+    return;
+  }
+  if (dismissed && options && options.force && object.id === precisionEditSelectedId) delete state.dismissedIds[object.id];
+  popover.hidden = false;
+  popover.setAttribute('aria-hidden', 'false');
+  popover.dataset.objectId = object.id;
+  popover.classList.toggle('is-confirmed', !!state.confirmedIds[object.id]);
+  popover.dataset.confirmed = state.confirmedIds[object.id] ? 'true' : 'false';
+  if (elements.selection) elements.selection.textContent = precisionEditObjectName(object);
+  if (elements.confirm) elements.confirm.setAttribute('aria-pressed', state.confirmedIds[object.id] ? 'true' : 'false');
+  if (document.activeElement !== elements.input) elements.input.value = precisionEditObjectInstruction(object);
+  placePrecisionAnnotationInstructionPopover(popover, object, index);
+}
+
+function syncPrecisionAnnotationInstructionPopover(options) {
+  options = options || {};
+  var popover = document.getElementById('precisionAnnotationInstructionPopover');
+  var input = document.getElementById('precisionAnnotationInstructionText');
+  var objects = precisionEditObjects.slice();
+  if (!popover || !input || !precisionEditSourceImage || !objects.length) {
+    if (popover) {
+      popover.hidden = true;
+      popover.setAttribute('aria-hidden', 'true');
+    }
+    Array.prototype.slice.call(document.querySelectorAll('[data-precision-annotation-instruction-card="true"]')).forEach(function(card) { card.remove(); });
+    syncPrecisionAnnotationSummary();
+    return;
+  }
+  var state = precisionAnnotationInstructionPopoverState;
+  var selected = precisionEditObjectById(precisionEditSelectedId) || objects[0];
+  state.selectedId = selected.id;
+  Array.prototype.slice.call(document.querySelectorAll('[data-precision-annotation-instruction-card="true"]')).forEach(function(card) { card.remove(); });
+  bindPrecisionAnnotationInstructionCard(popover);
+  if (state.confirmedIds[selected.id] && !options.force) {
+    popover.hidden = true;
+    popover.setAttribute('aria-hidden', 'true');
+  } else {
+    syncPrecisionAnnotationInstructionCard(popover, selected, 0, options);
+  }
+  syncPrecisionAnnotationSummary();
+  if (options.focus) input.focus();
+}
+
+function syncPrecisionAnnotationSummary() {
+  var region = document.getElementById('precisionAnnotationSummary');
+  var cards = document.getElementById('precisionAnnotationSummaryCards');
+  if (!region || !cards) return;
+  cards.innerHTML = '';
+  var confirmed = precisionEditObjects.filter(function(object) {
+    return precisionAnnotationInstructionPopoverState.confirmedIds && precisionAnnotationInstructionPopoverState.confirmedIds[object.id];
+  });
+  region.hidden = !confirmed.length;
+  if (!confirmed.length) return;
+  confirmed.forEach(function(object) {
+    var card = document.createElement('article');
+    card.className = 'precision-annotation-summary-card';
+    card.setAttribute('role', 'listitem');
+    card.dataset.objectId = object.id;
+    var open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'precision-annotation-summary-card-open';
+    open.setAttribute('aria-label', '编辑' + precisionEditObjectName(object) + '的修改说明');
+    var title = document.createElement('strong');
+    title.textContent = precisionEditObjectName(object);
+    var text = document.createElement('span');
+    text.textContent = precisionEditObjectInstruction(object) || '尚未填写修改说明';
+    open.appendChild(title);
+    open.appendChild(text);
+    open.addEventListener('click', function() { focusPrecisionEditInstruction(object.id); });
+    var remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn-ghost precision-annotation-summary-card-delete';
+    remove.setAttribute('aria-label', '删除' + precisionEditObjectName(object) + '批注');
+    remove.title = '删除批注';
+    remove.textContent = '×';
+    remove.addEventListener('click', function(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      confirmPrecisionAnnotationSummaryDelete(object.id);
+    });
+    card.appendChild(open);
+    card.appendChild(remove);
+    cards.appendChild(card);
+  });
+}
+
+function confirmPrecisionAnnotationSummaryDelete(id) {
+  var object = precisionEditObjectById(id);
+  if (!object) return false;
+  var message = '确定删除“' + precisionEditObjectName(object) + '”及其修改说明吗？此操作可通过撤销恢复。';
+  if (typeof window === 'undefined' || typeof window.confirm !== 'function' || !window.confirm(message)) return false;
+  // The object list is the generation payload source of truth. Keeping the
+  // confirmation marker lets the existing object-history undo restore this
+  // summary card without maintaining a second, divergent history stack.
+  deletePrecisionEditObject(id);
+  return true;
+}
+
+function bindPrecisionAnnotationInstructionCard(popover) {
+  var elements = precisionAnnotationInstructionCardElements(popover);
+  var input = elements.input;
+  var close = elements.close;
+  var confirm = elements.confirm;
+  if (!popover || !input || popover.dataset.precisionBound === 'true') return;
+  popover.dataset.precisionBound = 'true';
+  input.addEventListener('input', function() {
+    var id = popover.dataset.objectId;
+    if (!id) return;
+    var captureHistory = input.dataset.precisionHistoryCaptured !== 'true';
+    var changed = updatePrecisionEditObject(id, 'instruction', input.value, { captureHistory: captureHistory, preserveEditor: true });
+    if (changed && captureHistory) input.dataset.precisionHistoryCaptured = 'true';
+    delete precisionAnnotationInstructionPopoverState.confirmedIds[id];
+    popover.classList.remove('is-confirmed');
+    popover.dataset.confirmed = 'false';
+    if (confirm) confirm.setAttribute('aria-pressed', 'false');
+    syncPrecisionAnnotationSummary();
+  });
+  input.addEventListener('blur', function() { finishPrecisionEditObjectInput(input); });
+  var confirmInstruction = function(event) {
+    if (event) { event.preventDefault(); event.stopPropagation(); }
+    var id = popover.dataset.objectId || precisionAnnotationInstructionPopoverState.selectedId;
+    if (id) precisionAnnotationInstructionPopoverState.confirmedIds[id] = true;
+    finishPrecisionEditObjectInput(input);
+    input.blur();
+    popover.classList.add('is-confirmed');
+    popover.dataset.confirmed = 'true';
+    if (confirm) confirm.setAttribute('aria-pressed', 'true');
+    popover.hidden = true;
+    popover.setAttribute('aria-hidden', 'true');
+    syncPrecisionAnnotationSummary();
+  };
+  if (confirm) confirm.addEventListener('click', confirmInstruction);
+  if (close) close.addEventListener('click', function(event) {
+    if (event) { event.preventDefault(); event.stopPropagation(); }
+    var id = popover.dataset.objectId || precisionAnnotationInstructionPopoverState.selectedId;
+    if (id) precisionAnnotationInstructionPopoverState.dismissedIds[id] = true;
+    precisionAnnotationInstructionPopoverState.dismissedId = id || '';
+    popover.hidden = true;
+    popover.setAttribute('aria-hidden', 'true');
+  });
+  var beginDrag = function(event) {
+    if (event.button !== 0) return;
+    // Text fields and action buttons retain their native click/focus behavior;
+    // every other blank card area is a drag surface.
+    var target = event.target;
+    if (target && target.closest && target.closest('textarea, input, button, select, a, label')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    precisionAnnotationInstructionPopoverState.drag = {
+      pointerId: event.pointerId,
+      card: popover,
+      left: parseFloat(popover.style.left) || 0,
+      top: parseFloat(popover.style.top) || 0,
+      startX: event.clientX,
+      startY: event.clientY
+    };
+    if (popover.setPointerCapture) {
+      try { popover.setPointerCapture(event.pointerId); } catch (ignore) {}
+    }
+  };
+  popover.addEventListener('pointerdown', beginDrag);
+  popover.addEventListener('pointermove', function(event) {
+    var drag = precisionAnnotationInstructionPopoverState.drag;
+    var panel = document.getElementById('panelPrecisionEdit');
+    if (!drag || drag.card !== popover || drag.pointerId !== event.pointerId || !panel || !panel.getBoundingClientRect) return;
+    var position = precisionAnnotationInstructionClampPosition(popover, drag.left + event.clientX - drag.startX, drag.top + event.clientY - drag.startY);
+    if (!position) return;
+    popover.style.left = position.left + 'px';
+    popover.style.top = position.top + 'px';
+    precisionAnnotationInstructionPopoverState.manuallyPositioned = true;
+    var id = popover.dataset.objectId || precisionAnnotationInstructionPopoverState.selectedId;
+    if (id) precisionAnnotationInstructionPopoverState.positions[id] = position;
+  });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(type) {
+    popover.addEventListener(type, function(event) {
+      var drag = precisionAnnotationInstructionPopoverState.drag;
+      if (!drag || (event.pointerId !== undefined && drag.pointerId !== event.pointerId)) return;
+      precisionAnnotationInstructionPopoverState.drag = null;
+    });
+  });
+}
+
+function bindPrecisionAnnotationInstructionPopover() {
+  var popover = document.getElementById('precisionAnnotationInstructionPopover');
+  if (!popover) return;
+  var selection = document.getElementById('precisionAnnotationInstructionSelection');
+  var input = document.getElementById('precisionAnnotationInstructionText');
+  var confirm = document.getElementById('btnPrecisionAnnotationInstructionConfirm');
+  var close = document.getElementById('btnPrecisionAnnotationInstructionClose');
+  if (selection) selection.dataset.precisionAnnotationSelection = 'true';
+  if (confirm) confirm.dataset.precisionAnnotationConfirm = 'true';
+  if (close) close.dataset.precisionAnnotationClose = 'true';
+  if (typeof bindPrecisionAnnotationInstructionCard === 'function') {
+    bindPrecisionAnnotationInstructionCard(popover);
+    return;
+  }
+  // The focused UI contract executes this legacy entry point in isolation.
+  // Keep its pointer behavior self-contained while production uses the shared
+  // binder above for the template and each cloned card.
+  if (!input || popover.dataset.precisionBound === 'true') return;
+  popover.dataset.precisionBound = 'true';
+  popover.addEventListener('pointerdown', function(event) {
+    if (event.button !== 0) return;
+    var target = event.target;
+    if (target && target.closest && target.closest('textarea, input, button, select, a, label')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    precisionAnnotationInstructionPopoverState.drag = {
+      pointerId: event.pointerId, card: popover,
+      left: parseFloat(popover.style.left) || 0,
+      top: parseFloat(popover.style.top) || 0,
+      startX: event.clientX, startY: event.clientY
+    };
+    if (popover.setPointerCapture) { try { popover.setPointerCapture(event.pointerId); } catch (ignore) {} }
+  });
+  popover.addEventListener('pointermove', function(event) {
+    var drag = precisionAnnotationInstructionPopoverState.drag;
+    var panel = document.getElementById('panelPrecisionEdit');
+    if (!drag || drag.card !== popover || drag.pointerId !== event.pointerId || !panel || !panel.getBoundingClientRect) return;
+    var rect = panel.getBoundingClientRect();
+    var viewportWidth = Math.max(document.documentElement && document.documentElement.clientWidth || 0, window.innerWidth || 0);
+    var viewportHeight = Math.max(document.documentElement && document.documentElement.clientHeight || 0, window.innerHeight || 0);
+    var minLeft = Math.max(12, rect.left);
+    var maxLeft = Math.max(minLeft, Math.min(viewportWidth - 12, rect.right) - popover.offsetWidth);
+    var minTop = Math.max(12, rect.top);
+    var maxTop = Math.max(minTop, Math.min(viewportHeight - 12, rect.bottom) - popover.offsetHeight);
+    var left = Math.max(minLeft, Math.min(maxLeft, drag.left + event.clientX - drag.startX));
+    var top = Math.max(minTop, Math.min(maxTop, drag.top + event.clientY - drag.startY));
+    popover.style.left = left + 'px';
+    popover.style.top = top + 'px';
+    var id = popover.dataset.objectId || precisionAnnotationInstructionPopoverState.selectedId;
+    if (id) precisionAnnotationInstructionPopoverState.positions[id] = { left: left, top: top, width: popover.offsetWidth, height: popover.offsetHeight };
+  });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(type) {
+    popover.addEventListener(type, function(event) {
+      var drag = precisionAnnotationInstructionPopoverState.drag;
+      if (!drag || (event.pointerId !== undefined && drag.pointerId !== event.pointerId)) return;
+      precisionAnnotationInstructionPopoverState.drag = null;
+    });
   });
 }
 
@@ -3870,6 +5176,29 @@ function deletePrecisionEditObject(id) {
 
 function renderPrecisionEditObjectList() {
   var list = document.getElementById('precisionEditObjectList');
+  var summary = document.getElementById('precisionSessionSummary');
+  if (!list && !summary) return;
+  // Confirmed annotation cards live in the canvas-side summary rather than
+  // duplicating the same editable list in the fixed inspector.
+  var annotationSummary = document.getElementById('precisionAnnotationSummary');
+  if (list && annotationSummary) {
+    var listSection = list.closest && list.closest('.precision-edit-list');
+    if (listSection) listSection.hidden = true;
+    list.innerHTML = '';
+    list.setAttribute('aria-hidden', 'true');
+    list = null;
+  }
+  var useSessionSummary = !!summary;
+  if (summary) {
+    summary.innerHTML = precisionEditObjects.length ? precisionEditObjects.map(function(object) {
+      var selected = object.id === precisionEditSelectedId;
+      var instruction = precisionEditObjectInstruction(object);
+      return '<article class="precision-session-summary-item' + (selected ? ' selected' : '') + '" data-precision-summary-object="' + escAttr(object.id) + '">' +
+        '<strong>' + escHtml(precisionEditObjectName(object)) + '</strong>' +
+        '<p title="' + escAttr(instruction || i18nText('creator.precision_edit_object_instruction_placeholder')) + '"><span>' + escHtml(i18nText('creator.precision_edit_object_instruction')) + '</span><b>' + escHtml(instruction || i18nText('creator.precision_edit_object_instruction_placeholder')) + '</b></p>' +
+      '</article>';
+    }).join('') : '<p class="precision-session-summary-empty">' + escHtml(i18nText('creator.precision_edit_changes_empty')) + '</p>';
+  }
   if (!list) return;
   if (!precisionEditObjects.length) {
     list.innerHTML = '<p class="precision-object-empty">' + escHtml(i18nText('creator.precision_edit_changes_empty')) + '</p>';
@@ -3878,20 +5207,18 @@ function renderPrecisionEditObjectList() {
   list.innerHTML = precisionEditObjects.map(function(object) {
     var selected = object.id === precisionEditSelectedId;
     var instruction = precisionEditObjectInstruction(object);
-    var textField = object.type === 'text'
+    var textField = !useSessionSummary && object.type === 'text'
       ? '<input class="precision-object-text" value="' + escAttr(object.text || '') + '" maxlength="500" data-precision-text="' + escAttr(object.id) + '" aria-label="' + escAttr(i18nText('creator.precision_edit_text')) + '">'
       : '';
+    var instructionSummary = useSessionSummary ? '' :
+      '<p class="precision-object-instruction-summary" title="' + escAttr(instruction || i18nText('creator.precision_edit_object_instruction_placeholder')) + '"><span>' + escHtml(i18nText('creator.precision_edit_object_instruction')) + '</span><strong>' + escHtml(instruction || i18nText('creator.precision_edit_object_instruction_placeholder')) + '</strong></p>';
     return '<article class="precision-object-row' + (selected ? ' selected' : '') + '" data-precision-object="' + escAttr(object.id) + '">' +
       '<button type="button" class="precision-object-select" onclick="selectPrecisionEditObject(\'' + escAttr(object.id) + '\')">' + escHtml(precisionEditObjectName(object)) + '</button>' +
       textField +
-      '<label><span>' + escHtml(i18nText('creator.precision_edit_object_instruction')) + '</span><textarea rows="2" maxlength="500" data-precision-instruction="' + escAttr(object.id) + '" placeholder="' + escAttr(i18nText('creator.precision_edit_object_instruction_placeholder')) + '">' + escHtml(instruction) + '</textarea></label>' +
+      instructionSummary +
       '<button type="button" class="btn-ghost precision-object-delete" onclick="deletePrecisionEditObject(\'' + escAttr(object.id) + '\')" title="' + escAttr(i18nText('creator.precision_edit_delete')) + '">×</button>' +
     '</article>';
   }).join('');
-  list.querySelectorAll('[data-precision-instruction]').forEach(function(input) {
-    input.addEventListener('input', function() { updatePrecisionEditObjectFromInput(input, 'instruction'); });
-    input.addEventListener('blur', function() { finishPrecisionEditObjectInput(input); });
-  });
   list.querySelectorAll('[data-precision-text]').forEach(function(input) {
     input.addEventListener('input', function() { updatePrecisionEditObjectFromInput(input, 'text'); });
     input.addEventListener('blur', function() { finishPrecisionEditObjectInput(input); });
@@ -4151,11 +5478,17 @@ function renderPrecisionEditSession() {
   var after = document.getElementById('precisionCompareAfter');
   var stage = document.getElementById('precisionCompareStage');
   var useAsBase = document.getElementById('btnPrecisionUseSelectedAsBase');
-  if (!rail || !before || !after || !stage || !precisionEditSession.source) return;
+  if (!rail || !before || !after || !stage) return;
+  if (!precisionEditSession.source) {
+    renderPrecisionSessionShowcase([]);
+    return;
+  }
   var selected = precisionEditSession.selectedVersionId;
   var entries = [precisionEditSession.source].concat(precisionEditSession.versions);
+  var versionSwitchPending = typeof precisionBaseVersionSwitchPending !== 'undefined' && precisionBaseVersionSwitchPending;
   rail.innerHTML = entries.map(function(entry) {
-    return '<div class="precision-version-item"><button type="button" class="precision-version' + (entry.id === selected ? ' selected' : '') + '" onclick="selectPrecisionVersion(\'' + escAttr(entry.id) + '\')"' + ((typeof precisionBaseVersionSwitchPending !== 'undefined' && precisionBaseVersionSwitchPending) ? ' disabled aria-disabled="true"' : '') + '>' + escHtml(entry.label) + '</button></div>';
+    var active = entry.id === selected;
+    return '<div class="precision-version-item" role="presentation"><button type="button" role="tab" class="precision-version' + (active ? ' selected' : '') + '" data-precision-version-id="' + escAttr(entry.id) + '" aria-selected="' + (active ? 'true' : 'false') + '"' + (active ? ' aria-current="true"' : '') + ' tabindex="' + (active ? '0' : '-1') + '" onclick="selectPrecisionVersion(\'' + escAttr(entry.id) + '\',{focusRail:true})" onkeydown="handlePrecisionVersionRailKeydown(event)"' + (versionSwitchPending ? ' disabled aria-disabled="true"' : '') + '>' + escHtml(entry.label) + '</button></div>';
   }).join('');
   var current = entries.find(function(entry) { return entry.id === selected; }) || precisionEditSession.source;
   var base = entries.find(function(entry) { return entry.id === (current.parentId || 'original'); }) || precisionEditSession.source;
@@ -4181,35 +5514,26 @@ function renderPrecisionEditSession() {
   });
   updatePrecisionCompareSlider((document.getElementById('precisionCompareSlider') || { value: 50 }).value);
   renderPrecisionSessionShowcase(entries);
+  if (typeof updatePrecisionCanvasImageInfo === 'function') updatePrecisionCanvasImageInfo();
   updatePrecisionCutoutRefineControls();
 }
 
 function renderPrecisionSessionShowcase(entries) {
+  ensurePrecisionSessionShowcaseControls();
   var gallery = document.getElementById('precisionSessionGallery');
   var count = document.getElementById('precisionSessionResultCount');
   var strip = document.getElementById('precisionPromptStrip');
-  // This renderer intentionally receives normalized current-session entries only.
-  // A later history API can reuse this entry point after it supplies the same shape.
   entries = (entries || []).filter(function(entry) { return entry && entry.data; });
-  window.precisionSessionCalendarEntries = entries.slice(1);
   var source = entries[0] || null;
-  var results = filterPrecisionSessionEntries(entries.slice(1));
-  if (count) count.textContent = String(results.length);
-  if (gallery) gallery.innerHTML = results.length ? results.map(function(entry, index) {
+  var results = entries.slice(1);
+  var historyPosters = precisionWorkflowHistoryPosterMarkup(precisionWorkflowHistoryState.items || []);
+  if (count) count.textContent = String(results.length + historyPosters.count);
+  if (gallery) gallery.innerHTML = results.length || historyPosters.markup ? results.map(function(entry, index) {
     var selected = entry.id === precisionEditSession.selectedVersionId;
     var label = String(entry.label || ('结果 ' + (index + 1)));
     return '<div class="precision-session-item" role="listitem"><button type="button" class="precision-session-thumb' + (selected ? ' selected' : '') + '" data-version-id="' + escAttr(entry.id) + '" onclick="selectPrecisionVersion(\'' + escAttr(entry.id) + '\')" aria-label="' + escAttr(label) + '"' + (selected ? ' aria-current="true"' : '') + ' title="' + escAttr(label) + '"><img src="' + escAttr(entry.data) + '" alt="" loading="lazy" draggable="false"><span>' + (index + 1) + '</span></button></div>';
-  }).join('') : '<p class="precision-session-empty">' + escHtml(i18nText('creator.precision_session_empty')) + '</p>';
-  var visiblePromptEntries = [source].concat(results).filter(function(entry) {
-    return entry && String(entry.prompt || '').trim();
-  });
-  if (strip) strip.innerHTML = visiblePromptEntries.map(function(entry, index) {
-    var prompt = String(entry.prompt || '').trim();
-    var title = index === 0 ? '原图提示词' : '改图 ' + index + ' 提示词';
-    return '<details' + (index === visiblePromptEntries.length - 1 ? ' open' : '') + '><summary>' + escHtml(title) + '</summary><div class="precision-prompt-chunks">' + splitDisplayPrompt(prompt, 220).map(function(chunk, chunkIndex) { return '<div class="precision-prompt-chunk"><b>' + (chunkIndex + 1) + '</b> ' + escHtml(chunk) + '</div>'; }).join('') + '</div></details>';
-  }).join('');
-  renderPrecisionSessionCalendar();
-  updatePrecisionSessionDateSummary();
+  }).join('') + historyPosters.markup : '<p class="precision-session-empty">' + escHtml(i18nText('creator.precision_session_empty')) + '</p>';
+  if (strip) strip.innerHTML = '';
 }
 
 function setPrecisionSessionShowcaseOpen(open, restoreFocus) {
@@ -4241,6 +5565,26 @@ function togglePrecisionSessionShowcase() {
   return showcase.classList.contains('is-expanded');
 }
 
+function ensurePrecisionSessionShowcaseControls() {
+  var showcase = document.getElementById('precisionSessionShowcase');
+  var content = document.getElementById('precisionSessionShowcaseContent');
+  var toggle = document.getElementById('btnPrecisionSessionShowcaseToggle');
+  var workflow = showcase && showcase.querySelector('.precision-workflow-history');
+  if (!showcase || !content || !toggle || !workflow) return null;
+  var controls = document.getElementById('precisionSessionShowcaseControls');
+  if (!controls) {
+    controls = document.createElement('div');
+    controls.id = 'precisionSessionShowcaseControls';
+    controls.className = 'precision-session-showcase-controls';
+    controls.setAttribute('role', 'group');
+    controls.setAttribute('aria-label', '精准改图图库操作');
+    showcase.insertBefore(controls, content);
+  }
+  if (toggle.parentElement !== controls) controls.appendChild(toggle);
+  if (workflow.parentElement !== controls) controls.appendChild(workflow);
+  return controls;
+}
+
 function precisionWorkflowHistoryMediaUrl(value) {
   var url = String(value || '');
   return /^\/api\/precision\/workflows\/pw_[a-f0-9]{32}\/versions\/(?:original|pv_[a-f0-9]{24})\/(?:thumb|image)$/.test(url) ? url : '';
@@ -4252,12 +5596,137 @@ function precisionWorkflowHistoryStatus(message) {
 }
 
 function precisionWorkflowHistoryFilters() {
-  var from = document.getElementById('precisionWorkflowHistoryDateFrom');
-  var to = document.getElementById('precisionWorkflowHistoryDateTo');
+  var state = precisionWorkflowHistoryCalendarState();
   return {
-    dateFrom: String(from && from.value || ''),
-    dateTo: String(to && to.value || '')
+    dateFrom: String(state.dateFrom || ''),
+    dateTo: String(state.dateTo || '')
   };
+}
+
+function precisionWorkflowHistoryCalendarState() {
+  return window.precisionWorkflowHistoryCalendarState || (window.precisionWorkflowHistoryCalendarState = {
+    anchor: new Date(),
+    dateFrom: '',
+    dateTo: '',
+    anchorExplicit: false
+  });
+}
+
+function precisionWorkflowHistoryDateKeys(workflow) {
+  var keys = [];
+  (Array.isArray(workflow && workflow.versions) ? workflow.versions : []).forEach(function(version) {
+    var time = Date.parse(String(version && version.created_at || ''));
+    if (Number.isFinite(time)) keys.push(precisionCalendarDateKey(new Date(time)));
+  });
+  if (!keys.length) {
+    var fallback = Date.parse(String(workflow && (workflow.updated_at || workflow.created_at) || ''));
+    if (Number.isFinite(fallback)) keys.push(precisionCalendarDateKey(new Date(fallback)));
+  }
+  return keys;
+}
+
+function precisionWorkflowHistoryCalendarIndex() {
+  var index = {};
+  (precisionWorkflowHistoryState.calendarItems || precisionWorkflowHistoryState.items || []).forEach(function(workflow) {
+    precisionWorkflowHistoryDateKeys(workflow).forEach(function(key) {
+      index[key] = (index[key] || 0) + 1;
+    });
+  });
+  return index;
+}
+
+function renderPrecisionWorkflowHistoryCalendar() {
+  var calendar = document.getElementById('precisionWorkflowHistoryCalendar');
+  var label = document.getElementById('precisionWorkflowHistoryCalendarLabel');
+  if (!calendar || !label) return;
+  var state = precisionWorkflowHistoryCalendarState();
+  var anchor = new Date(state.anchor.getFullYear(), state.anchor.getMonth(), 1);
+  state.anchor = anchor;
+  label.textContent = anchor.getFullYear() + '年' + (anchor.getMonth() + 1) + '月';
+  var firstDay = new Date(anchor.getFullYear(), anchor.getMonth(), 1).getDay();
+  var days = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate();
+  var index = precisionWorkflowHistoryCalendarIndex();
+  var today = precisionCalendarDateKey(new Date());
+  var html = ['<span class="precision-workflow-history-calendar-weekday">日</span><span class="precision-workflow-history-calendar-weekday">一</span><span class="precision-workflow-history-calendar-weekday">二</span><span class="precision-workflow-history-calendar-weekday">三</span><span class="precision-workflow-history-calendar-weekday">四</span><span class="precision-workflow-history-calendar-weekday">五</span><span class="precision-workflow-history-calendar-weekday">六</span>'];
+  for (var blank = 0; blank < firstDay; blank += 1) html.push('<span class="precision-workflow-history-calendar-day is-placeholder" aria-hidden="true"></span>');
+  for (var day = 1; day <= days; day += 1) {
+    var key = precisionCalendarDateKey(new Date(anchor.getFullYear(), anchor.getMonth(), day));
+    var hasHistory = !!index[key];
+    var selected = !!state.dateFrom && key >= state.dateFrom && (!state.dateTo || key <= state.dateTo);
+    var classes = 'precision-workflow-history-calendar-day' + (hasHistory ? ' has-history' : ' is-empty') + (selected ? ' selected' : '') + (key === today ? ' today' : '');
+    html.push('<button type="button" class="' + classes + '" data-workflow-date="' + key + '" aria-label="' + escAttr(key + (hasHistory ? '，' + index[key] + ' 个历史工作流' : '，无历史工作流')) + '" aria-pressed="' + (selected ? 'true' : 'false') + '" onclick="selectPrecisionWorkflowHistoryCalendarDate(\'' + key + '\')"><span>' + day + '</span>' + (hasHistory ? '<small></small>' : '') + '</button>');
+  }
+  calendar.innerHTML = html.join('');
+}
+
+function shiftPrecisionWorkflowHistoryCalendar(offset) {
+  var state = precisionWorkflowHistoryCalendarState();
+  state.anchor = new Date(state.anchor.getFullYear(), state.anchor.getMonth() + Number(offset || 0), 1);
+  state.anchorExplicit = true;
+  renderPrecisionWorkflowHistoryCalendar();
+  var toolbar = document.querySelector('.precision-workflow-history-calendar-toolbar');
+  var buttons = toolbar ? toolbar.querySelectorAll('button') : [];
+  var focusTarget = buttons[Number(offset) < 0 ? 0 : buttons.length - 1];
+  if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
+}
+
+function setPrecisionWorkflowHistoryDateRange(range) {
+  var end = new Date();
+  var start = new Date(end);
+  if (range === '3d' || range === '5d') start.setDate(start.getDate() - (range === '3d' ? 2 : 4));
+  else if (range === 'week') start.setDate(end.getDate() - end.getDay());
+  else if (range === 'month') start = new Date(end.getFullYear(), end.getMonth(), 1);
+  else if (range === 'quarter') start = new Date(end.getFullYear(), Math.floor(end.getMonth() / 3) * 3, 1);
+  else if (range === 'half-year') start = new Date(end.getFullYear(), end.getMonth() < 6 ? 0 : 6, 1);
+  else if (range === 'year') start = new Date(end.getFullYear(), 0, 1);
+  else return false;
+  var state = precisionWorkflowHistoryCalendarState();
+  state.dateFrom = precisionCalendarDateKey(start);
+  state.dateTo = precisionCalendarDateKey(end);
+  state.anchor = new Date(end.getFullYear(), end.getMonth(), 1);
+  state.anchorExplicit = true;
+  renderPrecisionWorkflowHistoryCalendar();
+  return loadPrecisionWorkflowHistory(true);
+}
+
+function selectPrecisionWorkflowHistoryCalendarDate(key) {
+  var state = precisionWorkflowHistoryCalendarState();
+  state.dateFrom = key;
+  state.dateTo = key;
+  state.anchor = new Date((precisionCalendarDateFromKey(key) || new Date()).getFullYear(), (precisionCalendarDateFromKey(key) || new Date()).getMonth(), 1);
+  state.anchorExplicit = true;
+  renderPrecisionWorkflowHistoryCalendar();
+  return loadPrecisionWorkflowHistory(true);
+}
+
+function clearPrecisionWorkflowHistoryDateFilter() {
+  var state = precisionWorkflowHistoryCalendarState();
+  state.dateFrom = '';
+  state.dateTo = '';
+  renderPrecisionWorkflowHistoryCalendar();
+  return loadPrecisionWorkflowHistory(true);
+}
+
+function handlePrecisionWorkflowHistoryCalendarKeydown(event) {
+  var calendar = document.getElementById('precisionWorkflowHistoryCalendar');
+  if (!calendar) return;
+  var days = Array.prototype.slice.call(calendar.querySelectorAll('button[data-workflow-date]'));
+  var index = days.indexOf(document.activeElement);
+  if (['Enter', ' ', 'Spacebar'].indexOf(event.key) !== -1) {
+    if (index < 0) return;
+    event.preventDefault();
+    return selectPrecisionWorkflowHistoryCalendarDate(days[index].dataset.workflowDate);
+  }
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].indexOf(event.key) === -1) return;
+  if (index < 0) index = 0;
+  if (event.key === 'Home') index = 0;
+  else if (event.key === 'End') index = days.length - 1;
+  else if (event.key === 'ArrowLeft') index -= 1;
+  else if (event.key === 'ArrowRight') index += 1;
+  else if (event.key === 'ArrowUp') index -= 7;
+  else index += 7;
+  event.preventDefault();
+  days[Math.max(0, Math.min(days.length - 1, index))].focus();
 }
 
 function setPrecisionWorkflowHistoryFilterOpen(open, restoreFocus) {
@@ -4272,6 +5741,7 @@ function setPrecisionWorkflowHistoryFilterOpen(open, restoreFocus) {
     precisionWorkflowHistoryState.filterOpener = trigger;
     setPrecisionWorkflowHistoryActionOpen(false);
     if (!precisionWorkflowHistoryState.loaded) loadPrecisionWorkflowHistory(true);
+    renderPrecisionWorkflowHistoryCalendar();
     if (typeof popover.focus === 'function') popover.focus();
   } else if (restoreFocus && wasOpen && precisionWorkflowHistoryState.filterOpener && typeof precisionWorkflowHistoryState.filterOpener.focus === 'function') {
     precisionWorkflowHistoryState.filterOpener.focus();
@@ -4313,7 +5783,11 @@ function precisionWorkflowHistoryItemMarkup(workflow) {
   var versions = Array.isArray(workflow && workflow.versions) ? workflow.versions : [];
   var summary = workflow && workflow.summary || {};
   var resultIndex = 0;
-  var versionMarkup = versions.map(function(version, index) {
+  // The history card is a visual workflow: source first, then each edit in order.
+  // Keep only the first source projection because an API history record has one base image.
+  var orderedVersions = versions.filter(function(version) { return version && version.kind === 'source'; }).slice(0, 1)
+    .concat(versions.filter(function(version) { return version && version.kind === 'result'; }));
+  var versionMarkup = orderedVersions.map(function(version, index) {
     if (version && version.kind === 'result') resultIndex += 1;
     var arrow = index ? '<span class="precision-workflow-history-arrow" aria-hidden="true">→</span>' : '';
     return arrow + precisionWorkflowHistoryVersionMarkup(version, resultIndex);
@@ -4323,6 +5797,25 @@ function precisionWorkflowHistoryItemMarkup(workflow) {
   var latestSize = /^\d{1,5}x\d{1,5}$/.test(String(summary.latest_size || '')) ? String(summary.latest_size) : '';
   var meta = updated + (updated && count ? ' · ' : '') + i18nText('creator.precision_workflow_history_edits', { count: count }) + (latestSize ? ' · ' + latestSize : '');
   return '<div class="precision-workflow-history-item" role="listitem"><button type="button" class="precision-workflow-history-select" onclick="selectPrecisionWorkflowHistory(\'' + escAttr(workflowId) + '\',event)"><span class="precision-workflow-history-item-meta"><strong>' + escHtml(updated || i18nText('creator.precision_workflow_history_date_unknown')) + '</strong><small>' + escHtml(meta) + '</small></span><span class="precision-workflow-history-version-row">' + versionMarkup + '</span></button></div>';
+}
+
+function precisionWorkflowHistoryPosterMarkup(workflows) {
+  var count = 0;
+  var markup = (workflows || []).map(function(workflow) {
+    var workflowId = String(workflow && workflow.workflow_id || '');
+    var updated = String(workflow && workflow.updated_at || '').slice(0, 10);
+    var step = 0;
+    return (Array.isArray(workflow && workflow.versions) ? workflow.versions : []).map(function(version) {
+      if (!version || version.kind !== 'result') return '';
+      step += 1;
+      var thumbnail = version.available ? precisionWorkflowHistoryMediaUrl(version.thumbnail) : '';
+      if (!thumbnail) return '';
+      count += 1;
+      var label = (updated ? updated + ' · ' : '') + i18nText('creator.precision_workflow_history_step', { count: step });
+      return '<div class="precision-session-item precision-history-poster" role="listitem"><button type="button" class="precision-session-thumb" onclick="selectPrecisionWorkflowHistory(\'' + escAttr(workflowId) + '\',event)" aria-label="' + escAttr(label) + '" title="' + escAttr(label) + '"><img src="' + escAttr(thumbnail) + '" alt="" loading="lazy" draggable="false"></button></div>';
+    }).join('');
+  }).join('');
+  return { markup: markup, count: count };
 }
 
 function renderPrecisionWorkflowHistory() {
@@ -4338,7 +5831,7 @@ function loadPrecisionWorkflowHistory(force) {
   var request = ++precisionWorkflowHistoryState.listRequest;
   precisionWorkflowHistoryState.loading = true;
   precisionWorkflowHistoryStatus(i18nText('creator.precision_workflow_history_loading'));
-  var query = new URLSearchParams({ limit: '30' });
+  var query = new URLSearchParams({ limit: '100' });
   if (filters.dateFrom) query.set('date_from', filters.dateFrom);
   if (filters.dateTo) query.set('date_to', filters.dateTo);
   return _authFetch('/api/precision/workflows?' + query.toString()).then(function(response) {
@@ -4347,6 +5840,14 @@ function loadPrecisionWorkflowHistory(force) {
   }).then(function(data) {
     if (request !== precisionWorkflowHistoryState.listRequest) return false;
     precisionWorkflowHistoryState.items = Array.isArray(data && data.items) ? data.items : [];
+    if (!filters.dateFrom && !filters.dateTo) precisionWorkflowHistoryState.calendarItems = precisionWorkflowHistoryState.items.slice();
+    var calendarState = precisionWorkflowHistoryCalendarState();
+    if (!calendarState.anchorExplicit) {
+      var indexedDates = Object.keys(precisionWorkflowHistoryCalendarIndex()).sort();
+      var latestDate = indexedDates[indexedDates.length - 1];
+      var latest = precisionCalendarDateFromKey(latestDate);
+      if (latest) calendarState.anchor = new Date(latest.getFullYear(), latest.getMonth(), 1);
+    }
     precisionWorkflowHistoryState.loaded = true;
     precisionWorkflowHistoryState.loading = false;
     if (!precisionWorkflowHistoryState.items.some(function(item) { return item && item.workflow_id === precisionWorkflowHistoryState.selectedWorkflowId; })) {
@@ -4356,12 +5857,16 @@ function loadPrecisionWorkflowHistory(force) {
     }
     precisionWorkflowHistoryStatus(precisionWorkflowHistoryState.items.length ? i18nText('creator.precision_workflow_history_loaded', { count: precisionWorkflowHistoryState.items.length }) : i18nText('creator.precision_workflow_history_empty'));
     renderPrecisionWorkflowHistory();
+    renderPrecisionWorkflowHistoryCalendar();
+    renderPrecisionSessionShowcase(precisionEditSession.source ? [precisionEditSession.source].concat(precisionEditSession.versions) : []);
     return true;
   }).catch(function() {
     if (request !== precisionWorkflowHistoryState.listRequest) return false;
     precisionWorkflowHistoryState.loading = false;
     precisionWorkflowHistoryStatus(i18nText('creator.precision_workflow_history_load_failed'));
     renderPrecisionWorkflowHistory();
+    renderPrecisionWorkflowHistoryCalendar();
+    renderPrecisionSessionShowcase(precisionEditSession.source ? [precisionEditSession.source].concat(precisionEditSession.versions) : []);
     return false;
   });
 }
@@ -4422,22 +5927,181 @@ function precisionWorkflowHistoryImageDataUrl(url) {
   });
 }
 
+function precisionWorkflowHistorySnapshotObjects(snapshot, versionId) {
+  if (!snapshot || !Array.isArray(snapshot.annotations)) return [];
+  var fallbackColor = (typeof precisionEditStyle === 'function' && precisionEditStyle().color) || '#ef4444';
+  var fallbackStroke = (typeof precisionEditStyle === 'function' && precisionEditStyle().strokeWidth) || 5;
+  return snapshot.annotations.map(function(annotation, index) {
+    if (!annotation || typeof annotation !== 'object') return null;
+    var type = annotation.type === 'rectangle' ? 'rect' : annotation.type;
+    if (['arrow', 'rect', 'ellipse', 'brush', 'text'].indexOf(type) === -1) return null;
+    var label = Number(annotation.label);
+    if (!Number.isInteger(label) || label <= 0) label = index + 1;
+    var object = {
+      id: 'workflow-' + String(versionId || 'restore') + '-' + index,
+      type: type,
+      label: label,
+      color: fallbackColor,
+      strokeWidth: fallbackStroke,
+      instruction: String(annotation.instruction || '')
+    };
+    if (type === 'arrow') {
+      object.x = Number(annotation.x1) || 0;
+      object.y = Number(annotation.y1) || 0;
+      object.x2 = Number(annotation.x2) || 0;
+      object.y2 = Number(annotation.y2) || 0;
+    } else if (type === 'rect' || type === 'ellipse') {
+      object.x = Number(annotation.x) || 0;
+      object.y = Number(annotation.y) || 0;
+      object.x2 = object.x + (Number(annotation.width) || 0);
+      object.y2 = object.y + (Number(annotation.height) || 0);
+    } else if (type === 'brush') {
+      object.points = Array.isArray(annotation.points) ? annotation.points.map(function(point) {
+        return { x: Number(point && point.x) || 0, y: Number(point && point.y) || 0 };
+      }) : [];
+    } else {
+      object.x = Number(annotation.x) || 0;
+      object.y = Number(annotation.y) || 0;
+      object.text = String(annotation.text || '');
+      object.fontSize = (typeof precisionEditStyle === 'function' && precisionEditStyle().fontSize) || 24;
+    }
+    return object;
+  }).filter(Boolean);
+}
+
+function precisionWorkflowHistoryLoadVersionData(versions) {
+  var loaded = {};
+  var requests = (versions || []).map(function(version) {
+    var id = String(version && version.version_id || '');
+    var imageUrl = precisionWorkflowHistoryMediaUrl(version && version.image_url);
+    if (!id || !imageUrl) return Promise.resolve();
+    return precisionWorkflowHistoryImageDataUrl(imageUrl).then(function(dataUrl) {
+      if (dataUrl) loaded[id] = dataUrl;
+    }).catch(function() {
+      // Keep the metadata chain intact when one historical artifact is gone.
+      // The selected version gets a second direct restore attempt below.
+    });
+  });
+  return Promise.all(requests).then(function() { return loaded; });
+}
+
+function precisionWorkflowHistoryEnsureVersionData(versions, imageData, ids) {
+  var wanted = (ids || []).map(String).filter(function(id) { return id && !imageData[id]; });
+  return Promise.all(wanted.map(function(id) {
+    var version = (versions || []).find(function(candidate) { return String(candidate && candidate.version_id || '') === id; });
+    var imageUrl = precisionWorkflowHistoryMediaUrl(version && version.image_url);
+    if (!imageUrl) return Promise.resolve();
+    return precisionWorkflowHistoryImageDataUrl(imageUrl).then(function(dataUrl) {
+      if (dataUrl) imageData[id] = dataUrl;
+    });
+  })).then(function() { return imageData; });
+}
+
+function precisionWorkflowHistoryRestoredSession(workflow, imageData) {
+  var versions = Array.isArray(workflow && workflow.versions) ? workflow.versions : [];
+  var sourceVersion = versions.find(function(version) { return version && version.version_id === 'original'; });
+  if (!sourceVersion || !imageData || !imageData.original) return null;
+  var session = {
+    source: {
+      id: 'original', label: i18nText('creator.precision_original'), data: imageData.original,
+      createdAt: String(sourceVersion.createdAt || sourceVersion.created_at || ''),
+      width: sourceVersion.width, height: sourceVersion.height
+    },
+    versions: [], selectedVersionId: 'original', baseVersionId: 'original',
+    taskBaseVersionId: null, view: 'after', taskId: null,
+    sourceGeneration: precisionSourceLoadGeneration
+  };
+  versions.forEach(function(version, index) {
+    if (!version || version.version_id === 'original') return;
+    session.versions.push({
+      id: version.version_id,
+      label: String(session.versions.length + 1),
+      data: imageData[version.version_id] || '',
+      parentId: imageData[version.parent_version_id] ? version.parent_version_id : 'original',
+      createdAt: String(version.createdAt || version.created_at || ''),
+      width: version.width, height: version.height,
+      annotationSnapshot: version.annotation_snapshot || null,
+      workflowIndex: index
+    });
+  });
+  session.annotationSnapshots = {};
+  session.versions.forEach(function(version) {
+    if (version.annotationSnapshot) session.annotationSnapshots[version.id] = version.annotationSnapshot;
+  });
+  return session;
+}
+
+function applyPrecisionWorkflowVersionAnnotations(versionId) {
+  var snapshot = precisionEditSession && precisionEditSession.annotationSnapshots && precisionEditSession.annotationSnapshots[versionId];
+  if (!snapshot) return false;
+  precisionEditObjects = precisionWorkflowHistorySnapshotObjects(snapshot, versionId);
+  precisionEditLabelCounter = precisionEditObjects.reduce(function(maximum, object) { return Math.max(maximum, Number(object.label) || 0); }, 0);
+  precisionEditSelectedId = precisionEditObjects.length ? precisionEditObjects[0].id : null;
+  precisionAnnotationInstructionPopoverState.confirmedIds = {};
+  precisionAnnotationInstructionPopoverState.dismissedIds = {};
+  precisionEditObjects.forEach(function(object) { precisionAnnotationInstructionPopoverState.confirmedIds[object.id] = true; });
+  if (typeof setPrecisionEditStrategy === 'function') setPrecisionEditStrategy(snapshot.precision_strategy || 'standard');
+  precisionSelectionFeather = Math.max(0, Math.min(64, Math.round(Number(snapshot.precision_selection_feather) || 0)));
+  var featherInput = document.getElementById('precisionSelectionFeather');
+  if (featherInput) featherInput.value = String(precisionSelectionFeather);
+  if (typeof setPrecisionEditSelectionMode === 'function') setPrecisionEditSelectionMode(snapshot.precision_selection_mode || 'annotation');
+  return true;
+}
+
 function restorePrecisionWorkflowHistory() {
   var workflow = precisionWorkflowHistoryState.selectedWorkflow;
-  var imageUrl = precisionWorkflowHistoryMediaUrl(workflow && workflow.restore && workflow.restore.image_url);
-  if (!imageUrl || !preparePrecisionSourceReplacement()) return false;
+  var restore = workflow && workflow.restore;
+  var restoredVersionId = String(restore && restore.version_id || '');
+  var versions = Array.isArray(workflow && workflow.versions) ? workflow.versions : [];
+  if (!restoredVersionId || !versions.length || !preparePrecisionSourceReplacement()) return false;
   setPrecisionWorkflowHistoryActionOpen(false);
   var generation = ++precisionSourceLoadGeneration;
   precisionWorkflowHistoryStatus(i18nText('creator.precision_workflow_history_restoring'));
-  return precisionWorkflowHistoryImageDataUrl(imageUrl).then(function(dataUrl) {
-    if (generation !== precisionSourceLoadGeneration || !dataUrl) return false;
+  return precisionWorkflowHistoryLoadVersionData(versions).then(function(imageData) {
+    if (generation !== precisionSourceLoadGeneration) return false;
+    var baseVersionId = String(restore && restore.base_version_id || 'original');
+    return precisionWorkflowHistoryEnsureVersionData(versions, imageData, ['original', baseVersionId, restoredVersionId]).then(function() {
+      if (generation !== precisionSourceLoadGeneration) return false;
+    var session = precisionWorkflowHistoryRestoredSession(workflow, imageData);
+    var selected = session && precisionEditSessionEntry([session.source].concat(session.versions), restoredVersionId, null);
+    if (!session || !selected) throw new Error('precision_workflow_history_restore_incomplete');
+    baseVersionId = String(restore && restore.base_version_id || selected.parentId || 'original');
+    var base = precisionEditSessionEntry([session.source].concat(session.versions), baseVersionId, session.source);
+    var snapshot = (restore && restore.annotation_snapshot) || selected.annotationSnapshot || null;
+    var restoredObjects = precisionWorkflowHistorySnapshotObjects(snapshot, restoredVersionId);
+    resetPrecisionSourceSpecificState(generation);
+    session.selectedVersionId = selected.id;
+    session.baseVersionId = base.id;
+    session.view = selected.id === base.id ? 'after' : 'compare';
+    session.sourceGeneration = generation;
+    precisionEditSession = session;
     setCreatorWorkbenchMode('image', 'precision');
-    loadPrecisionEditSourceImage(dataUrl, '', { generation: generation, onLoaded: function() {
+    loadPrecisionEditSourceImage(base.data, '', { generation: generation, preserveSession: true, onLoaded: function() {
+      if (generation !== precisionSourceLoadGeneration) return;
+      precisionEditObjects = restoredObjects;
+      precisionEditHistory = [];
+      precisionEditRedo = [];
+      precisionEditLabelCounter = restoredObjects.reduce(function(maximum, object) { return Math.max(maximum, Number(object.label) || 0); }, 0);
+      precisionEditSelectedId = restoredObjects.length ? restoredObjects[0].id : null;
+      precisionAnnotationInstructionPopoverState.confirmedIds = {};
+      precisionAnnotationInstructionPopoverState.dismissedIds = {};
+      restoredObjects.forEach(function(object) { precisionAnnotationInstructionPopoverState.confirmedIds[object.id] = true; });
+      if (snapshot) {
+        if (typeof setPrecisionEditStrategy === 'function') setPrecisionEditStrategy(snapshot.precision_strategy || 'standard');
+        precisionSelectionFeather = Math.max(0, Math.min(64, Math.round(Number(snapshot.precision_selection_feather) || 0)));
+        var featherInput = document.getElementById('precisionSelectionFeather');
+        if (featherInput) featherInput.value = String(precisionSelectionFeather);
+        if (typeof setPrecisionEditSelectionMode === 'function') setPrecisionEditSelectionMode(snapshot.precision_selection_mode || 'annotation');
+      }
+      renderPrecisionEditCanvas();
+      updatePrecisionEditControls();
+      renderPrecisionEditSession();
       precisionWorkflowHistoryStatus(i18nText('creator.precision_workflow_history_restored'));
     }, onError: function() {
       precisionWorkflowHistoryStatus(i18nText('creator.precision_workflow_history_load_failed'));
     }});
     return true;
+    });
   }).catch(function() {
     if (generation === precisionSourceLoadGeneration) precisionWorkflowHistoryStatus(i18nText('creator.precision_workflow_history_load_failed'));
     return false;
@@ -4661,7 +6325,9 @@ document.addEventListener('click', function(event) {
   var sourceActions = document.getElementById('precisionSourceActions');
   if (sourceActions && !sourceActions.contains(event.target)) setPrecisionSourceMenuOpen(false);
   var historyFilters = document.querySelector('.precision-workflow-history-filters');
-  if (historyFilters && !historyFilters.contains(event.target)) {
+  var eventPath = typeof event.composedPath === 'function' ? event.composedPath() : [];
+  var eventInsideHistoryFilters = historyFilters && (historyFilters.contains(event.target) || eventPath.indexOf(historyFilters) !== -1);
+  if (historyFilters && !eventInsideHistoryFilters) {
     setPrecisionWorkflowHistoryFilterOpen(false);
     setPrecisionWorkflowHistoryActionOpen(false);
   }
@@ -4699,13 +6365,47 @@ document.addEventListener('keydown', function(event) {
   }
 });
 
-function selectPrecisionVersion(id) {
+function precisionVersionRailReducedMotion() {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function focusPrecisionVersionRailEntry(id) {
+  var rail = document.getElementById('precisionVersionRail');
+  if (!rail) return false;
+  var buttons = Array.prototype.slice.call(rail.querySelectorAll('[data-precision-version-id]'));
+  var button = buttons.find(function(candidate) { return candidate.getAttribute('data-precision-version-id') === id; });
+  if (!button || button.disabled) return false;
+  button.focus({ preventScroll: true });
+  if (typeof button.scrollIntoView === 'function') button.scrollIntoView({ behavior: precisionVersionRailReducedMotion() ? 'auto' : 'smooth', block: 'nearest', inline: 'nearest' });
+  return true;
+}
+
+function handlePrecisionVersionRailKeydown(event) {
+  if (!event || ['ArrowLeft', 'ArrowRight', 'Home', 'End'].indexOf(event.key) === -1) return;
+  var rail = document.getElementById('precisionVersionRail');
+  if (!rail) return;
+  var buttons = Array.prototype.slice.call(rail.querySelectorAll('[data-precision-version-id]:not(:disabled)'));
+  var currentIndex = buttons.indexOf(event.currentTarget);
+  if (currentIndex === -1 || !buttons.length) return;
+  var nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+  var nextId = buttons[nextIndex].getAttribute('data-precision-version-id');
+  event.preventDefault();
+  selectPrecisionVersion(nextId, { focusRail: true });
+}
+
+function selectPrecisionVersion(id, options) {
   if (typeof precisionBaseVersionSwitchPending !== 'undefined' && precisionBaseVersionSwitchPending) return false;
   var entries = [precisionEditSession.source].concat(precisionEditSession.versions);
   if (!entries.some(function(entry) { return entry.id === id; })) return;
   precisionEditSession.selectedVersionId = id;
   precisionEditSession.view = 'after';
+  if (precisionEditSession.annotationSnapshots && applyPrecisionWorkflowVersionAnnotations(id)) {
+    precisionEditHistory = [];
+    precisionEditRedo = [];
+  }
   renderPrecisionEditSession();
+  if (id === 'original' && precisionCutoutHasSource() && !precisionCutoutUiBusy()) updatePrecisionCutoutAvailability();
+  if (options && options.focusRail) focusPrecisionVersionRailEntry(id);
 }
 
 function useSelectedPrecisionVersionAsBase() {
@@ -4748,7 +6448,13 @@ function togglePrecisionCompareFullscreen() {
     }
   }
   if (!panel.requestFullscreen) return false;
-  panel.requestFullscreen();
+  var request = panel.requestFullscreen();
+  var button = document.getElementById('btnPrecisionFullscreen');
+  // Reflect the requested state immediately; a rejected request is corrected
+  // by the settled promise or the browser fullscreenchange event.
+  if (button) button.setAttribute('aria-pressed', 'true');
+  if (request && typeof request.then === 'function') request.then(syncPrecisionFullscreenState, syncPrecisionFullscreenState);
+  else window.setTimeout(syncPrecisionFullscreenState, 0);
   return true;
 }
 
@@ -4766,6 +6472,18 @@ function syncPrecisionFullscreenState() {
   var button = document.getElementById('btnPrecisionFullscreen');
   if (!button) return false;
   var active = !!(panel && document.fullscreenElement === panel);
+  var verticalHandle = document.getElementById('precisionCanvasVerticalResizeHandle');
+  var stage = document.querySelector('#panelPrecisionEdit .precision-edit-stage-column');
+  if (verticalHandle) {
+    verticalHandle.hidden = !active;
+    verticalHandle.setAttribute('aria-hidden', active ? 'false' : 'true');
+    verticalHandle.tabIndex = active ? 0 : -1;
+  }
+  if (stage) stage.classList.toggle('is-canvas-vertical-resizable', active && !!verticalHandle);
+  if (!active) {
+    if (precisionCanvasVerticalResizeState) endPrecisionCanvasVerticalResize();
+    clearPrecisionCanvasVerticalSize();
+  }
   var labelKey = active ? 'creator.precision_exit_fullscreen_label' : 'creator.precision_fullscreen_label';
   var tooltipKey = active ? 'creator.precision_exit_fullscreen_tooltip' : 'creator.precision_fullscreen_tooltip';
   button.setAttribute('aria-pressed', active ? 'true' : 'false');
@@ -4813,6 +6531,86 @@ function precisionEditSelectionModeValue() {
     ? 'local' : 'annotation';
 }
 
+function updatePrecisionGuidanceSummary() {
+  var status = document.getElementById('precisionGuidanceStatus');
+  if (!status) return '';
+  var strategyButtons = {
+    fine: document.getElementById('btnPrecisionStrategyFine'),
+    standard: document.getElementById('btnPrecisionStrategyStandard'),
+    fast: document.getElementById('btnPrecisionStrategyFast')
+  };
+  var selectionButtons = {
+    annotation: document.getElementById('btnPrecisionSelectionAnnotation'),
+    local: document.getElementById('btnPrecisionSelectionLocal')
+  };
+  var strategy = strategyButtons[precisionEditStrategyValue()];
+  var selection = selectionButtons[precisionEditSelectionModeValue()];
+  var summary = [strategy, selection].map(function(button) {
+    return button ? button.textContent.trim() : '';
+  }).filter(Boolean).join(' · ');
+  status.textContent = summary;
+  return summary;
+}
+
+function precisionGuidanceReducedMotion() {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function setPrecisionGuidanceExpanded(expanded, options) {
+  var card = document.getElementById('precisionGuidanceCard');
+  var toggle = document.getElementById('btnPrecisionGuidanceToggle');
+  var body = document.getElementById('precisionGuidanceBody');
+  if (!card || !toggle || !body) return false;
+  var shouldExpand = expanded === true;
+  var reducedMotion = precisionGuidanceReducedMotion();
+  if (precisionGuidanceTransitionTimer) {
+    clearTimeout(precisionGuidanceTransitionTimer);
+    precisionGuidanceTransitionTimer = null;
+  }
+  updatePrecisionGuidanceSummary();
+  toggle.setAttribute('aria-expanded', shouldExpand ? 'true' : 'false');
+  body.setAttribute('aria-hidden', shouldExpand ? 'false' : 'true');
+  if (shouldExpand) {
+    body.hidden = false;
+    if (reducedMotion) {
+      card.dataset.state = 'expanded';
+    } else {
+      card.dataset.state = 'collapsed';
+      body.getBoundingClientRect();
+      card.dataset.state = 'expanding';
+    }
+  } else {
+    card.dataset.state = reducedMotion ? 'collapsed' : 'collapsing';
+    if (options && options.restoreFocus && typeof toggle.focus === 'function') toggle.focus();
+  }
+  if (reducedMotion) {
+    if (!shouldExpand) body.hidden = true;
+    return shouldExpand;
+  }
+  precisionGuidanceTransitionTimer = setTimeout(function() {
+    card.dataset.state = shouldExpand ? 'expanded' : 'collapsed';
+    if (!shouldExpand) body.hidden = true;
+    precisionGuidanceTransitionTimer = null;
+  }, 420);
+  return shouldExpand;
+}
+
+function togglePrecisionGuidance() {
+  var toggle = document.getElementById('btnPrecisionGuidanceToggle');
+  var expanded = !!toggle && toggle.getAttribute('aria-expanded') === 'true';
+  return setPrecisionGuidanceExpanded(!expanded);
+}
+
+function handlePrecisionGuidanceKeydown(event) {
+  if (!event || event.key !== 'Escape') return;
+  var card = document.getElementById('precisionGuidanceCard');
+  var toggle = document.getElementById('btnPrecisionGuidanceToggle');
+  if (!card || !toggle || toggle.getAttribute('aria-expanded') !== 'true' || !card.contains(event.target)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  setPrecisionGuidanceExpanded(false, { restoreFocus: true });
+}
+
 function setPrecisionEditStrategy(strategy) {
   precisionEditStrategy = ['fine', 'standard', 'fast'].indexOf(strategy) !== -1 ? strategy : 'standard';
   [
@@ -4827,6 +6625,7 @@ function setPrecisionEditStrategy(strategy) {
     button.classList.toggle('btn-ghost', !active);
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
+  updatePrecisionGuidanceSummary();
   updatePrecisionEditControls();
   return precisionEditStrategy;
 }
@@ -4854,6 +6653,9 @@ function setPrecisionEditSelectionMode(mode) {
   }
   var output = document.getElementById('precisionSelectionFeatherValue');
   if (output) output.textContent = String(precisionSelectionFeatherValue());
+  var modeHint = document.getElementById('precisionSelectionModeHint');
+  if (modeHint) modeHint.textContent = i18nText(active ? 'creator.precision_selection_local_hint' : 'creator.precision_selection_annotation_hint');
+  updatePrecisionGuidanceSummary();
   updatePrecisionEditControls();
   return precisionEditSelectionMode;
 }
@@ -4890,7 +6692,9 @@ function applyPrecisionResizePreset(value) {
   var select = document.getElementById('precisionResizePreset');
   var option = null;
   if (select) {
-    option = Array.prototype.find.call(select.options || [], function(candidate) { return candidate.value === value; }) || null;
+    option = Array.prototype.find.call(select.options || [], function(candidate) {
+      return candidate.value === value && !candidate.hidden;
+    }) || Array.prototype.find.call(select.options || [], function(candidate) { return candidate.value === value; }) || null;
   }
   var size = precisionResizePresetSize(value, option);
   if (!size) return;
@@ -4913,16 +6717,14 @@ function applyPrecisionResizePromptPreset(key) {
     if (select) select.value = '';
     return false;
   }
-  var current = String(textarea.value || '').replace(/\s+$/, '');
-  var next = current ? current + '\n' + preset : preset;
-  if (textarea.maxLength > 0 && next.length > textarea.maxLength) {
+  if (textarea.maxLength > 0 && preset.length > textarea.maxLength) {
     textarea.setCustomValidity(i18nText('creator.precision_size_prompt_preset_too_long'));
     if (typeof textarea.reportValidity === 'function') textarea.reportValidity();
     if (select) select.value = '';
     return false;
   }
   textarea.setCustomValidity('');
-  textarea.value = next;
+  textarea.value = preset;
   if (typeof textarea.dispatchEvent === 'function' && typeof Event === 'function') {
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
   }
@@ -4933,6 +6735,10 @@ function applyPrecisionResizePromptPreset(key) {
 }
 
 function markPrecisionResizeCustom() {
+  if (getPrecisionOutputSizePolicy() !== 'fit_crop') {
+    updatePrecisionResizeCapabilityUI();
+    return;
+  }
   var preset = document.getElementById('precisionResizePreset');
   var tier = document.getElementById('precisionResizeTier');
   var ratio = document.getElementById('precisionResizeRatio');
@@ -4963,10 +6769,11 @@ function getPrecisionSizeRequest() {
     return { error: i18nText('creator.precision_size_instruction_required') };
   }
   var capability = getPrecisionResizeCapability();
+  var outputPolicy = getPrecisionOutputSizePolicy();
   var selectedPrecisionModel = precisionEditSelectedModel && precisionEditSelectedModel.model || '';
   var compatibilityProfile = typeof PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE === 'string'
     ? PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE : 'gpt-image-2';
-  var protocolModel = selectedPrecisionModel === compatibilityProfile;
+  var protocolModel = selectedPrecisionModel === compatibilityProfile || capability.flexibleSizes;
   if (!protocolModel && capability.canonicalModel === compatibilityProfile) {
     var declaredProtocolSizes = Object.keys(capability.sizes || {});
     protocolModel = declaredProtocolSizes.length > 0 && declaredProtocolSizes.every(function(size) {
@@ -4988,7 +6795,7 @@ function getPrecisionSizeRequest() {
       rejection: { code: 'precision_edit_size_capability_unknown', target_size: targetSize }
     };
   }
-  if (capability.sizes[targetSize] !== true) {
+  if (outputPolicy !== 'fit_crop' && !capability.flexibleSizes && capability.sizes[targetSize] !== true) {
     return {
       error: i18nText('creator.precision_size_capability_unsupported', { size: targetSize }),
       rejection: { code: 'precision_edit_size_undeclared', target_size: targetSize, supported_sizes: Object.keys(capability.sizes) }
@@ -5098,7 +6905,23 @@ function appendPrecisionEditVersion(result, expectedGeneration) {
   var src = precisionLocalPathUrl(result.local_path);
   var promptField = typeof document !== 'undefined' ? document.getElementById('txtPromptPrecision') : null;
   var prompt = result.prompt || result.enhanced_prompt || (promptField ? promptField.value : '');
-  appendPrecisionEditImageVersion(src, null, { prompt: prompt });
+  appendPrecisionEditImageVersion(src, null, {
+    prompt: prompt, autoSetBase: true,
+    createdAt: result.createdAt || result.created_at || result.timestamp || '',
+    width: result.width, height: result.height
+  });
+}
+
+function schedulePrecisionAutoBaseVersion(id) {
+  precisionAutoBaseVersionTarget = String(id || '');
+  if (precisionAutoBaseVersionTimer !== null) return;
+  precisionAutoBaseVersionTimer = setTimeout(function() {
+    precisionAutoBaseVersionTimer = null;
+    var target = precisionAutoBaseVersionTarget;
+    precisionAutoBaseVersionTarget = '';
+    if (!target || !precisionEditSession.versions.some(function(version) { return version.id === target; })) return;
+    setPrecisionBaseVersion(target);
+  }, 0);
 }
 
 function appendPrecisionEditImageVersion(src, parentId, metadata) {
@@ -5124,12 +6947,13 @@ function appendPrecisionEditImageVersion(src, parentId, metadata) {
     createdAt: metadata.createdAt || metadata.created_at || metadata.timestamp || new Date().toISOString(),
     restoreMinAlpha: Number.isInteger(metadata.restoreMinAlpha) ? metadata.restoreMinAlpha : null,
     selectionApplied: metadata.selectionApplied === true,
-    width: Number.isInteger(metadata.width) ? metadata.width : precisionEditSourceWidth,
-    height: Number.isInteger(metadata.height) ? metadata.height : precisionEditSourceHeight
+    width: Number.isInteger(metadata.width) ? metadata.width : null,
+    height: Number.isInteger(metadata.height) ? metadata.height : null
   });
   precisionEditSession.selectedVersionId = id;
   precisionEditSession.view = 'after';
   renderPrecisionEditSession();
+  if (metadata.autoSetBase === true) schedulePrecisionAutoBaseVersion(id);
   return true;
 }
 
@@ -5152,6 +6976,30 @@ function renderPrecisionTaskMonitorElapsed() {
   var elapsed = document.getElementById('precisionTaskElapsed');
   if (!elapsed) return;
   elapsed.textContent = precisionTaskMonitorElapsedSeconds === null ? '' : Math.max(0, precisionTaskMonitorElapsedSeconds).toFixed(1) + 's';
+}
+
+function setPrecisionTaskMonitorExpanded(expanded, restoreFocus) {
+  var monitor = document.getElementById('precisionTaskMonitor');
+  var toggle = document.getElementById('btnPrecisionTaskMonitorToggle');
+  var body = document.getElementById('precisionTaskMonitorBody');
+  if (!monitor || !toggle || !body) return false;
+  var next = !!expanded;
+  var wasExpanded = monitor.classList.contains('precision-task-expanded');
+  monitor.classList.toggle('precision-task-expanded', next);
+  monitor.classList.toggle('precision-task-collapsed', !next);
+  toggle.setAttribute('aria-expanded', next ? 'true' : 'false');
+  toggle.setAttribute('aria-label', next ? '折叠处理进度' : '展开处理进度');
+  toggle.setAttribute('title', next ? '折叠处理进度' : '展开处理进度');
+  body.setAttribute('aria-hidden', next ? 'false' : 'true');
+  if (!next && restoreFocus && wasExpanded && typeof toggle.focus === 'function') toggle.focus();
+  return wasExpanded;
+}
+
+function togglePrecisionTaskMonitor() {
+  var monitor = document.getElementById('precisionTaskMonitor');
+  if (!monitor) return false;
+  setPrecisionTaskMonitorExpanded(!monitor.classList.contains('precision-task-expanded'));
+  return monitor.classList.contains('precision-task-expanded');
 }
 
 function precisionDisplaySize(value) {
@@ -5242,6 +7090,42 @@ function precisionOutputSizeNotices(data) {
   return notices;
 }
 
+function precisionTransportFailureNoticeFromRecord(record) {
+  if (!record || typeof record !== 'object') return '';
+  var stage = String(record.transport_stage || record.transportStage || '').toLowerCase();
+  var errorType = String(record.transport_error || record.transportError || '').toLowerCase();
+  var retry = String(record.automatic_retry || record.automaticRetry || '').toLowerCase();
+  if (stage === 'response_read' && errorType === 'readerror' && retry === 'suppressed_non_idempotent_image_edit') {
+    return i18nText('creator.precision_connection_response_read_no_retry');
+  }
+  return '';
+}
+
+function precisionTransportFailureNotices(data) {
+  var notices = [];
+  var seen = {};
+  var add = function(value) {
+    value = String(value || '').trim();
+    if (!value || seen[value]) return;
+    seen[value] = true;
+    notices.push(value);
+  };
+  var visit = function(record) {
+    if (!record || typeof record !== 'object') return;
+    add(precisionTransportFailureNoticeFromRecord(record));
+    visit(record.error_details);
+    visit(record.details);
+  };
+  visit(data);
+  var states = data && data.provider_states ? data.provider_states : {};
+  Object.keys(states).forEach(function(key) {
+    var state = states[key] || {};
+    visit(state);
+    visit(state.result);
+  });
+  return notices;
+}
+
 function updatePrecisionTaskMonitor(data) {
   var monitor = document.getElementById('precisionTaskMonitor');
   var status = document.getElementById('precisionTaskStatus');
@@ -5259,6 +7143,11 @@ function updatePrecisionTaskMonitor(data) {
 
   if (!data) {
     if (monitor) monitor.classList.add('precision-task-idle');
+    if (typeof setPrecisionTaskMonitorExpanded === 'function') setPrecisionTaskMonitorExpanded(false);
+    if (monitor) {
+      monitor.classList.remove('precision-task-active', 'precision-task-terminal', 'precision-task-failed', 'precision-task-completed');
+      monitor.removeAttribute('data-task-status');
+    }
     if (precisionTaskMonitorTimer) { clearInterval(precisionTaskMonitorTimer); precisionTaskMonitorTimer = null; }
     precisionTaskMonitorData = null;
     precisionTaskMonitorStartedAtMs = 0;
@@ -5328,6 +7217,7 @@ function updatePrecisionTaskMonitor(data) {
   var lines = [];
   Object.keys(states).forEach(function(key) { lines = lines.concat(states[key].log || []); });
   lines = lines.concat(precisionOutputSizeNotices(data));
+  lines = lines.concat(precisionTransportFailureNotices(data));
   var stateKeys = Object.keys(states);
   var successfulCompleted = stateKeys.filter(function(key) {
     var state = states[key] || {};
@@ -5342,6 +7232,16 @@ function updatePrecisionTaskMonitor(data) {
   var progressText = hasEstimate ? actualLabel + ' · 耗时估算中' : actualLabel;
   if (status) status.textContent = taskStatus;
   if (progress) progress.textContent = progressText;
+  if (monitor) {
+    if (typeof monitor.setAttribute === 'function') monitor.setAttribute('data-task-status', String(taskStatus).toLowerCase());
+    monitor.classList.toggle('precision-task-active', !terminal);
+    monitor.classList.toggle('precision-task-terminal', terminal);
+    monitor.classList.toggle('precision-task-failed', terminalFailed);
+    monitor.classList.toggle('precision-task-completed', String(taskStatus).toLowerCase() === 'completed');
+  }
+  // A live task opens the monitor automatically; terminal results stay open
+  // until the user explicitly collapses them.
+  if (typeof setPrecisionTaskMonitorExpanded === 'function') setPrecisionTaskMonitorExpanded(true);
   renderPrecisionTaskMonitorElapsed();
   if (log) {
     log.textContent = lines.join('\n');
@@ -5350,6 +7250,7 @@ function updatePrecisionTaskMonitor(data) {
 
   if (progressBar) {
     progressBar.classList.toggle('indeterminate', hasEstimate);
+    progressBar.classList.toggle('has-estimate', hasEstimate);
     if (hasActualProgress && !hasEstimate) {
       progressBar.style.width = actualProgress + '%';
       progressBar.setAttribute('aria-valuenow', String(Math.round(actualProgress)));
@@ -5362,6 +7263,7 @@ function updatePrecisionTaskMonitor(data) {
   }
   if (progressFill) {
     progressFill.classList.toggle('indeterminate', hasEstimate);
+    progressFill.classList.toggle('has-estimate', hasEstimate);
     progressFill.style.width = hasActualProgress && !hasEstimate ? actualProgress + '%' : (terminal ? '0%' : '');
     progressFill.removeAttribute('aria-valuenow');
     progressFill.removeAttribute('aria-valuetext');
@@ -5501,6 +7403,226 @@ function setPrecisionCutoutAdapterDetailsExpanded(expanded) {
   return precisionCutoutAdapterDetailsExpanded;
 }
 
+function setPrecisionCutoutMode(mode) {
+  var next = mode === 'professional' ? 'professional' : 'simple';
+  precisionCutoutMode = next;
+  var controls = getPrecisionCutoutControls();
+  if (controls.simpleModeButton) controls.simpleModeButton.setAttribute('aria-selected', next === 'simple' ? 'true' : 'false');
+  if (controls.professionalModeButton) controls.professionalModeButton.setAttribute('aria-selected', next === 'professional' ? 'true' : 'false');
+  if (controls.simpleButton) controls.simpleButton.classList.toggle('hidden', next !== 'simple');
+  if (controls.professionalOpenButton) controls.professionalOpenButton.classList.toggle('hidden', next !== 'simple');
+  if (next === 'professional') openPrecisionCutoutProfessionalDialog();
+  return next;
+}
+
+function openPrecisionCutoutProfessionalDialog() {
+  var controls = getPrecisionCutoutControls();
+  precisionCutoutMode = 'professional';
+  if (controls.simpleModeButton) controls.simpleModeButton.setAttribute('aria-selected', 'false');
+  if (controls.professionalModeButton) controls.professionalModeButton.setAttribute('aria-selected', 'true');
+  if (controls.professionalDialog) {
+    if (!precisionCutoutProfessionalOpener) precisionCutoutProfessionalOpener = document.activeElement;
+    if (!precisionCutoutProfessionalHome && controls.professionalDialog.parentNode) {
+      precisionCutoutProfessionalHome = {
+        parent: controls.professionalDialog.parentNode,
+        nextSibling: controls.professionalDialog.nextSibling
+      };
+    }
+    if (document.body && controls.professionalDialog.parentNode !== document.body) {
+      document.body.appendChild(controls.professionalDialog);
+    }
+    if (document.body) document.body.classList.add('precision-cutout-professional-focus');
+    var page = document.getElementById('pageGenerate');
+    if (page) page.classList.add('precision-cutout-professional-focus');
+    controls.professionalDialog.hidden = false;
+    controls.professionalDialog.setAttribute('aria-hidden', 'false');
+    setPrecisionCutoutProfessionalDockCollapsed(false);
+    setPrecisionCutoutProfessionalDockWidth(precisionCutoutProfessionalDockWidth);
+    observePrecisionCutoutProfessionalDockGeometry();
+    schedulePrecisionCutoutProfessionalDockGeometry();
+  }
+  if (controls.simpleButton) controls.simpleButton.classList.add('hidden');
+  if (controls.professionalOpenButton) controls.professionalOpenButton.classList.add('hidden');
+  renderPrecisionCutoutAdapterPicker(precisionCutoutCapability);
+  if (controls.professionalCloseButton && typeof controls.professionalCloseButton.focus === 'function') {
+    controls.professionalCloseButton.focus({ preventScroll: true });
+  }
+  return true;
+}
+
+function closePrecisionCutoutProfessionalDialog() {
+  var controls = getPrecisionCutoutControls();
+  stopObservingPrecisionCutoutProfessionalDockGeometry();
+  if (controls.professionalDialog) {
+    controls.professionalDialog.hidden = true;
+    controls.professionalDialog.setAttribute('aria-hidden', 'true');
+    controls.professionalDialog.style.removeProperty('top');
+    controls.professionalDialog.style.removeProperty('height');
+    controls.professionalDialog.style.removeProperty('bottom');
+    if (precisionCutoutProfessionalHome && precisionCutoutProfessionalHome.parent) {
+      if (precisionCutoutProfessionalHome.nextSibling && precisionCutoutProfessionalHome.nextSibling.parentNode === precisionCutoutProfessionalHome.parent) {
+        precisionCutoutProfessionalHome.parent.insertBefore(controls.professionalDialog, precisionCutoutProfessionalHome.nextSibling);
+      } else {
+        precisionCutoutProfessionalHome.parent.appendChild(controls.professionalDialog);
+      }
+    }
+  }
+  if (document.body) document.body.classList.remove('precision-cutout-professional-focus');
+  var page = document.getElementById('pageGenerate');
+  if (page) page.classList.remove('precision-cutout-professional-focus');
+  precisionCutoutMode = 'simple';
+  if (controls.simpleModeButton) controls.simpleModeButton.setAttribute('aria-selected', 'true');
+  if (controls.professionalModeButton) controls.professionalModeButton.setAttribute('aria-selected', 'false');
+  if (controls.simpleButton) controls.simpleButton.classList.remove('hidden');
+  if (controls.professionalOpenButton) controls.professionalOpenButton.classList.remove('hidden');
+  if (precisionCutoutProfessionalOpener && typeof precisionCutoutProfessionalOpener.focus === 'function') precisionCutoutProfessionalOpener.focus();
+  precisionCutoutProfessionalOpener = null;
+  precisionCutoutProfessionalHome = null;
+  precisionCutoutProfessionalDockCollapsed = false;
+  if (document.documentElement) document.documentElement.style.removeProperty('--precision-cutout-professional-dock-width');
+  return true;
+}
+
+function precisionCutoutProfessionalDockLimits() {
+  var viewport = Math.max(0, Number(typeof window !== 'undefined' && window.innerWidth) || 0);
+  return { min: 320, max: Math.max(360, Math.min(560, viewport ? viewport * 0.46 : 560)) };
+}
+
+function setPrecisionCutoutProfessionalDockWidth(width) {
+  var limits = precisionCutoutProfessionalDockLimits();
+  var value = Math.max(limits.min, Math.min(limits.max, Number(width) || limits.min));
+  precisionCutoutProfessionalDockWidth = Math.round(value);
+  if (document.documentElement) document.documentElement.style.setProperty('--precision-cutout-professional-dock-width', precisionCutoutProfessionalDockWidth + 'px');
+  var handle = document.getElementById('precisionCutoutProfessionalResizeHandle');
+  if (handle) {
+    handle.setAttribute('aria-valuemin', String(Math.round(limits.min)));
+    handle.setAttribute('aria-valuemax', String(Math.round(limits.max)));
+    handle.setAttribute('aria-valuenow', String(precisionCutoutProfessionalDockWidth));
+  }
+  positionPrecisionCanvasResizeHandle();
+  schedulePrecisionCutoutProfessionalDockGeometry();
+  return precisionCutoutProfessionalDockWidth;
+}
+
+function syncPrecisionCutoutProfessionalDockGeometry() {
+  var dialog = document.getElementById('precisionCutoutProfessionalDialog');
+  var shell = document.getElementById('precisionCanvasShell');
+  if (!dialog || dialog.hidden || !shell || !document.body || !document.body.classList.contains('precision-cutout-professional-focus') || !shell.getBoundingClientRect) return;
+  var rect = shell.getBoundingClientRect();
+  if (!rect || rect.height < 1) return;
+  var viewportHeight = Math.max(0, Number(typeof window !== 'undefined' && window.innerHeight) || 0);
+  var top = Math.max(0, Math.round(rect.top));
+  var height = Math.round(rect.height);
+  if (viewportHeight) height = Math.min(height, Math.max(1, viewportHeight - top - 14));
+  dialog.style.top = top + 'px';
+  dialog.style.height = height + 'px';
+  dialog.style.bottom = 'auto';
+}
+
+function schedulePrecisionCutoutProfessionalDockGeometry() {
+  // Opening the focus workbench changes the canvas grid. Wait for that grid
+  // reflow before sampling its bounds, otherwise the dock can retain an old height.
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(function() {
+      requestAnimationFrame(syncPrecisionCutoutProfessionalDockGeometry);
+    });
+  } else if (typeof setTimeout === 'function') {
+    setTimeout(syncPrecisionCutoutProfessionalDockGeometry, 0);
+  } else {
+    syncPrecisionCutoutProfessionalDockGeometry();
+  }
+}
+
+function observePrecisionCutoutProfessionalDockGeometry() {
+  stopObservingPrecisionCutoutProfessionalDockGeometry();
+  var shell = document.getElementById('precisionCanvasShell');
+  if (!shell || typeof ResizeObserver !== 'function') return;
+  precisionCutoutProfessionalDockObserver = new ResizeObserver(function() {
+    schedulePrecisionCutoutProfessionalDockGeometry();
+  });
+  precisionCutoutProfessionalDockObserver.observe(shell);
+}
+
+function stopObservingPrecisionCutoutProfessionalDockGeometry() {
+  if (!precisionCutoutProfessionalDockObserver) return;
+  precisionCutoutProfessionalDockObserver.disconnect();
+  precisionCutoutProfessionalDockObserver = null;
+}
+
+function setPrecisionCutoutProfessionalDockCollapsed(collapsed) {
+  precisionCutoutProfessionalDockCollapsed = collapsed === true;
+  var body = document.body;
+  if (body) body.classList.toggle('precision-cutout-professional-dock-collapsed', precisionCutoutProfessionalDockCollapsed);
+  var controls = getPrecisionCutoutControls();
+  if (controls.professionalCollapseButton) {
+    controls.professionalCollapseButton.setAttribute('aria-expanded', precisionCutoutProfessionalDockCollapsed ? 'false' : 'true');
+    controls.professionalCollapseButton.setAttribute('aria-label', precisionCutoutProfessionalDockCollapsed ? '展开专业工具侧栏' : '收起专业工具侧栏');
+    controls.professionalCollapseButton.title = precisionCutoutProfessionalDockCollapsed ? '展开专业工具侧栏' : '收起专业工具侧栏';
+    controls.professionalCollapseButton.textContent = precisionCutoutProfessionalDockCollapsed ? '‹' : '›';
+  }
+  if (controls.professionalDialog) controls.professionalDialog.setAttribute('data-collapsed', precisionCutoutProfessionalDockCollapsed ? 'true' : 'false');
+  positionPrecisionCanvasResizeHandle();
+  schedulePrecisionCutoutProfessionalDockGeometry();
+  return precisionCutoutProfessionalDockCollapsed;
+}
+
+function beginPrecisionCutoutProfessionalDockResize(event) {
+  var handle = event && event.currentTarget;
+  if (!event || !handle || event.isPrimary === false || (event.button !== undefined && event.button !== 0) || precisionCutoutProfessionalDockCollapsed) return;
+  precisionCutoutProfessionalDockResizeState = { pointerId: event.pointerId, startX: event.clientX, startWidth: precisionCutoutProfessionalDockWidth, handle: handle };
+  if (handle.setPointerCapture) { try { handle.setPointerCapture(event.pointerId); } catch (ignore) {} }
+  window.addEventListener('pointermove', continuePrecisionCutoutProfessionalDockResize, { passive: false });
+  window.addEventListener('pointerup', endPrecisionCutoutProfessionalDockResize);
+  window.addEventListener('pointercancel', endPrecisionCutoutProfessionalDockResize);
+  event.preventDefault();
+}
+
+function continuePrecisionCutoutProfessionalDockResize(event) {
+  var state = precisionCutoutProfessionalDockResizeState;
+  if (!state || state.pointerId !== event.pointerId) return;
+  setPrecisionCutoutProfessionalDockWidth(state.startWidth + (state.startX - event.clientX));
+  event.preventDefault();
+}
+
+function endPrecisionCutoutProfessionalDockResize(event) {
+  var state = precisionCutoutProfessionalDockResizeState;
+  if (!state || (event && event.pointerId !== undefined && event.pointerId !== state.pointerId)) return;
+  precisionCutoutProfessionalDockResizeState = null;
+  window.removeEventListener('pointermove', continuePrecisionCutoutProfessionalDockResize);
+  window.removeEventListener('pointerup', endPrecisionCutoutProfessionalDockResize);
+  window.removeEventListener('pointercancel', endPrecisionCutoutProfessionalDockResize);
+  if (state.handle && state.handle.releasePointerCapture) { try { state.handle.releasePointerCapture(state.pointerId); } catch (ignore) {} }
+}
+
+function bindPrecisionCutoutProfessionalDock() {
+  var controls = getPrecisionCutoutControls();
+  if (controls.professionalCollapseButton && controls.professionalCollapseButton.dataset.precisionBound !== 'true') {
+    controls.professionalCollapseButton.dataset.precisionBound = 'true';
+    controls.professionalCollapseButton.addEventListener('click', function() { setPrecisionCutoutProfessionalDockCollapsed(!precisionCutoutProfessionalDockCollapsed); });
+  }
+  var handle = controls.professionalResizeHandle;
+  if (!handle || handle.dataset.precisionBound === 'true') return;
+  handle.dataset.precisionBound = 'true';
+  handle.addEventListener('pointerdown', beginPrecisionCutoutProfessionalDockResize);
+  handle.addEventListener('lostpointercapture', endPrecisionCutoutProfessionalDockResize);
+  handle.addEventListener('keydown', function(event) {
+    if (precisionCutoutProfessionalDockCollapsed) return;
+    var limits = precisionCutoutProfessionalDockLimits();
+    var next = precisionCutoutProfessionalDockWidth;
+    if (event.key === 'ArrowLeft') next += 24;
+    else if (event.key === 'ArrowRight') next -= 24;
+    else if (event.key === 'Home') next = limits.min;
+    else if (event.key === 'End') next = limits.max;
+    else return;
+    setPrecisionCutoutProfessionalDockWidth(next);
+    event.preventDefault();
+  });
+  if (typeof window !== 'undefined' && window.addEventListener && handle.dataset.precisionGeometryBound !== 'true') {
+    handle.dataset.precisionGeometryBound = 'true';
+    window.addEventListener('resize', schedulePrecisionCutoutProfessionalDockGeometry);
+  }
+}
+
 function togglePrecisionCutoutAdapterDetails() {
   return setPrecisionCutoutAdapterDetailsExpanded(!precisionCutoutAdapterDetailsExpanded);
 }
@@ -5546,11 +7668,35 @@ function renderPrecisionCutoutAdapterPicker(capability) {
   var selected = precisionCutoutSelectedAdapterRecord(capability);
   precisionCutoutSelectedAdapter = selected ? selected.adapter : '';
   if (controls.adapterSelect) {
-    var selectDisabled = precisionCutoutUiBusy() || !selected;
+    var selectDisabled = precisionCutoutUiBusy() || !executable.length;
     controls.adapterSelect.disabled = true;
     renderPrecisionCutoutAdapterOptions(controls.adapterSelect, executable);
     controls.adapterSelect.value = selected ? selected.adapter : '';
     controls.adapterSelect.disabled = selectDisabled;
+  }
+  if (controls.professionalAlgorithm) {
+    controls.professionalAlgorithm.disabled = precisionCutoutUiBusy() || !executable.length;
+    renderPrecisionCutoutAdapterOptions(controls.professionalAlgorithm, executable);
+    controls.professionalAlgorithm.value = selected ? selected.adapter : '';
+  }
+  if (controls.simpleAlgorithm) {
+    controls.simpleAlgorithm.textContent = selected
+      ? i18nText('creator.cutout_algorithm_ready', { algorithm: precisionCutoutAdapterDisplayName(selected) })
+      : i18nText('creator.cutout_algorithm_unavailable');
+    controls.simpleAlgorithm.dataset.state = selected ? 'ready' : 'unavailable';
+  }
+  if (controls.professionalAlgorithmStatus) {
+    controls.professionalAlgorithmStatus.textContent = selected
+      ? i18nText('creator.cutout_algorithm_ready', { algorithm: precisionCutoutAdapterDisplayName(selected) })
+      : i18nText('creator.cutout_algorithm_unavailable');
+  }
+  if (controls.simpleButton) {
+    controls.simpleButton.disabled = precisionCutoutUiBusy() || !precisionCutoutHasSource() || !selected;
+    controls.simpleButton.setAttribute('aria-busy', precisionCutoutUiBusy() ? 'true' : 'false');
+  }
+  if (controls.professionalRunButton) {
+    controls.professionalRunButton.disabled = precisionCutoutUiBusy() || !precisionCutoutHasSource() || !selected;
+    controls.professionalRunButton.setAttribute('aria-busy', precisionCutoutUiBusy() ? 'true' : 'false');
   }
   if (controls.capabilityRefreshButton) {
     controls.capabilityRefreshButton.disabled = precisionCutoutModelMutationPending || precisionCutoutModelTaskIsActive(precisionCutoutModelTask) || precisionCutoutUiBusy();
@@ -5633,6 +7779,34 @@ function precisionCutoutSelectionObjects() {
   return (precisionEditObjects || []).filter(function(object) {
     return object && ['rect', 'ellipse', 'brush'].indexOf(object.type) !== -1;
   });
+}
+
+function activatePrecisionCutoutSelection() {
+  var controls = getPrecisionCutoutControls();
+  if (!controls.useSelection || !controls.useSelection.checked) return false;
+  var selections = precisionCutoutSelectionObjects();
+  if (!selections.length) return false;
+  var selected = precisionEditObjectById(precisionEditSelectedId);
+  if (!selected || ['rect', 'ellipse', 'brush'].indexOf(selected.type) === -1) {
+    selected = selections[0];
+    precisionEditSelectedId = selected.id;
+  }
+  // A local refinement selection must be visible and editable on the canvas.
+  // Keep the existing shape tool active so the matching toolbar affordance is
+  // highlighted rather than silently switching the generation selection mode.
+  if (!precisionEditAnnotationsVisible) setPrecisionEditAnnotationsVisible(true);
+  setPrecisionEditTool(selected.type);
+  renderPrecisionEditCanvas();
+  updatePrecisionEditControls();
+  syncPrecisionAnnotationInstructionPopover();
+  var canvas = document.getElementById('precisionAnnotationCanvas');
+  if (canvas) {
+    canvas.classList.add('is-cutout-selection-active');
+    if (typeof canvas.focus === 'function') {
+      try { canvas.focus({ preventScroll: true }); } catch (ignore) { canvas.focus(); }
+    }
+  }
+  return true;
 }
 
 function exportPrecisionCutoutSelectionMask() {
@@ -6060,6 +8234,7 @@ function updatePrecisionCutoutRefineControls() {
   if (!controls.refineButton && !controls.feather && !controls.useSelection && !controls.restoreMode && !controls.restoreMinAlpha && !controls.cancelButton) return;
   var radius = precisionCutoutFeatherRadius();
   var selectionCount = precisionCutoutSelectionObjects().length;
+  var canvas = document.getElementById('precisionAnnotationCanvas');
   var transparentVersion = precisionCutoutSelectedTransparentVersion();
   var restoreReady = !!(transparentVersion && selectionCount > 0);
   var restoreEnabled = !!(controls.restoreMode && controls.restoreMode.checked);
@@ -6073,6 +8248,11 @@ function updatePrecisionCutoutRefineControls() {
     controls.useSelection.disabled = precisionCutoutUiBusy() || selectionCount === 0 || restoreEnabled;
     if (!selectionCount) controls.useSelection.checked = false;
     else if (restoreEnabled) controls.useSelection.checked = true;
+  }
+  if (canvas) {
+    canvas.classList.toggle('is-cutout-selection-active', !!(
+      controls.useSelection && controls.useSelection.checked && selectionCount > 0
+    ));
   }
   var restoreMinAlpha = precisionCutoutRestoreMinAlpha();
   if (controls.restoreMinAlphaValue) {
@@ -6124,6 +8304,12 @@ function setPrecisionCutoutUi(key, state, values) {
   button.dataset.state = state || 'idle';
   button.setAttribute('aria-busy', precisionCutoutUiBusy() ? 'true' : 'false');
   button.disabled = precisionCutoutUiBusy() || !precisionCutoutHasSource() || !precisionCutoutIsExecutable(precisionCutoutCapability);
+  var executable = precisionCutoutIsExecutable(precisionCutoutCapability);
+  [controls.simpleButton, controls.professionalRunButton].forEach(function(action) {
+    if (!action) return;
+    action.disabled = precisionCutoutUiBusy() || !precisionCutoutHasSource() || !executable;
+    action.setAttribute('aria-busy', precisionCutoutUiBusy() ? 'true' : 'false');
+  });
   updatePrecisionCutoutRefineControls();
 }
 
@@ -6273,7 +8459,8 @@ function appendPrecisionCutoutVersion(result, expectedWidth, expectedHeight, par
     adapter: result.adapter,
     fallbackFrom: result.fallback_from,
     width: expectedWidth,
-    height: expectedHeight
+    height: expectedHeight,
+    autoSetBase: false
   }) === true : false;
 }
 
@@ -6411,7 +8598,8 @@ function appendPrecisionCutoutRefineVersion(result, expectedWidth, expectedHeigh
     restoreMinAlpha: result.restore_mode === true && Number.isFinite(Number(result.restore_min_alpha)) ? Math.round(Number(result.restore_min_alpha)) : null,
     selectionApplied: selectionApplied === true,
     width: expectedWidth,
-    height: expectedHeight
+    height: expectedHeight,
+    autoSetBase: false
   }) === true : false;
 }
 
@@ -6590,14 +8778,14 @@ function getPrecisionEditReadiness() {
     return object && ['rect', 'ellipse', 'brush'].indexOf(object.type) !== -1;
   });
   if (!precisionEditObjects.length) {
-    if (selectionMode === 'local') {
-      return { ready: false, message: i18nText('creator.precision_selection_local_required') };
+    if (precisionEditSizeMode === 'resize') {
+      if (!selectedProviders.length) return { ready: false, message: i18nText('creator.model_required') };
+      var pureResize = getPrecisionSizeRequest();
+      if (pureResize.error) return { ready: false, message: pureResize.error };
+      return { ready: true, pureResize: true, message: i18nText('creator.precision_pure_resize_ready') };
     }
-    if (precisionEditSizeMode !== 'resize') return { ready: false, message: i18nText('creator.precision_annotation_required') };
-    if (!selectedProviders.length) return { ready: false, message: i18nText('creator.model_required') };
-    var pureResize = getPrecisionSizeRequest();
-    if (pureResize.error) return { ready: false, message: pureResize.error };
-    return { ready: true, pureResize: true, message: i18nText('creator.precision_pure_resize_ready') };
+    if (selectionMode === 'local') return { ready: false, message: i18nText('creator.precision_selection_local_required') };
+    return { ready: false, message: i18nText('creator.precision_annotation_required') };
   }
   if (selectionMode === 'local' && !hasLocalSelection) {
     return { ready: false, message: i18nText('creator.precision_selection_local_required') };
@@ -6617,6 +8805,7 @@ function updatePrecisionEditControls(options) {
   syncPrecisionEditStyleControls();
   updatePrecisionStrokeWidthValue();
   if (!options || options.renderObjectList !== false) renderPrecisionEditObjectList();
+  if (typeof syncPrecisionAnnotationInstructionPopover === 'function') syncPrecisionAnnotationInstructionPopover();
   updatePrecisionAnnotationPreview();
   updatePrecisionResizeCapabilityUI();
   var status = document.getElementById('precisionEditStatus');
@@ -9029,6 +11218,8 @@ function showGenerationProgressCloseButton(show) {
 function generationFailureMessage(data) {
   var sizeNotices = precisionOutputSizeNotices(data);
   if (sizeNotices.length) return sizeNotices[0];
+  var transportNotices = precisionTransportFailureNotices(data);
+  if (transportNotices.length) return transportNotices[0];
   if (data && data.error) return String(data.error);
   var states = data && data.provider_states ? data.provider_states : {};
   var keys = Object.keys(states);
@@ -12999,9 +15190,10 @@ function mountCreatorGenerateAction(mode){
   var header=document.getElementById('creatorGenerateHeader');
   var target=document.getElementById(mode==='i2i'?'panelI2I':mode==='precision_edit'?'panelPrecisionEdit':mode==='inpaint'?'panelVAR':'panelT2I');
   if(!action||!header||!target)return;
+  var actionTarget=mode==='precision_edit'?document.getElementById('precisionGalleryCommandBar')||target:target;
   header.classList.toggle('precision-action-header',mode==='precision_edit');
   target.insertBefore(header,target.firstChild);
-  target.appendChild(action);
+  actionTarget.appendChild(action);
   var promptModeButton=document.getElementById('btnModeNewbie');
   var promptModeGroup=promptModeButton&&promptModeButton.parentElement;
   if(promptModeGroup)promptModeGroup.classList.toggle('hidden',mode==='inpaint'||mode==='precision_edit');
@@ -13335,6 +15527,7 @@ function initializeUiLanguage(){
 }
 function setUiLanguage(language){
   GenBoxI18n.setLanguage(language);
+  updatePrecisionGuidanceSummary();
 }
 (function(){
   var initializeUi=function(){

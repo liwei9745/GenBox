@@ -179,6 +179,8 @@
     "creator.precision_selection_mode":{"zh-CN":"选区语义","en":"Selection meaning"},
     "creator.precision_selection_annotation":{"zh-CN":"批注编辑","en":"Annotation edit"},
     "creator.precision_selection_local":{"zh-CN":"局部选区","en":"Local selection"},
+    "creator.precision_selection_annotation_hint":{"zh-CN":"批注编辑：先用画笔、矩形或椭圆标出位置，再填写对应的修改说明。","en":"Annotation edit: mark a location with the brush, rectangle, or ellipse, then enter its change instruction."},
+    "creator.precision_selection_local_hint":{"zh-CN":"局部选区：先选画笔、矩形或椭圆，再在画布上圈出一个或多个区域。","en":"Local selection: choose the brush, rectangle, or ellipse, then draw one or more regions on the canvas."},
     "creator.precision_selection_feather":{"zh-CN":"选区羽化","en":"Selection feather"},
     "creator.precision_selection_local_required":{"zh-CN":"局部选区模式需要至少一个矩形、椭圆或画笔选区。","en":"Local selection mode needs at least one rectangle, ellipse, or brush selection."},
     "creator.precision_selection_feather_hint":{"zh-CN":"羽化只作为局部选区边缘的模型指导，范围为 0 到 64px。","en":"Feather guides the local selection edge only and is limited to 0–64px."},
@@ -189,7 +191,7 @@
     "creator.precision_edit_model_select":{"zh-CN":"编辑模型","en":"Editing model"},
     "creator.precision_edit_no_model":{"zh-CN":"暂无已验证的精准改图模型","en":"No verified precise-edit model available"},
     "creator.precision_edit_no_endpoint":{"zh-CN":"暂无可用端点","en":"No available endpoint"},
-    "creator.precision_edit_endpoint_select":{"zh-CN":"编辑端点","en":"Edit endpoint"},
+    "creator.precision_edit_endpoint_select":{"zh-CN":"模型端点","en":"Model endpoint"},
     "creator.precision_edit_authorize":{"zh-CN":"确认支持并启用","en":"Confirm support and enable"},
     "creator.precision_edit_authorize_hint":{"zh-CN":"仅在你确认该端点和模型支持 OpenAI 兼容图片编辑时启用。","en":"Enable only after confirming this endpoint and model support OpenAI-compatible image editing."},
     "creator.precision_edit_authorize_confirm":{"zh-CN":"我确认已验证该端点和模型支持 OpenAI 兼容图片编辑。启用后仍会在提交时校验。","en":"I confirm this endpoint and model support OpenAI-compatible image editing. Submission remains validated."},
@@ -1946,7 +1948,7 @@
   MESSAGES['extensions.push_key_ready_to_save'] = {"zh-CN":"新 Push 密钥仅在本次创建或轮换后可见。请先复制配置，再勾选本地保存并确认。","en":"A new Push key is available from this create or rotation. Copy the configuration, then opt in and confirm local saving."};
   MESSAGES['creator.precision_edit_overall_instruction'] = {"zh-CN":"整体要求（可选）","en":"Overall instructions (optional)"};
   MESSAGES['creator.precision_edit_overall_instruction_placeholder'] = {"zh-CN":"例如：未标注区域保持不变。","en":"For example: Keep unmarked areas unchanged."};
-  MESSAGES['creator.precision_edit_model_picker'] = {"zh-CN":"选择编辑模型","en":"Choose an editing model"};
+  MESSAGES['creator.precision_edit_model_picker'] = {"zh-CN":"选择模型","en":"Choose model"};
   MESSAGES['creator.precision_edit_model_picker_hint'] = {"zh-CN":"先选服务端点，再选该端点提供的图片编辑模型。","en":"Choose the service endpoint first, then an image-editing model from that endpoint."};
   MESSAGES['creator.precision_edit_header_hint'] = {"zh-CN":"在画布上标出位置，再为每处填写修改说明。","en":"Mark locations on the canvas, then describe each change."};
   MESSAGES['creator.precision_help_label'] = {"zh-CN":"查看精准改图帮助","en":"View precise image edit help"};
@@ -1964,6 +1966,8 @@
   MESSAGES['creator.precision_docs_eraser_body'] = {"zh-CN":"橡皮擦可点击删除选中的对象，也可在画笔轨迹上拖动擦除；移动、缩放、擦除和清除都可撤销/重做。","en":"The eraser can click to delete the selected object, or drag over brush strokes to erase them. Move, resize, erase, and clear actions all support undo/redo."};
   MESSAGES['creator.precision_docs_text_title'] = {"zh-CN":"文字批注","en":"Text annotations"};
   MESSAGES['creator.precision_docs_text_body'] = {"zh-CN":"文字工具单击画布添加文字；切到“选择/移动”后可拖动移动，双击已有文字可再次编辑，选中后可调整字号和颜色。","en":"With the text tool, click once on the canvas to add text. Switch to Select/Move to drag it, double-click existing text to edit it again, and adjust font size or color while it is selected."};
+  MESSAGES['creator.precision_docs_shortcuts_title'] = {"zh-CN":"工具快捷键","en":"Tool shortcuts"};
+  MESSAGES['creator.precision_docs_shortcuts_body'] = {"zh-CN":"工作台激活时可直接按 V 选择/移动、O 椭圆、A 箭头、R 矩形、B 画笔、E 橡皮擦、T 文字。输入框、下拉框和文字编辑状态下不会触发快捷键。","en":"When the workbench is active, press V for Select/Move, O for ellipse, A for arrow, R for rectangle, B for brush, E for eraser, or T for text. Shortcuts are ignored while an input, select, or text editor is focused."};
   MESSAGES['creator.precision_docs_cutout_title'] = {"zh-CN":"抠图、羽化与选区","en":"Cutout, feather, and selection"};
   MESSAGES['creator.precision_docs_cutout_body'] = {"zh-CN":"一键抠图会追加真实透明 PNG 版本。选择透明版本后可用 0–64 px 羽化精修 alpha 边缘；勾选“仅精修画布选区”时，画笔、矩形或椭圆会作为局部选区。棋盘格只用于预览，不会改变文件透明度。","en":"One-click cutout appends a real transparent PNG version. After selecting a transparent version, use 0-64 px feathering to refine the alpha edge; when Refine canvas selection only is enabled, brush, rectangle, and ellipse marks become the local selection. The checkerboard is preview-only and does not change file transparency."};
   MESSAGES['creator.cutout_algorithm_label'] = {"zh-CN":"抠图算法","en":"Cutout algorithm"};
@@ -1997,7 +2001,7 @@
   MESSAGES['creator.precision_docs_cutout_model_step_verify'] = {"zh-CN":"返回工作台刷新状态；只有文件校验和本地运行能力探测都通过后，一键抠图才会启用。","en":"Return to the workbench and refresh the status. One-click cutout is enabled only after file verification and the local runtime capability probe both pass."};
   MESSAGES['creator.precision_docs_cutout_model_boundary'] = {"zh-CN":"当前自动下载未启用。模型转换链、训练数据来源、授权与商业使用权利尚未由 GenBox 验证；下载或使用前请自行阅读上游资料并确认适用于你的场景。","en":"Automated download is currently disabled. GenBox has not verified the model conversion chain, training-data provenance, license, or commercial-use rights. Review the upstream materials and confirm suitability for your use before downloading or using it."};
   MESSAGES['creator.precision_docs_resize_title'] = {"zh-CN":"纯尺寸扩图","en":"Pure size expansion"};
-  MESSAGES['creator.precision_docs_resize_body'] = {"zh-CN":"无需批注也可开启“改变尺寸”，填写目标宽高和构图说明后提交。请求只携带底图、目标尺寸与构图说明；模型必须明确声明支持该尺寸。","en":"You can submit without annotations by enabling Change size, then entering target dimensions and composition guidance. The request carries only the base image, target size, and guidance; the model must explicitly declare support for that size."};
+  MESSAGES['creator.precision_docs_resize_body'] = {"zh-CN":"无需批注也可开启“改变尺寸”。“模型尺寸”优先使用当前模型已声明的原生尺寸；未声明候选需要逐项用户授权试用，实际输出仍须严格校验。“裁切适配”使用常用修图尺寸，模型完成一次改图后由 GenBox 在本地裁切缩放到目标尺寸。","en":"You can enable Change size without annotations. Model size prefers native dimensions declared for the current model; undeclared candidates need a scoped user trial authorization and actual output still passes strict validation. Crop to fit uses common editing sizes and GenBox locally crops/scales the single model result to the target."};
   MESSAGES['creator.precision_docs_versions_title'] = {"zh-CN":"版本与对比","en":"Versions and comparison"};
   MESSAGES['creator.precision_docs_versions_body'] = {"zh-CN":"版本栏只切换浏览结果，不会自动替换底图。“修改前”显示当前版本的父版本，“修改后”显示所选版本，“对比”可拖动分隔线。只有“设为下一次底图”会改变后续编辑基准。","en":"The version rail only browses results and never replaces the base image automatically. Before shows the current version parent, After shows the selected version, and Compare exposes a draggable divider. Only Use as next base changes the base for later edits."};
   MESSAGES['creator.precision_docs_fullscreen_title'] = {"zh-CN":"全屏与节点编辑","en":"Fullscreen and node editing"};
@@ -2028,6 +2032,8 @@
   MESSAGES['creator.precision_versions'] = {"zh-CN":"版本","en":"Versions"};
   MESSAGES['creator.precision_session_results'] = {"zh-CN":"当前会话结果","en":"Current session results"};
   MESSAGES['creator.precision_session_gallery_show'] = {"zh-CN":"显示精准改图图库","en":"Show Precision Edit gallery"};
+  MESSAGES['creator.precision_session_gallery_title'] = {"zh-CN":"精准改图图库","en":"Precision Edit gallery"};
+  MESSAGES['creator.precision_session_gallery_poster_hint'] = {"zh-CN":"全部改图结果","en":"All edited results"};
   MESSAGES['creator.precision_session_empty'] = {"zh-CN":"提交改图后，结果会显示在精准改图图库中。","en":"Submit an edit to see the result in the Precision Edit gallery."};
   MESSAGES['creator.precision_workflow_history'] = {"zh-CN":"历史改图工作流","en":"Past edit workflows"};
   MESSAGES['creator.precision_workflow_history_refresh'] = {"zh-CN":"刷新历史改图工作流","en":"Refresh edit history"};
@@ -2076,12 +2082,19 @@
   MESSAGES['creator.precision_canvas_resize_tooltip'] = {"zh-CN":"拖动或使用左右方向键调整画布显示大小","en":"Drag or use the Left and Right arrow keys to resize the canvas display"};
   MESSAGES['creator.precision_version_shortcuts'] = {"zh-CN":"版本快捷栏","en":"Version shortcuts"};
   MESSAGES['creator.precision_subject_actions'] = {"zh-CN":"主体处理","en":"Subject processing"};
-  MESSAGES['creator.precision_size_title'] = {"zh-CN":"画布尺寸","en":"Canvas size"};
+  MESSAGES['creator.precision_size_title'] = {"zh-CN":"智能扩图与画布适配","en":"Smart outpainting and canvas fit"};
   MESSAGES['creator.precision_size_preserve'] = {"zh-CN":"保持原图","en":"Keep original"};
   MESSAGES['creator.precision_size_resize'] = {"zh-CN":"改变尺寸","en":"Change size"};
   MESSAGES['creator.precision_size_preserve_hint'] = {"zh-CN":"默认保持原图尺寸和比例，不会套用文生图设置。","en":"Keeps the source dimensions and aspect ratio by default; text-to-image settings are not reused."};
-  MESSAGES['creator.precision_size_resize_active_hint'] = {"zh-CN":"已开启改变尺寸；GenBox 会发送所选像素尺寸，后端会由尺寸推导构图比例约束。","en":"Size change is enabled. GenBox sends the selected pixel size; the backend derives the aspect-ratio composition constraint from it."};
+  MESSAGES['creator.precision_size_resize_active_hint'] = {"zh-CN":"选择目标尺寸和构图方向；生成前会检查当前模型是否可用。","en":"Choose a target size and composition direction. GenBox checks whether the current model can use it before generation."};
+  MESSAGES['creator.precision_size_mode'] = {"zh-CN":"尺寸方式","en":"Size mode"};
+  MESSAGES['creator.precision_size_mode_strict'] = {"zh-CN":"模型尺寸","en":"Model sizes"};
+  MESSAGES['creator.precision_size_mode_fit_crop'] = {"zh-CN":"裁切适配","en":"Crop to fit"};
+  MESSAGES['creator.precision_size_mode_strict_hint'] = {"zh-CN":"优先使用当前模型已声明的原生尺寸；未声明候选需逐项授权试用，不提供自定义，也不会裁切或拉伸。","en":"Prefers native sizes declared for the current model; undeclared candidates require a scoped trial authorization. No custom size, crop, or stretch."};
+  MESSAGES['creator.precision_size_mode_fit_crop_hint'] = {"zh-CN":"使用常见修图尺寸；上游返回后在本地裁切并缩放到目标尺寸，不会再次调用模型。","en":"Uses common editing sizes; the result is locally cropped and scaled to the target without another model request."};
   MESSAGES['creator.precision_size_preset'] = {"zh-CN":"常用尺寸","en":"Common sizes"};
+  MESSAGES['creator.precision_size_model_preset'] = {"zh-CN":"模型尺寸预设","en":"Model size presets"};
+  MESSAGES['creator.precision_size_crop_preset'] = {"zh-CN":"裁切适配预设","en":"Crop-to-fit presets"};
   MESSAGES['creator.precision_size_tier'] = {"zh-CN":"输出档位","en":"Output tier"};
   MESSAGES['creator.precision_size_ratio'] = {"zh-CN":"构图比例","en":"Aspect ratio"};
   MESSAGES['creator.precision_size_custom'] = {"zh-CN":"自定义","en":"Custom"};
@@ -2092,6 +2105,7 @@
   MESSAGES['creator.precision_size_delete_preset'] = {"zh-CN":"删除所选","en":"Delete selected"};
   MESSAGES['creator.precision_size_reset_presets'] = {"zh-CN":"重置已保存","en":"Reset saved"};
   MESSAGES['creator.precision_size_preset_name_invalid'] = {"zh-CN":"请输入 1 到 40 个字符的预设名称；控制字符会被移除。","en":"Enter a preset name from 1 to 40 characters; control characters are removed."};
+  MESSAGES['creator.precision_size_preset_crop_only'] = {"zh-CN":"自定义尺寸仅在“裁切适配”中可保存。","en":"Custom sizes can only be saved in Crop to fit mode."};
   MESSAGES['creator.precision_size_preset_exists'] = {"zh-CN":"“{name}”已经保存，无需重复添加。","en":"“{name}” is already saved."};
   MESSAGES['creator.precision_size_preset_name_duplicate'] = {"zh-CN":"名称“{name}”已用于另一个尺寸。","en":"The name “{name}” is already used for another size."};
   MESSAGES['creator.precision_size_preset_size_duplicate'] = {"zh-CN":"该尺寸已存在：{name}","en":"That size already exists: {name}"};
@@ -2112,8 +2126,8 @@
   MESSAGES['creator.precision_size_instruction'] = {"zh-CN":"构图调整说明","en":"Composition guidance"};
   MESSAGES['creator.precision_size_instruction_placeholder'] = {"zh-CN":"例如：向左右扩展背景，人物大小和位置保持不变","en":"For example: extend the background sideways while keeping the subject size and position."};
   MESSAGES['creator.precision_size_prompt_preset'] = {"zh-CN":"构图说明预设","en":"Composition presets"};
-  MESSAGES['creator.precision_size_prompt_preset_choose'] = {"zh-CN":"选择后追加到构图说明","en":"Choose to append to the guidance"};
-  MESSAGES['creator.precision_size_prompt_preset_append_hint'] = {"zh-CN":"选择预设会追加到已有说明，不会覆盖；之后仍可自由编辑。","en":"A preset is appended to existing guidance without replacing it, and remains freely editable."};
+  MESSAGES['creator.precision_size_prompt_preset_choose'] = {"zh-CN":"选择后填入构图说明","en":"Choose to fill the guidance"};
+  MESSAGES['creator.precision_size_prompt_preset_append_hint'] = {"zh-CN":"选择预设会替换当前构图说明；之后仍可自由编辑。","en":"A preset replaces the current guidance, and remains freely editable."};
   MESSAGES['creator.precision_size_prompt_preset_keep_style_subject'] = {"zh-CN":"保持原有画面风格与主体元素，向四周自然扩展","en":"Preserve the original visual style and main elements, extending naturally in all directions."};
   MESSAGES['creator.precision_size_prompt_preset_keep_person'] = {"zh-CN":"保持人物大小和位置，补全背景","en":"Keep the person's size and position, and complete the background."};
   MESSAGES['creator.precision_size_prompt_preset_center_subject'] = {"zh-CN":"主体居中，扩展环境并保持光影一致","en":"Center the subject, extend the environment, and keep lighting consistent."};
@@ -2124,27 +2138,37 @@
   MESSAGES['creator.precision_size_resize_hint'] = {"zh-CN":"只有开启改变尺寸时才会把目标尺寸交给模型；构图说明帮助模型理解画面，不会把“8K”等描述词当成实际像素。","en":"The target size is sent only in Change size mode. Composition guidance helps the model frame the scene, but words like “8K” are not treated as actual pixels."};
   MESSAGES['creator.precision_output_size_policy'] = {"zh-CN":"输出尺寸策略","en":"Output size policy"};
   MESSAGES['creator.precision_output_size_policy_strict'] = {"zh-CN":"严格匹配","en":"Strict"};
-  MESSAGES['creator.precision_output_size_policy_fit_crop'] = {"zh-CN":"本地适配","en":"Local fit/crop"};
+  MESSAGES['creator.precision_output_size_policy_fit_crop'] = {"zh-CN":"裁切适配","en":"Crop to fit"};
   MESSAGES['creator.precision_output_size_policy_strict_hint'] = {"zh-CN":"默认严格匹配；上游返回尺寸不一致时失败，并提示实际尺寸，不会自动重试付费请求。","en":"Strict is the default. If the upstream size differs, the task fails with the actual size and does not auto-retry a paid request."};
   MESSAGES['creator.precision_output_size_policy_fit_crop_hint'] = {"zh-CN":"若上游输出接近目标，GenBox 会本地居中裁切并高质量缩放到目标尺寸，不再次调用模型，并记录原始尺寸。","en":"If the upstream output is near the target, GenBox locally center-crops and high-quality scales it to the target, records the original size, and does not call the model again."};
-  MESSAGES['creator.precision_output_size_adjusted'] = {"zh-CN":"上游实际 {actual}，本地适配为 {target}。","en":"Upstream returned {actual}; locally fit/cropped to {target}."};
-  MESSAGES['creator.precision_output_size_strict_mismatch'] = {"zh-CN":"上游实际 {actual}，目标 {target}；严格匹配已失败。可改用本地适配，不会自动重试付费请求。","en":"Upstream returned {actual}, target was {target}; strict matching failed. You can switch to local fit/crop; GenBox will not auto-retry a paid request."};
+  MESSAGES['creator.precision_output_size_adjusted'] = {"zh-CN":"上游实际 {actual}，已裁切适配为 {target}。","en":"Upstream returned {actual}; locally fit/cropped to {target}."};
+  MESSAGES['creator.precision_output_size_strict_mismatch'] = {"zh-CN":"上游实际 {actual}，目标 {target}；严格尺寸已失败。可改用裁切适配，不会自动重试付费请求。","en":"Upstream returned {actual}, target was {target}; strict size matching failed. You can switch to crop-to-fit; GenBox will not auto-retry a paid request."};
+  MESSAGES['creator.precision_connection_response_read_no_retry'] = {"zh-CN":"图片编辑请求已发往上游，但读取响应时连接被中断（ReadError）。为避免可能重复计费，GenBox 未自动重试。请检查端点服务端 /images/edits 的反向代理超时、上传体积限制和连接中断记录，再在 GenBox 手动重试一次；“测试连接”只验证 /models，不能证明图片编辑可用。","en":"The image-edit request reached the upstream but its response read was interrupted (ReadError). GenBox did not auto-retry because the edit may already have been billed. Check the endpoint's /images/edits reverse-proxy timeout, upload limits, and disconnect logs, then retry once manually in GenBox. The connection test only checks /models; it does not validate image editing."};
   MESSAGES['creator.precision_size_capability_label'] = {"zh-CN":"当前尺寸模型支持状态","en":"Current size model support"};
   MESSAGES['creator.precision_size_capability_model_required'] = {"zh-CN":"先选择并确认一个精准改图模型，再确认当前目标尺寸。","en":"Select and confirm a precision-edit model before confirming the current target size."};
   MESSAGES['creator.precision_size_capability_invalid'] = {"zh-CN":"先输入有效的目标宽度和高度。","en":"Enter a valid target width and height first."};
-  MESSAGES['creator.precision_size_capability_unknown'] = {"zh-CN":"当前模型尚未明确确认支持目标尺寸 {size}，因此暂不能生成。","en":"The current model has not explicitly confirmed support for {size}, so generation remains disabled."};
-  MESSAGES['creator.precision_size_capability_unsupported'] = {"zh-CN":"目标尺寸 {size} 不在当前模型已确认的尺寸中，因此暂不能生成。","en":"Target size {size} is not among the sizes confirmed for the current model, so generation remains disabled."};
-  MESSAGES['creator.precision_size_capability_supported'] = {"zh-CN":"已保存该模型对目标尺寸 {size} 的用户确认；实际输出仍由严格尺寸校验决定。","en":"User confirmation for target size {size} is saved; strict output validation still decides the actual result."};
-  MESSAGES['creator.precision_size_confirm_action_empty'] = {"zh-CN":"确认当前尺寸","en":"Confirm current size"};
-  MESSAGES['creator.precision_size_revoke_action_empty'] = {"zh-CN":"撤销当前尺寸确认","en":"Revoke current size confirmation"};
-  MESSAGES['creator.precision_size_confirm_action'] = {"zh-CN":"确认当前模型支持 {size}","en":"Confirm current model supports {size}"};
-  MESSAGES['creator.precision_size_revoke_action'] = {"zh-CN":"撤销 {size} 确认","en":"Revoke confirmation for {size}"};
-  MESSAGES['creator.precision_size_confirm_dialog'] = {"zh-CN":"请仅在你确认当前端点和模型支持精准改图尺寸 {size} 时继续。是否保存此尺寸确认？","en":"Continue only if you have verified that the current endpoint and model support precision editing at {size}. Save this size confirmation?"};
-  MESSAGES['creator.precision_size_revoke_dialog'] = {"zh-CN":"撤销当前模型对尺寸 {size} 的确认？撤销后该尺寸将不能生成，直到再次确认。","en":"Revoke the current model's confirmation for {size}? Generation at this size will be disabled until it is confirmed again."};
-  MESSAGES['creator.precision_size_confirming'] = {"zh-CN":"正在保存当前模型对 {size} 的支持确认…","en":"Saving confirmation that the current model supports {size}…"};
-  MESSAGES['creator.precision_size_revoking'] = {"zh-CN":"正在撤销当前模型对 {size} 的尺寸确认…","en":"Revoking the current model's size confirmation for {size}…"};
-  MESSAGES['creator.precision_size_confirmed'] = {"zh-CN":"已保存当前模型对尺寸 {size} 的用户确认；实际输出仍需严格校验。","en":"Saved user confirmation for size {size}; actual output still requires strict validation."};
-  MESSAGES['creator.precision_size_revoked'] = {"zh-CN":"已撤销当前模型对尺寸 {size} 的确认。","en":"Revoked the current model's confirmation for {size}."};
+  MESSAGES['creator.precision_size_capability_unknown'] = {"zh-CN":"常用尺寸只是表单预设，不代表端点支持。当前模型尚未声明目标尺寸 {size}；核对端点说明后，可选择“授权试用当前尺寸”。授权不会继承其他模型尺寸，也不会自动发送或重试请求。","en":"Size presets only fill the form; they do not prove endpoint support. The current model has not declared {size}. After checking the endpoint documentation, you may authorize a trial for this exact size. Authorization never inherits sizes from another model and never sends or retries a request automatically."};
+  MESSAGES['creator.precision_size_capability_unsupported'] = {"zh-CN":"常用尺寸只是表单预设。目标尺寸 {size} 不在当前模型已声明的尺寸中；核对端点说明后，可选择“授权试用当前尺寸”。这只作用于当前供应商、模型和尺寸。","en":"Size presets only fill the form. Target size {size} is not declared for the current model. After checking the endpoint documentation, you may authorize a trial for this exact provider, model, and size."};
+  MESSAGES['creator.precision_size_capability_supported'] = {"zh-CN":"已保存当前供应商、模型和尺寸 {size} 的用户试用授权；实际输出仍由严格尺寸校验决定。","en":"A user trial authorization for the current provider, model, and size {size} is saved; strict output validation still decides the actual result."};
+  MESSAGES['creator.precision_size_capability_flexible'] = {"zh-CN":"已启用 GPT Image 2 合法尺寸范围：所有合规预设和自定义尺寸均可提交；越界、非 16 对齐或像素范围不合规的尺寸仍会拦截。","en":"The GPT Image 2 legal size envelope is enabled. All compliant presets and custom sizes can be submitted; out-of-range, non-16-aligned, or invalid pixel sizes remain blocked."};
+  MESSAGES['creator.precision_size_capability_fit_crop'] = {"zh-CN":"裁切适配使用本地常用修图尺寸。模型完成一次改图后，GenBox 会在本地裁切并缩放到目标尺寸；这不表示上游原生支持该尺寸。","en":"Crop to fit uses common local finishing sizes. After one model edit, GenBox crops and scales locally to the target; this does not claim native upstream support for that size."};
+  MESSAGES['creator.precision_size_preset_trial_required'] = {"zh-CN":"当前模型尚未声明此尺寸；选择后可授权试用。","en":"The current model has not declared this size; select it to authorize a trial."};
+  MESSAGES['creator.precision_size_confirm_action_empty'] = {"zh-CN":"授权试用当前尺寸","en":"Authorize current size trial"};
+  MESSAGES['creator.precision_size_revoke_action_empty'] = {"zh-CN":"撤销当前尺寸授权","en":"Revoke current size authorization"};
+  MESSAGES['creator.precision_size_confirm_action'] = {"zh-CN":"授权试用 {size}","en":"Authorize trial for {size}"};
+  MESSAGES['creator.precision_size_revoke_action'] = {"zh-CN":"撤销 {size} 授权","en":"Revoke authorization for {size}"};
+  MESSAGES['creator.precision_size_flexible_enable_action'] = {"zh-CN":"启用全部合法尺寸","en":"Enable all legal sizes"};
+  MESSAGES['creator.precision_size_flexible_disable_action'] = {"zh-CN":"恢复逐项尺寸确认","en":"Use per-size confirmation"};
+  MESSAGES['creator.precision_size_confirm_dialog'] = {"zh-CN":"当前端点和模型尚未声明精准改图尺寸 {size}。继续后，只会保存当前供应商、当前模型和该尺寸的用户试用授权；不会借用其他模型的尺寸、不会自动发送或重试。确认后仍需你手动点击“生成图片”，且严格尺寸校验仍会拒绝输出不匹配。继续吗？","en":"The current endpoint and model have not declared precision-edit size {size}. Continuing saves a user trial authorization only for this provider, model, and size. It never borrows another model's sizes or automatically sends/retries. You must still manually click Generate, and strict validation will reject a mismatched output. Continue?"};
+  MESSAGES['creator.precision_size_revoke_dialog'] = {"zh-CN":"撤销当前供应商和模型对尺寸 {size} 的试用授权？撤销后该尺寸将不能生成，直到再次授权。","en":"Revoke the trial authorization for {size} on the current provider and model? Generation at this size will be disabled until it is authorized again."};
+  MESSAGES['creator.precision_size_flexible_enable_dialog'] = {"zh-CN":"仅在你已确认当前端点使用 GPT Image 2 兼容尺寸协议时启用。启用后，GenBox 会允许所有合法的 16 对齐尺寸；每次实际输出仍由严格尺寸或裁切适配策略检查。是否继续？","en":"Enable only after confirming that the current endpoint uses the GPT Image 2-compatible size protocol. GenBox will allow every legal 16-aligned size; actual output is still checked by strict size or crop-to-fit policy. Continue?"};
+  MESSAGES['creator.precision_size_flexible_disable_dialog'] = {"zh-CN":"恢复为逐项尺寸确认？恢复后，只有已单独确认的尺寸可以提交。","en":"Return to per-size confirmation? Afterwards, only individually confirmed sizes can be submitted."};
+  MESSAGES['creator.precision_size_confirming'] = {"zh-CN":"正在保存当前模型对 {size} 的试用授权…","en":"Saving a trial authorization for {size} on the current model…"};
+  MESSAGES['creator.precision_size_revoking'] = {"zh-CN":"正在撤销当前模型对 {size} 的试用授权…","en":"Revoking the trial authorization for {size} on the current model…"};
+  MESSAGES['creator.precision_size_confirmed'] = {"zh-CN":"已保存当前供应商、模型和尺寸 {size} 的用户试用授权；实际输出仍需严格校验。","en":"Saved a user trial authorization for the current provider, model, and size {size}; strict validation still applies."};
+  MESSAGES['creator.precision_size_revoked'] = {"zh-CN":"已撤销当前供应商和模型对尺寸 {size} 的试用授权。","en":"Revoked the trial authorization for {size} on the current provider and model."};
+  MESSAGES['creator.precision_size_flexible_enabled'] = {"zh-CN":"已启用全部合法 GPT Image 2 尺寸。","en":"All legal GPT Image 2 sizes are now enabled."};
+  MESSAGES['creator.precision_size_flexible_disabled'] = {"zh-CN":"已恢复逐项尺寸确认。","en":"Per-size confirmation is restored."};
   MESSAGES['creator.precision_size_capability_save_failed'] = {"zh-CN":"尺寸支持状态保存失败，请稍后重试。","en":"Could not save the size support state. Try again shortly."};
   MESSAGES['creator.precision_size_invalid'] = {"zh-CN":"请输入 64 到 8192 之间的有效宽高，且总像素不要超过安全上限。","en":"Enter valid dimensions between 64 and 8192 within the pixel safety limit."};
   MESSAGES['creator.precision_size_instruction_required'] = {"zh-CN":"请填写构图调整说明，告诉模型扩展哪里、哪些主体需要保持不变。","en":"Describe how to reframe or outpaint the image and what must stay unchanged."};
@@ -2171,8 +2195,8 @@
   MESSAGES['creator.precision_pure_resize_ready'] = {"zh-CN":"纯扩图已就绪：将只提交目标尺寸和构图说明，不发送批注。","en":"Size expansion is ready. Only the target size and composition guidance will be sent, without annotations."};
   MESSAGES['creator.precision_zoom'] = {"zh-CN":"查看缩放","en":"View zoom"};
   MESSAGES['creator.precision_zoom_fit'] = {"zh-CN":"适合窗口","en":"Fit"};
-  MESSAGES['creator.precision_zoom_hint'] = {"zh-CN":"只调整查看大小，不改变图片尺寸。按住 Ctrl 滚轮也可缩放。","en":"Changes only the viewing scale, not image dimensions. Ctrl+wheel also zooms."};
-  MESSAGES['creator.precision_quick_tools'] = {"zh-CN":"常用处理","en":"Quick tools"};
+  MESSAGES['creator.precision_zoom_hint'] = {"zh-CN":"只调整查看大小，不改变图片尺寸。按住 Shift 滚轮可缩放。","en":"Changes only the viewing scale, not image dimensions. Shift+wheel also zooms."};
+  MESSAGES['creator.precision_quick_tools'] = {"zh-CN":"智能处理","en":"Smart tools"};
   MESSAGES['creator.precision_quick_hint'] = {"zh-CN":"先选功能，再在画布上圈出位置。","en":"Choose an action, then mark the area on the canvas."};
   MESSAGES['creator.precision_ai_remove'] = {"zh-CN":"AI 消除","en":"AI removal"};
   MESSAGES['creator.precision_remove_people'] = {"zh-CN":"消除路人","en":"Remove people"};
@@ -2182,6 +2206,14 @@
   MESSAGES['creator.precision_remove_people_instruction'] = {"zh-CN":"移除标记区域内的路人，并根据周围环境自然补全背景，其他区域保持不变。","en":"Remove bystanders inside the marked area and reconstruct the background naturally; preserve all other areas."};
   MESSAGES['creator.precision_remove_watermark_instruction'] = {"zh-CN":"移除标记区域内的水印或覆盖文字，并根据周围内容自然补全，其他区域保持不变。","en":"Remove the watermark or overlay text inside the marked area and reconstruct surrounding content naturally; preserve all other areas."};
   MESSAGES['creator.cutout_person'] = {"zh-CN":"一键抠出人物","en":"Extract person"};
+  MESSAGES['creator.cutout_mode_label'] = {"zh-CN":"抠图模式","en":"Cutout mode"};
+  MESSAGES['creator.cutout_mode_simple'] = {"zh-CN":"简易模式","en":"Simple"};
+  MESSAGES['creator.cutout_mode_professional'] = {"zh-CN":"专业模式","en":"Professional"};
+  MESSAGES['creator.cutout_simple_ready_title'] = {"zh-CN":"本地人物抠图","en":"Local person cutout"};
+  MESSAGES['creator.cutout_professional_open'] = {"zh-CN":"打开专业设置","en":"Open professional settings"};
+  MESSAGES['creator.cutout_professional_title'] = {"zh-CN":"专业抠图设置","en":"Professional cutout settings"};
+  MESSAGES['creator.cutout_professional_hint'] = {"zh-CN":"仅显示本机已验证可运行的算法；不会下载或调用第三方在线服务。","en":"Only locally verified runnable algorithms are shown. No third-party download or online service is used."};
+  MESSAGES['creator.cutout_professional_close'] = {"zh-CN":"关闭专业抠图设置","en":"Close professional cutout settings"};
   MESSAGES['creator.cutout_person_start'] = {"zh-CN":"抠出人物","en":"Extract person"};
   MESSAGES['creator.cutout_person_hint'] = {"zh-CN":"需要安装本地透明背景抠图组件；未安装时按钮会保持不可用。","en":"Requires a local transparent-background cutout component; the button stays disabled until installed."};
   MESSAGES['creator.cutout_help_label'] = {"zh-CN":"查看抠图说明","en":"View cutout help"};
@@ -2207,6 +2239,7 @@
   MESSAGES['creator.cutout_refine_use_selection'] = {"zh-CN":"仅精修画布选区","en":"Refine canvas selection only"};
   MESSAGES['creator.cutout_refine_selection_empty'] = {"zh-CN":"用画笔、矩形或椭圆标出选区后可启用。","en":"Add a brush, rectangle, or ellipse selection to enable this option."};
   MESSAGES['creator.cutout_refine_selection_ready'] = {"zh-CN":"检测到 {count} 个可用选区；勾选后只精修这些区域。","en":"Found {count} usable selections. Enable the option to refine only those areas."};
+  MESSAGES['creator.cutout_refine_flow_hint'] = {"zh-CN":"操作顺序：先抠出人物并选中透明版本，再调羽化；需要局部处理时勾选“仅精修画布选区”。","en":"Flow: run cutout and select the transparent version, then adjust feathering; enable ‘Refine canvas selection only’ for local areas."};
   MESSAGES['creator.cutout_refine_source_required'] = {"zh-CN":"请先选择一个透明抠图版本，再精修边缘。","en":"Select a transparent cutout version before refining its edge."};
   MESSAGES['creator.cutout_refine_feather_invalid'] = {"zh-CN":"羽化值必须在 0 到 64 像素之间。","en":"Feather must be between 0 and 64 pixels."};
   MESSAGES['creator.cutout_refine_processing'] = {"zh-CN":"正在本地精修透明边缘；完成前可取消等待。","en":"Refining the alpha edge locally. You can cancel waiting before it finishes."};

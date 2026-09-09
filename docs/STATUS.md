@@ -1,5 +1,402 @@
 # Current Project Status
 
+## 2026-09-09 Precision UI Checkpoint And Pending Acceptance
+
+- **USER-CONFIRMED:** The user accepted the target-model size presets.
+  UI acceptance is deferred until the model-visibility grouping and scroll
+  retention fixes are complete. Other vendors' edit/size linkage still needs
+  separate manual acceptance; no universal model compatibility is claimed.
+- **IMPLEMENTED:** Inspector order is processing, model (native collapsed
+  disclosure), size, smart tools. Workflow restore retains per-version
+  dimensions and timestamps; decoded image dimensions correct stale metadata.
+  Version timestamps do not claim to be original photo capture times.
+- **VERIFIED:** JavaScript syntax, precision UI and version-metadata Node
+  suites, eight synthetic browser scenarios and 518 focused Python tests passed
+  in the preceding local verification. This is not paid upstream E2E evidence.
+- **RESUME:** Complete grouped model visibility and preserve checkbox focus/
+  scroll; rerun tests, restart the owned lab, then request combined UI UAT.
+  Keep existing changes, temporary test outputs and screenshots out of unrelated
+  commits. Keep strict output checking and the no-replay image-edit POST guard.
+
+## 2026-09-09 User-Authorized Precision Size Trials And Resize UI
+
+- **FIXED / USER-CONTROLLED SIZE TRIAL:** A strict-size preset that is not
+  declared by the selected model remains visible and selectable. GenBox now
+  offers an explicit `授权试用 <size>` action once an authorized edit model and
+  valid target are selected. Confirmation stores only the current provider,
+  current model, and exact size; it neither inherits historical sizes from a
+  different model nor starts or retries an image-edit request automatically.
+- **RETAINED / OUTPUT AND BILLING GUARDS:** A trial still requires the user to
+  press Generate separately. Strict output-size validation remains fail-closed,
+  `裁切适配` remains an explicit local finishing mode, and an ambiguous or
+  failed image-edit POST is never replayed automatically.
+- **FIXED / RESIZE CONTROL HIERARCHY:** The resize section now uses the same
+  restrained glass texture as the workflow-filter control. Its title only shows
+  `智能扩图与画布适配`; the mode selector is presented as
+  `尺寸方式 | 模型尺寸` with a visible native-select chevron. The former
+  secondary heading hint is retained only for assistive technology.
+- **VERIFIED / FINAL LOCAL INTEGRATION:** `node --check static/js/app-all.js`,
+  the precision UI static suite, seven browser precision-workbench scenarios,
+  `224` precision-edit/workflow contracts, `253` provider precision/alias/error
+  contracts, and `41` setup-security checks passed. The owned `8895` laboratory
+  was restarted and verified online. No paid upstream image-edit request was
+  made for this change.
+- **USER-CONFIRMED / MANUAL LAB UAT:** On `8895` the workbench displayed the
+  title `智能扩图与画布适配` and the selector `尺寸方式 | 模型尺寸`. With
+  `gpt-image-2.5-c` at `1024x1024`, the UI first required `授权试用 1024x1024`
+  and then showed the saved authorization after the local confirmation. Changing
+  to `1168x656` required a new authorization. Switching the endpoint to
+  `小恐龙` cleared the usable authorization and showed its model as待确认,
+  confirming provider/model/size scoping. This was local UI state only; no
+  upstream request, upload, or paid action was performed.
+
+## 2026-09-09 Precision Resize Readiness And Guidance UX
+
+- **FIXED / PURE-RESIZE READINESS:** A resize request with no annotations now
+  takes the validated pure-resize path before checking a leftover local
+  selection mode. Choosing a size and composition guidance therefore does not
+  leave “生成图片” disabled merely because the user previously used a manual
+  selection tool. Source, selected authorized model, and size-capability
+  validation still remain required.
+- **FIXED / COMPOSITION PRESETS:** Selecting a composition preset now replaces
+  the current composition guidance instead of appending it. The selector and
+  hint say this explicitly; selecting the same item repeatedly cannot duplicate
+  prompt text, and users can still edit the resulting text freely.
+- **FIXED / RESIZE DISCOVERABILITY:** The former generic “画布尺寸” heading is
+  now “智能扩图与画布适配”, with an accent-marked title treatment and a short
+  instruction that explains choosing a target size and composition direction
+  before model validation.
+- **VERIFIED / REGRESSION:** JavaScript syntax, the precision UI static suite,
+  seven Playwright precision-workbench scenarios, and `253` provider
+  precision/alias/error-safety tests pass. The owned development laboratory at
+  `8895` is online after restart.
+
+## 2026-09-09 Professional Cutout Dock And 21:9 Incident Follow-Up
+
+- **FIXED / PROFESSIONAL CUTOUT WORKBENCH:** The professional cutout focus
+  view is a real two-column workbench: the live canvas occupies the left
+  stage; a same-height, glass-surface local-tool dock occupies the right.
+  The dock has a visible resize separator, keyboard-resizable separator,
+  collapse control, and a return control. Its geometry is synchronized after
+  the canvas reflows and observed while the canvas size changes, so opening,
+  resizing, switching images, collapsing, and reopening do not leave the dock
+  at an obsolete height.
+- **VERIFIED / LIVE LAB UI:** In the owned development laboratory at `8895`,
+  a `1438x994` viewport produced equal canvas and dock bounds (`876px` high),
+  with the dock clear of the canvas. Collapsing reduced the dock from `410px`
+  to `48px` and expanded the canvas; reopening restored it to `410px`. Return
+  restored the ordinary workbench. Browser regression coverage also checks
+  equal bounds and that every professional control remains inside its card.
+- **VERIFIED / 21:9 FAILURE CLASSIFICATION:** The runs ending at
+  `2026-09-09 01:14:09` and `01:20:34` reached the `gpt-image2-bc`
+  image-edit transport and received upstream HTTP `503`. They are not local
+  resize-preflight rejections and do not prove that `21:9` is invalid. No
+  automatic replay was added because an edit POST is not safely idempotent.
+- **DECISION / SIZE CORRECTION BOUNDARY:** “模型尺寸” must never silently
+  rewrite its requested dimensions. A future “裁切适配” implementation may
+  explicitly request a confirmed native direction and locally fit/crop the
+  returned image to a user-selected target, but it needs a separate request
+  and output contract plus tests. It is not a remedy for a transient upstream
+  `503`.
+- **VERIFIED / REGRESSION:** JavaScript syntax, precision UI checks, seven
+  Playwright precision-workbench scenarios, and `253` provider
+  precision/alias/error-safety tests pass. The lab was restarted after the
+  final visual fix. No paid upstream edit was sent for this verification.
+
+## 2026-09-08 Precision Edit HTTP 503 Non-Replay Fix
+
+- **VERIFIED / MODEL-SIZE EVIDENCE:** Two completed local precision-edit tasks
+  now confirm the only strict sizes retained for `gpt-image2-bc`: `1152x2048`
+  completed at `2026-09-08 09:16:55`, and `2048x1152` completed at
+  `2026-09-08 23:29:21`. The latter originated from a `1024x1024` canvas and
+  completed in `90.3` seconds. Earlier requests for `2544x1088`, `3840x1648`,
+  and `3840x2160` returned differing output dimensions and remain excluded
+  from strict model sizes. They may be offered only through explicit local
+  crop-to-fit adaptation, never as an upstream exact-size promise.
+- **VERIFIED / INCIDENT CLASSIFICATION:** The user-reported task beginning at
+  `2026-09-08 22:54:47` failed at `22:58:03` after dispatch to canonical model
+  `gpt-image2-bc` on the `/images/edits` transport profile. The persisted
+  structured result is `precision_edit_upstream_error` with HTTP `503`; it is
+  neither a local resize preflight rejection nor an output-size mismatch.
+  Ordinary text-to-image availability cannot verify a separate image-edit
+  endpoint.
+- **FIXED / NO EDIT REPLAY:** Precision-edit now has one POST allowance for the
+  entire operation. `429`/`5xx` no longer retry the multipart edit request and
+  a failed first configured endpoint is not followed by a second endpoint. This
+  prevents duplicate work or billing when an upstream has accepted a request
+  before reporting a failure; users may explicitly retry later.
+- **VERIFIED / REGRESSION:** `253` provider precision/alias/error-safety tests;
+  `224` precision contract/workflow tests; JavaScript syntax plus precision and
+  generation-error UI tests pass. The owned development lab at `8895` was
+  restarted and verified online after the change. No additional paid upstream
+  edit request was submitted.
+- **FIXED / PROFESSIONAL CUTOUT DOCK:** When the professional dialog is
+  portaled to `document.body`, its focused-workbench CSS now retains fixed
+  viewport positioning above the canvas. The dedicated right-side dock keeps
+  the local algorithm picker, run/refresh controls, selection refinement, and
+  foreground restoration visible instead of placing them below the canvas.
+  Static UI checks plus seven Playwright precision-workbench scenarios pass
+  using the installed local Chrome executable; the owned `8895` lab was
+  restarted after this CSS correction.
+
+## 2026-09-08 Precision Crop Presets And Professional Workbench
+
+- **FIXED / CROP PRESET COMPLETENESS:** “裁切适配” now builds independent
+  `1K`, `2K`, and `4K` preset groups from the documented dimension catalogue.
+  Selecting a tier/ratio resolves to its `crop:` preset rather than falling
+  back to “自定义” because that local preset was absent. These options remain
+  local fit/crop targets and do not add native-size authority to the upstream
+  model whitelist.
+- **FIXED / PROFESSIONAL FOCUS MODE:** Opening professional cutout moves its
+  local-only controls into a dedicated focus workbench: the live image canvas
+  remains visible while unrelated inspector, gallery, generation, and toolbar
+  controls are hidden. Closing the dock or pressing `Esc` restores the original
+  workbench and focus.
+- **VERIFIED / FAILURE CLASSIFICATION:** The user-reported run beginning at
+  `2026-09-08 14:23:22` and failing at `14:31:23` was an upstream HTTP `503`.
+  It is a temporary provider service failure after dispatch, not a local source
+  image, resize preset, or output-validation failure. No automatic retry was
+  added because an image-edit POST is not safely idempotent. The redacted
+  handling guidance was added to the local `precision-edit-error-diagnosis`
+  skill.
+- **VERIFIED / REGRESSION:** `node --check static/js/app-all.js`,
+  `node tests/test_precision_edit_ui.mjs`, `node tests/test_cutout_model_install_ui.mjs`,
+  and the focused precision/cutout pytest suite passed (`483 passed`) on
+  2026-09-08. `git diff --check` reported no whitespace errors, only existing
+  line-ending warnings.
+- **VERIFIED / HEADED LOCAL LAB:** An owned development laboratory was started
+  at `http://127.0.0.1:8895` on 2026-09-08. In its live DOM, selecting
+  “裁切适配” exposed complete `1K`, `2K`, and `4K` groups and selected
+  `2K · 1:1 · 2048 × 2048`; professional cutout hid unrelated controls and
+  `Esc` restored the ordinary workbench. This is local UI evidence only, not a
+  paid upstream image-edit success. The unrelated legacy `8894` runtime record
+  remains mismatched and was not stopped or modified.
+
+## 2026-09-08 Precision Cutout Modes
+
+- **FIXED / SIMPLE-PRO MODE:** The local one-click cutout panel now separates a
+  simple mode from a professional dialog. Simple mode exposes only the current
+  executable, verified local adapter and the main cutout action. Professional
+  mode reuses the existing local algorithm selector, feather, selection, and
+  foreground-restore controls in a standalone dialog.
+- **RESEARCH BOUNDARY:** `XIAOTsune/MatteBackgroundFree` is MIT code built
+  around BiRefNet, but its model weights and dependency chain still require a
+  separate authorization/reproducibility review. `Scipline/Image_matting` has
+  no verified license declaration in the reviewed metadata and includes a
+  remote remove.bg path, so neither project code nor weights were imported.
+- **RETAINED SAFETY:** Only adapters reported executable by GenBox's local
+  capability registry can be selected or run. No third-party download, remote
+  image service, or paid generation request was triggered by this change.
+
+## 2026-09-08 Precision Model-Size Catalogue
+
+- **FIXED / READ-ONLY CATALOG:** `/api/providers` and the provider detail
+  endpoint now expose `precision_size_catalog` per model. The projection keeps
+  official/documented GPT Image 2 presets separate from the connection's
+  explicit, validated `supported_sizes` declaration.
+- **FIXED / STRICT BOUNDARY:** `strict_selectable_sizes` is populated only for
+  an enabled OpenAI-compatible image provider whose model is explicitly
+  confirmed for precision editing and has a valid declared size list. Official
+  documentation never expands submission authority; the current laboratory
+  gateway therefore remains limited to its confirmed dimensions.
+- **VERIFIED / TESTS:** Precision route/provider/alias contracts pass (`419`
+  focused tests after this change); Python compilation and `git diff --check`
+  pass. No provider request or secret was used.
+
+## 2026-09-08 Precision Resize Mode Separation
+
+- **FIXED / TWO-LEVEL MODE:** “改变尺寸” now exposes a second-level “严格尺寸 / 裁切适配” selector. Strict mode is tied to the selected model's confirmed upstream whitelist; crop-to-fit mode keeps a separate common editing preset family and uses the existing local `fit_crop` post-processing path.
+- **FIXED / LINKED PRESETS:** Tier, aspect ratio, pixel dimensions, and the active mode stay synchronized. Switching modes maps the selected dimensions into the matching preset family without changing the backend request contract.
+- **VERIFIED / UX BASIS:** A short agent-reach review of mature image resizer patterns found the same separation between exact destination presets and local fit/fill/crop behavior, with explicit final dimensions before export. This is a design reference, not an upstream capability claim.
+- **VERIFIED / REGRESSION:** `node --check static/js/app-all.js`, `node tests/test_precision_edit_ui.mjs`, and `python -m pytest tests/test_precision_edit_contract.py tests/test_provider_precision_contract.py tests/test_provider_precision_alias_compat.py -q` passed on 2026-09-08 (`418 passed`).
+- **RETAINED BOUNDARY / LAB:** The local `8894` page was reachable during UI inspection, but `python scripts/genbox_lab.py status` reported that its runtime record did not match the current port or mode and refused to terminate or restart anything. No real paid edit request was sent for this change; an owned lab restart or headed user acceptance remains required before calling this live upstream evidence.
+
+## 2026-09-08 Precision Size Evidence Gate
+
+- **VERIFIED / FAILURE ROOT CAUSE:** Recent `gpt-image2-bc` failures are
+  upstream output-size mismatches, not source-image format errors. On
+  **2026-09-08 09:53:22**, request `3840x1648` returned `3808x1632`; GenBox
+  rejected it with `precision_edit_output_size_mismatch`. The same strict
+  behavior applies to a `4K · 16:9 · 3840x2160` request that returned
+  `2048x1152`.
+- **VERIFIED / SIZE EVIDENCE:** Generation `gen_0083_f0c3b3` completed at
+  **2026-09-08 09:16:55** with output `1152x2048`. Together with prior
+  successful `2048x1152` outputs, these are the only two dimensions currently
+  treated as confirmed for the local `gpt-image2-bc` model.
+- **FIXED / FAIL-CLOSED PRESETS:** The local laboratory capability record for
+  `gpt-image2-bc` now contains only `2048x1152` and `1152x2048`; the
+  `gpt_image_2_flexible` policy was revoked. Unverified 2K/4K combinations are
+  therefore rejected before dispatch and should be hidden or marked unavailable
+  by the UI. This is an empirical whitelist, not a claim of universal upstream
+  support.
+- **RETAINED BOUNDARY:** Strict output validation remains enabled. A local
+  `fit_crop` operation is an explicit post-processing fallback and does not
+  prove native 4K support or replay the paid edit request.
+
+## 2026-09-08 Precision Size Preset Clarity
+
+- **FIXED / PRESET DISCOVERABILITY:** The `常用尺寸` menu now visibly lists all
+  27 combinations of `1K / 2K / 4K` and the nine supported ratios, including
+  `2K · 9:16 · 1152 × 2048` and `4K · 21:9 · 3840 × 1648`.
+- **FIXED / UI COPY:** Removed the confusing routine action labelled
+  “恢复逐项尺寸确认”. Flexible-size mode remains a deliberate capability
+  policy, while individual target confirmation is still available when the
+  policy is not enabled.
+- **CLARIFIED / LIVE FAILURE:** A strict `4K · 16:9 · 3840 × 2160` request
+  failed because the configured upstream returned `2048 × 1152`; GenBox
+  correctly rejected the mismatched output instead of presenting it as 4K.
+
+## 2026-09-07 Precision Flexible-Size Capability
+
+- **FIXED / SIZE AUTHORIZATION:** A confirmed precision-edit model can now
+  opt into `gpt_image_2_flexible`, which admits every target inside the
+  documented GPT Image 2 envelope: 16-pixel alignment, at most `3840` per
+  side, aspect ratio from `1:3` to `3:1`, and `655,360` to `8,294,400` pixels.
+  Other models remain on the exact `supported_sizes` whitelist. Unknown policy
+  strings fail closed.
+- **VERIFIED / MATRIX:** Provider tests cover every `1K / 2K / 4K` tier and
+  all nine ratio choices, plus a legal custom size and an invalid alignment
+  case. The capability API persists an explicit user confirmation and supports
+  revocation without silently changing the model's precision-edit permission.
+- **VERIFIED / LOCAL RUNTIME:** The local `8894` laboratory was restarted in
+  development mode. The selected `gpt-image2-bc` model was explicitly enabled
+  for the flexible-size policy through the local capability endpoint. This is
+  local authorization, not evidence that an external upstream has natively
+  returned every possible size.
+- **VERIFIED / REGRESSION:** Precision contract and provider suites passed
+  `415`; gallery browser tests passed `6`; JavaScript syntax/static UI checks
+  and `git diff --check` passed.
+- **RETAINED BOUNDARY:** A minimal, user-authorized live request is still
+  needed to verify an additional non-`2048x1152` upstream output. Strict mode
+  continues to reject mismatches; local fit/crop remains an explicit fallback
+  and never replays a non-idempotent edit request.
+
+## 2026-09-07 Precision Workbench Acceptance Follow-Up IV
+
+- **FIXED / WORKFLOW RESTORE:** Detail restore now loads the complete
+  projected version chain and performs a direct second fetch for the original,
+  base, and selected artifacts if a bulk fetch misses one. Historical version
+  metadata is retained instead of being silently dropped; per-version
+  annotation snapshots are indexed so switching `原 / 1 / 2 ...` can restore
+  the corresponding annotation set. Records created before annotation
+  snapshots existed remain unable to recreate text that was never persisted.
+- **FIXED / CANVAS ZOOM:** Browser-conflicting `Ctrl+wheel` was replaced with
+  `Shift+wheel`; middle-click reset and resize-handle anchoring remain intact.
+  The visible hint text and static/browser contracts now describe Shift.
+- **FIXED / SESSION CONTROLS:** On wide desktop layouts, display mode,
+  修改前/修改后/对比, 图片全屏, and 工作台全屏 are now nested in one aligned
+  control group. Narrow layouts retain responsive wrapping.
+- **VERIFIED / REGRESSION:** Workflow and precision contracts passed `221`;
+  browser gallery/canvas tests passed `6`; provider precision suites passed
+  `170`; JavaScript syntax and static UI assertions passed; `git diff --check`
+  reported no whitespace errors beyond existing line-ending warnings.
+
+## 2026-09-07 Precision Workbench Acceptance Follow-Up III
+
+- **VERIFIED / WORKFLOW RESTORE:** Restoring a history workflow now rebuilds
+  the projected original plus every safely available result version, preserves
+  parent/base/selected-version relationships, and restores the validated
+  annotation snapshot associated with the predecessor canvas. Public history
+  rows remain redacted; annotation snapshots are exposed only by the explicit
+  workflow-detail projection. Older records without a snapshot can still
+  restore their available version chain but cannot recreate annotation text
+  that was never stored.
+- **VERIFIED / LOCAL CANVAS INTERACTION:** Ctrl+wheel zoom retains the cursor
+  anchor and middle-button reset remains available. The canvas resize handle
+  is positioned in the scroll container's visible lower-right corner, so zoom
+  and pan scroll offsets no longer carry it away or resize the canvas.
+- **VERIFIED / LOCAL UI:** The annotation editor uses one compact title/object/
+  confirm/close row; confirmed annotations use readable glass tiles; version
+  shortcuts are upper-left ordered; image-only and workbench fullscreen share
+  the display-control row; and the cutout algorithm control retains native
+  dropdown semantics with a visible affordance.
+- **VERIFIED / REGRESSION:** `tests/test_precision_workflow_history.py` and
+  `tests/test_precision_edit_contract.py` passed `221`; provider precision
+  suites passed `170`; Playwright gallery/canvas interaction tests passed `6`;
+  JavaScript syntax and static precision UI assertions passed; `git diff
+  --check` reported no whitespace errors (only existing CRLF warnings).
+- **RETAINED BOUNDARY:** The user-confirmed `1792 x 1024` source yielding a
+  `2048 x 1152` output is treated as endpoint behavior, not an exact-size
+  promise. Any future upstream `ReadError` still requires a fresh,
+  user-authorized laboratory retry; non-idempotent precision-edit POSTs remain
+  deliberately non-retried to avoid duplicate billing.
+
+## 2026-09-07 Precision Workbench Acceptance Follow-Up II
+
+- **VERIFIED / LOCAL UI:** Removed the expanded-gallery title/instruction
+  topbar. Gallery and workflow controls remain equal square-corner cards with
+  the same surface treatment whether collapsed or expanded. The gallery now
+  renders a wrapping, multi-row poster wall with internal vertical scrolling.
+  Image-only and workbench-fullscreen actions share the session control row.
+- **VERIFIED / LOCAL ANNOTATION FLOW:** The inspector's duplicate edit list is
+  hidden. Confirmed annotation tiles own reopen and deletion flows; deletion
+  requires an explicit confirmation and removes the same object that would be
+  serialized into the generation payload. The canvas resize control is sticky
+  within its visible scrollport so view zoom/pan does not carry it through the
+  image.
+- **VERIFIED / DIAGNOSIS AND FIX:** The sanitized local record at
+  `2026-09-07 16:30:43` identifies a precision-edit `ReadError` after the
+  request entered response reading for the selected `gpt-image2-bc` model. It
+  is a transport/read-stage failure, distinct from the earlier strict output
+  mismatch. Client cleanup now covers read/write transport errors; precision
+  edits still do not auto-retry non-idempotent POST requests. UI recovery text
+  distinguishes a `/models` connection check from an `/images/edits` request.
+- **VERIFIED / CUTOUT AND SIZE UI:** Enabling local cutout refinement for the
+  canvas selection reveals annotations, selects a valid box/brush region, and
+  highlights the active tool. Strict resize guidance now states that a preset
+  fills the form only; it does not authorize the endpoint to produce that size.
+  Strict output validation remains fail-closed.
+- **VERIFIED / REGRESSION:** `python -m py_compile providers/__init__.py`, JS
+  syntax, precision UI/i18n Node checks, and the focused Python suite passed:
+  `410 passed in 27.97s`. `git diff --check` reported no whitespace errors;
+  only existing CRLF warnings were emitted.
+- **RETAINED BOUNDARY:** A fresh, user-authorized laboratory retry is still
+  required to prove the external endpoint no longer produces a `ReadError`.
+  Local contract results must not be represented as a live upstream recovery.
+
+## 2026-09-07 Precision Workbench UI Follow-Up
+
+- **VERIFIED / LOCAL UI CONTRACT:** Precision generation now fills its command
+  row after the runtime action wrapper mounts. The gallery trigger and workflow
+  filter are reparented into a symmetric two-card control row, so workflow
+  recovery remains available while the gallery wall is collapsed.
+- **VERIFIED / LOCAL INTERACTION:** Confirming an annotation hides the floating
+  editor and adds a compact, editable summary tile below generation; selecting
+  a tile reopens that annotation. The editor remains a separate compact drag
+  surface while active. Tool shortcuts now include `F` for workbench fullscreen
+  and use capture-phase key handling while excluding editable controls.
+- **VERIFIED / LOCAL LAYOUT:** Gallery results use a wrapping poster wall with
+  internal vertical overflow rather than a horizontal-only strip. The inspector
+  resize handle is constrained to a narrow left-edge separator, and Ctrl+wheel
+  over a canvas resize handle clears any residual drag instead of resizing it.
+- **VERIFIED / REGRESSION:** JavaScript syntax, precision UI/i18n Node checks,
+  and focused Python suites passed: `240` gallery/contract/cutout tests plus
+  `169` provider precision tests. `git diff --check` reported no whitespace
+  errors (only existing CRLF and temporary-directory warnings).
+- **RETAINED BOUNDARY:** This is automated/local visual-contract evidence. A
+  headed human acceptance pass is still required for the exact composition,
+  splitter hit area, keyboard behavior, and a live annotated image workflow.
+
+## 2026-09-06 Precision-Edit Preserve Preflight Fix
+
+- **VERIFIED / ROOT CAUSE:** The latest repeated failure was a local
+  preflight rejection (`precision_edit_size_capability_unknown`) for a model
+  already confirmed for precision editing but missing an optional supported-
+  size list. No upstream HTTP request was made. Historical successful edits
+  and the later strict-size/output-mismatch records remain separate evidence.
+- **FIXED / LOCAL CONTRACT:** Preserve mode now forwards the existing source
+  canvas when the selected model is explicitly authorized for precision edit;
+  an absent optional size list no longer blocks that path. Strict resize still
+  requires an explicit declared target size and remains fail-closed.
+- **VERIFIED / REGRESSION:** `tests/test_provider_precision_alias_compat.py`
+  and `tests/test_provider_precision_contract.py` passed; precision UI/i18n,
+  JavaScript syntax, and diff checks passed. The reusable local skill
+  `precision-edit-error-diagnosis` was added under the user Codex skills
+  directory with a redacted diagnosis workflow.
+- **RETAINED BOUNDARY:** This fixes the local gate; a fresh live upstream
+  success for the user's current endpoint/model and source image still needs
+  an authorized retry in the laboratory.
+
 ## 2026-09-06 Precision Workbench And Workflow-History Acceptance (latest)
 
 - **USER-CONFIRMED / HEADED WORKBENCH ACCEPTANCE:** The current precision
@@ -3653,3 +4050,47 @@ full sanitization review, and public release remain later gates.
   or authorized human-image quality review (legs, hair, and soft edges). It is
   still not registered as the default executable algorithm and is not a Release
   artifact.
+
+## Precision workbench interaction pass (2026-09-07)
+
+- **VERIFIED / LOCAL UI:** the precision canvas now limits wheel zoom to its
+  centered image-inspection hotspot; outside that hotspot the page scrolls
+  normally. A middle click still restores the normal view. Keyboard tool
+  shortcuts are documented and do not run while typing in a form control.
+- **VERIFIED / CONTINUATION:** a successful precision-edit result is loaded as
+  the next editable base image. Cutout and cutout-refinement results keep their
+  existing explicit-base behavior.
+- **VERIFIED / RESPONSIVE UI:** the session gallery uses a compact disclosure;
+  task status has an idle pill and an automatically expanded task card; the
+  right inspector can be resized on desktop with pointer or keyboard controls
+  and remains single-column on narrow screens. Workflow dialogs and source
+  menus stay above or within their viewport bounds.
+- **VERIFIED / COMMANDS:** `node tests/test_precision_edit_ui.mjs`, `node
+  tests/test_i18n.mjs`, `node --check static/js/app-all.js`, `git diff --check`,
+  and `$env:PYTHONPATH='.'; python -m pytest -q
+  tests/test_precision_session_gallery_browser.py` passed (`5 passed`).
+- **BOUNDARY:** this is local UI and browser-contract evidence. It does not
+  claim a new real upstream image-edit call or any release/publication result.
+
+## Precision workbench canvas affordances (2026-09-07)
+
+- **VERIFIED / UI IMPLEMENTATION:** the session-gallery outer surface now keeps
+  its low-contrast metal/glass texture across the full row while retaining the
+  centered compact disclosure pill.
+- **VERIFIED / UI IMPLEMENTATION:** the selected ellipse, rectangle, arrow,
+  brush, and text annotation receives a visible canvas-only highlight with
+  handles/label above it; export rendering still passes `selected=false`.
+- **VERIFIED / UI IMPLEMENTATION:** selected-region instructions now use a
+  canvas-adjacent glass popover with a bounded pointer-drag handle, close action,
+  and live textarea updates. The inspector list retains only a compact summary.
+  The popover is hidden when no annotation is selected and falls back to a
+  bottom sheet on narrow screens.
+- **VERIFIED / COMMANDS:** `node --check static/js/app-all.js`, `node
+  tests/test_precision_edit_ui.mjs`, `node tests/test_i18n.mjs`, and `git diff
+  --check` passed on 2026-09-07.
+- **BOUNDARY:** this pass is local UI and static/browser-contract evidence. It
+  does not claim a new real upstream image-edit call or a cutout quality gate.
+- **RESUME:** perform headed manual acceptance with a loaded image: draw each
+  supported annotation, verify the highlight, edit text in the draggable
+  popover, drag it inside the canvas, close/reopen by selecting the annotation,
+  and verify the full-row gallery texture at desktop and narrow widths.
