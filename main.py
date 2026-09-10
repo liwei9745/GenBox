@@ -72,6 +72,9 @@ from config import (
     cfg_mgr, BASE_DIR, GALLERY_DIR, STORAGE_DIR, PrecisionEditProfile, ProviderConfig, ProvidersConfig,
     PRECISION_GPT_IMAGE_2_FLEXIBLE_SIZE_POLICY,
     documented_precision_model_size_presets,
+    gemini_precision_model_presets,
+    gemini_precision_preset_for_size,
+    GEMINI_NATIVE_IMAGE_MODELS,
     gpt_image_2_size_error,
     is_prod_mode, get_admin_key, verify_admin_key, generate_admin_key, reset_admin_key,
     normalize_precision_capability_size, precision_capability_size_declaration,
@@ -1523,6 +1526,19 @@ def _provider_precision_model_resolution(provider, selected_model: str):
     )
 
 
+def _precision_native_gemini_ready(provider, selected_model: str) -> bool:
+    profile = getattr(provider, "precision_edit_profile", None)
+    if isinstance(profile, PrecisionEditProfile):
+        profile = profile.value
+    resolution = _provider_precision_model_resolution(provider, selected_model)
+    return bool(
+        str(getattr(provider, "endpoint_type", "") or "").strip().lower() == "gemini"
+        and profile == PrecisionEditProfile.GEMINI_GENERATE_CONTENT.value
+        and resolution.structure_valid
+        and resolution.canonical_model in GEMINI_NATIVE_IMAGE_MODELS
+    )
+
+
 def _normalize_precision_size(value: object) -> Optional[str]:
     return normalize_precision_capability_size(
         value,
@@ -1589,6 +1605,16 @@ def _validate_precision_edit_size_authorization(
             provider
             and precision_model_uses_gpt_image_2_size_contract(provider, model)
         ) or flexible_sizes
+        native_gemini = provider and _precision_native_gemini_ready(provider, model)
+        canonical_model = _provider_precision_model_resolution(provider, model).canonical_model if provider else ""
+        if native_gemini and not gemini_precision_preset_for_size(canonical_model, target):
+            unsupported.append({
+                "id": provider_id,
+                "model": model,
+                "reason": "gemini_precision_target_not_mappable",
+                "target_size": target,
+            })
+            continue
         if protocol_model:
             protocol_error = gpt_image_2_size_error(target)
             if protocol_error:
@@ -1645,13 +1671,16 @@ def _validate_precision_edit_provider_authorization(
             unsupported.append({"id": provider_id, "reason": "provider_not_enabled"})
             continue
         endpoint_type = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
-        if endpoint_type != "openai":
-            unsupported.append({"id": provider_id, "reason": "explicit_openai_required"})
-            continue
         provider_setting = settings.get(provider_id, {})
         if not isinstance(provider_setting, dict):
             provider_setting = {}
         selected_model = str(provider_setting.get("model") or "").strip()
+        if endpoint_type != "openai" and not _precision_native_gemini_ready(provider, selected_model):
+            unsupported.append({"id": provider_id, "reason": "explicit_openai_required"})
+            continue
+        if endpoint_type == "openai" and getattr(provider, "precision_edit_profile", None) == PrecisionEditProfile.GEMINI_GENERATE_CONTENT:
+            unsupported.append({"id": provider_id, "reason": "precision_edit_profile_protocol_mismatch"})
+            continue
         if not selected_model:
             unsupported.append({
                 "id": provider_id,
@@ -1668,7 +1697,7 @@ def _validate_precision_edit_provider_authorization(
     if unsupported:
         raise _generation_contract_error(
             "precision_edit_provider_unsupported",
-            "precision_edit requires an explicitly verified OpenAI image-edit model",
+            "precision_edit requires an explicitly verified image-edit model and matching transport",
             providers=unsupported,
         )
 
@@ -2659,10 +2688,21 @@ def _public_precision_size_catalog(provider: ProviderConfig) -> List[dict]:
     for model_id in model_ids:
         resolution = _provider_precision_model_resolution(provider, model_id)
         canonical_model = resolution.canonical_model if resolution.structure_valid else ""
+        endpoint_type = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
+        profile = getattr(provider, "precision_edit_profile", None)
+        if isinstance(profile, PrecisionEditProfile):
+            profile = profile.value
+        native_gemini = _precision_native_gemini_ready(provider, model_id)
         provider_ready = bool(
             getattr(provider, "type", "") == "image"
             and getattr(provider, "enabled", False)
-            and str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower() == "openai"
+            and (
+                (endpoint_type == "openai" and profile != PrecisionEditProfile.GEMINI_GENERATE_CONTENT.value)
+                or (
+                    native_gemini
+                    and profile == PrecisionEditProfile.GEMINI_GENERATE_CONTENT.value
+                )
+            )
             and isinstance(getattr(provider, "capabilities", None), dict)
             and provider.capabilities.get("precision_edit") is True
         )
@@ -2675,7 +2715,7 @@ def _public_precision_size_catalog(provider: ProviderConfig) -> List[dict]:
             else []
         )
         capability_record = resolution.capability if isinstance(resolution.capability, dict) else {}
-        protocol = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
+        protocol = endpoint_type
         if protocol not in {"openai", "gemini", "qwen", "volc_ark", "volc_ark_plan"}:
             protocol = "unknown"
         if provider_ready and resolution.structure_valid and resolution.precision_edit_confirmed:
@@ -2705,6 +2745,7 @@ def _public_precision_size_catalog(provider: ProviderConfig) -> List[dict]:
             "model": model_id,
             "canonical_model": canonical_model,
             "documented_presets": list(documented_precision_model_size_presets(canonical_model)),
+            "native_presets": list(gemini_precision_model_presets(canonical_model)),
             "declared_sizes": declared_sizes,
             "strict_selectable_sizes": list(declared_sizes),
             "precision_capability": {
@@ -2724,6 +2765,11 @@ def _public_precision_size_catalog(provider: ProviderConfig) -> List[dict]:
                 ),
                 "evidence": evidence,
                 "dispatch_authorized": bool(status == "ready" and declared_sizes),
+                "native_request_profile": (
+                    PrecisionEditProfile.GEMINI_GENERATE_CONTENT.value
+                    if native_gemini and profile == PrecisionEditProfile.GEMINI_GENERATE_CONTENT.value
+                    else None
+                ),
             },
         })
     return catalog
@@ -2883,6 +2929,13 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
         )
     capability_model = resolution.canonical_model if resolution.structure_valid else model
     capability_record = dict(resolution.capability or selected)
+    endpoint_type = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
+    native_gemini = endpoint_type == "gemini"
+    if native_gemini and (req.enabled or size_requested or flexible_sizes_requested):
+        if capability_model not in GEMINI_NATIVE_IMAGE_MODELS:
+            raise HTTPException(status_code=400, detail={"code": "gemini_precision_model_unknown", "message": "Native Gemini editing requires a documented model or explicit canonical mapping"})
+        if compatibility_profile is not None or flexible_sizes_requested:
+            raise HTTPException(status_code=400, detail={"code": "gemini_precision_policy_invalid", "message": "Native Gemini uses model-specific imageConfig presets, not GPT flexible sizes"})
 
     if size_requested or flexible_sizes_requested:
         if getattr(provider, "type", "") != "image":
@@ -2892,10 +2945,12 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
         if not (provider.get_effective_keys() or provider.get_active_endpoints()):
             raise HTTPException(status_code=400, detail={"code": "precision_provider_key_required", "message": "Provider must have a configured key"})
         endpoint_type = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
-        if endpoint_type != "openai":
+        if endpoint_type != "openai" and not _precision_native_gemini_ready(provider, model):
             raise HTTPException(status_code=400, detail={"code": "precision_provider_openai_required", "message": "Provider must use the OpenAI-compatible image transport"})
         if not _provider_precision_model_capability(provider, model):
             raise HTTPException(status_code=400, detail={"code": "precision_model_precision_edit_required", "message": "Model must already have explicit precision_edit capability"})
+        if native_gemini and size_requested and req.enabled and not gemini_precision_preset_for_size(capability_model, normalized_size):
+            raise HTTPException(status_code=400, detail={"code": "gemini_precision_target_not_mappable", "message": "Size cannot be mapped to this Gemini model's native imageConfig"})
 
         # gpt-image-2 has a stricter upstream size envelope than the generic
         # WIDTHxHEIGHT capability contract.  Apply it to both the canonical
@@ -2986,12 +3041,16 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
         capability_model = model
         capability_record = selected_record
     elif req.enabled:
-        for alias_field in ("alias_of", "canonical_model"):
-            capability_record.pop(alias_field, None)
+        if not native_gemini:
+            for alias_field in ("alias_of", "canonical_model"):
+                capability_record.pop(alias_field, None)
         capabilities[PRECISION_EDIT_CAPABILITY] = True
         capability_record[PRECISION_EDIT_CAPABILITY] = True
-        provider.endpoint_type = "openai"
-        if provider.precision_edit_profile is None:
+        if native_gemini:
+            provider.precision_edit_profile = PrecisionEditProfile.GEMINI_GENERATE_CONTENT
+        else:
+            provider.endpoint_type = "openai"
+        if not native_gemini and provider.precision_edit_profile is None:
             provider.precision_edit_profile = (
                 PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_REPEATED_IMAGE
             )

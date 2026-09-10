@@ -1272,15 +1272,85 @@ function precisionResizeInputDimension(id) {
 }
 
 function precisionResizeTierRatioSize(tier, ratio) {
-  var table = PRECISION_GPT_IMAGE_2_TIER_RATIOS[String(tier || '').toLowerCase()];
+  var modelTable = precisionSelectedModelPresetTable();
+  var tableSet = Object.keys(modelTable).length ? modelTable : PRECISION_GPT_IMAGE_2_TIER_RATIOS;
+  var table = tableSet[String(tier || '').toLowerCase()];
   var value = table && table[String(ratio || '')];
-  return value && precisionGptImage2SizeError(value) === '' ? value : '';
+  if (!value) return '';
+  var entry = precisionSelectedModelCatalogEntry();
+  var isGemini = !!(entry && entry.protocol === 'gemini');
+  return isGemini || precisionGptImage2SizeError(value) === '' ? value : '';
+}
+
+function precisionSelectedModelCatalogEntry() {
+  var selected = precisionEditSelectedModel || {};
+  var provider = findProvider(selected.providerId);
+  var catalog = provider && Array.isArray(provider.precision_size_catalog) ? provider.precision_size_catalog : [];
+  return catalog.find(function(entry) {
+    return entry && entry.model === selected.model;
+  }) || null;
+}
+
+function precisionCatalogPresetList(entry) {
+  if (!entry || !Array.isArray(entry.documented_presets)) return [];
+  return entry.documented_presets.map(function(item) {
+    if (typeof item === 'string') return { size: item };
+    return item && typeof item === 'object' ? item : null;
+  }).filter(function(item) {
+    return item && /^[1-9]\d{1,4}x[1-9]\d{1,4}$/.test(String(item.size || ''));
+  });
+}
+
+function precisionSelectedModelPresetTable() {
+  var table = {};
+  precisionCatalogPresetList(precisionSelectedModelCatalogEntry()).forEach(function(item) {
+    var size = String(item.size);
+    var ratio = String(item.ratio || '').trim();
+    var tier = String(item.tier || '').trim().toLowerCase();
+    if (!tier) {
+      var pixels = Number(size.split('x')[0]) * Number(size.split('x')[1]);
+      tier = pixels >= 7000000 ? '4k' : pixels >= 1500000 ? '2k' : '1k';
+    }
+    if (!ratio) {
+      var parts = size.split('x');
+      var gcd = function(a, b) { while (b) { var t = a % b; a = b; b = t; } return a; };
+      var divisor = gcd(Number(parts[0]), Number(parts[1]));
+      ratio = (Number(parts[0]) / divisor) + ':' + (Number(parts[1]) / divisor);
+    }
+    if (!table[tier]) table[tier] = {};
+    table[tier][ratio] = size;
+  });
+  return table;
+}
+
+function ensurePrecisionModelCatalogOptions(select, documented) {
+  if (!select || typeof document === 'undefined') return;
+  Array.prototype.forEach.call(select.querySelectorAll('optgroup[data-precision-model-catalog="true"]'), function(group) {
+    if (group.parentNode) group.parentNode.removeChild(group);
+  });
+  if (!documented.length) return;
+  var group = document.createElement('optgroup');
+  group.label = '模型尺寸 · 当前模型';
+  group.dataset.precisionResizeMode = 'strict';
+  group.dataset.precisionModelCatalog = 'true';
+  documented.forEach(function(item) {
+    var option = document.createElement('option');
+    option.value = item.size;
+    option.textContent = (item.tier ? String(item.tier).toUpperCase() + ' · ' : '')
+      + (item.ratio ? String(item.ratio) + ' · ' : '') + item.size.replace('x', ' × ');
+    option.dataset.precisionResizeMode = 'strict';
+    option.dataset.precisionModelCatalog = 'true';
+    group.appendChild(option);
+  });
+  select.appendChild(group);
 }
 
 function precisionResizeTierRatioForSize(size) {
   var result = { tier: 'custom', ratio: 'custom' };
-  Object.keys(PRECISION_GPT_IMAGE_2_TIER_RATIOS).some(function(tier) {
-    var table = PRECISION_GPT_IMAGE_2_TIER_RATIOS[tier];
+  var modelTable = precisionSelectedModelPresetTable();
+  var tables = Object.keys(modelTable).length ? modelTable : PRECISION_GPT_IMAGE_2_TIER_RATIOS;
+  Object.keys(tables).some(function(tier) {
+    var table = tables[tier];
     return Object.keys(table).some(function(ratio) {
       if (table[ratio] !== size) return false;
       result = { tier: tier, ratio: ratio };
@@ -1852,6 +1922,15 @@ function updatePrecisionResizeCapabilityUI() {
   var select = document.getElementById('precisionResizePreset');
   ensurePrecisionResizeModePresetGroups();
   var capability = getPrecisionResizeCapability();
+  var catalogEntry = typeof precisionSelectedModelCatalogEntry === 'function'
+    ? precisionSelectedModelCatalogEntry() : null;
+  var documented = typeof precisionCatalogPresetList === 'function'
+    ? precisionCatalogPresetList(catalogEntry) : [];
+  var documentedSizes = {};
+  documented.forEach(function(item) { documentedSizes[item.size] = item; });
+  if (typeof ensurePrecisionModelCatalogOptions === 'function') {
+    ensurePrecisionModelCatalogOptions(select, documented);
+  }
   var options = select && select.options || [];
   var outputPolicy = getPrecisionOutputSizePolicy();
   syncPrecisionResizeModePresetSelection(outputPolicy);
@@ -1872,19 +1951,30 @@ function updatePrecisionResizeCapabilityUI() {
     var modeMismatch = outputPolicy === 'fit_crop'
       ? (optionMode === 'strict')
       : (optionMode === 'fit_crop');
+    var nativeCatalog = !!(catalogEntry && catalogEntry.protocol === 'gemini');
     var supported = (custom && outputPolicy === 'fit_crop') || outputPolicy === 'fit_crop' || (capability.flexibleSizes
-      ? !!size && precisionGptImage2SizeError(size) === ''
+      ? !!size && (nativeCatalog || precisionGptImage2SizeError(size) === '')
       : capability.known && !!size && capability.sizes[size] === true);
+    // A model catalogue is descriptive, but it is the only source for the
+    // visible strict preset family. It never grants submission capability.
+    var modelPreset = documentedSizes[size];
+    var modelMismatch = outputPolicy !== 'fit_crop' && documented.length > 0 && !!size && !modelPreset;
     var capabilityState = custom || outputPolicy === 'fit_crop'
       ? 'local'
       : !capability.known
         ? 'unknown'
         : supported ? 'supported' : 'needs-authorization';
-    option.hidden = modeMismatch;
+    option.hidden = modeMismatch || modelMismatch;
     option.disabled = false;
     option.title = custom || supported ? '' : i18nText('creator.precision_size_preset_trial_required');
     option.dataset.precisionCapabilityState = capabilityState;
     option.dataset.precisionCapabilityModel = capability.canonicalModel || '';
+    if (modelPreset) {
+      option.dataset.precisionPresetTier = String(modelPreset.tier || '');
+      option.dataset.precisionPresetRatio = String(modelPreset.ratio || '');
+      option.textContent = (modelPreset.tier ? String(modelPreset.tier).toUpperCase() + ' · ' : '')
+        + (modelPreset.ratio ? String(modelPreset.ratio) + ' · ' : '') + size.replace('x', ' × ');
+    }
     if (size && !optionMode) option.dataset.precisionResizeMode = 'strict';
   }
   // Switching between strict and crop-to-fit can hide the active option.
@@ -8905,7 +8995,9 @@ function getPrecisionEditModelAuthorizationState() {
     provider && providerId && valueProviderId === providerId && model && endpointOptionCurrent && modelOptionCurrent &&
     models.some(function(candidate) { return String(candidate) === model; }));
   var resolution = valid ? resolvePrecisionModelCapability(provider, model) : null;
-  var authorized = !!(valid && provider.endpoint_type === 'openai' && provider.capabilities &&
+  var nativeGemini = !!(valid && provider.endpoint_type === 'gemini' &&
+    resolution && resolution.canonicalModel && /^gemini-(2\.5-flash-image|3-pro-image|3\.1-flash-image)$/.test(resolution.canonicalModel));
+  var authorized = !!(valid && (provider.endpoint_type === 'openai' || nativeGemini) && provider.capabilities &&
     provider.capabilities.precision_edit === true && resolution && resolution.structureValid && resolution.precisionEditConfirmed);
   var compatibilityResolution = valid
     ? resolvePrecisionModelCapability(provider, PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE)
@@ -8923,7 +9015,7 @@ function getPrecisionEditModelAuthorizationState() {
     authorized: authorized,
     compatibilityActive: compatibilityActive,
     canUseCompatibility: canUseCompatibility,
-    canAuthorize: !!(valid && !authorized && provider.endpoint_type === 'openai' && !precisionEditAuthorizationPending),
+    canAuthorize: !!(valid && !authorized && (provider.endpoint_type === 'openai' || nativeGemini) && !precisionEditAuthorizationPending),
     canRevoke: !!(valid && authorized && !precisionEditAuthorizationPending)
   };
 }
@@ -9598,7 +9690,8 @@ function modelSupportsGenerationMode(provider, model, mode) {
   if (mode === 'precision_edit') {
     var precisionResolution = resolvePrecisionModelCapability(provider, model);
     var explicitlyUnsupported = precisionResolution.capability && Object.prototype.hasOwnProperty.call(precisionResolution.capability, 'precision_edit') && precisionResolution.capability.precision_edit === false;
-    return !!(provider && provider.endpoint_type === 'openai' && caps.precision_edit !== false &&
+    return !!(provider && (provider.endpoint_type === 'openai' ||
+      (provider.endpoint_type === 'gemini' && /^gemini-(2\.5-flash-image|3-pro-image|3\.1-flash-image)$/.test(String(model || '')))) && caps.precision_edit !== false &&
       precisionResolution.structureValid && !explicitlyUnsupported);
   }
   if (modelCaps && typeof modelCaps === 'object') {

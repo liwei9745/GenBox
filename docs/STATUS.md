@@ -37,6 +37,39 @@
   strict output checks, scoped authorization and no automatic image-edit POST
   retry. Do not infer other-vendor acceptance from this GPT-target release.
 
+## 2026-09-10 Gemini Nano Banana Precision-Edit Development
+
+- **RESEARCH VERIFIED:** Google AI for Developers documents native image editing
+  through Gemini `generateContent` for `gemini-2.5-flash-image` (Nano Banana),
+  `gemini-3-pro-image` (Nano Banana Pro), and `gemini-3.1-flash-image` (Nano
+  Banana 2). The same documentation defines model-specific aspect-ratio and
+  resolution controls; Gemini 2.5 uses its native 1K table without `imageSize`,
+  while Gemini 3 families expose 1K/2K/4K (3.1 Flash also 512). These are
+  provider documentation facts, not evidence of any configured gateway's
+  availability.
+- **IMPLEMENTED / LOCAL ONLY:** Native Gemini precision editing now has an
+  allowlisted `gemini_generate_content` transport, source/annotation image
+  parts, bounded composition guidance, model-specific native preset catalogs,
+  strict output validation, explicit crop-to-fit, and one-POST/no-retry
+  behavior. GPT-compatible Nano Banana gateway names remain separate and do
+  not inherit native Gemini capability or GPT size records.
+- **IMPLEMENTED:** Model-specific documented presets drive the precision UI
+  candidate list and tier/ratio mapping. Strict selectable sizes still come
+  only from explicit provider/model/size capability records; switching models
+  does not inherit authorization. Unknown or unmappable Gemini sizes fail
+  closed before a request.
+- **VERIFIED:** `python -m py_compile config.py main.py providers/__init__.py`;
+  `git diff --check`; Gemini catalog `10 passed`; native Gemini provider
+  contract `30 passed`; combined precision/provider regression `511 passed`;
+  `node --check static/js/app-all.js`; precision UI and Gemini preset Node
+  suites passed. The owned lab was restarted and reports
+  `ONLINE | PID 40040 | HEAD ec24eb1 | v2.6.8` on port `8895`.
+- **BOUNDARY:** No real Gemini request, upload, paid call, or gateway capability
+  claim was made. Gemini 3.1 Flash extreme 4K dimensions above GenBox's current
+  8192-side safety envelope are withheld. Manual browser acceptance and one
+  explicitly authorized real trial remain pending; record sanitized target and
+  actual output dimensions separately.
+
 ## 2026-09-10 Precision Quick Start
 
 - **IMPLEMENTED:** Short model, size/composition and smart-tool instructions

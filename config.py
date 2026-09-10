@@ -101,6 +101,7 @@ class PrecisionEditProfile(str, Enum):
     OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE = (
         "openai_images_edits_multipart_single_source_image"
     )
+    GEMINI_GENERATE_CONTENT = "gemini_generate_content"
 
 
 PRECISION_EDIT_CAPABILITY = "precision_edit"
@@ -188,6 +189,103 @@ GPT_IMAGE_DOCUMENTED_STANDARD_MODELS = frozenset(
     {"gpt-image-1", "gpt-image-1.5", "gpt-image-1-mini"}
 )
 
+# Gemini image models use the native GenerateContent imageConfig contract.
+# These are documentation presets only: a provider/model still needs an
+# explicit precision capability record before dispatch is authorized.
+GEMINI_NATIVE_IMAGE_MODELS = frozenset({
+    "gemini-2.5-flash-image",
+    "gemini-3-pro-image",
+    "gemini-3.1-flash-image",
+})
+GEMINI_25_FLASH_IMAGE = "gemini-2.5-flash-image"
+GEMINI_3_PRO_IMAGE = "gemini-3-pro-image"
+GEMINI_31_FLASH_IMAGE = "gemini-3.1-flash-image"
+
+def _gemini_preset(size: str, ratio: str, tier: str, *, image_size: Optional[str] = None) -> Dict[str, Any]:
+    item = {
+        "id": f"gemini-{tier.lower()}-{ratio.replace(':', 'x')}",
+        "size": size,
+        "tier": tier,
+        "ratio": ratio,
+        "evidence": "official_native_image_config",
+        "experimental": False,
+        "provider": "gemini",
+        "image_config": {"aspectRatio": ratio},
+    }
+    if image_size is not None:
+        item["image_config"]["imageSize"] = image_size
+    return item
+
+
+def gemini_precision_model_presets(canonical_model: object) -> Tuple[Dict[str, Any], ...]:
+    """Return native Gemini GenerateContent presets for one exact model.
+
+    The returned values describe request mapping only. They do not grant
+    precision editing or provider access, and unsupported arbitrary dimensions
+    must not be synthesized from these ratios.
+    """
+    model = str(canonical_model or "").strip()
+    if model == GEMINI_25_FLASH_IMAGE:
+        table = {
+            "1:1": "1024x1024", "2:3": "832x1248", "3:2": "1248x832",
+            "9:16": "768x1344", "16:9": "1344x768", "21:9": "1536x672",
+        }
+        return tuple(_gemini_preset(size, ratio, "1K") for ratio, size in table.items())
+    if model == GEMINI_3_PRO_IMAGE:
+        tables = {
+            "1K": {
+                "1:1": "1024x1024", "2:3": "848x1264", "3:2": "1264x848",
+                "4:5": "928x1152", "5:4": "1152x928", "9:16": "768x1376",
+                "16:9": "1376x768", "21:9": "1584x672",
+            },
+            "2K": {
+                "1:1": "2048x2048", "2:3": "1696x2528", "3:2": "2528x1696",
+                "4:5": "1856x2304", "5:4": "2304x1856", "9:16": "1536x2752",
+                "16:9": "2752x1536", "21:9": "3168x1344",
+            },
+            "4K": {
+                "1:1": "4096x4096", "2:3": "3392x5056", "3:2": "5056x3392",
+                "4:5": "3712x4608", "5:4": "4608x3712", "9:16": "3072x5504",
+                "16:9": "5504x3072", "21:9": "6336x2688",
+            },
+        }
+        return tuple(
+            _gemini_preset(size, ratio, tier, image_size=tier)
+            for tier, table in tables.items()
+            for ratio, size in table.items()
+        )
+    if model == GEMINI_31_FLASH_IMAGE:
+        table = {
+            "1:1": (1024, 1024), "1:4": (512, 2048), "1:8": (384, 3072),
+            "2:3": (848, 1264), "3:2": (1264, 848), "3:4": (896, 1200),
+            "4:1": (2048, 512), "4:3": (1200, 896), "4:5": (928, 1152),
+            "5:4": (1152, 928), "8:1": (3072, 384), "9:16": (768, 1376),
+            "16:9": (1376, 768), "21:9": (1584, 672),
+        }
+        presets = []
+        for tier, numerator, denominator in (("512", 1, 2), ("1K", 1, 1), ("2K", 2, 1), ("4K", 4, 1)):
+            for ratio, (width, height) in table.items():
+                # Google's published 512/21:9 row is internally inconsistent;
+                # do not invent dimensions pending clarification. Extreme 4K
+                # rows exceed the application's existing 8192-side limit.
+                if tier == "512" and ratio == "21:9":
+                    continue
+                size = f"{width * numerator // denominator}x{height * numerator // denominator}"
+                if normalize_precision_capability_size(size):
+                    presets.append(_gemini_preset(size, ratio, tier, image_size=tier))
+        return tuple(presets)
+    return ()
+
+
+def gemini_precision_preset_for_size(canonical_model: object, size: object) -> Optional[Dict[str, Any]]:
+    normalized = normalize_precision_capability_size(size)
+    if not normalized:
+        return None
+    for preset in gemini_precision_model_presets(canonical_model):
+        if preset["size"] == normalized:
+            return dict(preset)
+    return None
+
 
 def documented_precision_model_size_presets(canonical_model: object) -> Tuple[Dict[str, Any], ...]:
     """Return non-authorizing model-documentation presets for one canonical model.
@@ -199,7 +297,7 @@ def documented_precision_model_size_presets(canonical_model: object) -> Tuple[Di
     if canonical_model in GPT_IMAGE_DOCUMENTED_STANDARD_MODELS:
         return tuple(item for item in GPT_IMAGE_2_DOCUMENTED_SIZE_PRESETS if item["tier"] == "standard")
     if canonical_model != "gpt-image-2":
-        return ()
+        return gemini_precision_model_presets(canonical_model)
     return tuple(dict(item) for item in GPT_IMAGE_2_DOCUMENTED_SIZE_PRESETS)
 
 
