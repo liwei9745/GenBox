@@ -139,10 +139,29 @@ def test_precision_canvas_shift_wheel_zoom_and_middle_reset_keep_resize_handle_f
             }""", [box["x"] + box["width"] / 2, box["y"] + box["height"] / 2])
             handle_before = page.locator("#precisionCanvasResizeHandle").bounding_box()
             assert handle_before
+            page.evaluate("""() => {
+                window.__wheelProbe = [];
+                document.addEventListener('wheel', event => {
+                    const shell = document.querySelector('#precisionCanvasShell');
+                    const box = shell.getBoundingClientRect();
+                    window.__wheelProbe.push({
+                        target: event.target.id, shift: event.shiftKey,
+                        x: event.clientX, y: event.clientY,
+                        dx: event.deltaX, dy: event.deltaY,
+                        hotspot: precisionCanvasZoomHotspotContains(event, shell),
+                        rect: {x: box.x, y: box.y, width: box.width, height: box.height},
+                        loaded: !!precisionEditSourceImageData,
+                        bound: shell.dataset.precisionZoomBound
+                    });
+                }, {capture: true, once: true});
+            }""")
             page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
             page.keyboard.down("Shift")
             page.mouse.wheel(0, -120)
-            expect(page.locator("#precisionViewZoom")).to_have_value("110")
+            try:
+                expect(page.locator("#precisionViewZoom")).to_have_value("110")
+            except AssertionError:
+                raise AssertionError(page.evaluate("() => window.__wheelProbe")) from None
             page.keyboard.up("Shift")
             handle_after = page.locator("#precisionCanvasResizeHandle").bounding_box()
             assert handle_after
