@@ -6,7 +6,7 @@ from pathlib import Path
 import threading
 
 from PIL import Image
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 
 ROOT = Path(__file__).parents[1]
@@ -142,7 +142,7 @@ def test_precision_canvas_shift_wheel_zoom_and_middle_reset_keep_resize_handle_f
             page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
             page.keyboard.down("Shift")
             page.mouse.wheel(0, -120)
-            page.wait_for_function("() => Number(document.querySelector('#precisionViewZoom').value) === 110")
+            expect(page.locator("#precisionViewZoom")).to_have_value("110")
             page.keyboard.up("Shift")
             handle_after = page.locator("#precisionCanvasResizeHandle").bounding_box()
             assert handle_after
@@ -793,6 +793,7 @@ def test_loaded_precision_canvas_real_pointer_fullscreen_and_mobile_menu_contrac
                         precisionEditSelectedId = null;
                         setPrecisionEditTool('brush');
                         renderPrecisionEditCanvas();
+                        syncPrecisionAnnotationInstructionPopover();
                     }"""
                 )
                 double_click_with_small_drift()

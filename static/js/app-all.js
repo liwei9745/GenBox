@@ -1210,9 +1210,11 @@ function ensurePrecisionEditPanel() {
         return;
       }
       if (!precisionCanvasZoomHotspotContains(event, zoomShell)) return;
+      var wheelDelta = Number(event.deltaY) || Number(event.deltaX) || 0;
+      if (!wheelDelta) return;
       event.preventDefault();
       event.stopPropagation();
-      setPrecisionViewZoom(precisionViewZoom + (event.deltaY < 0 ? 10 : -10), event);
+      setPrecisionViewZoom(precisionViewZoom + (wheelDelta < 0 ? 10 : -10), event);
     }, { passive: false, capture: true });
     zoomShell.addEventListener('mousedown', function(event) {
       if (event.button !== 1 || !precisionEditSourceImageData) return;
