@@ -117,21 +117,26 @@ def test_precision_canvas_shift_wheel_zoom_and_middle_reset_keep_resize_handle_f
             page = browser.new_page(viewport={"width": 1200, "height": 900})
             page.add_init_script("localStorage.setItem('genbox_precision_quick_start_v1', 'seen');")
             page.set_default_timeout(3000)
+            page.route("**/api/**", lambda route: route.fulfill(status=404, json={"detail": "test only"}))
             page.goto(f"http://127.0.0.1:{server.server_port}/static/index.html", wait_until="domcontentloaded")
             page.evaluate(
                 """(dataUrl) => {
-                    document.querySelector('#pageGenerate').classList.remove('hidden');
-                    document.querySelector('#pageGenerate').classList.add('precision-workbench');
-                    document.querySelector('#panelPrecisionEdit').classList.remove('hidden');
+                    switchNav('generate', document.querySelector('#navGen'));
+                    setCreatorWorkbenchMode('image', 'precision');
                     loadPrecisionEditSourceImage(dataUrl, '');
                 }""",
                 data_url,
             )
             shell = page.locator("#precisionCanvasShell")
-            shell.scroll_into_view_if_needed()
             page.wait_for_function("() => precisionEditSourceImageData && document.querySelector('#precisionCanvasResizeHandle').offsetParent !== null")
+            shell.scroll_into_view_if_needed()
+            shell.hover()
             box = shell.bounding_box()
             assert box
+            assert page.evaluate("""([x, y]) => {
+                const hit = document.elementFromPoint(x, y);
+                return !!hit && !!hit.closest('#precisionCanvasShell');
+            }""", [box["x"] + box["width"] / 2, box["y"] + box["height"] / 2])
             handle_before = page.locator("#precisionCanvasResizeHandle").bounding_box()
             assert handle_before
             page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
@@ -726,6 +731,11 @@ def test_loaded_precision_canvas_real_pointer_fullscreen_and_mobile_menu_contrac
                 page.wait_for_function("document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
 
                 def double_click_with_small_drift():
+                    canvas.scroll_into_view_if_needed()
+                    current_box = canvas.bounding_box()
+                    assert current_box
+                    point = {"x": current_box["x"] + current_box["width"] / 2, "y": current_box["y"] + current_box["height"] / 2}
+                    assert page.evaluate("([x,y]) => document.elementFromPoint(x,y)?.id", [point["x"], point["y"]]) == "precisionAnnotationCanvas"
                     page.mouse.move(point["x"], point["y"])
                     page.mouse.down(button="left")
                     page.mouse.move(point["x"] + 2, point["y"] + 1, steps=2)
