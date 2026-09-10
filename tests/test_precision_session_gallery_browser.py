@@ -115,6 +115,7 @@ def test_precision_canvas_shift_wheel_zoom_and_middle_reset_keep_resize_handle_f
         with sync_playwright() as playwright:
             browser = _launch_browser(playwright, headless=True)
             page = browser.new_page(viewport={"width": 1200, "height": 900})
+            page.add_init_script("localStorage.setItem('genbox_precision_quick_start_v1', 'seen');")
             page.set_default_timeout(3000)
             page.goto(f"http://127.0.0.1:{server.server_port}/static/index.html", wait_until="domcontentloaded")
             page.evaluate(
@@ -136,8 +137,8 @@ def test_precision_canvas_shift_wheel_zoom_and_middle_reset_keep_resize_handle_f
             page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
             page.keyboard.down("Shift")
             page.mouse.wheel(0, -120)
-            page.keyboard.up("Shift")
             page.wait_for_function("() => Number(document.querySelector('#precisionViewZoom').value) === 110")
+            page.keyboard.up("Shift")
             handle_after = page.locator("#precisionCanvasResizeHandle").bounding_box()
             assert handle_after
             assert abs((handle_after["x"] + handle_after["width"]) - (box["x"] + box["width"])) <= 1
@@ -714,7 +715,9 @@ def test_loaded_precision_canvas_real_pointer_fullscreen_and_mobile_menu_contrac
 
                 page.evaluate("setPrecisionEditTool('brush')")
                 object_count = page.evaluate("window.precisionEditObjects.length")
-                page.mouse.dblclick(point["x"], point["y"], button="left", delay=20)
+                # Opening the viewer may scroll the triggering button into view.
+                # Resolve the canvas again instead of reusing pre-viewer coordinates.
+                canvas.dblclick(button="left", delay=20)
                 page.wait_for_function("!document.querySelector('#precisionImageFullscreen').classList.contains('hidden')")
                 assert page.evaluate("window.precisionEditObjects.length") == object_count
                 assert page.locator("#precisionImageFullscreenImg").get_attribute("src").startswith("data:image/svg+xml")
