@@ -131,6 +131,16 @@ def test_precision_canvas_shift_wheel_zoom_and_middle_reset_keep_resize_handle_f
             page.wait_for_function("() => precisionEditSourceImageData && document.querySelector('#precisionCanvasResizeHandle').offsetParent !== null")
             shell.scroll_into_view_if_needed()
             shell.hover()
+            # Fit-to-window and ResizeObserver can reflow after the first paint.
+            page.wait_for_function("""() => {
+                const rect = document.querySelector('#precisionCanvasShell').getBoundingClientRect();
+                const key = [rect.x, rect.y, rect.width, rect.height].join(',');
+                const now = performance.now();
+                if (!window.__canvasSettled || window.__canvasSettled.key !== key) {
+                    window.__canvasSettled = {key, since: now};
+                }
+                return now - window.__canvasSettled.since >= 300;
+            }""")
             box = shell.bounding_box()
             assert box
             assert page.evaluate("""([x, y]) => {
