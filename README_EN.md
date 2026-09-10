@@ -20,10 +20,10 @@ The project began as a multi-model image comparison workspace and grew with real
 GenBox is built for visual AI enthusiasts, model evaluators, self-hosting hobbyists, and anyone who wants one interface for OpenAI-compatible services, Gemini, Qwen, Agnes, and other configurable model endpoints.
 
 > [!IMPORTANT]
-> **v2.6.7 is the current stable release.** It adds a collapsible current-session gallery, cross-session workflow review and restore, date/workflow filtering, and compact base-image, display-mode, and image-replacement controls on top of Precision Edit V4. Provider capabilities and supported sizes must still be endpoint-declared or user-confirmed; aliases inherit them only through explicit configuration or a limited user-confirmed compatibility mapping, and missing or ambiguous metadata fails closed. [Read the release notes](release-notes-v2.6.7.md)
+> **v2.6.8: Precision Edit major update.** The configured GPT target model has passed user acceptance, with model-first size presets, visual annotation editing, local person cutout, version metadata and first-use navigation. [Read the release notes](release-notes-v2.6.8.md)
 
 > [!NOTE]
-> Remote precision edits are still performed by the Provider you configure, and this release verification made no real Provider request. Packages include NumPy, ONNX Runtime, and the local cutout adapter, but **not the ONNX cutout checkpoint**. Production network download and installation remain disabled because provenance, training-data history, and commercial-use rights are **UNVERIFIED**. An operator-provided model must pass fixed size, hash, and executable checks before cutout becomes available.
+> Remote precision edits use your configured provider. GPT acceptance was completed by the user; release automation makes no paid generation requests. Other vendors still await manual acceptance. Packages include NumPy, ONNX Runtime, and the local cutout adapter, but **not the ONNX cutout checkpoint**. Production network download and installation remain disabled because provenance, training-data history, and commercial-use rights are **UNVERIFIED**. Operator-provided models must pass integrity and execution checks.
 
 ## Main Interface Screenshots
 
@@ -56,6 +56,31 @@ GenBox is built for visual AI enthusiasts, model evaluators, self-hosting hobbyi
 - **Complete release matrix**: download Windows, macOS, or Linux clients, or use the Docker Compose bundle, GHCR image, or source package. Desktop clients include their Python runtime.
 - **Local-first and self-hostable**: run GenBox as a desktop client or keep it on a NAS, VPS, or Docker host.
 
+## Precision Edit: Major Update
+
+**Choose a model and a size, then point with an arrow or mark a region with a rectangle or circle.**
+
+- **Intelligent expansion**: 27 presets across 1K, 2K and 4K tiers, with editable composition guidance. Capability and authorization state follow the selected endpoint and model.
+- **Visual annotation editing**: arrows, rectangles, ellipses and brush marks make the intended edit location clear. Move, resize, undo and redo annotations; actual editing accuracy depends on the model.
+- **One-click local person cutout**: use a configured and validated local model to separate a person from the background, refine edges, feather and recover foreground without sending the image to an online generator. Online AI removal is a separate operation.
+- **Continue and compare**: restore workflows, compare edit versions, and view actual dimensions and available version timestamps. First-use navigation can be reopened from Guide.
+
+**USER-CONFIRMED (September 10, 2026):** The configured GPT target identifier `gpt-image-2.5-c` passed user acceptance. The table below describes GenBox presets, not an official support list for every GPT endpoint or vendor.
+
+| Aspect | 1K tier | 2K tier | 4K tier |
+|---|---|---|---|
+| 1:1 | 1024 × 1024 | 2048 × 2048 | 2880 × 2880 |
+| 16:9 | 1168 × 656 | 2048 × 1152 | 3840 × 2160 |
+| 9:16 | 656 × 1168 | 1152 × 2048 | 2160 × 3840 |
+| 4:3 | 1024 × 768 | 2048 × 1536 | 3328 × 2480 |
+| 3:4 | 768 × 1024 | 1536 × 2048 | 2480 × 3328 |
+| 3:2 | 1008 × 672 | 2016 × 1344 | 3520 × 2352 |
+| 2:3 | 672 × 1008 | 1344 × 2016 | 2352 × 3520 |
+| 21:9 | 1344 × 576 | 2544 × 1088 | 3840 × 1648 |
+| 9:21 | 576 × 1344 | 1088 × 2544 | 1648 × 3840 |
+
+> Tiers are preset categories, not fixed edge lengths; some ratios are pixel-aligned approximations. Model size checks actual output strictly. Undeclared sizes need a trial authorization for the exact endpoint, model and dimensions. Crop to fit applies local cropping/scaling after one online edit. Authorization never generates automatically; failed edits are not automatically retried and 503 does not mean a size is unsupported. Gemini, Qwen and other vendors await separate manual acceptance.
+
 ## Quick Start
 
 ### Which file should I download?
@@ -83,7 +108,7 @@ Desktop packages include their runtime. **You do not need to install Python.**
 - GenBox does not include commercial model credits. You need access to the model service you configure.
 - Keep API keys inside your own GenBox. Never post them in issues, screenshots, chat logs, or public diagnostics.
 - Release clients use `http://localhost:8891`; source development uses `8892` by default.
-- The ONNX cutout checkpoint is not included with v2.6.7, and production network installation is disabled. Without a validated local model, cutout remains safely unavailable.
+- The ONNX cutout checkpoint is not included with v2.6.8, and production network installation is disabled. Without a validated local model, cutout remains safely unavailable.
 - Windows clients from v2.4.1 or earlier need one manual ZIP upgrade to v2.5.1. See the [upgrade notes](release-notes-v2.5.1.md#upgrade-safely).
 - chatgpt2api is a third-party reverse-engineering research project. Do not test it with important accounts.
 
@@ -142,7 +167,7 @@ The README stays focused on the first successful run. Use the [documentation map
 
 | I want to learn about | Start here |
 |---|---|
-| Installation, upgrades, and known issues | [v2.6.7 release notes](release-notes-v2.6.7.md) · [Changelog](CHANGELOG.md) |
+| Installation, upgrades, and known issues | [v2.6.8 release notes](release-notes-v2.6.8.md) · [Changelog](CHANGELOG.md) |
 | Product direction and current boundaries | [Product definition](docs/PRODUCT.md) · [Current status](docs/STATUS.md) |
 | NAS, VPS, Docker, and safe releases | [Development and release lifecycle](docs/DEVELOPMENT-LIFECYCLE.md) |
 | How GenBox connects to chatgpt2api | [Integration contract](docs/INTEGRATION.md) |

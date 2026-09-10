@@ -4,6 +4,26 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.8] - 2026-09-10
+
+### Added
+
+- Model-first precision editing with 27 GPT tier/aspect presets and scoped
+  endpoint/model/exact-size trial authorization. GPT target acceptance is
+  user-confirmed; other vendors await separate manual acceptance.
+- Grouped model visibility, retained selection scroll/focus, short workflow
+  instructions and a one-time clickable quick-start guide.
+- Local person-cutout workbench with edge refinement and algorithm selection;
+  compatible validated model weights remain operator-provided, not bundled.
+
+### Fixed
+
+- Pure resize readiness, per-version actual dimensions and timestamps after
+  workflow restore, and precision canvas/workbench interaction.
+- Undeclared sizes stay available for explicit trials without inheriting another
+  model's evidence. Strict output checks and no automatic image-edit POST replay
+  remain in force.
+
 ## [2.6.7] - 2026-09-06
 
 ### Added

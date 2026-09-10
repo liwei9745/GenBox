@@ -144,6 +144,8 @@ async function runCancellationRace(cancelStatus) {
     'precisionDisplaySizeFromFields',
     'precisionOutputSizeNoticeFromRecord',
     'precisionOutputSizeNotices',
+    'precisionTransportFailureNoticeFromRecord',
+    'precisionTransportFailureNotices',
     'generationFailureMessage',
     'finishGenerationTerminalStatus',
     'resolveCancellationTerminalPayload',

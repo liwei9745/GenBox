@@ -1,5 +1,23 @@
 # Current Project Status
 
+## 2026-09-10 GPT Acceptance And v2.6.8 Publication
+
+- **USER-CONFIRMED:** GPT target-model precision editing passed manual acceptance.
+  The user authorized GitHub publication before testing other vendors.
+- **PREPARED:** v2.6.8 version/Compose metadata, bilingual README feature section
+  and release notes. All four public size tables are checked against the 27
+  code presets. No universal GPT endpoint or other-vendor support is claimed.
+- **VERIFIED:** Ten Node suites and 47 packaging/size/extension checks pass.
+  New commits contain no checkpoint or user-image additions; credential-pattern
+  review found no real key material. Only explicit release files are staged.
+- **PENDING:** Hosted clean-source tests, desktop runtime/HTTP smoke tests,
+  Docker smoke and formal release asset verification. Existing v2.6.7 tag is
+  immutable: its desktop workflow 34011635213 failed a browser test and never
+  created a Release; its Docker workflow succeeded. v2.6.6 is the latest public
+  Release as verified via GitHub CLI before this publication attempt.
+- **RESUME:** Finish v2.6.8 publication and verify assets before reporting success.
+  Other-vendor real requests still need explicit authorization and separate UAT.
+
 ## 2026-09-10 Precision Quick Start
 
 - **IMPLEMENTED:** Short model, size/composition and smart-tool instructions

@@ -33,7 +33,7 @@ assert.ok(html.includes('id="precisionSessionGallery"'), 'Precision workbench mu
 assert.ok(html.includes('id="precisionPromptStrip"'), 'Precision workbench must expose split prompt history.');
 assert.match(html, /id="btnPrecisionReplaceSource"[^>]+onclick="togglePrecisionSourceMenu\(\)"[^>]+aria-haspopup="menu"[^>]+aria-expanded="false"/,
   'A loaded precision source must expose an accessible replace-image menu trigger.');
-assert.match(html, /id="precisionSourceMenu"[^>]+role="menu"[^>]+hidden[\s\S]*?id="btnPrecisionReplaceLocal"[^>]+role="menuitem"[\s\S]*?本地选择[\s\S]*?id="btnPrecisionReplaceFromGallery"[^>]+role="menuitem"/,
+assert.match(html, /id="precisionSourceMenu"[^>]+role="menu"[^>]+hidden[\s\S]*?id="btnPrecisionReplaceLocal"[^>]+role="menuitem"[\s\S]*?data-i18n="creator.precision_edit_local_upload"[\s\S]*?id="btnPrecisionReplaceFromGallery"[^>]+role="menuitem"/,
   'The replace-image menu must clearly offer local and gallery choices.');
 assert.ok(html.includes('id="btnPrecisionUpload"') && html.includes('id="btnPrecisionGallery"'), 'The initial empty-canvas source choices must remain available.');
 assert.match(html, /id="btnPrecisionUseSelectedAsBase"[^>]+onclick="useSelectedPrecisionVersionAsBase\(\)"[^>]+disabled[^>]+aria-disabled="true"/,
@@ -45,18 +45,18 @@ assert.match(css, /precision-version-base-action\s*\{[\s\S]*?grid-column:\s*2;[\
 const precisionCanvasShellIndex = html.indexOf('id="precisionCanvasShell"');
 const precisionSessionShowcaseIndex = html.indexOf('class="precision-session-showcase"');
 assert.ok(precisionCanvasShellIndex !== -1 && precisionSessionShowcaseIndex > precisionCanvasShellIndex, 'Current-session results must render below the precision canvas.');
-assert.match(html, /class="precision-session-showcase" aria-label="精准改图图库"[\s\S]*?class="precision-session-showcase-heading"[\s\S]*?精准改图图库[\s\S]*?class="precision-session-date-filter"/,
-  'The collapsed date filter must live in the lower Precision Edit gallery top bar.');
-assert.match(html, /id="precisionSessionDateToggle"[^>]+aria-haspopup="dialog"[^>]+aria-expanded="false"/,
-  'The gallery date capsule must advertise its collapsed dialog state.');
+assert.match(html, /class="precision-session-showcase" aria-label="精准改图图库"[\s\S]*?class="precision-session-showcase-heading"[\s\S]*?精准改图图库[\s\S]*?class="precision-workflow-history-filters"/,
+  'Date filtering must be available through workflow history beside the gallery.');
+assert.match(html, /id="btnPrecisionWorkflowHistoryFilter"[^>]+aria-haspopup="dialog"[^>]+aria-expanded="false"/,
+  'The workflow filter must advertise its collapsed dialog state.');
 ['近3日', '近5日', '>周<', '>月<', '>季度<', '>半年<', '>年<'].forEach((label) => assert.ok(html.includes(label), `Date filter must expose ${label}.`));
 assert.ok(html.includes('id="precisionSessionGallery" class="precision-session-gallery" role="list"'), 'Session gallery must expose list semantics for result thumbnails.');
 assert.ok(i18n.includes("creator.precision_session_results"), 'Session gallery heading must have an i18n translation key.');
 assert.ok(i18n.includes("creator.precision_session_empty"), 'Session gallery empty state must have an i18n translation key.');
 assert.ok(/precision-session-empty/.test(fs.readFileSync(path.join(root, 'static/js/app-all.js'), 'utf8')), 'Session gallery must render an explicit localized empty state.');
 assert.ok(html.includes('id="galleryDateFrom"') && html.includes('id="galleryDateTo"'), 'Gallery must expose date range filters.');
-assert.ok(html.includes('id="precisionSessionDateFrom"') && html.includes('id="precisionSessionDateTo"'), 'Session gallery must expose isolated date range filters.');
-assert.ok(html.includes('applyPrecisionSessionDateFilter()') && html.includes('clearPrecisionSessionDateFilter()'), 'Session gallery date controls must have dedicated handlers.');
+assert.ok(html.includes('id="precisionWorkflowHistoryCalendar"') && html.includes('data-workflow-date-range'), 'Workflow history must expose its own calendar and date presets.');
+assert.ok(html.includes("setPrecisionWorkflowHistoryDateRange('3d')") && html.includes('clearPrecisionWorkflowHistoryDateFilter()'), 'Workflow date controls must have dedicated handlers.');
 assert.ok(css.includes('.precision-image-fullscreen') && css.includes('.precision-session-gallery'), 'Showcase/fullscreen styles must be responsive and scoped.');
 assert.ok(css.includes('grid-auto-flow: column') && css.includes('max-width: 100%'), 'Session gallery must stay bounded while supporting multiple result thumbnails.');
 assert.match(css, /precision-session-showcase-heading\s*\{[\s\S]*?flex-wrap:\s*wrap/, 'Session gallery heading must wrap instead of overflowing at intermediate widths.');

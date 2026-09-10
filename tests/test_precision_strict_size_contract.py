@@ -1,6 +1,7 @@
 """Focused contract checks for strict precision resize dimensions."""
 
 from pathlib import Path
+import re
 
 from config import gpt_image_2_size_error
 
@@ -13,8 +14,12 @@ def test_frontend_exposes_strict_tier_ratio_linkage():
     assert "PRECISION_GPT_IMAGE_2_TIER_RATIOS" in source
     assert "function applyPrecisionResizeTierRatio" in source
     assert "precisionResizeTierRatioSize" in source
-    assert "id=\"precisionResizeTier\"" in (ROOT / "static/index.html").read_text(encoding="utf-8")
-    assert "id=\"precisionResizeRatio\"" in (ROOT / "static/index.html").read_text(encoding="utf-8")
+    html = (ROOT / "static/index.html").read_text(encoding="utf-8")
+    assert 'id="precisionResizePreset"' in html
+    # The compact selector combines tier and ratio into grouped size options.
+    groups = re.findall(r'<optgroup label="模型尺寸 · ([124]K)" data-precision-resize-mode="strict">(.*?)</optgroup>', html)
+    assert [tier for tier, _ in groups] == ["1K", "2K", "4K"]
+    assert all(len(re.findall(r'<option value="\d+x\d+">', options)) == 9 for _, options in groups)
 
 
 def test_all_builtin_tier_ratio_dimensions_obey_strict_envelope():
@@ -47,3 +52,18 @@ def test_strict_envelope_rejects_alignment_side_pixels_and_ratio_violations():
     for size, code in cases.items():
         error = gpt_image_2_size_error(size)
         assert error is not None and error[0] == code, (size, error)
+
+
+def test_published_precision_size_tables_match_presets():
+    from genbox_version import __version__
+
+    source = (ROOT / "static/js/app-all.js").read_text(encoding="utf-8")
+    table = source.split("var PRECISION_GPT_IMAGE_2_TIER_RATIOS = {", 1)[1].split("\n};", 1)[0]
+    tiers = re.findall(r"'[124]k': \{(.*?)\}", table, re.S)
+    expected = [dict(re.findall(r"'([\d:]+)': '(\d+x\d+)'", tier)) for tier in tiers]
+    for filename in ["README.md", "README_EN.md", f"release-notes-v{__version__}-zh.md", f"release-notes-v{__version__}.md"]:
+        text = (ROOT / filename).read_text(encoding="utf-8")
+        rows = re.findall(r"^\| (\d+:\d+)[^|]*\| (\d+ × \d+) \| (\d+ × \d+) \| (\d+ × \d+) \|$", text, re.M)
+        assert len(rows) == 9, filename
+        for ratio, *sizes in rows:
+            assert [value.replace(" × ", "x") for value in sizes] == [tier[ratio] for tier in expected], (filename, ratio)
