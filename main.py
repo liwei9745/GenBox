@@ -6,16 +6,25 @@ import os
 import sys
 import platform
 import re
+import base64
+import binascii
+import math
+import hmac
+import hashlib
 import threading
 import asyncio
+import io
 import json as _json
 import time
 import uuid
+import secrets
 import webbrowser
+import warnings
 import uvicorn
-from pathlib import Path
-from typing import Dict, List, Optional
-from urllib.parse import quote, urlsplit
+from datetime import datetime, timezone
+from pathlib import Path, PurePosixPath, PureWindowsPath
+from typing import Any, Dict, List, Optional
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from genbox_version import __version__
 
@@ -51,39 +60,132 @@ if getattr(sys, 'frozen', False):
     os.chdir(Path(sys.executable).parent)
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, model_validator
+from pydantic_core import PydanticCustomError
+from PIL import Image
 
 from config import (
-    cfg_mgr, BASE_DIR, GALLERY_DIR, STORAGE_DIR, ProviderConfig, ProvidersConfig,
+    cfg_mgr, BASE_DIR, GALLERY_DIR, STORAGE_DIR, PrecisionEditProfile, ProviderConfig, ProvidersConfig,
+    PRECISION_GPT_IMAGE_2_FLEXIBLE_SIZE_POLICY,
+    documented_precision_model_size_presets,
+    gpt_image_2_size_error,
     is_prod_mode, get_admin_key, verify_admin_key, generate_admin_key, reset_admin_key,
+    normalize_precision_capability_size, precision_capability_size_declaration,
+    resolve_precision_model_capability, verify_ssl_enabled,
 )
-from providers import generate_multi, enhance_prompt_with_llm, enhance_prompt_with_llm_detailed, ImageResult, fetch_models_from_upstream, _save_image, translate_upstream_error
+from providers import (
+    DEFAULT_PRECISION_RESIZE_GUIDANCE,
+    GeneratedImageValidationError,
+    ImageResult,
+    ProviderResponseValidationError,
+    _decode_generated_image_base64,
+    _endpoint_failure_summary,
+    _parse_provider_json_response,
+    _provider_error_text,
+    _save_image,
+    _stream_bounded_provider_response,
+    enhance_prompt_with_llm,
+    enhance_prompt_with_llm_detailed,
+    fetch_models_from_upstream,
+    generate_multi,
+    precision_model_uses_gpt_image_2_size_contract,
+    resolve_provider_precision_model_capability,
+    translate_upstream_error,
+)
 
 # ── 远程 chatgpt2api 兼容部署同步 ──
 from sync.models import RemoteImageRecord, SyncCandidate, SyncDeployment
 from sync.client import ChatGPT2APIClient, sha256_bytes
 from sync.manifest import SyncManifest, LocalImageIndex
-from sync.ingest import authenticate_push_source, validate_image_payload
+from sync.ingest import (
+    PUSH_CONTRACT_VERSION,
+    authenticate_push_source,
+    push_max_image_bytes,
+    validate_source_sha256,
+    validate_image_payload,
+    validate_remote_path,
+)
 import sync.store as sync_store
 from extensions.models import (
     ExtensionBatchTargetsRequest, ExtensionDeployRequest, ExtensionDiscoveryRequest,
-    ExtensionKeyResetRequest, ExtensionPlanRequest, ExtensionTestRequest,
-    ManagedCredentialUpsertRequest, VaultPasswordRequest,
+    ExtensionDeliveryClaimRequest, ExtensionHostKeyConfirmRequest, ExtensionHostKeyPairingCancelRequest,
+    ExtensionHostKeyPairingCompleteRequest, ExtensionHostKeyPairingStartRequest, ExtensionHostKeyProbeRequest, ExtensionKeyResetRequest,
+    ExtensionHostKeyResetRequest,
+    ExtensionTaskResumeRequest,
+    ExtensionPlanRequest, ExtensionTestRequest, PushKeyLocalSaveConfirmationRequest, PushKeyLocalSaveRequest,
+    PushSourceProvisionRequest, PushSourceRotateRequest, PushSourceGrantDeleteRequest,
+    ImageIntegrationCheckRequest,
+    ManagedCredential, ManagedCredentialUpsertRequest, VaultPasswordRequest,
+    ManagedImageUpdatePlanRequest, ManagedImageUpdateApplyRequest, SSHCredential,
+    is_canonical_host_key_trust, is_immutable_image_reference, validate_deployment_image,
 )
 from extensions.orchestrator import (
-    deployment_plans, extension_tasks, reset_managed_admin_key,
+    DeploymentAttemptConflictError, DeploymentNoTaskError, SSHAuthenticationError, SSHConnectionError,
+    deployment_plans, extension_tasks, public_instance_access, public_instance_handle, reset_managed_admin_key,
+    update_managed_image,
+    probe_host_key,
     test_connection as test_extension_connection,
 )
 from extensions.discovery import discover_environment
+from extensions.read_only_discovery_plan import (
+    DiscoveryPlanValidationError,
+    ValidatedDiscoveryPlan,
+    validate_read_only_discovery_plan,
+)
+from extensions.capabilities import validate_deployment_capability
+from extensions.image_capabilities import check_image_integration
 import extensions.store as extensions_store
+from extensions.store import (
+    build_host_key_pairing_helper,
+    parse_host_key_pairing_response,
+    target_identity_digest,
+    host_key_pairings,
+)
 from extensions.credential_vault import credential_vault
 from extensions.catalog import public_catalog
 from extensions.models import NetworkConnectRequest
 from extensions.network_adapters import network_tasks
 from extensions.local_tailscale import begin_login, enable_genbox_serve, local_install_tasks, local_status
+from sync.push_sources import create_source as create_push_source
+from sync.push_sources import deletion_granted as push_source_deletion_granted
+from sync.push_sources import list_sources as list_push_sources
+from sync.push_sources import revoke_source as revoke_push_source
+from sync.push_sources import revoke_target_sources as revoke_target_push_sources
+from sync.push_sources import rotate_source as rotate_push_source
+from sync.push_sources import set_source_grant_delete as set_push_source_grant_delete
+from sync.push_sources import source_key_belongs_to_instance
+from image_tools.cutout_onnx import (
+    ADAPTER_ID as CUTOUT_ADAPTER_ID,
+    MODEL_MANIFEST as CUTOUT_MODEL_MANIFEST,
+    MODEL_RELATIVE_PATH as CUTOUT_MODEL_RELATIVE_PATH,
+    CutoutAdapterError,
+    CutoutONNXAdapter,
+)
+from image_tools.cutout_model_manager import (
+    MODEL_INSTALL_CONTRACT as CUTOUT_MODEL_INSTALL_CONTRACT,
+    MODEL_SOURCE_ID as CUTOUT_MODEL_SOURCE_ID,
+    MODEL_SOURCE_PAGE as CUTOUT_MODEL_SOURCE_PAGE,
+    CutoutModelManager,
+    CutoutModelManagerError,
+)
+from image_tools.cutout_registry import create_default_registry
+from image_tools.cutout_refine import (
+    CUTOUT_REFINE_CONTRACT,
+    CUTOUT_SELECTION_MASK_CONTRACT,
+    MAX_FEATHER_RADIUS,
+    CutoutRefineError,
+    refine_cutout_alpha,
+    save_refined_png_atomic,
+)
+from image_tools.cutout_modnet_import import (
+    ModNetImportError,
+    ModNetModelImportManager,
+)
+from image_tools.cutout_modnet import MODNET_ADAPTER_ID, ModNetONNXAdapter
 
 
 # ──────────────────────────────────────────────────────────────
@@ -135,8 +237,21 @@ class GenerateRequest(BaseModel):
     llm_provider_id: Optional[str] = None  # 指定用于优化提示词的 LLM Provider
     size: Optional[str] = None
     quality: Optional[str] = None
-    mode: str = "t2i"                # "t2i" 文生图 | "i2i" 图生图
+    mode: str = "t2i"                # t2i | i2i | inpaint | precision_edit
     image_data: Optional[str] = None  # base64 图片数据 (i2i 模式)
+    image_data_list: List[str] = []   # 多张参考图；image_data 保留兼容旧客户端
+    mask_data: Optional[str] = None    # 局部重绘遮罩（白色=编辑）
+    mask_contract: Optional[str] = None
+    annotation_image_data: Optional[str] = None  # 精准改图批注叠加图
+    annotation_contract: Optional[str] = None
+    annotations: List[dict] = []       # 箭头、矩形、文字的归一化坐标
+    precision_strategy: str = "standard"  # fine | standard | fast
+    precision_selection_mode: str = "annotation"  # annotation | local
+    precision_selection_feather: StrictInt | StrictFloat = 0  # local selection guidance only, 0-64px
+    precision_size_mode: str = "preserve"  # preserve | resize；精准改图不复用文生图尺寸
+    precision_target_size: Optional[str] = None
+    precision_resize_prompt: Optional[str] = None
+    precision_output_size_policy: str = "strict"  # strict | fit_crop；仅 precision resize
     strength: float = 0.55            # 变换强度 (i2i 模式)
     continuous: bool = False          # 连续生图模式（保持一致性）
     system_prompt: Optional[str] = None  # 系统提示词（专业模式）
@@ -144,10 +259,1427 @@ class GenerateRequest(BaseModel):
     quantities: dict = {}              # {provider_id: 数量(int)}，如 {"gpt-image": 2, "gemini": 1}
     # ── Per-provider 设置 ──
     provider_settings: dict = {}       # {provider_id: {quality, size, ...}}
+    exact_ratio_crop: bool = False      # 用户显式允许对近似画布做居中裁切
     # ── 尺寸自适应：小图生成 + 本地放大 ──
     upscale_to: Optional[str] = None
     upscale_method: str = "lanczos3"
     upscale_ratio: str = "original"  # 宽高比：1:1, 16:9, 21:9, 4:3, 3:2, 9:16, 3:4, original
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_unknown_precision_fields(cls, value):
+        """Reject likely precision aliases without changing other mode compatibility."""
+        if not isinstance(value, dict) or value.get("mode") != "precision_edit":
+            return value
+
+        known_fields = set(cls.model_fields)
+        precision_boundary_aliases = {
+            "imagedatalist",
+            "maskcontract",
+            "maskdata",
+            "upscaleratio",
+            "upscaleto",
+        }
+        for raw_name in value:
+            if not isinstance(raw_name, str) or raw_name in known_fields:
+                continue
+            normalized = re.sub(r"[^a-z0-9]", "", raw_name.lower())
+            if (
+                normalized.startswith("annotation")
+                or normalized.startswith("precision")
+                or normalized in precision_boundary_aliases
+            ):
+                raise PydanticCustomError(
+                    "precision_unknown_field",
+                    "precision_edit contains unsupported precision fields",
+                )
+        return value
+
+
+class CutoutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract: str
+    image_data: str
+    adapter: Optional[str] = None
+    algorithm: Optional[str] = None
+
+
+class CutoutModelActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract: str
+    source_id: str
+    confirmed: StrictBool
+
+
+class CutoutRefineRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract: str
+    image_data: str
+    selection_mask_data: Optional[str] = None
+    selection_mask_contract: Optional[str] = None
+    feather_radius: StrictInt | StrictFloat = 0
+    restore_mode: bool = False
+    restore_source_image_data: Optional[str] = None
+    restore_min_alpha: StrictInt | StrictFloat = 255
+    parent_version_id: Optional[str] = None
+
+
+GENERATION_MODES = frozenset({"t2i", "i2i", "inpaint", "precision_edit"})
+INPAINT_MASK_CONTRACT = "genbox-edit-white-v1"
+PRECISION_ANNOTATION_CONTRACT_V1 = "genbox-annotation-v1"
+PRECISION_ANNOTATION_CONTRACT_V2 = "genbox-annotation-v2"
+PRECISION_ANNOTATION_CONTRACT_V3 = "genbox-annotation-v3"
+PRECISION_ANNOTATION_CONTRACT = PRECISION_ANNOTATION_CONTRACT_V1
+PRECISION_ANNOTATION_CONTRACTS = frozenset({
+    PRECISION_ANNOTATION_CONTRACT_V1,
+    PRECISION_ANNOTATION_CONTRACT_V2,
+    PRECISION_ANNOTATION_CONTRACT_V3,
+})
+PRECISION_EDIT_CAPABILITY = "precision_edit"
+PRECISION_ANNOTATION_TYPES = frozenset({"arrow", "rectangle", "ellipse", "brush", "text"})
+PRECISION_STRATEGIES = frozenset({"fine", "standard", "fast"})
+PRECISION_SELECTION_MODES = frozenset({"annotation", "local"})
+PRECISION_SELECTION_TYPES = frozenset({"rectangle", "ellipse", "brush"})
+MAX_PRECISION_SELECTION_FEATHER = 64
+MAX_PRECISION_ANNOTATIONS = 100
+MAX_PRECISION_BRUSH_POINTS = 1024
+MAX_PRECISION_BRUSH_POINTS_TOTAL = 4096
+MAX_PRECISION_ANNOTATION_TEXT = 500
+MAX_PRECISION_ANNOTATION_TEXT_TOTAL = 4000
+MAX_PRECISION_PROMPT_TEXT = 2000
+MAX_PRECISION_RESIZE_PROMPT_TEXT = 500
+PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE = "gpt-image-2"
+MAX_PRECISION_OUTPUT_PIXELS = int(
+    os.getenv("GENBOX_PRECISION_MAX_OUTPUT_PIXELS", str(64 * 1024 * 1024))
+)
+MAX_PRECISION_SUPPORTED_SIZES = 64
+CUTOUT_CONTRACT = "genbox-cutout-v1"
+# The adapter is declared locally, but capability is advertised only after the
+# fixed model manifest and CPU-only ONNX session have both been validated.
+CUTOUT_MODEL_PATH = BASE_DIR / CUTOUT_MODEL_RELATIVE_PATH
+CUTOUT_ADAPTER = CutoutONNXAdapter(model_path=CUTOUT_MODEL_PATH)
+CUTOUT_MODEL_MANAGER = CutoutModelManager(CUTOUT_ADAPTER)
+# MODNet is an explicit, user-supplied experimental checkpoint.  Keep its
+# importer isolated from the U²-Net installer and default registry.
+MODNET_IMPORT_MANAGER = ModNetModelImportManager(base_path=BASE_DIR)
+# Keep model installation tied to the existing U2Net adapter while routing
+# execution through the fail-closed multi-algorithm registry.
+CUTOUT_REGISTRY = create_default_registry(CUTOUT_ADAPTER)
+
+
+def _refresh_modnet_registry(manager: ModNetModelImportManager) -> dict[str, Any]:
+    """Replace the MODNet placeholder only after a full runtime probe passes."""
+    status = manager.status()
+    manifest = manager.manifest()
+    if not status.get("installed") or not status.get("valid") or manifest is None:
+        return {"available": False, "executable": False, "state": "needs_model"}
+    adapter = ModNetONNXAdapter(
+        model_path=manager.model_path,
+        base_path=manager.base_path,
+        model_manifest={**manifest, "filename": status.get("filename") or manifest["filename"]},
+        license_confirmed=bool(status.get("license_confirmed")),
+        license_source=status.get("license_source"),
+    )
+    capability = dict(adapter.capabilities())
+    if capability.get("available") is not True or capability.get("executable") is not True:
+        return capability
+    runtime_adapter_id = str(getattr(adapter, "adapter_id", "")).strip()
+    if not runtime_adapter_id:
+        return capability
+    registered_ids = set(CUTOUT_REGISTRY.ids())
+    # The first successful probe replaces the descriptive placeholder with the
+    # runtime adapter id. Later capability checks must replace that runtime
+    # entry in place instead of trying to replace a placeholder that no longer
+    # exists.
+    replace_id = (
+        runtime_adapter_id
+        if runtime_adapter_id in registered_ids
+        else "modnet-photographic-portrait"
+    )
+    if replace_id not in registered_ids:
+        return capability
+    CUTOUT_REGISTRY.replace(
+        replace_id,
+        adapter,
+        verified=True,
+        algorithm=capability.get("algorithm") or "MODNet photographic portrait matting ONNX",
+        algorithm_aliases=("modnet", "modnet portrait", "modnet photographic portrait matting"),
+    )
+    return capability
+GENERATION_ALLOWED_IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/webp"})
+MAX_GENERATION_INPUT_BYTES = int(
+    os.getenv("GENBOX_GENERATE_MAX_IMAGE_BYTES", str(25 * 1024 * 1024))
+)
+MAX_GENERATION_INPUT_PIXELS = int(
+    os.getenv("GENBOX_GENERATE_MAX_IMAGE_PIXELS", "25000000")
+)
+_GENERATION_IMAGE_VALIDATION_LOCK = threading.RLock()
+_GENERATION_IMAGE_FORMAT_MIME_TYPES = {
+    "PNG": "image/png",
+    "JPEG": "image/jpeg",
+    "WEBP": "image/webp",
+}
+_GALLERY_FILE_EXTENSIONS = frozenset({".png"})
+_VIDEO_FILE_EXTENSIONS = frozenset({".mp4", ".webm", ".mov"})
+_VIDEO_THUMB_EXTENSIONS = frozenset({".jpg"})
+_VIDEO_MEDIA_TYPES = {
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
+}
+MAX_BYTE_RANGE_DIGITS = 20
+
+
+def _gallery_file_not_found() -> HTTPException:
+    return HTTPException(status_code=404, detail="图片不存在")
+
+
+def _video_file_not_found() -> HTTPException:
+    return HTTPException(status_code=404, detail="视频文件不存在")
+
+
+def _thumbnail_not_found() -> HTTPException:
+    return HTTPException(status_code=404, detail="缩略图不存在")
+
+
+def _resolve_confined_media_file(
+    root: Path,
+    filename: object,
+    *,
+    allowed_extensions: frozenset[str],
+    not_found,
+    must_exist: bool = True,
+) -> Path:
+    raw_name = str(filename or "")
+    probe = raw_name
+    for _ in range(5):
+        posix = PurePosixPath(probe)
+        windows = PureWindowsPath(probe)
+        if (
+            not probe
+            or probe in {".", ".."}
+            or "/" in probe
+            or "\\" in probe
+            or ":" in probe
+            or posix.is_absolute()
+            or windows.is_absolute()
+            or bool(windows.drive)
+            or len(posix.parts) != 1
+            or len(windows.parts) != 1
+            or posix.suffix.lower() not in allowed_extensions
+        ):
+            raise not_found()
+        decoded = unquote(probe)
+        if decoded == probe:
+            break
+        probe = decoded
+    else:
+        raise not_found()
+
+    try:
+        confined_root = Path(root).resolve(strict=True)
+        unresolved = confined_root / raw_name
+        if not confined_root.is_dir() or unresolved.is_symlink():
+            raise ValueError("unsafe media path")
+        candidate = unresolved.resolve(strict=must_exist)
+        candidate.relative_to(confined_root)
+    except (OSError, RuntimeError, ValueError):
+        raise not_found() from None
+    if candidate.parent != confined_root or candidate.name != raw_name:
+        raise not_found()
+    if must_exist and not candidate.is_file():
+        raise not_found()
+    if not must_exist and candidate.exists() and not candidate.is_file():
+        raise not_found()
+    return candidate
+
+
+def _resolve_gallery_file(filename: object) -> Path:
+    return _resolve_confined_media_file(
+        GALLERY_DIR,
+        filename,
+        allowed_extensions=_GALLERY_FILE_EXTENSIONS,
+        not_found=_gallery_file_not_found,
+    )
+
+
+def _resolve_video_file(filename: object, *, must_exist: bool = True) -> Path:
+    return _resolve_confined_media_file(
+        VIDEO_DIR,
+        filename,
+        allowed_extensions=_VIDEO_FILE_EXTENSIONS,
+        not_found=_video_file_not_found,
+        must_exist=must_exist,
+    )
+
+
+def _resolve_video_thumbnail_file(filename: object, *, must_exist: bool = True) -> Path:
+    return _resolve_confined_media_file(
+        VIDEO_THUMBS_DIR,
+        filename,
+        allowed_extensions=_VIDEO_THUMB_EXTENSIONS,
+        not_found=_thumbnail_not_found,
+        must_exist=must_exist,
+    )
+
+
+def _read_gallery_image_payload(path: Path) -> tuple[bytes, str, str]:
+    """Read and verify gallery bytes, deriving MIME from decoded content."""
+    try:
+        payload = path.read_bytes()
+        prompt_text = ""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(payload)) as image:
+                image_format = str(image.format or "").upper()
+                prompt_text = str((image.info or {}).get("Prompt") or "")
+                image.verify()
+            with Image.open(io.BytesIO(payload)) as image:
+                image.load()
+    except Exception:
+        raise HTTPException(
+            status_code=415,
+            detail={
+                "code": "gallery_image_invalid",
+                "message": "gallery image is not readable",
+            },
+        ) from None
+
+    mime_type = _GENERATION_IMAGE_FORMAT_MIME_TYPES.get(image_format, "")
+    if mime_type not in GENERATION_ALLOWED_IMAGE_MIME_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail={
+                "code": "gallery_image_mime_unsupported",
+                "message": "gallery image uses an unsupported MIME type",
+            },
+        )
+    return payload, mime_type, prompt_text
+
+
+def _load_gallery_image_payload(filename: object) -> tuple[Path, bytes, str, str]:
+    path = _resolve_gallery_file(filename)
+    payload, mime_type, prompt_text = _read_gallery_image_payload(path)
+    return path, payload, mime_type, prompt_text
+
+
+def _load_thumbnail_image_payload(filename: object) -> tuple[bytes, str]:
+    try:
+        _path, payload, mime_type, _prompt = _load_gallery_image_payload(filename)
+        return payload, mime_type
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+
+    try:
+        video_path = _resolve_video_file(filename, must_exist=False)
+        thumb_name = video_path.stem + "_thumb.jpg"
+        planned_thumb = _resolve_video_thumbnail_file(thumb_name, must_exist=False)
+    except HTTPException:
+        raise _thumbnail_not_found() from None
+
+    if planned_thumb.exists():
+        thumb_path = _resolve_video_thumbnail_file(thumb_name)
+    else:
+        try:
+            video_path = _resolve_video_file(filename)
+        except HTTPException:
+            raise _thumbnail_not_found() from None
+        if _generate_video_thumbnail(video_path) is None:
+            raise _thumbnail_not_found()
+        try:
+            thumb_path = _resolve_video_thumbnail_file(thumb_name)
+        except HTTPException:
+            raise _thumbnail_not_found() from None
+
+    payload, mime_type, _prompt = _read_gallery_image_payload(thumb_path)
+    return payload, mime_type
+
+
+def _parse_byte_range_spec(range_spec: str) -> Optional[tuple[Optional[int], Optional[int]]]:
+    match = re.fullmatch(r"(\d*)-(\d*)", str(range_spec or "").strip())
+    if not match:
+        return None
+
+    start_text, end_text = match.groups()
+    if not start_text and not end_text:
+        return None
+    if max(len(start_text), len(end_text)) > MAX_BYTE_RANGE_DIGITS:
+        return None
+    try:
+        start_value = int(start_text) if start_text else None
+        end_value = int(end_text) if end_text else None
+    except (ValueError, OverflowError):
+        return None
+    if start_value is not None and end_value is not None and end_value < start_value:
+        return None
+    return start_value, end_value
+
+
+def _resolve_byte_range_spec(range_spec: str, total: int) -> Optional[tuple[int, int]]:
+    parsed = _parse_byte_range_spec(range_spec)
+    if parsed is None or total <= 0:
+        return None
+
+    start_value, end_value = parsed
+    if start_value is not None:
+        start = start_value
+        if start >= total:
+            return None
+        if end_value is not None:
+            end = end_value
+            end = min(end, total - 1)
+        else:
+            end = total - 1
+        return start, end
+
+    if end_value is None:
+        return None
+    suffix_length = end_value
+    if suffix_length <= 0:
+        return None
+    return max(total - suffix_length, 0), total - 1
+
+
+def _parse_single_byte_range(range_header: str, total: int) -> Optional[tuple[int, int]]:
+    normalized = str(range_header or "").strip()
+    unit, separator, range_spec = normalized.partition("=")
+    if separator != "=" or unit.lower() != "bytes":
+        return None
+    return _resolve_byte_range_spec(range_spec, total)
+
+
+def _is_valid_multiple_byte_range(range_header: str, total: int) -> bool:
+    normalized = str(range_header or "").strip()
+    unit, separator, range_set = normalized.partition("=")
+    if separator != "=" or unit.lower() != "bytes":
+        return False
+
+    parts = range_set.split(",")
+    if len(parts) < 2:
+        return False
+    normalized_parts = [part.strip() for part in parts]
+    if any(not part or _parse_byte_range_spec(part) is None for part in normalized_parts):
+        return False
+    return any(_resolve_byte_range_spec(part, total) is not None for part in normalized_parts)
+
+
+def _memory_media_response(request: Request, payload: bytes, media_type: str) -> Response:
+    total = len(payload)
+    headers = {"Accept-Ranges": "bytes"}
+    range_header = request.headers.get("range") if request.method.upper() == "GET" else None
+    ignore_multiple_ranges = _is_valid_multiple_byte_range(range_header, total)
+    if range_header is None or ignore_multiple_ranges:
+        headers["Content-Length"] = str(total)
+        return Response(
+            content=b"" if request.method.upper() == "HEAD" else payload,
+            media_type=media_type,
+            headers=headers,
+        )
+
+    byte_range = _parse_single_byte_range(range_header, total)
+    if byte_range is None:
+        headers.update({
+            "Content-Range": f"bytes */{total}",
+            "Content-Length": "0",
+        })
+        return Response(
+            content=b"",
+            status_code=416,
+            media_type=media_type,
+            headers=headers,
+        )
+
+    start, end = byte_range
+    partial = payload[start : end + 1]
+    headers.update({
+        "Content-Range": f"bytes {start}-{end}/{total}",
+        "Content-Length": str(len(partial)),
+    })
+    return Response(
+        content=partial,
+        status_code=206,
+        media_type=media_type,
+        headers=headers,
+    )
+
+
+def _generation_contract_error(code: str, message: str, *, status_code: int = 422, **extra) -> HTTPException:
+    """Return a stable, secret-free error payload for generation input violations."""
+    detail = {"code": code, "message": message}
+    detail.update(extra)
+    return HTTPException(status_code=status_code, detail=detail)
+
+
+def _has_generation_value(value: object) -> bool:
+    return value is not None and (not isinstance(value, str) or bool(value.strip()))
+
+
+def _normalize_generation_mime_type(value: str) -> str:
+    mime_type = str(value or "").strip().lower()
+    return "image/jpeg" if mime_type == "image/jpg" else mime_type
+
+
+def _validate_generation_image_data(
+    value: object,
+    field_name: str,
+    *,
+    required_mime_type: Optional[str] = None,
+) -> dict:
+    """Decode and inspect one browser image payload before a task is created."""
+    if not isinstance(value, str) or not value.strip():
+        raise _generation_contract_error(
+            "image_data_required",
+            f"{field_name} must contain a base64 image payload",
+            field=field_name,
+        )
+
+    original_value = value.strip()
+    encoded = original_value
+    declared_mime_type = ""
+    if original_value.lower().startswith("data:"):
+        header, separator, encoded = original_value.partition(",")
+        if not separator:
+            raise _generation_contract_error(
+                "invalid_image_data_url",
+                f"{field_name} must be a base64 data URL",
+                field=field_name,
+            )
+        match = re.fullmatch(
+            r"data:([A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+);base64",
+            header,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            raise _generation_contract_error(
+                "invalid_image_data_url",
+                f"{field_name} must be a base64 data URL",
+                field=field_name,
+            )
+        declared_mime_type = _normalize_generation_mime_type(match.group(1))
+        if declared_mime_type not in GENERATION_ALLOWED_IMAGE_MIME_TYPES:
+            raise _generation_contract_error(
+                "unsupported_image_mime",
+                f"{field_name} uses an unsupported image MIME type",
+                field=field_name,
+            )
+
+    max_encoded_length = ((MAX_GENERATION_INPUT_BYTES + 2) // 3) * 4
+    if len(encoded) > max_encoded_length:
+        raise _generation_contract_error(
+            "image_too_large",
+            f"{field_name} exceeds the configured byte limit",
+            field=field_name,
+            max_bytes=MAX_GENERATION_INPUT_BYTES,
+        )
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError, TypeError):
+        raise _generation_contract_error(
+            "invalid_image_base64",
+            f"{field_name} is not valid base64",
+            field=field_name,
+        ) from None
+    if not payload:
+        raise _generation_contract_error(
+            "invalid_image_base64",
+            f"{field_name} decoded to an empty image",
+            field=field_name,
+        )
+    if len(payload) > MAX_GENERATION_INPUT_BYTES:
+        raise _generation_contract_error(
+            "image_too_large",
+            f"{field_name} exceeds the configured byte limit",
+            field=field_name,
+            max_bytes=MAX_GENERATION_INPUT_BYTES,
+        )
+
+    try:
+        # Pillow warning filters are process-global. Serialize the warning
+        # promotion so concurrent browser inputs cannot bypass the bomb guard.
+        with _GENERATION_IMAGE_VALIDATION_LOCK:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", Image.DecompressionBombWarning)
+                with Image.open(io.BytesIO(payload)) as image:
+                    width, height = image.size
+                    image_format = str(image.format or "").upper()
+                    if width <= 0 or height <= 0 or width * height > MAX_GENERATION_INPUT_PIXELS:
+                        raise _generation_contract_error(
+                            "image_pixels_exceeded",
+                            f"{field_name} exceeds the configured pixel limit",
+                            field=field_name,
+                            max_pixels=MAX_GENERATION_INPUT_PIXELS,
+                        )
+                    image.verify()
+                with Image.open(io.BytesIO(payload)) as image:
+                    image.load()
+    except HTTPException:
+        raise
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning):
+        raise _generation_contract_error(
+            "image_decompression_bomb",
+            f"{field_name} was rejected by the decompression-bomb guard",
+            field=field_name,
+        ) from None
+    except Exception:
+        raise _generation_contract_error(
+            "invalid_image_payload",
+            f"{field_name} is not a readable image",
+            field=field_name,
+        ) from None
+
+    actual_mime_type = _GENERATION_IMAGE_FORMAT_MIME_TYPES.get(image_format, "")
+    if actual_mime_type not in GENERATION_ALLOWED_IMAGE_MIME_TYPES:
+        raise _generation_contract_error(
+            "unsupported_image_mime",
+            f"{field_name} uses an unsupported image MIME type",
+            field=field_name,
+        )
+    if declared_mime_type and declared_mime_type != actual_mime_type:
+        raise _generation_contract_error(
+            "image_mime_mismatch",
+            f"{field_name} MIME type does not match its image payload",
+            field=field_name,
+        )
+    if required_mime_type and actual_mime_type != required_mime_type:
+        raise _generation_contract_error(
+            "unsupported_image_mime",
+            f"{field_name} must use {required_mime_type}",
+            field=field_name,
+        )
+    return {
+        "value": original_value,
+        "mime_type": actual_mime_type,
+        "width": width,
+        "height": height,
+    }
+
+
+def _precision_annotation_string_is_safe(value: str) -> bool:
+    """Reject annotation text that could be interpreted as executable content or a resource."""
+    if not value.isprintable():
+        return False
+    if re.search(r"(?i)(?:https?|ftp|file|data|javascript):|www\.", value):
+        return False
+    if "<" in value or ">" in value:
+        return False
+    return not re.search(
+        r"(?:^|\s)(?:[A-Za-z]:[\\/]|\\\\|\.\.[\\/]|/(?:[\w.-]+/)+[\w.-]+)",
+        value,
+    )
+
+
+def _precision_coordinate(annotation: dict, field_name: str, index: int) -> float:
+    value = annotation.get(field_name)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise _generation_contract_error(
+            "precision_annotation_coordinate_invalid",
+            f"annotations[{index}].{field_name} must be a normalized number",
+            field=f"annotations[{index}].{field_name}",
+        )
+    normalized = float(value)
+    if not math.isfinite(normalized) or normalized < 0.0 or normalized > 1.0:
+        raise _generation_contract_error(
+            "precision_annotation_coordinate_invalid",
+            f"annotations[{index}].{field_name} must be between 0 and 1",
+            field=f"annotations[{index}].{field_name}",
+        )
+    return normalized
+
+
+def _validate_precision_annotations(value: object, contract: str) -> List[dict]:
+    if not isinstance(value, list) or not value:
+        raise _generation_contract_error(
+            "precision_annotations_required",
+            "precision_edit requires at least one structured annotation",
+            field="annotations",
+        )
+    if len(value) > MAX_PRECISION_ANNOTATIONS:
+        raise _generation_contract_error(
+            "precision_annotations_exceeded",
+            "precision_edit contains too many annotations",
+            field="annotations",
+            max_annotations=MAX_PRECISION_ANNOTATIONS,
+        )
+
+    is_v2 = contract == PRECISION_ANNOTATION_CONTRACT_V2
+    is_v3 = contract == PRECISION_ANNOTATION_CONTRACT_V3
+    is_structured = is_v2 or is_v3
+    if contract == PRECISION_ANNOTATION_CONTRACT_V1:
+        allowed_fields = {
+            "arrow": frozenset({"type", "x1", "y1", "x2", "y2"}),
+            "rectangle": frozenset({"type", "x", "y", "width", "height"}),
+            "text": frozenset({"type", "x", "y", "text"}),
+        }
+    elif is_v2:
+        allowed_fields = {
+            "arrow": frozenset({"type", "label", "instruction", "x1", "y1", "x2", "y2"}),
+            "rectangle": frozenset({"type", "label", "instruction", "x", "y", "width", "height"}),
+            "text": frozenset({"type", "label", "text", "instruction", "x", "y"}),
+        }
+    elif is_v3:
+        allowed_fields = {
+            "arrow": frozenset({"type", "label", "instruction", "x1", "y1", "x2", "y2"}),
+            "rectangle": frozenset({"type", "label", "instruction", "x", "y", "width", "height"}),
+            "ellipse": frozenset({"type", "label", "instruction", "x", "y", "width", "height"}),
+            "brush": frozenset({"type", "label", "instruction", "points"}),
+            "text": frozenset({"type", "label", "text", "instruction", "x", "y"}),
+        }
+    else:
+        raise _generation_contract_error(
+            "precision_annotation_contract_unsupported",
+            "precision_edit annotation contract is unsupported",
+            mode="precision_edit",
+        )
+    coordinate_fields = {
+        "arrow": ("x1", "y1", "x2", "y2"),
+        "rectangle": ("x", "y", "width", "height"),
+        "ellipse": ("x", "y", "width", "height"),
+        "brush": (),
+        "text": ("x", "y"),
+    }
+    normalized_annotations: List[dict] = []
+    total_text_length = 0
+    seen_labels: set[int] = set()
+    total_brush_points = 0
+
+    for index, raw_annotation in enumerate(value):
+        if not isinstance(raw_annotation, dict):
+            raise _generation_contract_error(
+                "precision_annotation_invalid",
+                f"annotations[{index}] must be an object",
+                field=f"annotations[{index}]",
+            )
+        annotation_type = raw_annotation.get("type")
+        if annotation_type not in allowed_fields:
+            raise _generation_contract_error(
+                "precision_annotation_type_unsupported",
+                f"annotations[{index}].type is unsupported for {contract}",
+                field=f"annotations[{index}].type",
+            )
+        actual_fields = set(raw_annotation)
+        permitted_fields = allowed_fields[annotation_type]
+        if is_structured and annotation_type == "text":
+            required_fields = permitted_fields - {"instruction"}
+        else:
+            required_fields = permitted_fields
+        unknown_fields = sorted(actual_fields - permitted_fields)
+        missing_fields = sorted(required_fields - actual_fields)
+        if unknown_fields or missing_fields:
+            raise _generation_contract_error(
+                "precision_annotation_fields_unsupported",
+                f"annotations[{index}] contains missing or unsupported fields",
+                field=f"annotations[{index}]",
+                unsupported_fields=unknown_fields,
+                missing_fields=missing_fields,
+            )
+
+        normalized = {"type": annotation_type}
+        if is_structured:
+            label = raw_annotation.get("label")
+            if isinstance(label, bool) or not isinstance(label, int) or label <= 0:
+                raise _generation_contract_error(
+                    "precision_annotation_label_invalid",
+                    f"annotations[{index}].label must be a positive integer",
+                    field=f"annotations[{index}].label",
+                )
+            if label in seen_labels:
+                raise _generation_contract_error(
+                    "precision_annotation_label_duplicate",
+                    f"annotations[{index}].label must be unique",
+                    field=f"annotations[{index}].label",
+                )
+            seen_labels.add(label)
+            normalized["label"] = label
+        for field_name in coordinate_fields[annotation_type]:
+            normalized[field_name] = _precision_coordinate(raw_annotation, field_name, index)
+
+        if annotation_type == "arrow":
+            if normalized["x1"] == normalized["x2"] and normalized["y1"] == normalized["y2"]:
+                raise _generation_contract_error(
+                    "precision_annotation_geometry_invalid",
+                    f"annotations[{index}] arrow must have distinct endpoints",
+                    field=f"annotations[{index}]",
+                )
+        elif annotation_type in {"rectangle", "ellipse"}:
+            if normalized["width"] <= 0.0 or normalized["height"] <= 0.0:
+                raise _generation_contract_error(
+                    "precision_annotation_geometry_invalid",
+                    f"annotations[{index}] {annotation_type} must have positive width and height",
+                    field=f"annotations[{index}]",
+                )
+            if normalized["x"] + normalized["width"] > 1.0 or normalized["y"] + normalized["height"] > 1.0:
+                raise _generation_contract_error(
+                    "precision_annotation_geometry_invalid",
+                    f"annotations[{index}] {annotation_type} must stay within the normalized canvas",
+                    field=f"annotations[{index}]",
+                )
+        elif annotation_type == "brush":
+            points = raw_annotation.get("points")
+            if not isinstance(points, list) or len(points) < 2 or len(points) > MAX_PRECISION_BRUSH_POINTS:
+                raise _generation_contract_error(
+                    "precision_annotation_geometry_invalid",
+                    f"annotations[{index}].points must contain 2 to {MAX_PRECISION_BRUSH_POINTS} points",
+                    field=f"annotations[{index}].points",
+                )
+            normalized_points = []
+            for point_index, point in enumerate(points):
+                if not isinstance(point, dict) or set(point) != {"x", "y"}:
+                    raise _generation_contract_error(
+                        "precision_annotation_geometry_invalid",
+                        f"annotations[{index}].points[{point_index}] must contain only x and y",
+                        field=f"annotations[{index}].points[{point_index}]",
+                    )
+                normalized_points.append({
+                    "x": _precision_coordinate(point, "x", index),
+                    "y": _precision_coordinate(point, "y", index),
+                })
+            if all(point == normalized_points[0] for point in normalized_points[1:]):
+                raise _generation_contract_error(
+                    "precision_annotation_geometry_invalid",
+                    f"annotations[{index}].points must describe a non-empty path",
+                    field=f"annotations[{index}].points",
+                )
+            total_brush_points += len(normalized_points)
+            if total_brush_points > MAX_PRECISION_BRUSH_POINTS_TOTAL:
+                raise _generation_contract_error(
+                    "precision_annotation_geometry_exceeded",
+                    "precision_edit brush paths exceed the total point limit",
+                    field="annotations",
+                    max_total_points=MAX_PRECISION_BRUSH_POINTS_TOTAL,
+                )
+            normalized["points"] = normalized_points
+        if annotation_type == "text":
+            text = raw_annotation.get("text")
+            if not isinstance(text, str) or not text.strip():
+                raise _generation_contract_error(
+                    "precision_annotation_text_required",
+                    f"annotations[{index}].text must contain annotation text",
+                    field=f"annotations[{index}].text",
+                )
+            text = text.strip()
+            if len(text) > MAX_PRECISION_ANNOTATION_TEXT:
+                raise _generation_contract_error(
+                    "precision_annotation_text_exceeded",
+                    f"annotations[{index}].text is too long",
+                    field=f"annotations[{index}].text",
+                    max_length=MAX_PRECISION_ANNOTATION_TEXT,
+                )
+            if not _precision_annotation_string_is_safe(text):
+                raise _generation_contract_error(
+                    "precision_annotation_text_unsafe",
+                    f"annotations[{index}].text cannot contain URLs, HTML, or filesystem paths",
+                    field=f"annotations[{index}].text",
+                )
+            total_text_length += len(text)
+            if total_text_length > MAX_PRECISION_ANNOTATION_TEXT_TOTAL:
+                raise _generation_contract_error(
+                    "precision_annotation_text_exceeded",
+                    "precision_edit annotation text exceeds the total length limit",
+                    field="annotations",
+                    max_total_length=MAX_PRECISION_ANNOTATION_TEXT_TOTAL,
+                )
+            normalized["text"] = text
+        if is_structured:
+            instruction = raw_annotation.get("instruction")
+            instruction_required = annotation_type in {"arrow", "rectangle", "ellipse", "brush"}
+            if instruction_required and (not isinstance(instruction, str) or not instruction.strip()):
+                raise _generation_contract_error(
+                    "precision_annotation_instruction_required",
+                    f"annotations[{index}].instruction must contain an edit instruction",
+                    field=f"annotations[{index}].instruction",
+                )
+            if instruction is not None:
+                if not isinstance(instruction, str) or not instruction.strip():
+                    raise _generation_contract_error(
+                        "precision_annotation_instruction_required",
+                        f"annotations[{index}].instruction must be omitted or non-empty",
+                        field=f"annotations[{index}].instruction",
+                    )
+                instruction = instruction.strip()
+                if len(instruction) > MAX_PRECISION_ANNOTATION_TEXT:
+                    raise _generation_contract_error(
+                        "precision_annotation_instruction_exceeded",
+                        f"annotations[{index}].instruction is too long",
+                        field=f"annotations[{index}].instruction",
+                        max_length=MAX_PRECISION_ANNOTATION_TEXT,
+                    )
+                if not _precision_annotation_string_is_safe(instruction):
+                    raise _generation_contract_error(
+                        "precision_annotation_instruction_unsafe",
+                        f"annotations[{index}].instruction contains unsafe characters or resource references",
+                        field=f"annotations[{index}].instruction",
+                    )
+                total_text_length += len(instruction)
+                if total_text_length > MAX_PRECISION_ANNOTATION_TEXT_TOTAL:
+                    raise _generation_contract_error(
+                        "precision_annotation_text_exceeded",
+                        "precision_edit annotation text exceeds the total length limit",
+                        field="annotations",
+                        max_total_length=MAX_PRECISION_ANNOTATION_TEXT_TOTAL,
+                    )
+                normalized["instruction"] = instruction
+        normalized_annotations.append(normalized)
+    if is_structured:
+        normalized_annotations.sort(key=lambda item: item["label"])
+    return normalized_annotations
+
+
+def _validate_generation_request_inputs(req: GenerateRequest) -> dict:
+    """Enforce the generation input matrix before allocating a task ID."""
+    mode = req.mode if isinstance(req.mode, str) else ""
+    if mode not in GENERATION_MODES:
+        raise _generation_contract_error(
+            "invalid_mode",
+            "mode must be one of: t2i, i2i, inpaint, precision_edit",
+            field="mode",
+        )
+
+    precision_strategy_supplied = "precision_strategy" in req.model_fields_set
+    precision_selection_mode_supplied = "precision_selection_mode" in req.model_fields_set
+    precision_selection_feather_supplied = "precision_selection_feather" in req.model_fields_set
+    output_size_policy_supplied = "precision_output_size_policy" in req.model_fields_set
+    if mode != "precision_edit" and output_size_policy_supplied and not any((
+        precision_strategy_supplied,
+        precision_selection_mode_supplied,
+        precision_selection_feather_supplied,
+    )):
+        raise _generation_contract_error(
+            "precision_output_size_policy_not_allowed",
+            "precision_output_size_policy is accepted only for precision_edit resize",
+            field="precision_output_size_policy",
+        )
+    if mode != "precision_edit" and any((
+        precision_strategy_supplied,
+        precision_selection_mode_supplied,
+        precision_selection_feather_supplied,
+    )):
+        raise _generation_contract_error(
+            "precision_fields_not_allowed",
+            "precision strategy and selection fields are accepted only for precision_edit",
+            mode=mode,
+        )
+
+    has_image_list = bool(req.image_data_list)
+    has_mask_fields = _has_generation_value(req.mask_data) or _has_generation_value(req.mask_contract)
+    has_annotation_fields = (
+        _has_generation_value(req.annotation_image_data)
+        or _has_generation_value(req.annotation_contract)
+        or bool(req.annotations)
+    )
+    if mode == "t2i":
+        if _has_generation_value(req.image_data) or has_image_list:
+            raise _generation_contract_error(
+                "image_input_not_allowed",
+                "t2i does not accept image_data or image_data_list",
+                mode=mode,
+            )
+        if has_mask_fields:
+            raise _generation_contract_error(
+                "mask_input_not_allowed",
+                "t2i does not accept mask data",
+                mode=mode,
+            )
+        if has_annotation_fields:
+            raise _generation_contract_error(
+                "annotation_input_not_allowed",
+                "t2i does not accept precision annotation data",
+                mode=mode,
+            )
+        return {"mode": mode, "images": []}
+
+    if mode == "i2i":
+        if has_mask_fields:
+            raise _generation_contract_error(
+                "mask_input_not_allowed",
+                "i2i does not accept mask data",
+                mode=mode,
+            )
+        if has_annotation_fields:
+            raise _generation_contract_error(
+                "annotation_input_not_allowed",
+                "i2i does not accept precision annotation data",
+                mode=mode,
+            )
+        legacy_image = (
+            _validate_generation_image_data(req.image_data, "image_data")
+            if _has_generation_value(req.image_data)
+            else None
+        )
+        images = [
+            _validate_generation_image_data(item, f"image_data_list[{index}]")
+            for index, item in enumerate(req.image_data_list or [])
+        ]
+        if legacy_image and images and legacy_image["value"] != images[0]["value"]:
+            raise _generation_contract_error(
+                "i2i_base_image_conflict",
+                "image_data must match the first image_data_list item when both are supplied",
+                mode=mode,
+            )
+        if not images and legacy_image:
+            images = [legacy_image]
+        if not images:
+            raise _generation_contract_error(
+                "i2i_image_required",
+                "i2i requires at least one reference image",
+                mode=mode,
+            )
+        return {"mode": mode, "images": images}
+
+    if mode == "precision_edit":
+        if "image_data_list" in req.model_fields_set:
+            raise _generation_contract_error(
+                "precision_edit_image_data_list_not_allowed",
+                "precision_edit accepts exactly one base image through image_data",
+                mode=mode,
+            )
+        if has_mask_fields:
+            raise _generation_contract_error(
+                "mask_input_not_allowed",
+                "precision_edit does not accept inpaint mask data",
+                mode=mode,
+            )
+        precision_prompt = req.prompt.strip()
+        if len(precision_prompt) > MAX_PRECISION_PROMPT_TEXT:
+            raise _generation_contract_error(
+                "precision_edit_prompt_exceeded",
+                "precision_edit prompt is too long",
+                field="prompt",
+                max_length=MAX_PRECISION_PROMPT_TEXT,
+            )
+        if precision_prompt and not _precision_annotation_string_is_safe(precision_prompt):
+            raise _generation_contract_error(
+                "precision_edit_prompt_unsafe",
+                "precision_edit prompt cannot contain URLs, HTML, or filesystem paths",
+                field="prompt",
+            )
+        precision_strategy = str(req.precision_strategy or "standard").strip().lower()
+        if precision_strategy not in PRECISION_STRATEGIES:
+            raise _generation_contract_error(
+                "precision_strategy_invalid",
+                "precision_strategy must be fine, standard, or fast",
+                field="precision_strategy",
+                allowed_strategies=sorted(PRECISION_STRATEGIES),
+            )
+        precision_selection_mode = str(req.precision_selection_mode or "annotation").strip().lower()
+        if precision_selection_mode not in PRECISION_SELECTION_MODES:
+            raise _generation_contract_error(
+                "precision_selection_mode_invalid",
+                "precision_selection_mode must be annotation or local",
+                field="precision_selection_mode",
+                allowed_modes=sorted(PRECISION_SELECTION_MODES),
+            )
+        if isinstance(req.precision_selection_feather, bool) or not math.isfinite(float(req.precision_selection_feather)):
+            raise _generation_contract_error(
+                "precision_selection_feather_invalid",
+                "precision_selection_feather must be a finite number between 0 and 64",
+                field="precision_selection_feather",
+            )
+        precision_selection_feather = float(req.precision_selection_feather)
+        if not 0 <= precision_selection_feather <= MAX_PRECISION_SELECTION_FEATHER:
+            raise _generation_contract_error(
+                "precision_selection_feather_invalid",
+                "precision_selection_feather must be between 0 and 64",
+                field="precision_selection_feather",
+                max_feather=MAX_PRECISION_SELECTION_FEATHER,
+            )
+        if precision_selection_mode != "local" and precision_selection_feather_supplied:
+            raise _generation_contract_error(
+                "precision_selection_feather_not_allowed",
+                "precision_selection_feather is accepted only for local selection mode",
+                field="precision_selection_feather",
+            )
+        size_mode = str(req.precision_size_mode or "preserve").strip().lower()
+        if size_mode not in {"preserve", "resize"}:
+            raise _generation_contract_error(
+                "precision_size_mode_invalid",
+                "precision_size_mode must be preserve or resize",
+                field="precision_size_mode",
+            )
+        output_size_policy = str(req.precision_output_size_policy or "")
+        if output_size_policy not in {"strict", "fit_crop"}:
+            raise _generation_contract_error(
+                "precision_output_size_policy_invalid",
+                "precision_output_size_policy must be strict or fit_crop",
+                field="precision_output_size_policy",
+                allowed_policies=["strict", "fit_crop"],
+            )
+        if size_mode != "resize" and output_size_policy_supplied:
+            raise _generation_contract_error(
+                "precision_output_size_policy_not_allowed",
+                "precision_output_size_policy is accepted only for precision_edit resize",
+                field="precision_output_size_policy",
+            )
+        annotation_field_names = {
+            "annotation_image_data",
+            "annotation_contract",
+            "annotations",
+        }
+        supplied_annotation_fields = annotation_field_names.intersection(req.model_fields_set)
+        precision_canvas_only = not supplied_annotation_fields
+        if supplied_annotation_fields and supplied_annotation_fields != annotation_field_names:
+            raise _generation_contract_error(
+                "precision_resize_annotation_fields_conflict",
+                "precision annotation fields must be supplied as one complete annotated-edit envelope",
+                field="annotations",
+            )
+        if precision_canvas_only and size_mode != "resize":
+            raise _generation_contract_error(
+                "precision_canvas_only_resize_required",
+                "precision_edit without annotations requires precision_size_mode=resize",
+                field="precision_size_mode",
+            )
+        if precision_canvas_only and precision_selection_mode == "local":
+            raise _generation_contract_error(
+                "precision_local_selection_requires_annotations",
+                "local selection mode requires rectangle, ellipse, or brush annotations",
+                field="precision_selection_mode",
+            )
+        resize_prompt = str(req.precision_resize_prompt or "").strip()
+        if req.upscale_to is not None or req.upscale_ratio != "original":
+            raise _generation_contract_error(
+                "precision_upscale_not_allowed",
+                "precision_edit does not accept generic post-generation upscaling",
+                field="upscale_to",
+            )
+        if len(resize_prompt) > MAX_PRECISION_RESIZE_PROMPT_TEXT:
+            raise _generation_contract_error(
+                "precision_resize_prompt_exceeded",
+                "precision_resize_prompt is too long",
+                field="precision_resize_prompt",
+                max_length=MAX_PRECISION_RESIZE_PROMPT_TEXT,
+            )
+        if resize_prompt and not _precision_annotation_string_is_safe(resize_prompt):
+            raise _generation_contract_error(
+                "precision_resize_prompt_unsafe",
+                "precision_resize_prompt cannot contain URLs, HTML, or filesystem paths",
+                field="precision_resize_prompt",
+            )
+        target_size = str(req.precision_target_size or "")
+        if size_mode == "preserve":
+            generic_size = str(req.size or "").strip().lower()
+            if generic_size not in {"", "auto"} or target_size or resize_prompt:
+                raise _generation_contract_error(
+                    "precision_preserve_size_conflict",
+                    "preserve mode does not accept generation or resize dimensions",
+                    field="precision_size_mode",
+                )
+        else:
+            normalized_target_size = _normalize_precision_size(target_size)
+            if not normalized_target_size:
+                raise _generation_contract_error(
+                    "precision_target_size_invalid",
+                    "resize mode requires precision_target_size as WIDTHxHEIGHT",
+                    field="precision_target_size",
+                )
+            target_size = normalized_target_size
+            resize_prompt = resize_prompt or DEFAULT_PRECISION_RESIZE_GUIDANCE
+        base_image = _validate_generation_image_data(req.image_data, "image_data")
+        if precision_canvas_only:
+            return {
+                "mode": mode,
+                "images": [base_image],
+                "precision_canvas_only": True,
+                "precision_strategy": precision_strategy,
+                "precision_selection_mode": precision_selection_mode,
+                "precision_size_mode": size_mode,
+                "precision_target_size": target_size,
+                "precision_resize_prompt": resize_prompt,
+                "precision_output_size_policy": output_size_policy,
+            }
+        annotation_contract = str(req.annotation_contract or "").strip()
+        if annotation_contract not in PRECISION_ANNOTATION_CONTRACTS:
+            raise _generation_contract_error(
+                "precision_annotation_contract_unsupported",
+                "precision_edit requires a supported annotation_contract",
+                mode=mode,
+                supported_contracts=sorted(PRECISION_ANNOTATION_CONTRACTS),
+            )
+        annotation_image = _validate_generation_image_data(
+            req.annotation_image_data,
+            "annotation_image_data",
+            required_mime_type="image/png",
+        )
+        if (base_image["width"], base_image["height"]) != (
+            annotation_image["width"],
+            annotation_image["height"],
+        ):
+            raise _generation_contract_error(
+                "precision_annotation_image_size_mismatch",
+                "image_data and annotation_image_data dimensions must match",
+                mode=mode,
+            )
+        annotations = _validate_precision_annotations(req.annotations, annotation_contract)
+        if precision_selection_mode == "local" and not any(
+            item["type"] in PRECISION_SELECTION_TYPES for item in annotations
+        ):
+            raise _generation_contract_error(
+                "precision_local_selection_required",
+                "local selection mode requires at least one rectangle, ellipse, or brush annotation",
+                field="annotations",
+            )
+        if annotation_contract == PRECISION_ANNOTATION_CONTRACT_V2:
+            annotations.sort(key=lambda item: item["label"])
+        return {
+            "mode": mode,
+            "images": [base_image],
+            "annotation_image": annotation_image,
+            "annotation_contract": annotation_contract,
+            "annotations": annotations,
+            "precision_canvas_only": False,
+            "precision_strategy": precision_strategy,
+            "precision_selection_mode": precision_selection_mode,
+            "precision_selection_feather": precision_selection_feather,
+            "precision_size_mode": size_mode,
+            "precision_target_size": target_size or None,
+            "precision_resize_prompt": resize_prompt or None,
+            **(
+                {"precision_output_size_policy": output_size_policy}
+                if size_mode == "resize"
+                else {}
+            ),
+        }
+
+    if has_annotation_fields:
+        raise _generation_contract_error(
+            "annotation_input_not_allowed",
+            "inpaint does not accept precision annotation data",
+            mode=mode,
+        )
+    if has_image_list:
+        raise _generation_contract_error(
+            "inpaint_image_data_list_not_allowed",
+            "inpaint accepts exactly one base image through image_data",
+            mode=mode,
+        )
+    base_image = _validate_generation_image_data(req.image_data, "image_data")
+    if not _has_generation_value(req.mask_data):
+        raise _generation_contract_error(
+            "inpaint_mask_required",
+            "inpaint requires mask_data",
+            mode=mode,
+        )
+    if req.mask_contract != INPAINT_MASK_CONTRACT:
+        raise _generation_contract_error(
+            "inpaint_mask_contract_unsupported",
+            f"inpaint requires mask_contract={INPAINT_MASK_CONTRACT}",
+            mode=mode,
+        )
+    mask_image = _validate_generation_image_data(
+        req.mask_data,
+        "mask_data",
+        required_mime_type="image/png",
+    )
+    if (base_image["width"], base_image["height"]) != (mask_image["width"], mask_image["height"]):
+        raise _generation_contract_error(
+            "inpaint_image_mask_size_mismatch",
+            "image_data and mask_data dimensions must match",
+            mode=mode,
+        )
+    return {"mode": mode, "images": [base_image], "mask": mask_image}
+
+
+def _validate_inpaint_provider_authorization(provider_ids: List[str], all_providers: dict) -> None:
+    """Allow inpaint only for a deliberately configured OpenAI mask adapter."""
+    unsupported = []
+    for provider_id in provider_ids:
+        provider = all_providers.get(provider_id)
+        if provider is None:
+            unsupported.append({"id": provider_id, "reason": "provider_not_found"})
+            continue
+        if getattr(provider, "type", "") != "image" or not getattr(provider, "enabled", False):
+            unsupported.append({"id": provider_id, "reason": "provider_not_enabled"})
+            continue
+        endpoint_type = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
+        if endpoint_type != "openai":
+            unsupported.append({"id": provider_id, "reason": "explicit_openai_required"})
+            continue
+        capabilities = getattr(provider, "capabilities", None)
+        if not isinstance(capabilities, dict) or capabilities.get("inpaint_mask") is not True:
+            unsupported.append({"id": provider_id, "reason": "inpaint_mask_capability_required"})
+    if unsupported:
+        raise _generation_contract_error(
+            "inpaint_provider_unsupported",
+            "inpaint requires an enabled image provider with endpoint_type=openai and capabilities.inpaint_mask=true",
+            providers=unsupported,
+        )
+
+
+def _provider_precision_model_capability(provider, selected_model: str) -> bool:
+    capabilities = getattr(provider, "capabilities", None)
+    if not isinstance(capabilities, dict) or capabilities.get(PRECISION_EDIT_CAPABILITY) is not True:
+        return False
+    resolution = _provider_precision_model_resolution(provider, selected_model)
+    return resolution.structure_valid and resolution.precision_edit_confirmed
+
+
+def _provider_precision_model_resolution(provider, selected_model: str):
+    return resolve_provider_precision_model_capability(
+        provider,
+        selected_model,
+    )
+
+
+def _normalize_precision_size(value: object) -> Optional[str]:
+    return normalize_precision_capability_size(
+        value,
+        max_output_pixels=MAX_PRECISION_OUTPUT_PIXELS,
+    )
+
+
+def _precision_declared_sizes(model_capabilities: object) -> set[str]:
+    """Return only valid, explicitly declared WIDTHxHEIGHT dimensions."""
+    _present, valid, sizes, _reason = precision_capability_size_declaration(
+        model_capabilities,
+        max_output_pixels=MAX_PRECISION_OUTPUT_PIXELS,
+    )
+    return set(sizes) if valid else set()
+
+
+def _precision_declared_size_list(model_capabilities: object) -> List[str]:
+    """Return valid declared sizes in stable first-seen order."""
+    _present, valid, sizes, _reason = precision_capability_size_declaration(
+        model_capabilities,
+        max_output_pixels=MAX_PRECISION_OUTPUT_PIXELS,
+    )
+    return list(sizes) if valid else []
+
+
+def _precision_model_declared_sizes(provider, selected_model: str) -> set[str]:
+    resolution = _provider_precision_model_resolution(provider, selected_model)
+    if not resolution.structure_valid or not resolution.size_declaration_valid:
+        return set()
+    return set(resolution.supported_sizes)
+
+
+def _precision_model_allows_flexible_sizes(provider, selected_model: str) -> bool:
+    """Allow the GPT Image 2 envelope only after an explicit persisted opt-in."""
+    resolution = _provider_precision_model_resolution(provider, selected_model)
+    return bool(
+        resolution.structure_valid
+        and resolution.precision_edit_confirmed
+        and resolution.size_declaration_valid
+        and resolution.flexible_sizes
+    )
+
+
+def _validate_precision_edit_size_authorization(
+    provider_ids: List[str],
+    all_providers: dict,
+    provider_settings: dict,
+    generation_input: dict,
+) -> None:
+    if generation_input.get("precision_size_mode") != "resize":
+        return
+    target = generation_input.get("precision_target_size")
+    output_size_policy = str(
+        generation_input.get("precision_output_size_policy") or "strict"
+    )
+    settings = provider_settings if isinstance(provider_settings, dict) else {}
+    unsupported = []
+    for provider_id in provider_ids:
+        provider = all_providers.get(provider_id)
+        setting = settings.get(provider_id) if isinstance(settings.get(provider_id), dict) else {}
+        model = str(setting.get("model") or "").strip()
+        flexible_sizes = _precision_model_allows_flexible_sizes(provider, model) if provider else False
+        protocol_model = bool(
+            provider
+            and precision_model_uses_gpt_image_2_size_contract(provider, model)
+        ) or flexible_sizes
+        if protocol_model:
+            protocol_error = gpt_image_2_size_error(target)
+            if protocol_error:
+                unsupported.append({
+                    "id": provider_id,
+                    "model": model,
+                    "reason": protocol_error[0],
+                    "target_size": target,
+                })
+                continue
+        sizes = _precision_model_declared_sizes(provider, model) if provider else set()
+        if flexible_sizes:
+            # The policy itself is an explicit operator confirmation that this
+            # OpenAI-compatible model accepts the documented GPT Image 2
+            # dimension envelope. The protocol validation above remains the
+            # hard boundary; this is not an unrestricted arbitrary-size grant.
+            continue
+        if not sizes:
+            unsupported.append({
+                "id": provider_id,
+                "model": model,
+                "reason": "precision_edit_size_capability_unknown",
+            })
+        elif output_size_policy == "strict" and target not in sizes:
+            unsupported.append({
+                "id": provider_id,
+                "model": model,
+                "reason": "precision_edit_target_size_not_declared",
+                "target_size": target,
+            })
+    if unsupported:
+        raise _generation_contract_error(
+            "precision_edit_size_unsupported",
+            "resize requires the selected model to explicitly declare the requested size",
+            providers=unsupported,
+            target_size=target,
+        )
+
+
+def _validate_precision_edit_provider_authorization(
+    provider_ids: List[str],
+    all_providers: dict,
+    provider_settings: dict,
+) -> None:
+    """Require an explicit model-level annotation-edit capability and transport."""
+    unsupported = []
+    settings = provider_settings if isinstance(provider_settings, dict) else {}
+    for provider_id in provider_ids:
+        provider = all_providers.get(provider_id)
+        if provider is None:
+            unsupported.append({"id": provider_id, "reason": "provider_not_found"})
+            continue
+        if getattr(provider, "type", "") != "image" or not getattr(provider, "enabled", False):
+            unsupported.append({"id": provider_id, "reason": "provider_not_enabled"})
+            continue
+        endpoint_type = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
+        if endpoint_type != "openai":
+            unsupported.append({"id": provider_id, "reason": "explicit_openai_required"})
+            continue
+        provider_setting = settings.get(provider_id, {})
+        if not isinstance(provider_setting, dict):
+            provider_setting = {}
+        selected_model = str(provider_setting.get("model") or "").strip()
+        if not selected_model:
+            unsupported.append({
+                "id": provider_id,
+                "model": "",
+                "reason": "precision_edit_explicit_model_required",
+            })
+            continue
+        if not _provider_precision_model_capability(provider, selected_model):
+            unsupported.append({
+                "id": provider_id,
+                "model": selected_model,
+                "reason": "precision_edit_model_capability_required",
+            })
+    if unsupported:
+        raise _generation_contract_error(
+            "precision_edit_provider_unsupported",
+            "precision_edit requires an explicitly verified OpenAI image-edit model",
+            providers=unsupported,
+        )
+
+
+def _normalize_generation_quantity(value: object) -> int:
+    """Keep a malformed or stale quantity from silently multiplying work."""
+    try:
+        quantity = int(value)
+    except (TypeError, ValueError):
+        return 1
+    return max(1, min(10, quantity))
 
 
 class GenerateResponse(BaseModel):
@@ -191,9 +1723,61 @@ class ProviderCreateReq(BaseModel):
     color: str = "#0ea5e9"
     display_name: str = ""
     capabilities: Dict[str, bool] = {}  # 能力声明: {"t2i": True, "i2i": True}
+    precision_edit_profile: Optional[PrecisionEditProfile] = None
     skip_proxy: bool = False            # 跳过全局代理（直连）
     endpoint_type: str = "auto"         # 端点协议类型
     extra: dict = {}
+
+
+class PrecisionCapabilityReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model: str
+    enabled: bool
+    confirmed: bool = False
+    size: Optional[str] = None
+    flexible_sizes: Optional[bool] = None
+    compatibility_profile: Optional[str] = None
+
+
+def _is_masked_secret(value: str) -> bool:
+    """识别 API 响应中的脱敏占位符，避免把它当成真实凭证保存。"""
+    return "****" in str(value or "")
+
+
+def _merge_provider_secrets(existing: ProviderConfig, req: ProviderCreateReq) -> dict:
+    """保留未在表单中重新输入的已存凭证。"""
+    payload = req.model_dump()
+    if not req.api_key or _is_masked_secret(req.api_key):
+        payload["api_key"] = existing.api_key if not _is_masked_secret(existing.api_key) else ""
+    if not req.api_keys or any(_is_masked_secret(key) for key in req.api_keys):
+        payload["api_keys"] = [key for key in (existing.api_keys or []) if not _is_masked_secret(key)]
+
+    incoming_endpoints = payload.get("endpoints") or []
+    existing_endpoints = existing.endpoints or []
+    if incoming_endpoints and existing_endpoints:
+        for index, endpoint in enumerate(incoming_endpoints):
+            if index >= len(existing_endpoints):
+                break
+            if not endpoint.key or _is_masked_secret(endpoint.key):
+                endpoint.key = (
+                    existing_endpoints[index].key
+                    if not _is_masked_secret(existing_endpoints[index].key)
+                    else ""
+                )
+    elif not incoming_endpoints:
+        payload["endpoints"] = list(existing_endpoints)
+    if "precision_edit_profile" not in req.model_fields_set:
+        payload["precision_edit_profile"] = existing.precision_edit_profile
+    incoming_extra = payload.get("extra")
+    existing_extra = existing.extra if isinstance(existing.extra, dict) else {}
+    if isinstance(incoming_extra, dict) and "model_capabilities" not in incoming_extra:
+        existing_model_capabilities = existing_extra.get("model_capabilities")
+        if isinstance(existing_model_capabilities, dict):
+            incoming_extra = dict(incoming_extra)
+            incoming_extra["model_capabilities"] = existing_model_capabilities
+            payload["extra"] = incoming_extra
+    return payload
 
 
 # ──────────────────────────────────────────────────────────────
@@ -201,6 +1785,7 @@ class ProviderCreateReq(BaseModel):
 # ──────────────────────────────────────────────────────────────
 app = FastAPI(title="GenBox", version=__version__)
 app_start_time = time.time()
+app_runtime_id = uuid.uuid4().hex[:12]
 GENBOX_PORT = int(os.getenv("GENBOX_PORT", "8891"))
 GENBOX_LOCAL_URL = f"http://localhost:{GENBOX_PORT}"
 GENBOX_LOOPBACK_URL = f"http://127.0.0.1:{GENBOX_PORT}"
@@ -213,6 +1798,20 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_response(_request: Request, exc: RequestValidationError):
+    """Do not echo invalid request bodies, which may contain credentials."""
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": [
+                {"type": item.get("type", "validation_error"), "loc": item.get("loc", ()), "msg": item.get("msg", "输入无效")}
+                for item in exc.errors()
+            ]
+        },
+    )
 
 # ──────────────────────────────────────────────────────────────
 # 安全 Headers 中间件
@@ -293,6 +1892,9 @@ def _check_rate_limit(client_ip: str, endpoint_type: str = "api") -> bool:
 generation_history: dict = {}
 generation_counter = 0
 HISTORY_FILE = STORAGE_DIR / "history.jsonl"
+PRECISION_WORKFLOW_SCHEMA = "genbox-precision-workflow-v1"
+PRECISION_WORKFLOW_ID_RE = re.compile(r"^pw_[a-f0-9]{32}$")
+PRECISION_VERSION_ID_RE = re.compile(r"^pv_[a-f0-9]{24}$")
 
 # 连续生图会话状态（内存存储）
 continuous_sessions: dict = {}  # {session_id: {"images": [...], "prompts": [...], "context": "..."}}
@@ -301,8 +1903,105 @@ continuous_sessions: dict = {}  # {session_id: {"images": [...], "prompts": [...
 # 生图任务队列（带并发控制，防风控）
 # ──────────────────────────────────────────────────────────────
 image_tasks: dict = {}        # {gen_id: {status, progress, providers: {pid: {status, log, result}}, ...}}
+image_task_handles: dict = {}
 image_gen_semaphore = None    # 延迟初始化（FastAPI lifespan）
 MAX_CONCURRENT_GENERATIONS = 16  # 最大并发生图数，可调
+BACKGROUND_GENERATION_ERROR_MAX_LENGTH = 2400
+
+
+def _background_generation_error_text(value: object, provider: ProviderConfig) -> str:
+    """Sanitize a provider failure before task, log, history, or API exposure."""
+    error_text = _provider_error_text(value, provider).strip()
+    if not error_text:
+        error_text = type(value).__name__ if isinstance(value, BaseException) else "Provider generation failed"
+    return error_text[:BACKGROUND_GENERATION_ERROR_MAX_LENGTH]
+
+
+def _cleanup_image_task_handle(gen_id: str, handle=None):
+    current = image_task_handles.get(gen_id)
+    if current is not None and (handle is None or current is handle):
+        image_task_handles.pop(gen_id, None)
+
+
+def _image_state_progress(state: dict) -> int:
+    """Keep terminal failure/cancellation distinct from completed work."""
+    try:
+        progress = round(float(state.get("progress", 0)))
+    except (TypeError, ValueError):
+        progress = 0
+    progress = max(0, min(100, progress))
+    if state.get("status") in ("failed", "cancelled"):
+        return min(99, progress)
+    return progress
+
+
+def _image_task_progress(states: dict, overall_status: str) -> int:
+    if not states:
+        return 0
+    progress = round(sum(_image_state_progress(state) for state in states.values()) / len(states))
+    if overall_status in ("failed", "cancelled"):
+        return min(99, progress)
+    return progress
+
+
+def _image_task_elapsed(task: dict) -> float:
+    """Return the terminal snapshot duration, or the current duration while running."""
+    stored = task.get("elapsed_seconds")
+    if stored is not None:
+        try:
+            return round(max(0.0, float(stored)), 1)
+        except (TypeError, ValueError):
+            pass
+    start_time = task.get("start_time")
+    if not start_time:
+        return 0.0
+    return round(max(0.0, time.time() - start_time), 1)
+
+
+def _image_task_status(current_status: str, states: dict) -> str:
+    """Derive one truthful public status without hiding partial successes."""
+    child_statuses = [state.get("status") for state in states.values()]
+    if current_status == "cancelled" or "cancelled" in child_statuses:
+        return "cancelled"
+    if not child_statuses:
+        return current_status
+    if all(status in ("completed", "failed") for status in child_statuses):
+        return "completed" if "completed" in child_statuses else "failed"
+    return current_status
+
+
+def _refresh_image_task_state(task: dict) -> str:
+    """Normalize child progress and publish the status derived from it."""
+    states = task.get("provider_states", {})
+    for state in states.values():
+        state["progress"] = _image_state_progress(state)
+    status = _image_task_status(task.get("status", "queued"), states)
+    task["status"] = status
+    task["progress"] = _image_task_progress(states, status)
+    return status
+
+
+def _mark_image_task_cancelled(gen_id: str):
+    task = image_tasks.get(gen_id)
+    if not task:
+        return None
+    status = _refresh_image_task_state(task)
+    if status in ("completed", "failed", "cancelled"):
+        return status
+    states = task.get("provider_states", {})
+    if not any(state.get("status") in ("queued", "generating") for state in states.values()):
+        return status
+    task["status"] = "cancelled"
+    for state in states.values():
+        if state.get("status") in ("queued", "generating"):
+            state["status"] = "cancelled"
+            state["progress"] = _image_state_progress(state)
+            log = state.setdefault("log", [])
+            if not log or "已停止" not in log[-1]:
+                log.append(f"[{time.strftime('%H:%M:%S')}] ■ 已停止")
+    task["progress"] = _image_task_progress(task.get("provider_states", {}), task["status"])
+    task["elapsed_seconds"] = _image_task_elapsed(task)
+    return task["status"]
 
 
 def _load_history():
@@ -335,6 +2034,438 @@ def _save_history_entry(entry: dict):
     """追加一条历史记录到 history.jsonl"""
     with open(HISTORY_FILE, "a", encoding="utf-8") as fh:
         fh.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def _precision_data_url_sha256(value: object) -> str:
+    """Hash a validated image data URL without retaining its bytes."""
+    raw = str(value or "")
+    encoded = raw.split(",", 1)[1] if "," in raw else raw
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError, TypeError):
+        return ""
+    return hashlib.sha256(payload).hexdigest() if payload else ""
+
+
+def _precision_history_metadata(entry: object) -> dict:
+    if not isinstance(entry, dict):
+        return {}
+    metadata = entry.get("precision_workflow")
+    if not isinstance(metadata, dict) or metadata.get("schema") != PRECISION_WORKFLOW_SCHEMA:
+        return {}
+    workflow_id = str(metadata.get("workflow_id") or "")
+    if not PRECISION_WORKFLOW_ID_RE.fullmatch(workflow_id):
+        return {}
+    return metadata
+
+
+def _precision_legacy_workflow_id(generation_id: object) -> str:
+    digest = hashlib.sha256(f"legacy:{generation_id}".encode("utf-8")).hexdigest()
+    return f"pw_{digest[:32]}"
+
+
+def _precision_version_id(generation_id: object, result_key: object) -> str:
+    digest = hashlib.sha256(
+        f"{generation_id}:{result_key}".encode("utf-8")
+    ).hexdigest()
+    return f"pv_{digest[:24]}"
+
+
+def _precision_history_gallery_file(local_path: object) -> Optional[Path]:
+    raw = str(local_path or "")
+    if not raw:
+        return None
+    filename = PureWindowsPath(raw).name if "\\" in raw else PurePosixPath(raw).name
+    try:
+        return _resolve_gallery_file(filename)
+    except HTTPException:
+        return None
+
+
+def _precision_gallery_file_sha256(path: Optional[Path]) -> str:
+    if path is None:
+        return ""
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+def _precision_result_artifact(entry: dict, result_key: str, result: dict) -> dict:
+    metadata = _precision_history_metadata(entry)
+    outputs = metadata.get("outputs") if isinstance(metadata.get("outputs"), dict) else {}
+    stored = outputs.get(result_key) if isinstance(outputs.get(result_key), dict) else {}
+    sha256 = str(stored.get("sha256") or "")
+    path = _precision_history_gallery_file(result.get("local_path"))
+    if path is None and isinstance(stored.get("filename"), str):
+        path = _precision_history_gallery_file(stored["filename"])
+    if path is None and re.fullmatch(r"[a-f0-9]{64}", sha256):
+        recovered_filename = _precision_find_gallery_source(sha256)
+        if recovered_filename:
+            path = _precision_history_gallery_file(recovered_filename)
+    if not re.fullmatch(r"[a-f0-9]{64}", sha256):
+        sha256 = _precision_gallery_file_sha256(path)
+
+    width = stored.get("width")
+    height = stored.get("height")
+    if not isinstance(width, int) or not isinstance(height, int) or width <= 0 or height <= 0:
+        width = height = None
+        if path is not None:
+            try:
+                with Image.open(path) as image:
+                    width, height = image.size
+            except Exception:
+                width = height = None
+    return {
+        "sha256": sha256,
+        "filename": path.name if path is not None else None,
+        "available": path is not None,
+        "width": width,
+        "height": height,
+    }
+
+
+def _precision_success_results(entry: dict):
+    results = entry.get("results")
+    if not isinstance(results, dict):
+        return
+    for result_key in sorted(results):
+        result = results.get(result_key)
+        if isinstance(result, dict) and result.get("success"):
+            yield str(result_key), result
+
+
+def _precision_find_parent_result(source_sha256: str) -> Optional[tuple[str, str, dict]]:
+    matches = []
+    for generation_id, entry in list(generation_history.items()):
+        if not isinstance(entry, dict) or entry.get("mode") != "precision_edit":
+            continue
+        for result_key, result in _precision_success_results(entry):
+            artifact = _precision_result_artifact(entry, result_key, result)
+            if artifact["sha256"] == source_sha256:
+                matches.append((str(entry.get("created_at") or ""), str(generation_id), result_key, artifact))
+    if not matches:
+        return None
+    _created_at, generation_id, result_key, artifact = max(matches)
+    return generation_id, result_key, artifact
+
+
+def _precision_existing_workflow_id(parent_generation_id: str) -> str:
+    parent = generation_history.get(parent_generation_id)
+    parent_metadata = _precision_history_metadata(parent)
+    if parent_metadata:
+        return str(parent_metadata["workflow_id"])
+    for entry in list(generation_history.values()):
+        metadata = _precision_history_metadata(entry)
+        if str(metadata.get("parent_generation_id") or "") == parent_generation_id:
+            return str(metadata["workflow_id"])
+    return _precision_legacy_workflow_id(parent_generation_id)
+
+
+def _precision_find_gallery_source(source_sha256: str) -> Optional[str]:
+    try:
+        candidates = sorted(GALLERY_DIR.glob("*.png"), reverse=True)
+    except OSError:
+        return None
+    for candidate in candidates:
+        try:
+            path = _resolve_gallery_file(candidate.name)
+        except HTTPException:
+            continue
+        if _precision_gallery_file_sha256(path) == source_sha256:
+            return path.name
+    return None
+
+
+def _precision_workflow_annotation_snapshot(generation_input: dict) -> Optional[dict]:
+    """Persist only the validated, structured edit record needed for restore."""
+    if not isinstance(generation_input, dict) or generation_input.get("precision_canvas_only"):
+        return None
+    contract = str(generation_input.get("annotation_contract") or "")
+    annotations = generation_input.get("annotations")
+    if contract not in PRECISION_ANNOTATION_CONTRACTS or not isinstance(annotations, list):
+        return None
+    # Validation already normalized this input. JSON round-tripping prevents a
+    # later task mutation from changing the durable history snapshot.
+    return {
+        "annotation_contract": contract,
+        "annotations": _json.loads(_json.dumps(annotations, ensure_ascii=True)),
+        "precision_strategy": str(generation_input.get("precision_strategy") or "standard"),
+        "precision_selection_mode": str(generation_input.get("precision_selection_mode") or "annotation"),
+        "precision_selection_feather": generation_input.get("precision_selection_feather", 0),
+    }
+
+
+def _precision_project_annotation_snapshot(metadata: dict) -> Optional[dict]:
+    """Fail closed when an on-disk history record has an invalid snapshot."""
+    raw = metadata.get("annotation_snapshot") if isinstance(metadata, dict) else None
+    if not isinstance(raw, dict):
+        return None
+    contract = str(raw.get("annotation_contract") or "")
+    if contract not in PRECISION_ANNOTATION_CONTRACTS:
+        return None
+    try:
+        annotations = _validate_precision_annotations(raw.get("annotations"), contract)
+    except HTTPException:
+        return None
+    strategy = str(raw.get("precision_strategy") or "standard")
+    selection_mode = str(raw.get("precision_selection_mode") or "annotation")
+    feather = raw.get("precision_selection_feather", 0)
+    if strategy not in PRECISION_STRATEGIES or selection_mode not in PRECISION_SELECTION_MODES:
+        return None
+    if isinstance(feather, bool) or not isinstance(feather, (int, float)):
+        return None
+    feather = float(feather)
+    if not math.isfinite(feather) or feather < 0 or feather > MAX_PRECISION_SELECTION_FEATHER:
+        return None
+    return {
+        "annotation_contract": contract,
+        "annotations": annotations,
+        "precision_strategy": strategy,
+        "precision_selection_mode": selection_mode,
+        "precision_selection_feather": feather,
+    }
+
+
+def _prepare_precision_workflow_metadata(generation_input: dict) -> dict:
+    image = generation_input["images"][0]
+    source_sha256 = _precision_data_url_sha256(image.get("value"))
+    parent = _precision_find_parent_result(source_sha256) if source_sha256 else None
+    if parent:
+        parent_generation_id, parent_result_key, parent_artifact = parent
+        workflow_id = _precision_existing_workflow_id(parent_generation_id)
+        input_filename = parent_artifact.get("filename")
+    else:
+        parent_generation_id = None
+        parent_result_key = None
+        workflow_id = f"pw_{uuid.uuid4().hex}"
+        input_filename = _precision_find_gallery_source(source_sha256) if source_sha256 else None
+    return {
+        "schema": PRECISION_WORKFLOW_SCHEMA,
+        "workflow_id": workflow_id,
+        "source_sha256": source_sha256,
+        "source_width": image.get("width"),
+        "source_height": image.get("height"),
+        "input_gallery_filename": input_filename,
+        "parent_generation_id": parent_generation_id,
+        "parent_result_key": parent_result_key,
+        "outputs": {},
+        "annotation_snapshot": _precision_workflow_annotation_snapshot(generation_input),
+    }
+
+
+def _finalize_precision_workflow_metadata(task: dict) -> dict:
+    metadata = dict(task.get("precision_workflow") or {})
+    outputs = {}
+    entry_view = {"precision_workflow": metadata}
+    for result_key, result in _precision_success_results(task):
+        artifact = _precision_result_artifact(entry_view, result_key, result)
+        outputs[result_key] = {
+            "sha256": artifact["sha256"],
+            "filename": artifact["filename"],
+            "width": artifact["width"],
+            "height": artifact["height"],
+        }
+    metadata["outputs"] = outputs
+    return metadata
+
+
+def _precision_normalize_timestamp(value: object) -> str:
+    if not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(float(value)):
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        except (OSError, OverflowError, ValueError):
+            return ""
+    text = str(value or "").strip()
+    if not text or len(text) > 64:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(text[:-1] + "+00:00" if text.endswith("Z") else text)
+    except ValueError:
+        return ""
+    if parsed.tzinfo is None:
+        return parsed.isoformat(timespec="seconds")
+    return parsed.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _precision_entry_timestamp(entry: dict, result: Optional[dict] = None) -> str:
+    if isinstance(result, dict):
+        finished_at = _precision_normalize_timestamp(result.get("finished_at"))
+        if finished_at:
+            return finished_at
+    return _precision_normalize_timestamp(entry.get("created_at"))
+
+
+def _precision_source_artifact(metadata: dict) -> dict:
+    filename = metadata.get("input_gallery_filename")
+    path = None
+    if isinstance(filename, str) and filename:
+        try:
+            path = _resolve_gallery_file(filename)
+        except HTTPException:
+            path = None
+    width = metadata.get("source_width")
+    height = metadata.get("source_height")
+    return {
+        "filename": path.name if path is not None else None,
+        "available": path is not None,
+        "width": width if isinstance(width, int) and width > 0 else None,
+        "height": height if isinstance(height, int) and height > 0 else None,
+    }
+
+
+def _precision_workflow_projection_data(*, include_annotation_snapshots: bool = False) -> tuple[List[dict], dict]:
+    entries = {
+        str(generation_id): entry
+        for generation_id, entry in list(generation_history.items())
+        if isinstance(entry, dict) and entry.get("mode") == "precision_edit"
+    }
+    assignments = {}
+    for generation_id, entry in entries.items():
+        metadata = _precision_history_metadata(entry)
+        if metadata:
+            assignments[generation_id] = str(metadata["workflow_id"])
+    changed = True
+    while changed:
+        changed = False
+        for generation_id, entry in entries.items():
+            metadata = _precision_history_metadata(entry)
+            parent_generation_id = str(metadata.get("parent_generation_id") or "")
+            workflow_id = assignments.get(generation_id)
+            if workflow_id and parent_generation_id in entries and parent_generation_id not in assignments:
+                assignments[parent_generation_id] = workflow_id
+                changed = True
+    for generation_id in entries:
+        assignments.setdefault(generation_id, _precision_legacy_workflow_id(generation_id))
+
+    grouped = defaultdict(list)
+    for generation_id, entry in entries.items():
+        grouped[assignments[generation_id]].append((generation_id, entry))
+
+    projections = []
+    file_index = {}
+    for workflow_id, workflow_entries in grouped.items():
+        workflow_entries.sort(key=lambda item: _precision_entry_timestamp(item[1]))
+        generation_ids = {generation_id for generation_id, _entry in workflow_entries}
+        _root_generation_id, root_entry = next(
+            (
+                (generation_id, entry)
+                for generation_id, entry in workflow_entries
+                if str(_precision_history_metadata(entry).get("parent_generation_id") or "") not in generation_ids
+            ),
+            workflow_entries[0],
+        )
+        root_metadata = _precision_history_metadata(root_entry)
+        source_artifact = _precision_source_artifact(root_metadata)
+        source_created_at = _precision_entry_timestamp(root_entry)
+        source_version = {
+            "version_id": "original",
+            "parent_version_id": None,
+            "kind": "source",
+            "created_at": source_created_at,
+            "available": source_artifact["available"],
+            "width": source_artifact["width"],
+            "height": source_artifact["height"],
+            "thumbnail": None,
+            "image_url": None,
+        }
+        if source_artifact["available"]:
+            source_version["thumbnail"] = f"/api/precision/workflows/{workflow_id}/versions/original/thumb"
+            source_version["image_url"] = f"/api/precision/workflows/{workflow_id}/versions/original/image"
+            file_index[(workflow_id, "original")] = source_artifact["filename"]
+
+        versions = []
+        result_version_ids = {}
+        for generation_id, entry in workflow_entries:
+            for result_key, _result in _precision_success_results(entry):
+                result_version_ids[(generation_id, result_key)] = _precision_version_id(generation_id, result_key)
+        for generation_id, entry in workflow_entries:
+            metadata = _precision_history_metadata(entry)
+            parent_generation_id = str(metadata.get("parent_generation_id") or "")
+            parent_result_key = str(metadata.get("parent_result_key") or "")
+            parent_version_id = result_version_ids.get((parent_generation_id, parent_result_key), "original")
+            for result_key, result in _precision_success_results(entry):
+                artifact = _precision_result_artifact(entry, result_key, result)
+                version_id = result_version_ids[(generation_id, result_key)]
+                version = {
+                    "version_id": version_id,
+                    "parent_version_id": parent_version_id,
+                    "kind": "result",
+                    "created_at": _precision_entry_timestamp(entry, result),
+                    "available": artifact["available"],
+                    "width": artifact["width"],
+                    "height": artifact["height"],
+                    "thumbnail": None,
+                    "image_url": None,
+                }
+                if include_annotation_snapshots:
+                    snapshot = _precision_project_annotation_snapshot(metadata)
+                    if snapshot is not None:
+                        version["annotation_snapshot"] = snapshot
+                if artifact["available"]:
+                    version["thumbnail"] = f"/api/precision/workflows/{workflow_id}/versions/{version_id}/thumb"
+                    version["image_url"] = f"/api/precision/workflows/{workflow_id}/versions/{version_id}/image"
+                    file_index[(workflow_id, version_id)] = artifact["filename"]
+                versions.append(version)
+
+        if not versions:
+            continue
+        versions.sort(key=lambda item: (item["created_at"], item["version_id"]))
+        all_versions = [source_version, *versions]
+        dated = [item["created_at"] for item in all_versions if item["created_at"]]
+        available_versions = [item for item in versions if item["available"]]
+        latest_available = available_versions[-1] if available_versions else None
+        latest_size = None
+        if latest_available and latest_available["width"] and latest_available["height"]:
+            latest_size = f"{latest_available['width']}x{latest_available['height']}"
+        restore = ({
+            "workflow_id": workflow_id,
+            "version_id": latest_available["version_id"],
+            "image_url": latest_available["image_url"],
+        } if latest_available else None)
+        if include_annotation_snapshots and restore is not None:
+            snapshot = latest_available.get("annotation_snapshot")
+            if snapshot is not None:
+                restore["annotation_snapshot"] = snapshot
+                restore["base_version_id"] = latest_available["parent_version_id"]
+        projections.append({
+            "workflow_id": workflow_id,
+            "created_at": min(dated) if dated else "",
+            "updated_at": max(dated) if dated else "",
+            "edit_count": len(versions),
+            "thumbnail": latest_available["thumbnail"] if latest_available else None,
+            "summary": {
+                "edit_count": len(versions),
+                "available_version_count": len(available_versions),
+                "source_available": source_artifact["available"],
+                "latest_size": latest_size,
+            },
+            "versions": all_versions,
+            "restore": restore,
+        })
+    projections.sort(key=lambda item: (item["updated_at"], item["workflow_id"]), reverse=True)
+    return projections, file_index
+
+
+def _precision_filter_date(value: str, field: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        datetime.strptime(text, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "precision_workflow_date_invalid", "field": field},
+        ) from None
+    return text
+
+
+def _precision_validate_workflow_id(workflow_id: str) -> str:
+    value = str(workflow_id or "")
+    if not PRECISION_WORKFLOW_ID_RE.fullmatch(value):
+        raise HTTPException(status_code=404, detail="工作流不存在")
+    return value
 
 
 # 启动时加载历史
@@ -378,6 +2509,9 @@ def _scan_gallery(limit: int = 100) -> List[dict]:
         prompt_text = ""
         source = "cloud" if f.stem.startswith("remote_") else "local"
         tags = ["cloud-sync"] if source == "cloud" else []
+        source_path = ""
+        source_deployment = ""
+        source_created_at = ""
         try:
             from PIL import Image
             with Image.open(f) as img:
@@ -389,6 +2523,10 @@ def _scan_gallery(limit: int = 100) -> List[dict]:
                     source = img.info["Source"]
                 if img.info and img.info.get("Tags"):
                     tags = [tag.strip() for tag in img.info["Tags"].split(",") if tag.strip()]
+                if img.info:
+                    source_path = str(img.info.get("SourcePath") or "")
+                    source_deployment = str(img.info.get("SourceDeployment") or "")
+                    source_created_at = str(img.info.get("CreatedAt") or "")
         except Exception as e:
             pass
         
@@ -417,6 +2555,9 @@ def _scan_gallery(limit: int = 100) -> List[dict]:
             "file_size": f.stat().st_size,
             "source": source,
             "tags": tags,
+            "source_path": source_path,
+            "source_deployment": source_deployment,
+            "source_created_at": source_created_at,
         })
     
     # 扫描视频
@@ -478,6 +2619,116 @@ async def status():
     return result
 
 
+@app.get("/api/runtime/status")
+async def runtime_status():
+    """Return a non-secret identity used to detect stale browser/runtime mixes."""
+    configured_mode = os.getenv("APP_MODE", "prod").strip().lower()
+    if configured_mode != "dev":
+        raise HTTPException(status_code=404, detail="Not found")
+    payload = {
+        "service": "genbox",
+        "version": __version__,
+        "mode": "dev",
+        "port": GENBOX_PORT,
+        "started_at": int(app_start_time),
+        "runtime_id": app_runtime_id,
+        "runtime_head": os.getenv("GENBOX_RUNTIME_HEAD", "").strip(),
+        "runtime_source": os.getenv("GENBOX_RUNTIME_SOURCE", "").strip(),
+    }
+    return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
+
+def _public_precision_size_catalog(provider: ProviderConfig) -> List[dict]:
+    """Project strict-size choices without converting documentation into support.
+
+    ``documented_presets`` is descriptive data for the model-size menu.  The
+    only values a caller may enable for a strict provider request are copied
+    into ``strict_selectable_sizes`` from the selected provider's explicit,
+    validated ``supported_sizes`` record.
+    """
+    extra = provider.extra if isinstance(provider.extra, dict) else {}
+    model_capabilities = extra.get("model_capabilities")
+    capability_models = list(model_capabilities) if isinstance(model_capabilities, dict) else []
+    model_ids = []
+    for candidate in list(provider.models or []) + [provider.model] + capability_models:
+        model_id = str(candidate or "").strip()
+        if model_id and model_id not in model_ids:
+            model_ids.append(model_id)
+
+    catalog = []
+    for model_id in model_ids:
+        resolution = _provider_precision_model_resolution(provider, model_id)
+        canonical_model = resolution.canonical_model if resolution.structure_valid else ""
+        provider_ready = bool(
+            getattr(provider, "type", "") == "image"
+            and getattr(provider, "enabled", False)
+            and str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower() == "openai"
+            and isinstance(getattr(provider, "capabilities", None), dict)
+            and provider.capabilities.get("precision_edit") is True
+        )
+        declared_sizes = (
+            list(resolution.supported_sizes)
+            if provider_ready
+            and resolution.structure_valid
+            and resolution.precision_edit_confirmed
+            and resolution.size_declaration_valid
+            else []
+        )
+        capability_record = resolution.capability if isinstance(resolution.capability, dict) else {}
+        protocol = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
+        if protocol not in {"openai", "gemini", "qwen", "volc_ark", "volc_ark_plan"}:
+            protocol = "unknown"
+        if provider_ready and resolution.structure_valid and resolution.precision_edit_confirmed:
+            # The current backend contract implements source-preserving edit and
+            # resize. More specific semantics (mask/inpaint/outpaint) must be
+            # explicitly declared by a future provider adapter.
+            operations = capability_record.get("operations")
+            if not isinstance(operations, list) or not all(
+                isinstance(item, str) and item in {"edit", "inpaint", "outpaint", "resize"}
+                for item in operations
+            ):
+                operations = ["edit", "resize"]
+            input_contract = (
+                "image_plus_annotation"
+                if not capability_record.get("input_contract")
+                else str(capability_record["input_contract"])
+            )
+            evidence = "explicit_provider_capability"
+            status = "ready"
+        else:
+            operations = []
+            input_contract = "unknown"
+            evidence = "unverified"
+            status = "unknown"
+        native_size = "exact_list" if declared_sizes else "unknown"
+        catalog.append({
+            "model": model_id,
+            "canonical_model": canonical_model,
+            "documented_presets": list(documented_precision_model_size_presets(canonical_model)),
+            "declared_sizes": declared_sizes,
+            "strict_selectable_sizes": list(declared_sizes),
+            "precision_capability": {
+                "status": status,
+                "provider": str(getattr(provider, "id", "") or ""),
+                "model": model_id,
+                "canonical_model": canonical_model,
+                "protocol": protocol,
+                "operations": operations,
+                "input_contract": input_contract,
+                "output_contract": "image_result" if status == "ready" else "unknown",
+                "native_size": native_size,
+                "size_policy": (
+                    ["native_strict", "provider_native_then_local_fit", "local_only"]
+                    if status == "ready"
+                    else ["local_only"]
+                ),
+                "evidence": evidence,
+                "dispatch_authorized": bool(status == "ready" and declared_sizes),
+            },
+        })
+    return catalog
+
+
 @app.get("/api/providers")
 async def list_providers():
     """获取所有 Provider 配置（API Key 脱敏）"""
@@ -485,9 +2736,14 @@ async def list_providers():
     providers_data = []
     for p in cfg_mgr.config.providers:
         d = p.model_dump(exclude={"api_key", "api_keys", "endpoints"})
-        d["has_key"] = bool(p.api_key or p.api_keys)
+        # Endpoint-only providers are valid runtime configurations too. Keep
+        # this readiness flag aligned with the transport's active-endpoint logic.
+        d["has_key"] = bool(p.get_effective_keys() or p.get_active_endpoints())
         d["has_keys"] = len(p.get_effective_keys()) > 1
         d["key_count"] = len(p.get_effective_keys())
+        extra = p.extra if isinstance(p.extra, dict) else {}
+        d["model_capabilities"] = extra.get("model_capabilities", {})
+        d["precision_size_catalog"] = _public_precision_size_catalog(p)
         # API Key 脱敏
         keys = p.get_effective_keys()
         if keys:
@@ -501,7 +2757,7 @@ async def list_providers():
         # 端点脱敏
         d["endpoints"] = []
         for ep in (p.endpoints or []):
-            ep_dict = {"url": ep.url, "model": ep.model, "enabled": ep.enabled}
+            ep_dict = {"name": ep.name, "url": ep.url, "model": getattr(ep, "model", ""), "enabled": ep.enabled}
             if ep.key:
                 ep_dict["key_masked"] = ep.key[:4] + "****" + ep.key[-4:] if len(ep.key) > 8 else "****"
             d["endpoints"].append(ep_dict)
@@ -515,13 +2771,14 @@ async def get_provider(provider_id: str):
     for p in cfg_mgr.config.providers:
         if p.id == provider_id:
             d = p.model_dump(exclude={"api_key", "api_keys"})
-            d["has_key"] = bool(p.api_key or p.api_keys)
+            d["has_key"] = bool(p.get_effective_keys() or p.get_active_endpoints())
+            d["precision_size_catalog"] = _public_precision_size_catalog(p)
             keys = p.get_effective_keys()
             if keys:
                 d["api_key_masked"] = keys[0][:4] + "****" + keys[0][-4:] if len(keys[0]) > 8 else "****"
             d["endpoints"] = []
             for ep in (p.endpoints or []):
-                ep_dict = {"url": ep.url, "model": ep.model, "enabled": ep.enabled}
+                ep_dict = {"name": ep.name, "url": ep.url, "model": getattr(ep, "model", ""), "enabled": ep.enabled}
                 if ep.key:
                     ep_dict["key_masked"] = ep.key[:4] + "****" + ep.key[-4:] if len(ep.key) > 8 else "****"
                 d["endpoints"].append(ep_dict)
@@ -541,7 +2798,10 @@ async def create_provider(req: ProviderCreateReq):
             existing_idx = i
             break
 
-    new_p = ProviderConfig(**req.model_dump())
+    if existing_idx is not None:
+        new_p = ProviderConfig(**_merge_provider_secrets(cfg.providers[existing_idx], req))
+    else:
+        new_p = ProviderConfig(**req.model_dump())
 
     if existing_idx is not None:
         cfg.providers[existing_idx] = new_p
@@ -551,6 +2811,218 @@ async def create_provider(req: ProviderCreateReq):
     cfg_mgr.save(cfg)
     _write_log("provider", f"Provider '{req.id}' 已保存", {"type": req.type})
     return {"ok": True, "message": f"Provider '{req.id}' 已保存", "id": req.id}
+
+
+@app.post("/api/providers/{provider_id}/precision-capability")
+async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq):
+    """Persist an explicit, per-model user confirmation for precision editing."""
+    model = str(req.model or "").strip()
+    size_requested = "size" in req.model_fields_set
+    flexible_sizes_requested = "flexible_sizes" in req.model_fields_set
+    compatibility_profile = req.compatibility_profile
+    if compatibility_profile is not None and compatibility_profile != PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "precision_compatibility_profile_invalid",
+                "message": "Compatibility profile is not supported",
+            },
+        )
+    if compatibility_profile is not None and (size_requested or flexible_sizes_requested or not req.enabled):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "precision_compatibility_request_invalid",
+                "message": "Compatibility profile is accepted only when enabling a model capability",
+            },
+        )
+    normalized_size = None
+    if size_requested:
+        normalized_size = _normalize_precision_size(req.size)
+        if not normalized_size:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "precision_size_invalid",
+                    "message": "Size must be a supported WIDTHxHEIGHT value",
+                },
+            )
+    if flexible_sizes_requested and not req.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "precision_flexible_size_request_invalid",
+                "message": "Flexible-size policy can be changed only while precision editing remains enabled",
+            },
+        )
+    provider = next((p for p in cfg_mgr.config.providers if p.id == provider_id), None)
+    if provider is None:
+        raise HTTPException(status_code=404, detail={"code": "provider_not_found", "message": "Provider not found"})
+    known_models = {str(item).strip() for item in (provider.models or [provider.model]) if str(item).strip()}
+    if not model or model not in known_models:
+        raise HTTPException(status_code=400, detail={"code": "precision_model_invalid", "message": "Model must belong to the selected provider"})
+    if (req.enabled or size_requested or flexible_sizes_requested or compatibility_profile is not None) and not req.confirmed:
+        raise HTTPException(status_code=400, detail={"code": "precision_confirmation_required", "message": "Explicit user confirmation is required"})
+    capabilities = dict(provider.capabilities or {})
+    extra = dict(provider.extra or {})
+    model_capabilities = dict(extra.get("model_capabilities") or {})
+    selected = dict(model_capabilities.get(model) or {})
+    resolution = resolve_precision_model_capability(
+        model_capabilities,
+        model,
+        max_output_pixels=MAX_PRECISION_OUTPUT_PIXELS,
+    )
+    selected_is_alias = any(field in selected for field in ("alias_of", "canonical_model"))
+    if selected_is_alias and not resolution.structure_valid:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "precision_model_alias_invalid",
+                "message": "Model alias metadata must resolve to one direct canonical model",
+            },
+        )
+    capability_model = resolution.canonical_model if resolution.structure_valid else model
+    capability_record = dict(resolution.capability or selected)
+
+    if size_requested or flexible_sizes_requested:
+        if getattr(provider, "type", "") != "image":
+            raise HTTPException(status_code=400, detail={"code": "precision_provider_not_image", "message": "Provider must be an image provider"})
+        if not getattr(provider, "enabled", False):
+            raise HTTPException(status_code=400, detail={"code": "precision_provider_not_enabled", "message": "Provider must be enabled"})
+        if not (provider.get_effective_keys() or provider.get_active_endpoints()):
+            raise HTTPException(status_code=400, detail={"code": "precision_provider_key_required", "message": "Provider must have a configured key"})
+        endpoint_type = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
+        if endpoint_type != "openai":
+            raise HTTPException(status_code=400, detail={"code": "precision_provider_openai_required", "message": "Provider must use the OpenAI-compatible image transport"})
+        if not _provider_precision_model_capability(provider, model):
+            raise HTTPException(status_code=400, detail={"code": "precision_model_precision_edit_required", "message": "Model must already have explicit precision_edit capability"})
+
+        # gpt-image-2 has a stricter upstream size envelope than the generic
+        # WIDTHxHEIGHT capability contract.  Apply it to both the canonical
+        # model and explicitly reviewed aliases that resolve to that model.
+        if size_requested and req.enabled and resolution.structure_valid and capability_model == PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE:
+            protocol_error = gpt_image_2_size_error(normalized_size)
+            if protocol_error:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "code": "precision_size_invalid",
+                        "message": protocol_error[1],
+                        "reason_code": protocol_error[0],
+                    },
+                )
+
+        supported_sizes = list(resolution.supported_sizes) if resolution.size_declaration_valid else []
+        if size_requested:
+            if req.enabled:
+                if normalized_size not in supported_sizes:
+                    if len(supported_sizes) >= MAX_PRECISION_SUPPORTED_SIZES:
+                        raise HTTPException(
+                            status_code=400,
+                            detail={
+                                "code": "precision_size_limit_exceeded",
+                                "message": "Model supported size list is full",
+                                "max_sizes": MAX_PRECISION_SUPPORTED_SIZES,
+                            },
+                        )
+                    supported_sizes.append(normalized_size)
+            else:
+                supported_sizes = [item for item in supported_sizes if item != normalized_size]
+
+            for legacy_field in ("supportedSizes", "sizes", "dimensions"):
+                capability_record.pop(legacy_field, None)
+            capability_record["supported_sizes"] = supported_sizes
+        if flexible_sizes_requested:
+            if req.flexible_sizes:
+                if not supported_sizes or any(gpt_image_2_size_error(size) for size in supported_sizes):
+                    raise HTTPException(
+                        status_code=400,
+                        detail={
+                            "code": "precision_flexible_size_profile_required",
+                            "message": "Flexible sizes require a confirmed GPT Image 2-compatible declared size",
+                        },
+                    )
+                capability_record["size_policy"] = PRECISION_GPT_IMAGE_2_FLEXIBLE_SIZE_POLICY
+            else:
+                capability_record.pop("size_policy", None)
+        model_capabilities[capability_model] = capability_record
+    elif req.enabled and compatibility_profile is not None:
+        canonical_resolution = resolve_precision_model_capability(
+            model_capabilities,
+            compatibility_profile,
+            max_output_pixels=MAX_PRECISION_OUTPUT_PIXELS,
+        )
+        if (
+            model == compatibility_profile
+            or not canonical_resolution.structure_valid
+            or not canonical_resolution.precision_edit_confirmed
+            or not canonical_resolution.size_declaration_valid
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "precision_compatibility_target_unavailable",
+                    "message": "The selected compatibility profile requires an explicit canonical capability and supported sizes",
+                },
+            )
+        selected_record = dict(selected)
+        for field_name in (
+            "precision_edit",
+            "supported_sizes",
+            "supportedSizes",
+            "sizes",
+            "dimensions",
+            "alias_of",
+            "canonical_model",
+        ):
+            selected_record.pop(field_name, None)
+        selected_record["alias_of"] = compatibility_profile
+        model_capabilities[model] = selected_record
+        capabilities[PRECISION_EDIT_CAPABILITY] = True
+        provider.endpoint_type = "openai"
+        provider.precision_edit_profile = (
+            PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE
+        )
+        capability_model = model
+        capability_record = selected_record
+    elif req.enabled:
+        for alias_field in ("alias_of", "canonical_model"):
+            capability_record.pop(alias_field, None)
+        capabilities[PRECISION_EDIT_CAPABILITY] = True
+        capability_record[PRECISION_EDIT_CAPABILITY] = True
+        provider.endpoint_type = "openai"
+        if provider.precision_edit_profile is None:
+            provider.precision_edit_profile = (
+                PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_REPEATED_IMAGE
+            )
+    else:
+        capability_model = model
+        capability_record = dict(selected)
+        capability_record.pop(PRECISION_EDIT_CAPABILITY, None)
+        capability_record.pop("alias_of", None)
+        capability_record.pop("canonical_model", None)
+    model_capabilities[capability_model] = capability_record
+    extra["model_capabilities"] = model_capabilities
+    provider.capabilities = capabilities
+    provider.extra = extra
+    cfg_mgr.save(cfg_mgr.config)
+    _write_log("provider", "精准改图模型能力已更新", {"provider_id": provider_id, "model": model, "enabled": req.enabled})
+    if size_requested or flexible_sizes_requested:
+        result = {
+            "ok": True,
+            "provider_id": provider_id,
+            "model": model,
+            "enabled": req.enabled,
+            "size": normalized_size,
+            "supported_sizes": supported_sizes,
+        }
+        if flexible_sizes_requested:
+            result["flexible_sizes"] = bool(req.flexible_sizes)
+        return result
+    result = {"ok": True, "provider_id": provider_id, "model": model, "enabled": req.enabled}
+    if compatibility_profile is not None:
+        result["compatibility_profile"] = compatibility_profile
+    return result
 
 
 @app.delete("/api/providers/{provider_id}")
@@ -642,7 +3114,7 @@ async def test_provider(provider_id: str):
                 ep_start = _time.time()
                 try:
                     # 轻量连通性检查：GET /models 或简单请求
-                    _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
+                    _verify_ssl = verify_ssl_enabled()
                     async with _httpx.AsyncClient(timeout=15.0, verify=_verify_ssl) as client:
                         headers = {"Authorization": f"Bearer {ep.key}"}
                         # 尝试 models 端点
@@ -729,7 +3201,7 @@ async def fetch_models(provider_id: str):
             except Exception as e:
                 return {
                     "success": False,
-                    "detail": f"拉取失败: {str(e)}。请确认 URL 支持 GET /v1/models 接口，或手动输入模型名称。",
+                    "detail": f"拉取失败: {_provider_error_text(e, p)}。请确认 URL 支持 GET /v1/models 接口，或手动输入模型名称。",
                     "provider_type": p.type,
                 }
     raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' 不存在")
@@ -807,9 +3279,672 @@ def _do_local_upscale(local_path: str, target_size: str, method: str = "lanczos3
 # ──────────────────────────────────────────────────────────────
 # 生图核心（异步队列 + 并发控制 + 实时进度）
 # ──────────────────────────────────────────────────────────────
+def _validate_cutout_model_action(req: CutoutModelActionRequest) -> None:
+    if req.contract != CUTOUT_MODEL_INSTALL_CONTRACT:
+        raise _generation_contract_error(
+            "cutout_model_contract_unsupported",
+            f"cutout model installation requires contract={CUTOUT_MODEL_INSTALL_CONTRACT}",
+            field="contract",
+        )
+    if req.source_id != CUTOUT_MODEL_SOURCE_ID:
+        raise _generation_contract_error(
+            "cutout_model_source_unsupported",
+            "cutout model source_id is not supported",
+            field="source_id",
+        )
+    if req.confirmed is not True:
+        raise _generation_contract_error(
+            "cutout_model_confirmation_required",
+            "explicit confirmation is required because checkpoint provenance and commercial authorization are unverified",
+            field="confirmed",
+            checkpoint_provenance_status="UNVERIFIED",
+            commercial_use_status="UNVERIFIED",
+        )
+
+
+def _cutout_model_manager_http_error(exc: CutoutModelManagerError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail=exc.to_detail())
+
+
+def _cutout_model_projection(capability: dict) -> dict:
+    try:
+        return CUTOUT_MODEL_MANAGER.model_projection_from_capability(capability)
+    except Exception:
+        return {
+            "contract": CUTOUT_MODEL_INSTALL_CONTRACT,
+            "source_id": CUTOUT_MODEL_SOURCE_ID,
+            "source_page": CUTOUT_MODEL_SOURCE_PAGE,
+            "filename": str(CUTOUT_MODEL_MANIFEST["filename"]),
+            "installed": False,
+            "valid": False,
+            "state": "invalid",
+            "reason": "cutout_model_status_unavailable",
+            "size_bytes": int(CUTOUT_MODEL_MANIFEST["size_bytes"]),
+            "sha256": str(CUTOUT_MODEL_MANIFEST["sha256"]),
+            "md5": str(CUTOUT_MODEL_MANIFEST["md5"]),
+            "download_supported": False,
+            "install_supported": False,
+            "confirmation_required": True,
+            "license": {
+                "checkpoint_provenance_status": "UNVERIFIED",
+                "commercial_use_status": "UNVERIFIED",
+            },
+            "active_task": None,
+        }
+
+
+MODNET_IMPORT_HTTP_CONTRACT = "genbox-cutout-modnet-http-v1"
+
+
+def _parse_modnet_import_manifest(raw_manifest: str) -> dict:
+    """Parse the browser-supplied manifest without accepting paths or URLs."""
+    if not isinstance(raw_manifest, str) or not raw_manifest.strip():
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "modnet_manifest_required",
+                "message": "请提供 MODNet 文件清单",
+                "contract": MODNET_IMPORT_HTTP_CONTRACT,
+            },
+        )
+    try:
+        manifest = _json.loads(raw_manifest)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "modnet_manifest_invalid",
+                "message": "MODNet 文件清单必须是 JSON 对象",
+                "contract": MODNET_IMPORT_HTTP_CONTRACT,
+            },
+        ) from None
+    if not isinstance(manifest, dict):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "modnet_manifest_invalid",
+                "message": "MODNet 文件清单必须是 JSON 对象",
+                "contract": MODNET_IMPORT_HTTP_CONTRACT,
+            },
+        )
+    required = {"filename", "size_bytes", "sha256", "md5"}
+    if not required.issubset(manifest):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "modnet_manifest_incomplete",
+                "message": "MODNet 文件清单缺少必要字段",
+                "required": sorted(required),
+                "contract": MODNET_IMPORT_HTTP_CONTRACT,
+            },
+        )
+    # Do not allow a manifest to smuggle a server path or a remote source.
+    filename = manifest.get("filename")
+    if not isinstance(filename, str) or filename != Path(filename).name or "\\" in filename:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "modnet_filename_invalid",
+                "message": "MODNet 文件名必须是上传内容中的安全 .onnx 文件名",
+                "contract": MODNET_IMPORT_HTTP_CONTRACT,
+            },
+        )
+    return {key: manifest[key] for key in required}
+
+
+def _modnet_import_http_error(exc: ModNetImportError) -> HTTPException:
+    return HTTPException(
+        status_code=exc.status_code if exc.status_code in {400, 409, 413, 422, 500} else 422,
+        detail={
+            "code": exc.code,
+            "message": exc.message,
+            "contract": MODNET_IMPORT_HTTP_CONTRACT,
+        },
+    )
+
+
+@app.post("/api/image-tools/cutout/modnet/import", status_code=201)
+async def import_modnet_model(
+    upload: UploadFile = File(...),
+    manifest: str = Form(...),
+    license_confirmed: str = Form(...),
+    license_source: str = Form(""),
+):
+    """Import an explicitly authorized MODNet checkpoint from browser bytes."""
+    expected = _parse_modnet_import_manifest(manifest)
+    if license_confirmed.strip().lower() != "true":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "modnet_license_unconfirmed",
+                "message": "请明确确认你拥有该 MODNet 权重的使用许可",
+                "contract": MODNET_IMPORT_HTTP_CONTRACT,
+            },
+        )
+    try:
+        result = await MODNET_IMPORT_MANAGER.import_upload(
+            upload,
+            filename=expected["filename"],
+            license_confirmed=True,
+            license_source=license_source,
+            expected=expected,
+        )
+    except ModNetImportError as exc:
+        raise _modnet_import_http_error(exc) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "modnet_import_failed",
+                "message": "MODNet 模型导入失败",
+                "contract": MODNET_IMPORT_HTTP_CONTRACT,
+            },
+        ) from None
+    # Importing a checkpoint is not enough to advertise it: rebuild the
+    # optional adapter and require a fresh CPU/runtime capability probe.
+    try:
+        runtime_capability = _refresh_modnet_registry(MODNET_IMPORT_MANAGER)
+    except Exception:
+        # Import remains successful, but capability advertisement stays
+        # fail-closed if registry replacement/probing encounters an issue.
+        runtime_capability = {
+            "available": False,
+            "executable": False,
+            "state": "unavailable",
+        }
+    # Never expose local filesystem paths in a browser response.
+    return {
+        "ok": True,
+        "contract": MODNET_IMPORT_HTTP_CONTRACT,
+        "adapter": result.as_dict()["adapter"],
+        "filename": result.filename,
+        "size_bytes": result.size_bytes,
+        "sha256": result.sha256,
+        "md5": result.md5,
+        "license_confirmed": True,
+        "runtime": {
+            "available": runtime_capability.get("available") is True,
+            "executable": runtime_capability.get("executable") is True,
+            "state": runtime_capability.get("state") or "unavailable",
+        },
+    }
+
+
+@app.get("/api/image-tools/cutout/model")
+async def get_cutout_model_status():
+    try:
+        return await asyncio.to_thread(CUTOUT_MODEL_MANAGER.model_status)
+    except CutoutModelManagerError as exc:
+        raise _cutout_model_manager_http_error(exc) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_model_status_unavailable",
+                "message": "抠图模型状态暂时不可用",
+                "contract": CUTOUT_MODEL_INSTALL_CONTRACT,
+                "source_id": CUTOUT_MODEL_SOURCE_ID,
+            },
+        ) from None
+
+
+@app.post("/api/image-tools/cutout/model/download", status_code=202)
+async def start_cutout_model_download(req: CutoutModelActionRequest):
+    _validate_cutout_model_action(req)
+    try:
+        task = CUTOUT_MODEL_MANAGER.start_download()
+    except CutoutModelManagerError as exc:
+        raise _cutout_model_manager_http_error(exc) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_model_download_start_failed",
+                "message": "无法启动抠图模型下载任务",
+                "contract": CUTOUT_MODEL_INSTALL_CONTRACT,
+                "source_id": CUTOUT_MODEL_SOURCE_ID,
+            },
+        ) from None
+    return {"ok": True, "task": task}
+
+
+@app.get("/api/image-tools/cutout/model/download/{task_id}")
+async def get_cutout_model_download(task_id: str):
+    task = CUTOUT_MODEL_MANAGER.get_task(task_id)
+    if task is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "cutout_model_download_not_found",
+                "message": "抠图模型下载任务不存在",
+            },
+        )
+    return {"task": task}
+
+
+@app.delete("/api/image-tools/cutout/model/download/{task_id}")
+async def cancel_cutout_model_download(task_id: str):
+    task = await CUTOUT_MODEL_MANAGER.cancel_download(task_id)
+    if task is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "cutout_model_download_not_found",
+                "message": "抠图模型下载任务不存在",
+            },
+        )
+    return {"task": task}
+
+
+@app.post("/api/image-tools/cutout/model/delete")
+async def delete_cutout_model(req: CutoutModelActionRequest):
+    _validate_cutout_model_action(req)
+    try:
+        result = await asyncio.to_thread(CUTOUT_MODEL_MANAGER.delete_model)
+    except CutoutModelManagerError as exc:
+        raise _cutout_model_manager_http_error(exc) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_model_delete_failed",
+                "message": "抠图模型删除失败",
+                "contract": CUTOUT_MODEL_INSTALL_CONTRACT,
+                "source_id": CUTOUT_MODEL_SOURCE_ID,
+            },
+        ) from None
+    return {"ok": True, **result}
+
+
+@app.get("/api/image-tools/cutout/capabilities")
+async def get_cutout_capabilities():
+    # Pick up an already-imported, explicitly licensed optional MODNet
+    # checkpoint without requiring a process restart.  The refresh remains
+    # fail-closed: invalid manifests, missing dependencies, or a failed CPU
+    # probe leave the default U2-Net capability unchanged.
+    try:
+        modnet_status = MODNET_IMPORT_MANAGER.status()
+        if modnet_status.get("installed") and modnet_status.get("valid"):
+            _refresh_modnet_registry(MODNET_IMPORT_MANAGER)
+    except Exception:
+        pass
+    try:
+        capability = CUTOUT_REGISTRY.probe()
+    except Exception:
+        capability = {
+            "code": "cutout_capability_invalid",
+            "message": "本地抠图能力状态无效",
+            "contract": CUTOUT_CONTRACT,
+            "available": False,
+            "executable": False,
+            "adapters": [],
+            "state": "unavailable",
+            "adapter_capabilities": [],
+        }
+    if not isinstance(capability, dict):
+        capability = {
+            "contract": CUTOUT_CONTRACT,
+            "available": False,
+            "executable": False,
+            "adapters": [],
+            "code": "cutout_capability_invalid",
+            "message": "本地抠图能力状态无效",
+            "state": "unavailable",
+            "adapter_capabilities": [],
+        }
+    capability.setdefault("contract", CUTOUT_CONTRACT)
+    capability.setdefault("available", False)
+    capability.setdefault("executable", False)
+    capability.setdefault("adapters", [])
+    capability.setdefault("adapter_capabilities", [])
+    capability["model"] = _cutout_model_projection(capability)
+    capability["can_download"] = capability["model"].get("download_supported") is True
+    if capability.get("available") is not True or capability.get("executable") is not True:
+        # Keep the historical 503 fail-closed status while returning the
+        # reason (missing model/dependency/session) for a guided UI.
+        raise HTTPException(status_code=503, detail=capability)
+    return capability
+
+
+@app.post("/api/image-tools/cutout")
+async def cutout_image(req: CutoutRequest):
+    if req.contract != CUTOUT_CONTRACT:
+        raise _generation_contract_error(
+            "cutout_contract_unsupported",
+            f"cutout requires contract={CUTOUT_CONTRACT}",
+            field="contract",
+        )
+    try:
+        result = await CUTOUT_REGISTRY.process_async(
+            req.image_data,
+            adapter=req.adapter,
+            algorithm=req.algorithm,
+        )
+    except CutoutAdapterError as exc:
+        adapter_id = str(exc.details.get("adapter") or req.adapter or CUTOUT_ADAPTER_ID)
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.to_detail(adapter_id=adapter_id),
+        ) from None
+    except Exception:
+        # Do not expose runtime/provider internals or write a partial result.
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_failed",
+                "message": "本地抠图失败，未保存结果",
+                "contract": CUTOUT_CONTRACT,
+                "available": True,
+                "executable": True,
+                "adapters": [],
+                "cancel_supported": False,
+            },
+        ) from None
+
+    if not isinstance(result, dict) or not result.get("image_bytes"):
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_output_invalid",
+                "message": "本地抠图未返回有效结果，未保存结果",
+                "contract": CUTOUT_CONTRACT,
+                "available": True,
+                "executable": True,
+                "adapters": [],
+            },
+        )
+
+    result_adapter_id = str(result.get("adapter") or "")
+    result_adapter = CUTOUT_REGISTRY.get(result_adapter_id)
+    if result_adapter is None:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_output_invalid",
+                "message": "本地抠图未返回有效适配器，未保存结果",
+                "contract": CUTOUT_CONTRACT,
+                "available": True,
+                "executable": True,
+                "adapters": [],
+            },
+        )
+
+    expected_size = None
+    if result.get("width") is not None and result.get("height") is not None:
+        try:
+            expected_size = (int(result["width"]), int(result["height"]))
+        except (TypeError, ValueError):
+            expected_size = None
+    try:
+        local_path = result_adapter.save_atomic(
+            result["image_bytes"],
+            GALLERY_DIR,
+            expected_size=expected_size,
+        )
+    except CutoutAdapterError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.to_detail(adapter_id=result_adapter_id),
+        ) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_persistence_failed",
+                "message": "抠图结果保存失败，未返回不完整文件",
+                "contract": CUTOUT_CONTRACT,
+                "available": True,
+                "executable": True,
+                "adapters": [result_adapter_id],
+            },
+        ) from None
+
+    encoded = base64.b64encode(bytes(result["image_bytes"])).decode("ascii")
+    width_value = result.get("width")
+    height_value = result.get("height")
+    if width_value is None and expected_size:
+        width_value = expected_size[0]
+    if height_value is None and expected_size:
+        height_value = expected_size[1]
+    width = int(width_value or 0)
+    height = int(height_value or 0)
+    try:
+        executable_adapters = list(CUTOUT_REGISTRY.probe().get("adapters") or [])
+    except Exception:
+        executable_adapters = [result_adapter_id]
+    if result_adapter_id not in executable_adapters:
+        executable_adapters.insert(0, result_adapter_id)
+
+    response = {
+        "contract": CUTOUT_CONTRACT,
+        "success": True,
+        "status": "completed",
+        "source_preserved": True,
+        "transparent": True,
+        "preview_background": "checkerboard",
+        "available": True,
+        "executable": True,
+        "adapters": executable_adapters,
+        "adapter": result_adapter_id,
+        "image_data": "data:image/png;base64," + encoded,
+        "filename": Path(local_path).name,
+        "gallery_url": f"/api/gallery/image/{quote(Path(local_path).name)}",
+        "width": width,
+        "height": height,
+        "elapsed_seconds": float(result.get("elapsed_seconds") or 0.0),
+        "cancel_supported": False,
+    }
+    if result.get("fallback_from"):
+        response["fallback_from"] = str(result["fallback_from"])
+    return response
+
+
+@app.post("/api/image-tools/cutout/refine")
+async def refine_cutout_image(req: CutoutRefineRequest):
+    if req.contract != CUTOUT_REFINE_CONTRACT:
+        raise _generation_contract_error(
+            "cutout_refine_contract_unsupported",
+            f"cutout refinement requires contract={CUTOUT_REFINE_CONTRACT}",
+            field="contract",
+        )
+
+    selection_field_names = {
+        "selection_mask_data",
+        "selection_mask_contract",
+    }
+    supplied_selection_fields = selection_field_names.intersection(req.model_fields_set)
+    if supplied_selection_fields and supplied_selection_fields != selection_field_names:
+        raise _generation_contract_error(
+            "cutout_refine_selection_fields_conflict",
+            "selection mask data and contract must be supplied together",
+            field="selection_mask_data",
+        )
+    if supplied_selection_fields and req.selection_mask_contract != CUTOUT_SELECTION_MASK_CONTRACT:
+        raise _generation_contract_error(
+            "cutout_refine_selection_contract_unsupported",
+            f"selection mask requires contract={CUTOUT_SELECTION_MASK_CONTRACT}",
+            field="selection_mask_contract",
+        )
+    if supplied_selection_fields and (
+        not isinstance(req.selection_mask_data, str) or not req.selection_mask_data.strip()
+    ):
+        raise _generation_contract_error(
+            "cutout_refine_selection_mask_required",
+            "selection_mask_data must contain a PNG payload",
+            field="selection_mask_data",
+        )
+    restore_field_names = {
+        "restore_mode",
+        "restore_source_image_data",
+        "restore_min_alpha",
+    }
+    supplied_restore_fields = restore_field_names.intersection(req.model_fields_set)
+    if supplied_restore_fields and req.restore_mode is not True and supplied_restore_fields - {"restore_mode"}:
+        raise _generation_contract_error(
+            "cutout_refine_restore_fields_conflict",
+            "restore fields require restore_mode=true",
+            field="restore_mode",
+        )
+    if req.restore_mode and not supplied_selection_fields:
+        raise _generation_contract_error(
+            "cutout_refine_restore_selection_mask_required",
+            "restore_mode requires selection_mask_data and selection_mask_contract",
+            field="selection_mask_data",
+        )
+    if req.restore_mode and (
+        not isinstance(req.restore_source_image_data, str) or not req.restore_source_image_data.strip()
+    ):
+        raise _generation_contract_error(
+            "cutout_refine_restore_source_required",
+            "restore_mode requires restore_source_image_data",
+            field="restore_source_image_data",
+        )
+
+    feather_radius = float(req.feather_radius)
+    if not math.isfinite(feather_radius) or feather_radius < 0 or feather_radius > MAX_FEATHER_RADIUS:
+        raise _generation_contract_error(
+            "feather_radius_invalid",
+            "feather_radius is outside the supported range",
+            field="feather_radius",
+            minimum=0,
+            maximum=MAX_FEATHER_RADIUS,
+        )
+
+    parent_version_id = None
+    if req.parent_version_id is not None:
+        parent_version_id = str(req.parent_version_id).strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", parent_version_id):
+            raise _generation_contract_error(
+                "cutout_refine_parent_version_invalid",
+                "parent_version_id must be a bounded opaque identifier",
+                field="parent_version_id",
+            )
+
+    selection_mask_data = req.selection_mask_data if supplied_selection_fields else None
+    try:
+        result = await asyncio.to_thread(
+            refine_cutout_alpha,
+            req.image_data,
+            selection_mask_data,
+            feather_radius,
+            restore_mode=req.restore_mode,
+            restore_source_image_data=req.restore_source_image_data,
+            restore_min_alpha=req.restore_min_alpha,
+        )
+    except CutoutRefineError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.to_detail()) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_refine_failed",
+                "message": "本地透明边缘精修失败，未保存结果",
+                "contract": CUTOUT_REFINE_CONTRACT,
+                "operation": "alpha_refine",
+                "local_only": True,
+            },
+        ) from None
+
+    if not isinstance(result, dict) or not result.get("image_bytes"):
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_refine_output_invalid",
+                "message": "本地透明边缘精修未返回有效 PNG，未保存结果",
+                "contract": CUTOUT_REFINE_CONTRACT,
+                "operation": "alpha_refine",
+                "local_only": True,
+            },
+        )
+
+    try:
+        width = int(result["width"])
+        height = int(result["height"])
+        image_bytes = bytes(result["image_bytes"])
+        if width <= 0 or height <= 0 or not image_bytes:
+            raise ValueError("invalid refined image result")
+    except (KeyError, TypeError, ValueError, OverflowError):
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_refine_output_invalid",
+                "message": "本地透明边缘精修未返回有效 PNG，未保存结果",
+                "contract": CUTOUT_REFINE_CONTRACT,
+                "operation": "alpha_refine",
+                "local_only": True,
+            },
+        ) from None
+
+    try:
+        local_path = await asyncio.to_thread(
+            save_refined_png_atomic,
+            image_bytes,
+            GALLERY_DIR,
+            expected_size=(width, height),
+        )
+    except CutoutRefineError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.to_detail()) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_refine_persistence_failed",
+                "message": "透明边缘精修结果保存失败，未返回不完整文件",
+                "contract": CUTOUT_REFINE_CONTRACT,
+                "operation": "alpha_refine",
+                "local_only": True,
+            },
+        ) from None
+
+    try:
+        filename = Path(local_path).name
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "cutout_refine_persistence_failed",
+                "message": "透明边缘精修结果保存失败，未返回不完整文件",
+                "contract": CUTOUT_REFINE_CONTRACT,
+                "operation": "alpha_refine",
+                "local_only": True,
+            },
+        ) from None
+    encoded = base64.b64encode(image_bytes).decode("ascii")
+    return {
+        "contract": CUTOUT_REFINE_CONTRACT,
+        "success": True,
+        "status": "completed",
+        "operation": "alpha_refine",
+        "local_only": True,
+        "source_preserved": True,
+        "transparent": True,
+        "preview_background": "checkerboard",
+        "image_data": "data:image/png;base64," + encoded,
+        "filename": filename,
+        "gallery_url": f"/api/gallery/image/{quote(filename)}",
+        "width": width,
+        "height": height,
+        "version_id": f"cutout-refine-{uuid.uuid4().hex}",
+        "parent_version_id": parent_version_id,
+        "restore_mode": bool(result.get("restore_mode")),
+        "restore_min_alpha": result.get("restore_min_alpha"),
+        "restore_applied": bool(result.get("restore_applied")),
+        "selection_applied": bool(result.get("selection_applied")),
+        "selection_mask_contract": (
+            CUTOUT_SELECTION_MASK_CONTRACT if result.get("selection_applied") else None
+        ),
+        "feather_radius": float(result.get("feather_radius", feather_radius)),
+        "alpha_changed": bool(result.get("alpha_changed")),
+        "alpha_extrema": list(result.get("alpha_extrema") or []),
+    }
+
+
 @app.post("/api/generate")
 async def generate(req: GenerateRequest, request: Request):
     global generation_counter, image_gen_semaphore
+    generation_input = _validate_generation_request_inputs(req)
+    mode = generation_input["mode"]
+
     if image_gen_semaphore is None:
         image_gen_semaphore = asyncio.Semaphore(MAX_CONCURRENT_GENERATIONS)
 
@@ -817,19 +3952,6 @@ async def generate(req: GenerateRequest, request: Request):
     client_ip = request.client.host if request.client else "unknown"
     if not _check_rate_limit(client_ip, "generate"):
         raise HTTPException(status_code=429, detail="请求过于频繁，请稍后再试")
-
-    generation_counter += 1
-    gen_id = f"gen_{generation_counter:04d}_{uuid.uuid4().hex[:6]}"
-
-    # LLM 优化提示词（仅对文生图模式）
-    original_prompt = req.prompt
-    enhanced_by_llm = None
-    llm_error_msg = None
-    if req.enhance_prompt and req.mode == "t2i":
-        enhanced_by_llm = await enhance_prompt_with_llm(req.prompt, req.llm_provider_id)
-        if enhanced_by_llm == req.prompt:
-            # LLM 未配置或调用失败（返回了原始 prompt）
-            llm_error_msg = "LLM 优化未生效，请检查 Provider 配置"
 
     # 确定要调用的 Provider 列表
     if req.providers:
@@ -840,28 +3962,101 @@ async def generate(req: GenerateRequest, request: Request):
     if not provider_ids:
         raise HTTPException(status_code=400, detail="无可用的生图模型，请先在设置中配置")
 
+    all_providers = {p.id: p for p in cfg_mgr.config.providers}
+    if mode == "inpaint":
+        _validate_inpaint_provider_authorization(provider_ids, all_providers)
+    elif mode == "precision_edit":
+        _validate_precision_edit_provider_authorization(
+            provider_ids,
+            all_providers,
+            req.provider_settings,
+        )
+        _validate_precision_edit_size_authorization(
+            provider_ids,
+            all_providers,
+            req.provider_settings,
+            generation_input,
+        )
+
+    generation_counter += 1
+    gen_id = f"gen_{generation_counter:04d}_{uuid.uuid4().hex[:6]}"
+    precision_workflow = (
+        await asyncio.to_thread(_prepare_precision_workflow_metadata, generation_input)
+        if mode == "precision_edit"
+        else None
+    )
+
+    # LLM 优化提示词（仅对文生图模式）
+    original_prompt = req.prompt
+    enhanced_by_llm = None
+    llm_error_msg = None
+    if req.enhance_prompt and mode == "t2i":
+        enhanced_by_llm = await enhance_prompt_with_llm(req.prompt, req.llm_provider_id)
+        if enhanced_by_llm == req.prompt:
+            # LLM 未配置或调用失败（返回了原始 prompt）
+            llm_error_msg = "LLM 优化未生效，请检查 Provider 配置"
+
     # 构建参数
     kwargs = {}
     if req.size: kwargs["size"] = req.size
     if req.quality: kwargs["quality"] = req.quality
-    if req.mode == "i2i" and req.image_data:
-        kwargs["image_data"] = req.image_data
+    kwargs["exact_ratio_crop"] = req.exact_ratio_crop
+    if mode == "i2i":
+        image_list = [item["value"] for item in generation_input["images"]]
+        kwargs["mode"] = mode
+        kwargs["image_data"] = image_list[0]
+        kwargs["image_data_list"] = image_list
         kwargs["strength"] = req.strength
-
-    all_providers = {p.id: p for p in cfg_mgr.config.providers}
+    elif mode == "inpaint":
+        kwargs.update({
+            "mode": mode,
+            "image_data": generation_input["images"][0]["value"],
+            "mask_data": generation_input["mask"]["value"],
+            "mask_contract": INPAINT_MASK_CONTRACT,
+            "inpaint_authorized": True,
+        })
+    elif mode == "precision_edit":
+        kwargs.update({
+            "mode": mode,
+            "image_data": generation_input["images"][0]["value"],
+            "precision_canvas_only": generation_input["precision_canvas_only"],
+            "precision_strategy": generation_input["precision_strategy"],
+            "precision_selection_mode": generation_input["precision_selection_mode"],
+            "precision_size_mode": generation_input["precision_size_mode"],
+            "precision_target_size": generation_input["precision_target_size"],
+            "precision_resize_prompt": generation_input["precision_resize_prompt"],
+            "precision_edit_authorized": True,
+        })
+        if generation_input["precision_selection_mode"] == "local":
+            kwargs["precision_selection_feather"] = generation_input["precision_selection_feather"]
+        if generation_input["precision_size_mode"] == "resize":
+            kwargs["precision_output_size_policy"] = generation_input[
+                "precision_output_size_policy"
+            ]
+        if not generation_input["precision_canvas_only"]:
+            kwargs.update({
+                "annotation_image_data": generation_input["annotation_image"]["value"],
+                "annotation_contract": generation_input["annotation_contract"],
+                "annotations": generation_input["annotations"],
+            })
 
     # 构建任务列表 (pid, seq, qty) + per-provider kwargs
     task_list = []
     provider_kwargs_map = {}  # {pid: kwargs} per-provider overrides
     for pid in provider_ids:
-        qty = req.quantities.get(pid, 1) if req.quantities else 1
+        raw_qty = req.quantities.get(pid, 1) if req.quantities else 1
+        qty = _normalize_generation_quantity(raw_qty)
         # 为每个 provider 构建独立的 kwargs
         p_kwargs = dict(kwargs)  # 复制全局 kwargs
-        p_setting = req.provider_settings.get(pid, {})
+        p_setting = req.provider_settings.get(pid, {}) if isinstance(req.provider_settings, dict) else {}
+        if not isinstance(p_setting, dict):
+            p_setting = {}
         if p_setting.get("size"):
             p_kwargs["size"] = p_setting["size"]
         if p_setting.get("quality"):
             p_kwargs["quality"] = p_setting["quality"]
+        if mode == "precision_edit":
+            p_kwargs["model"] = str(p_setting["model"]).strip()
         provider_kwargs_map[pid] = p_kwargs
         for seq in range(qty):
             if pid in all_providers:
@@ -887,7 +4082,7 @@ async def generate(req: GenerateRequest, request: Request):
     image_tasks[gen_id] = {
         "status": "queued",
         "progress": 0,
-        "mode": req.mode,
+        "mode": mode,
         "prompt": req.prompt,
         "enhanced_prompt": enhanced_by_llm,
         "llm_error": llm_error_msg,
@@ -904,6 +4099,7 @@ async def generate(req: GenerateRequest, request: Request):
         "continuous_id": req.continuous_id,
         "system_prompt": req.system_prompt,
         "original_prompt": req.prompt,
+        "precision_workflow": precision_workflow,
         # ── 尺寸自适应 ──
         "upscale_to": req.upscale_to,
         "upscale_method": req.upscale_method,
@@ -911,7 +4107,7 @@ async def generate(req: GenerateRequest, request: Request):
     }
 
     # 后台处理
-    asyncio.create_task(_process_image_gen(gen_id))
+    image_task_handles[gen_id] = asyncio.create_task(_process_image_gen(gen_id))
 
     _write_log("generate", f"生图任务已创建: {gen_id}, {len(task_list)} 个子任务", {"gen_id": gen_id, "providers": provider_ids})
 
@@ -929,10 +4125,23 @@ async def generate(req: GenerateRequest, request: Request):
 
 
 async def _process_image_gen(gen_id: str):
+    try:
+        await _process_image_gen_impl(gen_id)
+    except asyncio.CancelledError:
+        _mark_image_task_cancelled(gen_id)
+        return
+    finally:
+        _cleanup_image_task_handle(gen_id, asyncio.current_task())
+
+
+async def _process_image_gen_impl(gen_id: str):
     """后台逐个处理生图任务（带并发控制）"""
     global image_gen_semaphore
     task = image_tasks.get(gen_id)
     if not task:
+        return
+
+    if task.get("status") == "cancelled":
         return
 
     task["status"] = "generating"
@@ -941,6 +4150,8 @@ async def _process_image_gen(gen_id: str):
     from providers import generate_for_provider as _gen_one
 
     async def _run_one(key, pid, seq, p_cfg, prompt, kwargs):
+        if task.get("status") == "cancelled":
+            return
         t0 = time.time()
         state = task["provider_states"][key]
         state["status"] = "generating"
@@ -958,6 +4169,11 @@ async def _process_image_gen(gen_id: str):
         tick_task = asyncio.create_task(_tick_progress())
         try:
             res = await _gen_one(p_cfg, prompt, **kwargs)
+            if task.get("status") == "cancelled":
+                state["status"] = "cancelled"
+                state["progress"] = 0
+                state["log"].append(f"[{time.strftime('%H:%M:%S')}] ■ 已停止")
+                return
             t1 = time.time()
             res.elapsed_seconds = round(t1 - t0, 1)
             res.started_at = t0
@@ -977,21 +4193,30 @@ async def _process_image_gen(gen_id: str):
                         res.local_path = _upscaled
                         state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✔ 放大完成")
                 except Exception as ue:
-                    state["log"].append(f"[{time.strftime('%H:%M:%S')}] ⚠ 放大失败(保留原图): {str(ue)[:80]}")
+                    upscale_error = _background_generation_error_text(ue, p_cfg)
+                    state["log"].append(f"[{time.strftime('%H:%M:%S')}] ⚠ 放大失败(保留原图): {upscale_error[:80]}")
 
             if res.success:
+                for warning in getattr(res, "warnings", None) or []:
+                    warning_code = str(warning.get("code") or "generation_warning")[:80]
+                    warning_message = str(warning.get("message") or "")[:240]
+                    state["log"].append(
+                        f"[{time.strftime('%H:%M:%S')}] ⚠ {warning_code}: {warning_message}"
+                    )
                 state["status"] = "completed"
                 state["progress"] = 100
                 state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✔ 完成 ({res.elapsed_seconds}s)")
             else:
+                error_text = _background_generation_error_text(res.error, p_cfg)
+                res.error = error_text
                 state["status"] = "failed"
-                state["progress"] = 100
-                state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✗ 失败: {res.error[:120]}")
+                state["progress"] = _image_state_progress(state)
+                state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✗ 失败: {error_text[:120]}")
                 # 写入详细错误日志到 logs.jsonl
-                _write_log("generation_error", f"{pid} 失败: {res.error[:200]}", {
+                _write_log("generation_error", f"{pid} 失败: {error_text[:200]}", {
                     "provider_id": pid,
-                    "model": cfg.model if cfg else pid,
-                    "error": res.error[:500],
+                    "model": (p_cfg.model if p_cfg else pid),
+                    "error": error_text[:500],
                     "mode": task.get("mode", "t2i"),
                     "elapsed_seconds": res.elapsed_seconds,
                 })
@@ -1001,6 +4226,10 @@ async def _process_image_gen(gen_id: str):
                 "local_path": res.local_path,
                 "generation_id": res.generation_id,
                 "error": res.error,
+                "error_code": getattr(res, "error_code", "") or None,
+                "error_details": getattr(res, "error_details", None),
+                "metadata": getattr(res, "metadata", None),
+                "warnings": getattr(res, "warnings", None) or [],
                 "model": pid,
                 "prompt": prompt,
                 "original_prompt": task["original_prompt"],
@@ -1012,12 +4241,22 @@ async def _process_image_gen(gen_id: str):
             task["results"][key] = state["result"]
         except Exception as e:
             t1 = time.time()
+            error_text = _background_generation_error_text(e, p_cfg)
             state["status"] = "failed"
-            state["progress"] = 100
-            state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✗ 异常: {str(e)[:120]}")
+            state["progress"] = _image_state_progress(state)
+            state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✗ 异常: {error_text[:120]}")
+            _write_log("generation_error", f"{pid} 异常: {error_text[:200]}", {
+                "provider_id": pid,
+                "model": (p_cfg.model if p_cfg else pid),
+                "error": error_text[:500],
+                "mode": task.get("mode", "t2i"),
+                "elapsed_seconds": round(t1 - t0, 1),
+            })
             state["result"] = {
                 "success": False, "local_path": None, "generation_id": None,
-                "error": str(e), "model": pid, "prompt": prompt,
+                "error": error_text, "model": pid, "prompt": prompt,
+                "error_code": None, "error_details": None,
+                "metadata": None, "warnings": [],
                 "original_prompt": task["original_prompt"], "seq": seq,
                 "elapsed_seconds": round(t1 - t0, 1), "started_at": t0, "finished_at": t1,
             }
@@ -1038,6 +4277,8 @@ async def _process_image_gen(gen_id: str):
 
     async def _run_provider_group(pid, items):
         for i, (p, s, q) in enumerate(items):
+            if task.get("status") == "cancelled":
+                return
             if i > 0:
                 await asyncio.sleep(1.5)
             key = f"{p}_{s}" if q > 1 else p
@@ -1048,10 +4289,14 @@ async def _process_image_gen(gen_id: str):
 
     await asyncio.gather(*[_run_provider_group(pid, items) for pid, items in provider_tasks.items()])
 
-    # 全部完成
+    if task.get("status") == "cancelled":
+        return
+
+    # 全部子任务结束；部分成功仍可交付结果，全失败则明确失败。
     elapsed = round(time.time() - task["start_time"], 1)
-    task["status"] = "completed"
-    task["progress"] = 100
+    task["status"] = _image_task_status(task.get("status", "generating"), task["provider_states"])
+    task["progress"] = _image_task_progress(task["provider_states"], task["status"])
+    task["elapsed_seconds"] = elapsed
 
     # 计算分组耗时
     group_timings = {}
@@ -1078,7 +4323,7 @@ async def _process_image_gen(gen_id: str):
         task["continuous_id"] = cid
 
     # 记录历史
-    generation_history[gen_id] = {
+    history_entry = {
         "generation_id": gen_id,
         "prompt": task["prompt"],
         "system_prompt": task.get("system_prompt"),
@@ -1092,7 +4337,10 @@ async def _process_image_gen(gen_id: str):
         "elapsed_seconds": elapsed,
         "group_timings": group_timings,
     }
-    _save_history_entry(generation_history[gen_id])
+    if task["mode"] == "precision_edit":
+        history_entry["precision_workflow"] = _finalize_precision_workflow_metadata(task)
+    generation_history[gen_id] = history_entry
+    _save_history_entry(history_entry)
 
     ok_count = sum(1 for r in task["results"].values() if r.get("success"))
     _write_log("generate", f"生图完成: {ok_count}/{len(task['providers'])} 成功 ({elapsed}s)", {"gen_id": gen_id})
@@ -1104,25 +4352,12 @@ async def get_generate_status(gen_id: str):
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
 
-    # 计算整体进度（加权平均每个 provider 的进度）
+    # 计算整体进度（每个 provider 的真实进度/耗时估算平均值）
     states = task["provider_states"]
-    total = len(states)
-    if total > 0:
-        progress = round(sum(s.get("progress", 0) for s in states.values()) / total)
-    else:
-        progress = 0
+    status = _refresh_image_task_state(task)
+    progress = task["progress"]
 
-    # 判断最终状态
-    status = task["status"]
-    if status == "completed":
-        pass
-    else:
-        done = sum(1 for s in states.values() if s.get("status") in ("completed", "failed"))
-        if done >= total and total > 0:
-            status = "completed"
-            task["status"] = "completed"
-
-    elapsed = round(time.time() - task["start_time"], 1) if task.get("start_time") else 0
+    elapsed = _image_task_elapsed(task)
 
     # 构建响应（不含 all_providers 大对象）
     provider_states_out = {}
@@ -1148,10 +4383,34 @@ async def get_generate_status(gen_id: str):
         "enhanced_prompt": task.get("enhanced_prompt"),
         "llm_error": task.get("llm_error"),
         "continuous_id": task.get("continuous_id"),
-        "results": task["results"] if status == "completed" else {},
+        # Only terminal tasks may deliver provider results. Every terminal
+        # outcome keeps its real result/error and timing projection, including
+        # failed and cancelled tasks with partial success.
+        "results": task["results"] if status in ("completed", "failed", "cancelled") else {},
         "group_timings": {pid: {"total": round(sum(img["elapsed"] for img in imgs), 1), "images": imgs}
-                          for pid, imgs in _calc_group_timings(task["results"]).items()} if status == "completed" else {},
+                          for pid, imgs in _calc_group_timings(task["results"]).items()}
+                          if status in ("completed", "failed", "cancelled") else {},
     }
+
+
+@app.post("/api/generate/cancel/{gen_id}")
+async def cancel_generate(gen_id: str):
+    task = image_tasks.get(gen_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    status = _refresh_image_task_state(task)
+    if status in ("completed", "failed", "cancelled"):
+        return {"ok": True, "status": status}
+    status = _mark_image_task_cancelled(gen_id)
+    if status != "cancelled":
+        return {"ok": True, "status": status}
+    handle = image_task_handles.get(gen_id)
+    if handle:
+        if not handle.done():
+            handle.cancel()
+        _cleanup_image_task_handle(gen_id, handle)
+    _write_log("generate", f"生图任务已取消: {gen_id}", {"gen_id": gen_id})
+    return {"ok": True, "status": status}
 
 
 class LLMOptimizeRequest(BaseModel):
@@ -1167,24 +4426,28 @@ class VariationRequest(BaseModel):
     provider_id: str = ""            # 空=第一个支持的 provider
     model: str = ""                  # 可选：指定模型
     size: str = "1024x1024"          # 256x256 | 512x512 | 1024x1024
-    n: int = 1                       # 生成数量 1-4
+    n: int = Field(default=1, ge=1, le=4)  # 生成数量 1-4
 
 
 @app.post("/api/images/variations")
 async def image_variations(req: VariationRequest):
     """图片变形：基于输入图片生成变体（OpenAI /images/variations 协议）"""
-    import base64 as _b64
     import httpx as _httpx
 
-    # 解析图片
-    if "," in req.image_data:
-        img_b64 = req.image_data.split(",")[1]
-    else:
-        img_b64 = req.image_data
-    try:
-        img_bytes = _b64.b64decode(img_b64)
-    except Exception:
-        raise HTTPException(status_code=400, detail="图片数据无效")
+    source_image = _validate_generation_image_data(req.image_data, "image_data")
+    source_value = source_image["value"]
+    source_encoded = (
+        source_value.partition(",")[2]
+        if source_value.lower().startswith("data:")
+        else source_value
+    )
+    img_bytes = base64.b64decode(source_encoded, validate=True)
+    source_mime = source_image["mime_type"]
+    source_filename = {
+        "image/png": "image.png",
+        "image/jpeg": "image.jpg",
+        "image/webp": "image.webp",
+    }[source_mime]
 
     # 找到可用 provider
     provider = None
@@ -1204,37 +4467,122 @@ async def image_variations(req: VariationRequest):
 
     # 支持多端点 failover
     endpoints = provider.get_active_endpoints()
-    last_error = None
+    endpoint_failures = []
+    result = None
+    last_response_validation = None
 
-    for ep in endpoints:
+    for endpoint_index, ep in enumerate(endpoints, start=1):
         url = f"{ep.url.rstrip('/')}/images/variations"
         headers = {"Authorization": f"Bearer {ep.key}"}
-        files = {"image": ("image.png", img_bytes, "image/png")}
-        data = {"model": model_id, "n": min(req.n, 4), "size": req.size, "response_format": "b64_json"}
+        files = {"image": (source_filename, img_bytes, source_mime)}
+        data = {"model": model_id, "n": req.n, "size": req.size, "response_format": "b64_json"}
 
         try:
-            _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
-            async with _httpx.AsyncClient(timeout=180.0, verify=_verify_ssl) as client:
-                resp = await client.post(url, headers=headers, files=files, data=data)
+            async with _httpx.AsyncClient(
+                timeout=180.0,
+                verify=verify_ssl_enabled(),
+            ) as client:
+                resp = await _stream_bounded_provider_response(
+                    client,
+                    "POST",
+                    url,
+                    response_image_count=req.n,
+                    headers=headers,
+                    files=files,
+                    data=data,
+                )
                 if resp.status_code >= 400:
-                    last_error = f"端点 {ep.url[:40]}... HTTP {resp.status_code}"
+                    response_detail = _provider_error_text(
+                        getattr(resp, "text", ""),
+                        provider,
+                    ).strip()[:240]
+                    failure = f"HTTP {resp.status_code}"
+                    if response_detail:
+                        failure += f": {response_detail}"
+                    endpoint_failures.append((endpoint_index, ep, failure))
                     continue  # 尝试下一个端点
-                result = resp.json()
+                result = _parse_provider_json_response(resp)
                 break  # 成功
-        except Exception as e:
-            last_error = f"端点 {ep.url[:40]}... {str(e)[:60]}"
+        except ProviderResponseValidationError as exc:
+            last_response_validation = exc
+            endpoint_failures.append((endpoint_index, ep, f"{exc.code}: {exc}"))
+            continue
+        except Exception as exc:
+            endpoint_failures.append(
+                (
+                    endpoint_index,
+                    ep,
+                    _provider_error_text(exc, provider).strip() or type(exc).__name__,
+                )
+            )
             continue  # 尝试下一个端点
     else:
-        raise HTTPException(status_code=502, detail=f"所有端点均失败: {last_error}")
+        if last_response_validation is not None:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "image_variation_invalid_response",
+                    "message": "variation provider returned an invalid response",
+                    "validation_code": last_response_validation.code,
+                    **last_response_validation.details,
+                },
+            )
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "image_variation_upstream_error",
+                "message": "all variation provider endpoints failed",
+                "upstream_error": _endpoint_failure_summary(provider, endpoint_failures),
+            },
+        )
 
-    # 解析结果
+    response_validation_details = {}
+    if not isinstance(result, dict):
+        response_validation_code = "variation_response_not_object"
+    elif not isinstance(result.get("data"), list):
+        response_validation_code = "variation_response_data_invalid"
+    elif len(result["data"]) != req.n:
+        response_validation_code = "variation_response_item_count_mismatch"
+        response_validation_details = {
+            "requested_count": req.n,
+            "actual_count": len(result["data"]),
+        }
+    else:
+        response_validation_code = ""
+        for item in result["data"]:
+            if not isinstance(item, dict):
+                response_validation_code = "variation_response_item_invalid"
+                break
+            if not isinstance(item.get("b64_json"), str) or not item["b64_json"].strip():
+                response_validation_code = "variation_response_image_missing"
+                break
+    if response_validation_code:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "image_variation_invalid_response",
+                "message": "variation provider returned an invalid response",
+                "validation_code": response_validation_code,
+                **response_validation_details,
+            },
+        )
+
     images_out = []
-    for item in result.get("data", []):
-        b64_data = item.get("b64_json")
-        if b64_data:
-            raw = _b64.b64decode(b64_data)
+    for item in result["data"]:
+        b64_data = item["b64_json"]
+        try:
+            raw = _decode_generated_image_base64(b64_data)
             local_path = _save_image(raw, provider.id, "variation", "")
-            images_out.append({"b64_json": b64_data, "local_path": local_path, "provider_id": provider.id})
+        except GeneratedImageValidationError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "image_variation_invalid_response",
+                    "message": "variation provider returned an invalid image",
+                    "validation_code": exc.code,
+                },
+            ) from None
+        images_out.append({"b64_json": b64_data, "local_path": local_path, "provider_id": provider.id})
 
     return {"success": True, "images": images_out, "model": model_id, "provider_id": provider.id}
 
@@ -1352,31 +4700,18 @@ async def gallery(limit: int = 50):
 
 
 @app.get("/api/gallery/thumb/{filename}")
-async def thumbnail(filename: str):
-    # 先查图片目录
-    fpath = GALLERY_DIR / filename
-    if fpath.exists():
-        return FileResponse(str(fpath))
-    # 再查视频缩略图目录
-    thumb_name = Path(filename).stem + "_thumb.jpg"
-    thumb_path = VIDEO_THUMBS_DIR / thumb_name
-    if thumb_path.exists():
-        return FileResponse(str(thumb_path))
-    # 尝试从视频生成缩略图
-    video_path = VIDEO_DIR / filename
-    if video_path.exists():
-        gen = _generate_video_thumbnail(video_path)
-        if gen and gen.exists():
-            return FileResponse(str(gen))
-    raise HTTPException(status_code=404, detail="缩略图不存在")
+async def thumbnail(filename: str, request: Request):
+    payload, mime_type = await asyncio.to_thread(_load_thumbnail_image_payload, filename)
+    return _memory_media_response(request, payload, mime_type)
 
 
 @app.get("/api/gallery/image/{filename}")
-async def gallery_image(filename: str):
-    fpath = GALLERY_DIR / filename
-    if not fpath.exists():
-        raise HTTPException(status_code=404, detail="图片不存在")
-    return FileResponse(str(fpath), media_type="image/png")
+async def gallery_image(filename: str, request: Request):
+    _fpath, payload, mime_type, _prompt = await asyncio.to_thread(
+        _load_gallery_image_payload,
+        filename,
+    )
+    return _memory_media_response(request, payload, mime_type)
 
 
 @app.delete("/api/gallery/{item_id}")
@@ -1557,11 +4892,135 @@ async def rename_gallery_item(body: dict = {}):
 async def gallery_image_base64(filename: str):
     """返回图片的 base64 数据，用于推送到参考图区域"""
     import base64 as _b64
-    fpath = GALLERY_DIR / filename
-    if not fpath.exists():
-        raise HTTPException(status_code=404, detail="图片不存在")
-    data = _b64.b64encode(fpath.read_bytes()).decode()
-    return {"filename": filename, "data": f"data:image/png;base64,{data}"}
+    _fpath, payload, mime_type, _prompt = await asyncio.to_thread(
+        _load_gallery_image_payload,
+        filename,
+    )
+    data = _b64.b64encode(payload).decode()
+    return {"filename": filename, "data": f"data:{mime_type};base64,{data}"}
+
+
+@app.get("/api/precision/workflows")
+async def precision_workflows(
+    date_from: str = "",
+    date_to: str = "",
+    workflow_id: str = "",
+    limit: int = 50,
+):
+    """Return a prompt-free, path-free projection of persisted precision edits."""
+    if limit < 1 or limit > 200:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "precision_workflow_limit_invalid", "field": "limit"},
+        )
+    normalized_from = _precision_filter_date(date_from, "date_from")
+    normalized_to = _precision_filter_date(date_to, "date_to")
+    if normalized_from and normalized_to and normalized_from > normalized_to:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "precision_workflow_date_range_invalid"},
+        )
+    if workflow_id and not PRECISION_WORKFLOW_ID_RE.fullmatch(workflow_id):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "precision_workflow_id_invalid", "field": "workflow_id"},
+        )
+
+    items, _file_index = await asyncio.to_thread(_precision_workflow_projection_data)
+    if workflow_id:
+        items = [item for item in items if item["workflow_id"] == workflow_id]
+    if normalized_from or normalized_to:
+        items = [
+            item
+            for item in items
+            if any(
+                (not normalized_from or version["created_at"][:10] >= normalized_from)
+                and (not normalized_to or version["created_at"][:10] <= normalized_to)
+                for version in item["versions"]
+                if version.get("created_at")
+            )
+        ]
+    return {"items": items[:limit], "total": len(items)}
+
+
+@app.get("/api/precision/workflows/{workflow_id}")
+async def precision_workflow(workflow_id: str):
+    workflow_id = _precision_validate_workflow_id(workflow_id)
+    items, _file_index = await asyncio.to_thread(
+        _precision_workflow_projection_data,
+        include_annotation_snapshots=True,
+    )
+    for item in items:
+        if item["workflow_id"] == workflow_id:
+            return {"workflow": item}
+    raise HTTPException(status_code=404, detail="工作流不存在")
+
+
+def _precision_workflow_version_filename(workflow_id: str, version_id: str) -> str:
+    workflow_id = _precision_validate_workflow_id(workflow_id)
+    if version_id != "original" and not PRECISION_VERSION_ID_RE.fullmatch(str(version_id or "")):
+        raise HTTPException(status_code=404, detail="工作流版本不存在")
+    _items, file_index = _precision_workflow_projection_data()
+    filename = file_index.get((workflow_id, version_id))
+    if not filename:
+        raise HTTPException(status_code=404, detail="工作流版本不存在")
+    return filename
+
+
+def _load_precision_workflow_media(filename: str, *, thumbnail: bool) -> tuple[bytes, str]:
+    """Re-encode gallery pixels so PNG prompt metadata never crosses this API."""
+    _path, payload, _mime_type, _prompt = _load_gallery_image_payload(filename)
+    try:
+        with Image.open(io.BytesIO(payload)) as source:
+            source.load()
+            image = source.copy()
+        try:
+            image.info.clear()
+            if thumbnail:
+                image.thumbnail((320, 320), Image.Resampling.LANCZOS)
+            output = io.BytesIO()
+            image.save(output, format="PNG")
+            return output.getvalue(), "image/png"
+        finally:
+            image.close()
+    except Exception:
+        raise HTTPException(
+            status_code=415,
+            detail={
+                "code": "precision_workflow_image_invalid",
+                "message": "workflow image is not readable",
+            },
+        ) from None
+
+
+@app.get("/api/precision/workflows/{workflow_id}/versions/{version_id}/thumb")
+async def precision_workflow_thumbnail(workflow_id: str, version_id: str, request: Request):
+    filename = await asyncio.to_thread(
+        _precision_workflow_version_filename,
+        workflow_id,
+        version_id,
+    )
+    payload, mime_type = await asyncio.to_thread(
+        _load_precision_workflow_media,
+        filename,
+        thumbnail=True,
+    )
+    return _memory_media_response(request, payload, mime_type)
+
+
+@app.get("/api/precision/workflows/{workflow_id}/versions/{version_id}/image")
+async def precision_workflow_image(workflow_id: str, version_id: str, request: Request):
+    filename = await asyncio.to_thread(
+        _precision_workflow_version_filename,
+        workflow_id,
+        version_id,
+    )
+    payload, mime_type = await asyncio.to_thread(
+        _load_precision_workflow_media,
+        filename,
+        thumbnail=False,
+    )
+    return _memory_media_response(request, payload, mime_type)
 
 
 @app.get("/api/history")
@@ -2425,10 +5884,8 @@ async def video_status(task_id: str):
 @app.get("/api/video/file/{filename}")
 async def video_file(filename: str):
     """访问本地视频文件"""
-    fpath = VIDEO_DIR / filename
-    if not fpath.exists():
-        raise HTTPException(status_code=404, detail="视频文件不存在")
-    return FileResponse(str(fpath), media_type="video/mp4")
+    fpath = _resolve_video_file(filename)
+    return FileResponse(str(fpath), media_type=_VIDEO_MEDIA_TYPES[fpath.suffix.lower()])
 
 
 @app.get("/api/video/list")
@@ -2479,21 +5936,17 @@ async def preview_images():
     """返回图库中最近的图片base64列表（供视频页取图用）"""
     import base64 as _b64
     items = []
-    for f in sorted(GALLERY_DIR.glob("*.png"), reverse=True)[:40]:
+    for discovered in sorted(GALLERY_DIR.glob("*.png"), reverse=True)[:40]:
         try:
-            data = _b64.b64encode(f.read_bytes()).decode()
-            prompt_text = ""
+            f, payload, mime_type, prompt_text = await asyncio.to_thread(
+                _load_gallery_image_payload,
+                discovered.name,
+            )
+            data = _b64.b64encode(payload).decode()
             model_name = f.stem.split("_")[0] if f.stem else "unknown"
-            try:
-                from PIL import Image
-                with Image.open(f) as img:
-                    if img.info and "Prompt" in img.info:
-                        prompt_text = img.info["Prompt"]
-            except Exception:
-                pass
             items.append({
                 "filename": f.name,
-                "data": f"data:image/png;base64,{data}",
+                "data": f"data:{mime_type};base64,{data}",
                 "prompt": prompt_text,
                 "model": model_name,
                 "created_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(f.stat().st_mtime)),
@@ -2880,7 +6333,7 @@ async def check_network_status():
     async def _test_one(name, url, need_proxy):
         try:
             start = time.time()
-            _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
+            _verify_ssl = verify_ssl_enabled()
             async with _httpx.AsyncClient(
                 timeout=_httpx.Timeout(5.0),
                 verify=_verify_ssl,
@@ -2899,7 +6352,7 @@ async def check_network_status():
             if need_proxy and proxy_url:
                 try:
                     start = time.time()
-                    _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
+                    _verify_ssl = verify_ssl_enabled()
                     async with _httpx.AsyncClient(timeout=_httpx.Timeout(5.0), verify=_verify_ssl, follow_redirects=True) as client:
                         r = await client.head(url)
                         elapsed = round((time.time() - start) * 1000)
@@ -2925,7 +6378,7 @@ async def get_ip_info():
     """获取本机 IP 深度质检报告（来自 testisp.info）"""
     import httpx as _httpx
     try:
-        _verify_ssl = os.getenv("VERIFY_SSL", "false").lower() == "true"
+        _verify_ssl = verify_ssl_enabled()
         async with _httpx.AsyncClient(timeout=15.0, verify=_verify_ssl, follow_redirects=True) as client:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -3055,68 +6508,75 @@ def _detect_proxy():
 
 @app.get("/api/server/control")
 async def server_control(action: str = "status"):
-    """服务器控制：status/start/restart/stop"""
-    import subprocess
+    """Report status only; process mutation belongs to the owned local launcher."""
     if action == "status":
-        try:
-            import urllib.request
-            urllib.request.urlopen(f"{GENBOX_LOOPBACK_URL}/", timeout=2)
-            return {"status": "running", "port": GENBOX_PORT}
-        except Exception:
-            return {"status": "stopped", "port": GENBOX_PORT}
-    elif action == "restart":
-        subprocess.Popen(["python", "main.py"], cwd=str(STORAGE_DIR.parent))
-        return {"status": "restarting"}
-    elif action == "stop":
-        os._exit(0)
-        return {"status": "stopping"}
-    return {"status": "unknown"}
+        return {"status": "running", "port": GENBOX_PORT}
+    raise HTTPException(
+        status_code=405,
+        detail="为防止误停进程，请使用本机 GenBox Lab 启动器执行停止或重启",
+    )
 
 
 # ──────────────────────────────────────────────────────────────
 # 自动更新系统
 # ──────────────────────────────────────────────────────────────
+class UpdateApplyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 @app.get("/api/update/check")
-async def check_for_updates(mirror: str = ""):
-    """检查是否有可用更新"""
+async def check_for_updates(request: Request):
+    """Read the canonical release state without browser-selected routing."""
+    if request.query_params:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "update_check_parameters_forbidden",
+                "message": "update checks do not accept browser-supplied URLs or mirrors",
+            },
+        )
     from updater import check_update
-    info = await check_update(mirror)
+    info = await check_update()
     return {
         "available": info.available,
         "current_version": info.current_version,
         "latest_version": info.latest_version,
         "release_notes": info.release_notes,
-        "download_url": info.download_url,
         "update_type": info.update_type,
+        "automatic_apply_available": info.automatic_apply_available,
+        "manual_install_required": info.manual_install_required,
     }
 
 
 @app.get("/api/update/mirrors")
 async def test_update_mirrors():
-    """测试所有 GitHub 代理线路的连通性和延迟"""
-    from updater import test_all_mirrors
-    results = await test_all_mirrors()
-    return {
-        "mirrors": [
-            {
-                "name": r.name,
-                "url": r.url,
-                "latency_ms": r.latency_ms,
-                "available": r.available,
-                "error": r.error,
-            }
-            for r in results
-        ],
-        "recommended": results[0].name if results and results[0].available else None,
-    }
+    """Retire browser-selectable update mirrors."""
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "code": "update_mirror_check_unavailable",
+            "message": "update mirror selection is unavailable",
+        },
+    )
 
 
 @app.post("/api/update/apply")
-async def apply_update(mirror: str = "", download_url: str = ""):
-    """执行更新"""
-    from updater import apply_update
-    result = await apply_update(mirror, download_url)
-    return result
+async def apply_software_update(body: UpdateApplyRequest, request: Request):
+    """Fail closed before any automatic update side effect can begin."""
+    del body
+    if request.query_params:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "update_apply_parameters_forbidden",
+                "message": "update apply does not accept URLs or mirrors",
+            },
+        )
+    from updater import update_apply_unavailable_detail
+    raise HTTPException(
+        status_code=503,
+        detail=update_apply_unavailable_detail(),
+    )
 
 
 @app.get("/api/update/info")
@@ -3131,6 +6591,8 @@ async def get_update_info():
         "app_dir": str(app_dir),
         "platform": sys.platform,
         "is_frozen": getattr(sys, 'frozen', False),
+        "automatic_apply_available": False,
+        "manual_install_required": True,
     }
 
 
@@ -3139,6 +6601,7 @@ async def get_update_info():
 # ──────────────────────────────────────────────────────────────
 AUTH_EXEMPT_PATHS = {
     "/api/setup/status",
+    "/api/runtime/status",
     "/api/sync/push",
     "/api/sync/push/status",
     "/favicon.ico",
@@ -3170,6 +6633,7 @@ async def admin_auth_middleware(request: Request, call_next):
 # 拉取接口由全局 admin 中间件保护；push 使用独立的来源身份密钥。
 # ──────────────────────────────────────────────────────────────
 sync_tasks: Dict[str, dict] = {}
+push_commit_lock = threading.Lock()
 
 
 def _save_synced_image(data: bytes, deployment_name: str, remote_path: str,
@@ -3188,6 +6652,7 @@ def _save_synced_image(data: bytes, deployment_name: str, remote_path: str,
         metadata.add_text("Model", model or "remote-sync")
         metadata.add_text("CreatedAt", remote_created_at or ts)
         metadata.add_text("SourcePath", remote_path)
+        metadata.add_text("SourceSHA256", sha256_bytes(data))
         metadata.add_text("Source", "cloud")
         metadata.add_text("SourceDeployment", deployment_name)
         metadata.add_text("Tags", "cloud-sync")
@@ -3455,6 +6920,7 @@ async def sync_import(body: dict = {}):
 async def sync_push_image(
     image: UploadFile = File(...),
     remote_path: str = Form(...),
+    source_sha256: str = Form(""),
     created_at: str = Form(""),
     prompt: str = Form(""),
     model: str = Form(""),
@@ -3472,63 +6938,85 @@ async def sync_push_image(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     if not authenticated:
         raise HTTPException(status_code=401, detail="无效的推送来源或 API Key")
-    if not remote_path.strip() or len(remote_path) > 1024:
-        raise HTTPException(status_code=400, detail="remote_path 无效")
+    try:
+        remote_path = validate_remote_path(remote_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     payload = await image.read()
     try:
         metadata = validate_image_payload(payload, image.content_type or "")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        expected_source_sha256 = validate_source_sha256(source_sha256)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="invalid source_sha256") from exc
+    if expected_source_sha256 and expected_source_sha256 != metadata["sha256"]:
+        raise HTTPException(status_code=422, detail="source_sha256 does not match image")
 
-    manifest = SyncManifest()
-    existing = manifest.get(f"{x_genbox_source}::{remote_path}")
-    existing_path = Path(existing.get("local_path", "")) if existing else None
-    if (
-        existing
-        and existing.get("sha256") == metadata["sha256"]
-        and existing_path
-        and existing_path.is_file()
-    ):
+    with push_commit_lock:
+        manifest = SyncManifest()
+        existing = manifest.get(f"{x_genbox_source}::{remote_path}")
+        existing_path = (
+            manifest._safe_gallery_path(existing, GALLERY_DIR) if existing else None
+        )
+        if (
+            existing
+            and existing.get("sha256") == metadata["sha256"]
+            and existing_path is not None
+            and manifest.local_file_is_current(existing, GALLERY_DIR)
+        ):
+            filename = existing_path.name
+            status = "already-imported"
+        else:
+            local_index = LocalImageIndex()
+            local_index.ensure_sha256_index()
+            local_index.index.update(manifest.local_sha256_index(GALLERY_DIR))
+            local_index.save()
+            if local_index.contains_hash(metadata["sha256"]):
+                filename = local_index.index[metadata["sha256"]]
+                status = "duplicate-local"
+            else:
+                _, filename = _save_synced_image(
+                    payload, x_genbox_source, remote_path, created_at, prompt, model,
+                )
+                local_index.index[metadata["sha256"]] = filename
+                local_index.save()
+                status = "imported"
+
+            local_path = str(GALLERY_DIR / filename)
+            manifest.add(
+                x_genbox_source, remote_path, local_path, metadata["sha256"],
+                metadata["size"], created_at,
+            )
+
+        # Source-deletion authority is granted only for this managed source
+        # when (a) the sender provisioned it under an explicit receiver-side
+        # grant, and (b) this request commits the same bytes this path now
+        # holds. A duplicate-local import from another path or the default
+        # (ungranted) state never grants deletion (ADR-024/026).
+        grant_delete = False
+        try:
+            grant_delete = _push_source_deletion_granted(x_genbox_source)
+        except Exception:  # noqa: BLE001 - a broken grant registry must fail closed
+            grant_delete = False
+        authorized_status = status in ("imported", "already-imported")
+
         return {
             "ok": True,
-            "status": "already-imported",
+            "contract_version": PUSH_CONTRACT_VERSION,
+            "status": status,
             "source_id": x_genbox_source,
             "remote_path": remote_path,
             "sha256": metadata["sha256"],
-            "local_file": Path(existing.get("local_path", "")).name,
-            "safe_to_delete_source": True,
+            "local_file": filename,
+            "width": metadata["width"],
+            "height": metadata["height"],
+            # Deletion authority is granted only when the push committed this
+            # exact content for a source whose owner explicitly enabled it.
+            "safe_to_delete_source": bool(grant_delete and authorized_status),
         }
-
-    local_index = LocalImageIndex()
-    local_index.ensure_sha256_index()
-    if local_index.contains_hash(metadata["sha256"]):
-        filename = local_index.index[metadata["sha256"]]
-        status = "duplicate-local"
-    else:
-        _, filename = _save_synced_image(
-            payload, x_genbox_source, remote_path, created_at, prompt, model,
-        )
-        local_index.index[metadata["sha256"]] = filename
-        local_index.save()
-        status = "imported"
-
-    local_path = str(GALLERY_DIR / filename)
-    manifest.add(
-        x_genbox_source, remote_path, local_path, metadata["sha256"],
-        metadata["size"], created_at,
-    )
-    return {
-        "ok": True,
-        "status": status,
-        "source_id": x_genbox_source,
-        "remote_path": remote_path,
-        "sha256": metadata["sha256"],
-        "local_file": filename,
-        "width": metadata["width"],
-        "height": metadata["height"],
-        "safe_to_delete_source": True,
-    }
 
 
 @app.get("/api/sync/push/status")
@@ -3545,8 +7033,9 @@ async def sync_push_status(
         raise HTTPException(status_code=401, detail="无效的推送来源或 API Key")
     return {
         "ok": True,
+        "contract_version": PUSH_CONTRACT_VERSION,
         "source_id": x_genbox_source,
-        "max_image_bytes": int(os.getenv("GENBOX_PUSH_MAX_BYTES", str(25 * 1024 * 1024))),
+        "max_image_bytes": push_max_image_bytes(),
     }
 
 
@@ -3578,51 +7067,579 @@ async def extension_catalog():
     return public_catalog()
 
 
+@app.get("/api/extensions/store")
+async def extension_store():
+    return extensions_store.public_store_projection()
+
+
+@app.post("/api/extensions/images/integration-check")
+async def extension_image_integration_check(body: ImageIntegrationCheckRequest):
+    """Classify a pinned image from the local capability catalog only."""
+    try:
+        return {"image": body.image.strip(), **check_image_integration(body.image)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="immutable_image_required") from exc
+
+
 @app.post("/api/extensions/targets")
 async def extension_save_target(body: dict = {}):
-    target = extensions_store.upsert_target(body)
+    target = extensions_store.save_target_metadata(body)
     return {"target": target.model_dump()}
 
 
 @app.delete("/api/extensions/targets/{target_id}")
 async def extension_delete_target(target_id: str):
+    if not extensions_store.get_target(target_id):
+        raise HTTPException(status_code=404, detail="目标不存在")
+    try:
+        revoke_target_push_sources(target_id)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Push 凭据注册表暂不可用") from exc
     if not extensions_store.delete_target(target_id):
         raise HTTPException(status_code=404, detail="目标不存在")
     return {"deleted": True}
 
 
+def _bind_confirmed_extension_target(body, *, plan_confirmation: bool = False):
+    saved_target = extensions_store.get_target(body.target.id)
+    if not saved_target:
+        raise HTTPException(status_code=404, detail="请先保存 VPS，再执行远程操作")
+    if not is_canonical_host_key_trust(
+        saved_target.host_key_algorithm, saved_target.host_key
+    ):
+        raise HTTPException(status_code=409, detail="请先读取并确认 SSH 主机指纹")
+    if (
+        body.target.host != saved_target.host
+        or body.target.port != saved_target.port
+        or body.target.username != saved_target.username
+    ):
+        if plan_confirmation:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "VPS 连接身份与已确认部署计划不一致，请重新生成安全计划",
+                    "diagnostic": {
+                        "code": "deployment_plan_identity_changed",
+                        "stage": "plan_confirmation",
+                        "retry_safe": False,
+                        "task_created": False,
+                    },
+                },
+            )
+        raise HTTPException(status_code=409, detail="VPS 连接信息已变化，请重新保存并确认主机指纹")
+    if plan_confirmation and saved_target.target_role != "isolated-development":
+        raise HTTPException(
+            status_code=403,
+            detail="当前目标已标记为生产机（只读），不能生成或执行部署计划；请选择隔离开发机。",
+        )
+    return body.model_copy(update={
+        "target": saved_target,
+        "expected_host_key_algorithm": saved_target.host_key_algorithm,
+        "expected_host_key": saved_target.host_key,
+        "trust_host_key": True,
+    })
+
+
+async def _validate_read_only_discovery_intent(
+    body: ExtensionDiscoveryRequest,
+) -> ValidatedDiscoveryPlan:
+    """Bind one discovery click to the saved target and freshly observed key.
+
+    The probe performs SSH key exchange only. Authentication and the existing
+    backend-owned discovery commands remain in the subsequent discovery call.
+    The approval record is intentionally in-memory and request-scoped: it is
+    not target metadata, a task record, or a credential store.
+    """
+    observed_algorithm, observed_fingerprint = await probe_host_key(body.target)
+    expected_algorithm = body.expected_host_key_algorithm
+    expected_fingerprint = body.expected_host_key
+    if not (
+        hmac.compare_digest(expected_algorithm, observed_algorithm)
+        and hmac.compare_digest(expected_fingerprint, observed_fingerprint)
+    ):
+        raise SSHConnectionError(
+            "VPS 当前 SSH 主机身份与已确认记录不一致，已拒绝开始环境检查。",
+            code="ssh_host_key_mismatch",
+            stage="host_key_verification",
+        )
+    plan = {
+        "authorization": {
+            "scope": "read-only-discovery",
+            "target_role": body.target.target_role,
+            "host": body.target.host,
+            "port": body.target.port,
+            "username": body.target.username,
+            "approval_record_id": f"l2-{uuid.uuid4().hex}",
+            "approved_at": datetime.now(timezone.utc).isoformat(),
+        },
+        "trust": {
+            "expected_host": body.target.host,
+            "expected_port": body.target.port,
+            "expected_algorithm": expected_algorithm,
+            "expected_fingerprint": expected_fingerprint,
+            "observed_host": body.target.host,
+            "observed_port": body.target.port,
+            "observed_algorithm": observed_algorithm,
+            "observed_fingerprint": observed_fingerprint,
+        },
+        "operations": [
+            {"id": "identity"},
+            {"id": "os_release"},
+            {"id": "cpu_architecture"},
+            {"id": "cpu_count"},
+            {"id": "memory_summary"},
+            {"id": "home_directory"},
+            {"id": "python_version"},
+            {"id": "uv_version"},
+            {"id": "docker_version"},
+            {"id": "compose_version"},
+            {"id": "docker_ps"},
+            {"id": "compose_ls"},
+            {"id": "listening_ports"},
+            {"id": "capacity", "path": "/"},
+        ],
+    }
+    try:
+        return validate_read_only_discovery_plan(plan)
+    except DiscoveryPlanValidationError as exc:
+        raise SSHConnectionError(
+            "本次只读环境检查的安全范围无效，已拒绝连接。",
+            code="read_only_discovery_plan_rejected",
+            stage="discovery_authorization",
+        ) from exc
+
+
+READ_ONLY_DISCOVERY_TIMEOUT_SECONDS = 45
+
+
+def _safe_extension_ssh_error(exc: Exception, *, error: str, code: str, stage: str) -> HTTPException:
+    if isinstance(exc, (SSHAuthenticationError, SSHConnectionError)):
+        return HTTPException(
+            status_code=401 if isinstance(exc, SSHAuthenticationError) else 400,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        )
+    return HTTPException(
+        status_code=400,
+        detail={
+            "error": error,
+            "diagnostic": {"code": code, "stage": stage, "retry_safe": False},
+        },
+    )
+
+
+def _resolve_discovered_instance_handle(target_id: str, handle: str, discovery: dict) -> dict:
+    candidates = discovery.get("instances", [])
+    handle_matches = [
+        (index, item) for index, item in enumerate(candidates)
+        if isinstance(item, dict)
+        and isinstance(item.get("id"), str)
+        and hmac.compare_digest(public_instance_handle(target_id, item["id"]), handle)
+    ]
+    raw_matches = [
+        (index, item) for index, item in enumerate(candidates)
+        if isinstance(item, dict) and item.get("id") == handle
+    ]
+    if len(handle_matches) > 1 or len(raw_matches) > 1:
+        raise ValueError("deployment_instance_handle_invalid")
+    if handle_matches and raw_matches and handle_matches[0][0] != raw_matches[0][0]:
+        raise ValueError("deployment_instance_handle_invalid")
+    if handle_matches:
+        return handle_matches[0][1]
+    if raw_matches:
+        return raw_matches[0][1]
+    raise ValueError("deployment_instance_handle_invalid")
+
+
+def _resolve_plan_discovery_references(body: ExtensionPlanRequest, discovery: dict) -> ExtensionPlanRequest:
+    updates = {}
+    if body.strategy == "existing" and body.instance_id.startswith("i-"):
+        instance = _resolve_discovered_instance_handle(body.target.id, body.instance_id, discovery)
+        updates.update({
+            "instance_id": instance["id"],
+            "service_port": instance.get("service_port"),
+            "image": instance.get("image") or body.image,
+        })
+    if body.clone_scope in {"media", "working-copy"} and body.clone_source_id.startswith("i-"):
+        source = _resolve_discovered_instance_handle(body.target.id, body.clone_source_id, discovery)
+        updates.update({
+            "clone_source_id": source["id"],
+            "image": source.get("image") or body.image,
+        })
+    return body.model_copy(update=updates) if updates else body
+
+
+def _resolve_stored_instance_handle(instance_handle: str, target_id: str = ""):
+    candidates = extensions_store.list_instances(target_id)
+    matches = [
+        (index, item) for index, item in enumerate(candidates)
+        if hmac.compare_digest(public_instance_handle(item.target_id, item.id), instance_handle)
+    ]
+    raw_matches = [(index, item) for index, item in enumerate(candidates) if item.id == instance_handle]
+    if len(matches) > 1 or len(raw_matches) > 1:
+        return None
+    if matches and raw_matches and matches[0][0] != raw_matches[0][0]:
+        return None
+    if matches:
+        return matches[0][1]
+    if raw_matches:
+        return raw_matches[0][1]
+    return None
+
+
+def _require_managed_existing_instance(instance_id: str, target_id: str = ""):
+    instance = _resolve_stored_instance_handle(instance_id, target_id)
+    if (
+        not instance
+        or instance.managed is not True
+        or str(instance.ownership or "") != "managed"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "external_instance_adoption_required",
+                "message": "外部实例在完成已验证的 adoption flow 前仅可查看，不能进入部署或托管生命周期。",
+            },
+        )
+    return instance
+
+
+def _public_instance_projection(instance) -> dict:
+    return public_instance_access(instance)
+
+
 @app.post("/api/extensions/ssh/test")
 async def extension_test_ssh(body: ExtensionTestRequest):
+    body = _bind_confirmed_extension_target(body)
     try:
         return await test_extension_connection(body)
+    except (SSHAuthenticationError, SSHConnectionError) as exc:
+        raise HTTPException(
+            status_code=401 if isinstance(exc, SSHAuthenticationError) else 400,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        ) from exc
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "SSH 诊断未完成，原始错误已隐藏。请勿连续重试。",
+                "diagnostic": {"code": "ssh_check_failed", "stage": "ssh_check", "retry_safe": False},
+            },
+        ) from exc
+
+
+@app.post("/api/extensions/ssh/host-key/probe")
+async def extension_probe_ssh_host_key(body: ExtensionHostKeyProbeRequest):
+    target = extensions_store.get_target(body.target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="请先保存 VPS，再读取主机指纹")
+    try:
+        algorithm, fingerprint = await probe_host_key(target)
+    except SSHConnectionError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "读取 SSH 主机指纹失败，原始错误已隐藏。",
+                "diagnostic": {"code": "ssh_host_key_probe_failed", "stage": "host_key_probe", "retry_safe": False},
+            },
+        ) from exc
+    return {
+        "target_id": target.id,
+        "algorithm": algorithm,
+        "fingerprint": fingerprint,
+    }
+
+
+@app.post("/api/extensions/ssh/host-key/pair/start")
+async def extension_start_ssh_host_key_pairing(body: ExtensionHostKeyPairingStartRequest):
+    """Create a one-time helper for a user-trusted SSH terminal session."""
+    target = extensions_store.get_target(body.target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="请先保存 VPS，再开始配对")
+    try:
+        algorithm, fingerprint = await probe_host_key(target)
+        record = host_key_pairings.create(target, algorithm, fingerprint)
+        helper = build_host_key_pairing_helper(record)
+    except SSHConnectionError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "无法开始 SSH 主机身份配对，请稍后重试",
+                "diagnostic": {"code": "ssh_host_key_pair_start_failed", "stage": "host_key_pair_start", "retry_safe": False},
+            },
+        ) from exc
+    return {
+        "pairing_id": record.pairing_id,
+        "expires_at": int(record.expires_at),
+        "expires_in_seconds": max(0, int(record.expires_at - time.time())),
+        "helper_command": helper,
+    }
+
+
+@app.post("/api/extensions/ssh/host-key/pair/complete")
+async def extension_complete_ssh_host_key_pairing(body: ExtensionHostKeyPairingCompleteRequest):
+    """Validate and consume a helper response before persisting host trust."""
+    record = host_key_pairings.consume(body.pairing_id)
+    if not record:
+        raise HTTPException(status_code=409, detail="配对已过期、取消或已经使用")
+    parsed = parse_host_key_pairing_response(body.response)
+    target = extensions_store.get_target(record.target_id)
+    expected_proof = hashlib.sha256(
+        f"{record.algorithm}:{record.fingerprint}:{record.challenge}".encode("utf-8")
+    ).hexdigest()
+    if not parsed or not hmac.compare_digest(parsed["code"], record.challenge) or not hmac.compare_digest(parsed["proof"], expected_proof):
+        raise HTTPException(status_code=400, detail="配对回执格式或挑战值无效")
+    if not target or target_identity_digest(target) != record.target_identity:
+        raise HTTPException(status_code=409, detail="VPS 连接信息已修改，请重新开始配对")
+    try:
+        current_algorithm, current_fingerprint = await probe_host_key(target)
+    except SSHConnectionError as exc:
+        raise HTTPException(status_code=400, detail={"error": str(exc), "diagnostic": exc.diagnostic}) from exc
+    if current_algorithm != record.algorithm or current_fingerprint != record.fingerprint:
+        raise HTTPException(status_code=409, detail="SSH 主机身份在配对期间发生变化，未保存")
+    if is_canonical_host_key_trust(target.host_key_algorithm, target.host_key):
+        if target.host_key_algorithm != record.algorithm or target.host_key != record.fingerprint:
+            raise HTTPException(status_code=409, detail="VPS 已保存的主机身份与本次配对不一致")
+    try:
+        saved = extensions_store.confirm_target_host_key(target, record.algorithm, record.fingerprint)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="VPS 连接信息在配对期间发生变化，未保存") from exc
+    return {"target": saved.model_dump(), "verified": True}
+
+
+@app.post("/api/extensions/ssh/host-key/pair/cancel")
+async def extension_cancel_ssh_host_key_pairing(body: ExtensionHostKeyPairingCancelRequest):
+    """Discard a one-time pairing without revealing whether it existed."""
+    host_key_pairings.discard(body.pairing_id)
+    return {"cancelled": True}
+
+
+@app.post("/api/extensions/ssh/host-key/reset")
+async def extension_reset_ssh_host_key(body: ExtensionHostKeyResetRequest):
+    """Discard one saved trust record only after an explicit local user action."""
+    target = extensions_store.reset_target_host_key(body.target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="请先保存 VPS，再重置服务器身份记录")
+    return {"target": target.model_dump(), "reset": True}
+
+
+@app.post("/api/extensions/ssh/host-key/confirm")
+async def extension_confirm_ssh_host_key(body: ExtensionHostKeyConfirmRequest):
+    target = extensions_store.get_target(body.target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="请先保存 VPS，再确认主机指纹")
+    try:
+        current_algorithm, current_fingerprint = await probe_host_key(target)
+    except SSHConnectionError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        ) from exc
+    algorithm_matches = hmac.compare_digest(body.algorithm, current_algorithm)
+    fingerprint_matches = hmac.compare_digest(body.fingerprint, current_fingerprint)
+    if not (algorithm_matches and fingerprint_matches):
+        raise HTTPException(status_code=409, detail="VPS 主机身份在确认前发生变化，已拒绝保存")
+    if is_canonical_host_key_trust(target.host_key_algorithm, target.host_key):
+        saved_algorithm_matches = hmac.compare_digest(target.host_key_algorithm, current_algorithm)
+        saved_fingerprint_matches = hmac.compare_digest(target.host_key, current_fingerprint)
+        if not (saved_algorithm_matches and saved_fingerprint_matches):
+            raise HTTPException(status_code=409, detail="VPS 已保存的主机身份与当前值不一致，已拒绝覆盖")
+    try:
+        saved = extensions_store.confirm_target_host_key(
+            target, current_algorithm, current_fingerprint
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="VPS 连接信息在确认期间发生变化，已拒绝保存指纹") from exc
+    return {"target": saved.model_dump()}
 
 
 @app.post("/api/extensions/deploy")
 async def extension_start_deploy(body: ExtensionDeployRequest):
     try:
-        task_id = extension_tasks.create(body)
+        validate_deployment_capability(body.project_id, body.strategy, body.deployment_mode)
+        if body.strategy == "existing":
+            _require_managed_existing_instance(body.instance_id, body.target.id)
+        body = _bind_confirmed_extension_target(body, plan_confirmation=True)
+        task_id = await extension_tasks.create(body)
         return {"task_id": task_id}
+    except HTTPException:
+        raise
+    except DeploymentAttemptConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        ) from exc
+    except DeploymentNoTaskError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        ) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "deployment_request_rejected",
+                "diagnostic": {
+                    "code": "extension_deploy_request_rejected",
+                    "stage": "plan_confirmation",
+                    "retry_safe": False,
+                    "task_created": False,
+                },
+            },
+        ) from exc
+    except Exception as exc:
+        raise _safe_extension_ssh_error(
+            exc,
+            error="部署前远程复核或本地任务事务未完成，原始错误已隐藏。",
+            code="extension_deploy_preflight_failed",
+            stage="deployment_preflight",
+        ) from exc
 
 
 @app.post("/api/extensions/discover")
 async def extension_discover(body: ExtensionDiscoveryRequest):
+    body = _bind_confirmed_extension_target(body)
     try:
-        return await discover_environment(body)
+        approved_plan = await _validate_read_only_discovery_intent(body)
+        discovery = await asyncio.wait_for(
+            discover_environment(body, approved_plan=approved_plan),
+            timeout=READ_ONLY_DISCOVERY_TIMEOUT_SECONDS,
+        )
+        public = deployment_plans.public_discovery(discovery, body.target.id)
+        _save_store_environment_projection(body.target, discovery, public)
+        return public
+    except asyncio.TimeoutError as exc:
+        raise _safe_extension_ssh_error(
+            SSHConnectionError(
+                "只读环境检查在限定时间内未完成，已停止本次检查。无需重新确认服务器身份；"
+                "请检查隔离开发机的 SSH/Docker 响应后，再进行一次检查。",
+                code="read_only_discovery_timeout",
+                stage="environment_discovery",
+            ),
+            error="VPS 环境检查未完成，原始错误已隐藏。",
+            code="extension_discovery_failed",
+            stage="environment_discovery",
+        ) from exc
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+        raise _safe_extension_ssh_error(
+            exc,
+            error="VPS 环境检查未完成，原始错误已隐藏。",
+            code="extension_discovery_failed",
+            stage="environment_discovery",
+        ) from exc
+
+
+def _save_store_environment_projection(target, discovery: dict, public: dict) -> None:
+    """Persist only complete, successful discovery evidence for Store use."""
+    verified = extensions_store.verified_environment_projection(target, discovery, public)
+    verified_facts = extensions_store.verified_environment_facts(target, discovery, public)
+    if verified is not None and verified_facts is not None:
+        extensions_store.save_environment_observation(verified, verified_facts)
 
 
 @app.post("/api/extensions/deploy/plan")
 async def extension_deploy_plan(body: ExtensionPlanRequest):
     try:
-        discovery = await discover_environment(body)
-        return {"plan": deployment_plans.create(body, discovery), "discovery": discovery}
-    except Exception as exc:
+        validate_deployment_capability(body.project_id, body.strategy, body.deployment_mode)
+        validate_deployment_image(body.image, body.strategy, body.clone_scope)
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+    if body.strategy == "existing":
+        _require_managed_existing_instance(body.instance_id, body.target.id)
+    saved_target = extensions_store.get_target(body.target.id)
+    if not saved_target or saved_target.target_role != "isolated-development":
+        raise HTTPException(
+            status_code=403,
+            detail="当前目标仅允许只读检查；请把服务器用途改为隔离开发机后再生成部署计划。",
+        )
+    body = _bind_confirmed_extension_target(body)
+    if not body.approve_plan_discovery:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "生成安全计划前需要明确确认两次部署前只读复核；本次未连接服务器。",
+                "diagnostic": {
+                    "code": "plan_discovery_approval_required",
+                    "stage": "plan_discovery",
+                    "retry_safe": True,
+                },
+            },
+        )
+    try:
+        initial_discovery = await asyncio.wait_for(
+            discover_environment(body),
+            timeout=READ_ONLY_DISCOVERY_TIMEOUT_SECONDS,
+        )
+        body = _resolve_plan_discovery_references(body, initial_discovery)
+        path_requirements = deployment_plans.path_requirements(body, initial_discovery)
+        discovery = await asyncio.wait_for(
+            discover_environment(body, path_checks=path_requirements),
+            timeout=READ_ONLY_DISCOVERY_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "生成安全计划前的只读复核在限定时间内未完成，已停止本次复核。无需重新确认服务器身份。",
+                "diagnostic": {
+                    "code": "plan_discovery_timeout",
+                    "stage": "plan_discovery",
+                    "retry_safe": True,
+                },
+            },
+        ) from exc
+    except Exception as exc:
+        raise _safe_extension_ssh_error(
+            exc,
+            error="生成部署计划前的 VPS 检查未完成，原始错误已隐藏。",
+            code="extension_plan_discovery_failed",
+            stage="plan_discovery",
+        ) from exc
+    try:
+        plan = deployment_plans.create(
+            body,
+            discovery,
+            path_requirements=path_requirements,
+        )
+        return {
+            "plan": plan,
+            "discovery": deployment_plans.public_discovery(discovery, body.target.id),
+        }
+    except DeploymentNoTaskError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"error": str(exc), "diagnostic": exc.diagnostic},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "deployment_plan_rejected",
+                "diagnostic": {
+                    "code": "extension_plan_rejected",
+                    "stage": "plan_generation",
+                    "retry_safe": False,
+                    "task_created": False,
+                },
+            },
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "部署计划未生成，原始错误已隐藏。",
+                "diagnostic": {"code": "extension_plan_failed", "stage": "plan_generation", "retry_safe": False},
+            },
+        ) from exc
 
 
 @app.get("/api/extensions/tasks/{task_id}")
@@ -3633,22 +7650,346 @@ async def extension_task_status(task_id: str):
     return state
 
 
+@app.get("/api/extensions/tasks")
+async def extension_task_list():
+    return extension_tasks.list_summary()
+
+
 @app.post("/api/extensions/tasks/{task_id}/delivery")
-async def extension_task_delivery(task_id: str):
-    key = extension_tasks.take_delivery(task_id)
-    if not key:
+async def extension_task_delivery(task_id: str, body: ExtensionDeliveryClaimRequest):
+    delivery = extension_tasks.take_delivery(task_id, body.deployment_attempt_id)
+    if not delivery:
         raise HTTPException(status_code=404, detail="一次性交付信息不存在或已读取")
-    return {"admin_key": key, "shown_once": True}
+    response = {
+        "instance": delivery["instance"],
+        "shown_once": bool(delivery.get("admin_key")),
+    }
+    if delivery.get("admin_key"):
+        response["admin_key"] = delivery["admin_key"]
+    return response
+
+
+@app.post("/api/extensions/tasks/{task_id}/resume")
+async def extension_task_resume(task_id: str, body: ExtensionTaskResumeRequest):
+    instance = extension_tasks.resume_access(task_id, body.target_id)
+    if instance is None:
+        return {"resumable": False}
+    return {"resumable": True, "instance": instance}
 
 
 @app.get("/api/extensions/instances")
 async def extension_instances(target_id: str = ""):
-    return {"instances": [item.model_dump() for item in extensions_store.list_instances(target_id)]}
+    return {
+        "instances": [
+            _public_instance_projection(item)
+            for item in extensions_store.list_instances(target_id)
+        ]
+    }
+
+
+def _managed_push_source_access(instance_handle: str):
+    """Resolve an opaque managed chatgpt2api instance and its verified destination."""
+    if re.fullmatch(r"i-[a-f0-9]{32}", instance_handle or "") is None:
+        raise HTTPException(status_code=404, detail="托管实例不存在")
+    instance = _resolve_stored_instance_handle(instance_handle)
+    if (
+        not instance
+        or instance.managed is not True
+        or str(instance.ownership or "") != "managed"
+        or instance.project != "chatgpt2api"
+        or not hmac.compare_digest(
+            public_instance_handle(instance.target_id, instance.id), instance_handle
+        )
+    ):
+        raise HTTPException(status_code=404, detail="托管实例不存在")
+    target = extensions_store.get_target(instance.target_id)
+    if not target or not target.network_verified_at:
+        raise HTTPException(status_code=409, detail="GenBox 私网地址尚未验证")
+    try:
+        parsed = urlsplit(target.network_url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("invalid network URL")
+        parsed.port
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="GenBox 私网地址尚未验证") from exc
+    path = parsed.path.rstrip("/") + "/api/sync/push"
+    destination_url = urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
+    return instance, destination_url
+
+
+def _push_source_error(exc: Exception):
+    if isinstance(exc, ValueError) and str(exc) == "managed Push source already exists":
+        raise HTTPException(status_code=409, detail="该实例已有有效的 Push 凭据，请轮换或撤销后再创建") from exc
+    raise HTTPException(status_code=503, detail="Push 凭据注册表暂不可用") from exc
+
+
+def _push_source_deletion_granted(source_id: str) -> bool:
+    """True only when this managed Push source has explicit deletion grant.
+
+    Reads the durable registry read-only through the public query of the
+    receiving-side record; a damaged registry fails closed (False) rather than
+    ever granting deletion.
+    """
+    if not source_id:
+        return False
+    try:
+        granted = push_source_deletion_granted(source_id)
+    except Exception:  # noqa: BLE001 - fail closed on registry errors
+        return False
+    return granted
+
+
+_PUSH_KEY_SAVE_CONFIRMATION_TTL_SECONDS = 120
+
+
+class _PushKeySaveConfirmations:
+    """Short-lived, one-time, in-memory authorization for local Push-key save."""
+
+    def __init__(self):
+        self._lock = threading.RLock()
+        self._records: dict[str, dict[str, object]] = {}
+
+    @staticmethod
+    def _key_digest(push_key: str) -> str:
+        return hashlib.sha256(push_key.encode("utf-8")).hexdigest()
+
+    def issue(self, instance_handle: str, source_id: str, push_key: str) -> tuple[str, int]:
+        now = time.time()
+        token = secrets.token_urlsafe(32)
+        with self._lock:
+            self._records = {
+                item_token: record
+                for item_token, record in self._records.items()
+                if float(record["expires_at"]) > now
+            }
+            self._records[token] = {
+                "expires_at": now + _PUSH_KEY_SAVE_CONFIRMATION_TTL_SECONDS,
+                "instance_handle": instance_handle,
+                "source_id": source_id,
+                "key_digest": self._key_digest(push_key),
+            }
+        return token, _PUSH_KEY_SAVE_CONFIRMATION_TTL_SECONDS
+
+    def consume(self, instance_handle: str, source_id: str, push_key: str, token: str) -> bool:
+        if not token:
+            return False
+        with self._lock:
+            record = self._records.pop(token, None)
+        if not record or float(record["expires_at"]) <= time.time():
+            return False
+        return all((
+            hmac.compare_digest(str(record["instance_handle"]), instance_handle),
+            hmac.compare_digest(str(record["source_id"]), source_id),
+            hmac.compare_digest(str(record["key_digest"]), self._key_digest(push_key)),
+        ))
+
+
+_push_key_save_confirmations = _PushKeySaveConfirmations()
+
+
+@app.get("/api/extensions/push-sources/{instance_handle}")
+async def extension_push_source_status(instance_handle: str):
+    instance, destination_url = _managed_push_source_access(instance_handle)
+    try:
+        sources = list_push_sources(instance.target_id, instance.id)
+    except Exception as exc:
+        _push_source_error(exc)
+    return {
+        "instance_handle": instance_handle,
+        "destination_url": destination_url,
+        "configured": bool(sources),
+        "source": sources[0] if sources else None,
+        "saved_locally": bool(
+            credential_vault.status().get("configured")
+            and any(
+                item.get("instance_id") == instance.id
+                and ("genbox_" + "push" + "_key") in item.get("fields", [])
+                for item in credential_vault.list_metadata()
+            )
+        ),
+    }
+
+
+@app.post("/api/extensions/push-sources")
+async def extension_push_source_create(body: PushSourceProvisionRequest):
+    instance, destination_url = _managed_push_source_access(body.instance_handle)
+    try:
+        source, push_key = create_push_source(instance.target_id, instance.id)
+    except Exception as exc:
+        _push_source_error(exc)
+    return {
+        "instance_handle": body.instance_handle,
+        "destination_url": destination_url,
+        "source": source,
+        "push_key": push_key,
+        "shown_once": True,
+    }
+
+
+@app.post("/api/extensions/push-sources/{instance_handle}/{source_id}/rotate")
+async def extension_push_source_rotate(instance_handle: str, source_id: str, body: PushSourceRotateRequest | None = None):
+    body = body or PushSourceRotateRequest()
+    instance, destination_url = _managed_push_source_access(instance_handle)
+    try:
+        rotated = rotate_push_source(source_id, instance.target_id, instance.id)
+    except Exception as exc:
+        _push_source_error(exc)
+    if rotated is None:
+        raise HTTPException(status_code=404, detail="Push 来源不存在")
+    source, push_key = rotated
+    local_save = {
+        "requested": False,
+        "saved": False,
+        "pending": False,
+        "recovery_action": "",
+        "error": "",
+    }
+    return {
+        "instance_handle": instance_handle,
+        "destination_url": destination_url,
+        "source": source,
+        "push_key": push_key,
+        "shown_once": True,
+        "remote_rotated": True,
+        "local_save": local_save,
+    }
+
+
+@app.delete("/api/extensions/push-sources/{instance_handle}/{source_id}")
+async def extension_push_source_delete(instance_handle: str, source_id: str):
+    instance, _destination_url = _managed_push_source_access(instance_handle)
+    try:
+        revoked = revoke_push_source(source_id, instance.target_id, instance.id)
+    except Exception as exc:
+        _push_source_error(exc)
+    if not revoked:
+        raise HTTPException(status_code=404, detail="Push 来源不存在")
+    return {"instance_handle": instance_handle, "revoked": True}
+
+
+@app.patch("/api/extensions/push-sources/{instance_handle}/{source_id}/grant-delete")
+async def extension_push_source_grant_delete(instance_handle: str, source_id: str, body: PushSourceGrantDeleteRequest):
+    instance, _destination_url = _managed_push_source_access(instance_handle)
+    try:
+        updated = set_push_source_grant_delete(
+            source_id, instance.target_id, instance.id, body.enabled
+        )
+    except Exception as exc:
+        _push_source_error(exc)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Push 来源不存在")
+    return {
+        "instance_handle": instance_handle,
+        "source_id": source_id,
+        "grant_delete": bool(body.enabled),
+    }
+
+
+def _save_managed_push_configuration(instance, destination_url: str, source_id: str, push_key: str) -> None:
+    """Save only a newly issued key after the explicit local-save intent."""
+    try:
+        existing = credential_vault.get(instance.id)
+    except KeyError:
+        existing = ManagedCredential(genbox_push_key=push_key)
+    values = existing.model_dump()
+    values.update({"genbox_push_key": push_key, "genbox_push_source_id": source_id, "genbox_push_url": destination_url})
+    credential_vault.upsert(instance.id, ManagedCredential(**values))
+
+
+def _clear_managed_push_configuration(instance) -> None:
+    """Remove only the local Push fields before a remote key rotation."""
+    try:
+        existing = credential_vault.get(instance.id)
+    except (KeyError, PermissionError):
+        return
+    values = existing.model_dump()
+    values.update({"genbox_push_key": "", "genbox_push_source_id": "", "genbox_push_url": ""})
+    credential_vault.delete(instance.id)
+    if any(value for value in values.values()):
+        credential_vault.upsert(instance.id, ManagedCredential(**values))
+
+
+def _local_push_save_error(exc: Exception) -> str:
+    """Expose only a recovery category after a completed remote rotation."""
+    if isinstance(exc, PermissionError):
+        return "vault_locked"
+    if isinstance(exc, RuntimeError):
+        return "vault_unavailable"
+    return "vault_save_failed"
+
+
+@app.post("/api/extensions/vault/credentials/{instance_id}/push-key/confirmation")
+async def extension_confirm_vault_save_push_key(
+    instance_id: str, body: PushKeyLocalSaveConfirmationRequest,
+):
+    """Issue a short-lived, one-time confirmation bound to the displayed key."""
+    instance = _managed_vault_instance(instance_id)
+    try:
+        _instance, _destination_url = _managed_push_source_access(instance_id)
+        sources = list_push_sources(instance.target_id, instance.id)
+        if not any(item.get("source_id") == body.source_id for item in sources):
+            raise ValueError("Push source is no longer active; create or rotate again")
+        if not source_key_belongs_to_instance(
+            body.source_id, instance.target_id, instance.id, body.push_key,
+        ):
+            raise ValueError("Push key does not match the current managed source; create or rotate again")
+        token, expires_in_seconds = _push_key_save_confirmations.issue(
+            instance_id, body.source_id, body.push_key,
+        )
+        return {
+            "confirmation_token": token,
+            "expires_in_seconds": expires_in_seconds,
+        }
+    except Exception as exc:
+        if isinstance(exc, ValueError) and str(exc).startswith("Push "):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        _vault_error(exc)
+
+
+@app.put("/api/extensions/vault/credentials/{instance_id}/push-key")
+async def extension_vault_save_push_key(instance_id: str, body: PushKeyLocalSaveRequest):
+    """Save a Push key only after consuming its server-issued confirmation."""
+    instance = _managed_vault_instance(instance_id)
+    try:
+        if not _push_key_save_confirmations.consume(
+            instance_id, body.source_id, body.push_key, body.confirmation_token,
+        ):
+            raise ValueError("Push-key local-save confirmation is missing, expired, replayed, or invalid")
+        _instance, destination_url = _managed_push_source_access(instance_id)
+        if destination_url != body.destination_url:
+            raise ValueError("Push destination changed; create or rotate again")
+        sources = list_push_sources(instance.target_id, instance.id)
+        if not any(item.get("source_id") == body.source_id for item in sources):
+            raise ValueError("Push source is no longer active; create or rotate again")
+        if not source_key_belongs_to_instance(body.source_id, instance.target_id, instance.id, body.push_key):
+            raise ValueError("Push key does not match the current managed source; create or rotate again")
+        credential_vault._require_unlocked()
+        _save_managed_push_configuration(instance, destination_url, body.source_id, body.push_key)
+        return {"saved_locally": True, "remote_unchanged": True}
+    except Exception as exc:
+        if isinstance(exc, PermissionError):
+            raise HTTPException(status_code=423, detail=str(exc)) from exc
+        if isinstance(exc, OSError):
+            raise HTTPException(status_code=503, detail="vault_save_failed") from exc
+        if isinstance(exc, ValueError) and str(exc).startswith("Push"):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        _vault_error(exc)
 
 
 def _managed_vault_instance(instance_id: str):
-    instance = extensions_store.get_instance(instance_id)
-    if not instance or not instance.managed:
+    instance = _resolve_stored_instance_handle(instance_id)
+    if (
+        not instance
+        or instance.managed is not True
+        or str(instance.ownership or "") != "managed"
+    ):
         raise HTTPException(status_code=404, detail="托管实例不存在")
     return instance
 
@@ -3661,6 +8002,240 @@ def _vault_error(exc: Exception):
     if isinstance(exc, RuntimeError):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# Image updates are deliberately short-lived and single-use.  The plan binds
+# an opaque public handle to an immutable image, while the SSH credential is
+# retrieved only by the apply request after the vault has been unlocked.
+_managed_image_update_plans: dict[str, dict] = {}
+_managed_image_update_plans_lock = threading.RLock()
+_MANAGED_IMAGE_UPDATE_PLAN_TTL_SECONDS = 300
+
+
+class ManagedImageUpdateTaskManager:
+    """Public-only task projection for the bounded managed-image update."""
+
+    _TASK_ID_RE = re.compile(r"^iu-task-[a-f0-9]{16}$")
+    _STATUSES = {"queued", "running", "completed", "failed", "interrupted"}
+    _PHASES = {"queued", "connect", "update", "verify", "complete", "failed", "recovery"}
+    _STEP_IDS = ("connect", "update", "verify")
+
+    def __init__(self):
+        self.path = STORAGE_DIR / "managed_image_update_tasks.json"
+        self.lock = threading.RLock()
+        self.tasks: dict[str, dict] = {}
+        self.runners: dict[str, asyncio.Task] = {}
+        self._load()
+
+    def _load(self):
+        try:
+            payload = _json.loads(self.path.read_text(encoding="utf-8"))
+            records = payload.get("tasks", []) if isinstance(payload, dict) else []
+            self.tasks = {}
+            for item in records:
+                state = self._public_state(item)
+                if state:
+                    self.tasks[state["id"]] = state
+        except (OSError, ValueError, TypeError):
+            self.tasks = {}
+        changed = False
+        for state in self.tasks.values():
+            if state.get("status") in {"queued", "running"}:
+                state["status"] = "interrupted"
+                state["phase"] = "recovery"
+                state["error"] = "GenBox 重启时更新任务中断，请检查隔离实例后重新生成核对清单。"
+                changed = True
+        if changed:
+            self._persist()
+
+    def _persist(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.path.with_suffix(".tmp")
+        records = [state for state in (self._public_state(item) for item in self.tasks.values()) if state]
+        temporary.write_text(_json.dumps({"tasks": records}, ensure_ascii=True), encoding="utf-8")
+        os.replace(temporary, self.path)
+
+    @classmethod
+    def _public_state(cls, raw: dict | None) -> dict | None:
+        """Return only the bounded, secret-free task projection."""
+        if not isinstance(raw, dict):
+            return None
+        task_id = str(raw.get("id", ""))
+        if not cls._TASK_ID_RE.fullmatch(task_id):
+            return None
+        status = str(raw.get("status", ""))
+        if status not in cls._STATUSES:
+            return None
+        phase = str(raw.get("phase", "queued"))
+        if phase not in cls._PHASES:
+            phase = "recovery" if status == "interrupted" else "queued"
+        try:
+            progress = max(0, min(100, int(raw.get("progress", 0))))
+        except (TypeError, ValueError):
+            progress = 0
+        handle = str(raw.get("instance_handle", ""))
+        if re.fullmatch(r"i-[a-f0-9]{32}", handle) is None:
+            return None
+        image = str(raw.get("image", ""))
+        if not is_immutable_image_reference(image):
+            return None
+        raw_steps = raw.get("steps", [])
+        by_id = {item.get("id"): item for item in raw_steps if isinstance(item, dict)} if isinstance(raw_steps, list) else {}
+        steps = []
+        for step_id in cls._STEP_IDS:
+            item = by_id.get(step_id, {})
+            step_status = str(item.get("status", "pending"))
+            if step_status not in {"pending", "running", "success", "failed", "interrupted"}:
+                step_status = "pending"
+            steps.append({"id": step_id, "status": step_status})
+        logs = []
+        raw_logs = raw.get("logs", [])
+        if isinstance(raw_logs, list):
+            for item in raw_logs[-100:]:
+                if isinstance(item, dict):
+                    logs.append({"time": str(item.get("time", ""))[:32], "message": str(item.get("message", ""))[:240]})
+        state = {
+            "id": task_id, "status": status, "phase": phase, "progress": progress,
+            "instance_handle": handle, "image": image,
+            "error": str(raw.get("error"))[:240] if raw.get("error") else None,
+            "steps": steps, "logs": logs,
+            "created_at": str(raw.get("created_at", ""))[:64], "updated_at": str(raw.get("updated_at", ""))[:64],
+        }
+        result = raw.get("result")
+        if isinstance(result, dict) and isinstance(result.get("health_verified"), bool):
+            state["result"] = {"health_verified": result["health_verified"]}
+        return state
+
+    def _state(self, task_id: str) -> dict | None:
+        state = self.tasks.get(task_id)
+        public = self._public_state(state)
+        return _json.loads(_json.dumps(public, ensure_ascii=True)) if public else None
+
+    def get(self, task_id: str) -> dict | None:
+        with self.lock:
+            return self._state(task_id)
+
+    def list(self, instance_handle: str | None = None) -> list[dict]:
+        with self.lock:
+            states = [self._public_state(item) for item in self.tasks.values()]
+            states = [item for item in states if item and (not instance_handle or item["instance_handle"] == instance_handle)]
+            ordered = sorted(states, key=lambda item: item.get("updated_at", ""), reverse=True)
+            return _json.loads(_json.dumps(ordered, ensure_ascii=True))
+
+    def create(self, instance_handle: str, image: str, runner_factory) -> str:
+        task_id = "iu-task-" + uuid.uuid4().hex[:16]
+        now = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        state = {
+            "id": task_id, "status": "queued", "phase": "queued", "progress": 0,
+            "instance_handle": instance_handle, "image": image, "error": None,
+            "steps": [
+                {"id": "connect", "status": "pending"},
+                {"id": "update", "status": "pending"},
+                {"id": "verify", "status": "pending"},
+            ], "logs": [], "created_at": now, "updated_at": now,
+        }
+        with self.lock:
+            self.tasks[task_id] = state
+            self._persist()
+            runner = asyncio.create_task(self._run(task_id, runner_factory))
+            self.runners[task_id] = runner
+        return task_id
+
+    async def _run(self, task_id: str, runner_factory):
+        def update(status, phase, progress, step_index=None, step_status=None, message=None):
+            with self.lock:
+                state = self.tasks.get(task_id)
+                if not state:
+                    return
+                state.update({"status": status, "phase": phase, "progress": progress,
+                              "updated_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")})
+                if step_index is not None:
+                    state["steps"][step_index]["status"] = step_status or status
+                if message:
+                    state["logs"].append({"time": time.strftime("%H:%M:%S"), "message": message})
+                self._persist()
+        try:
+            update("running", "connect", 10, 0, "running", "正在连接隔离实例")
+            update("running", "update", 25, 1, "running", "正在拉取并切换不可变镜像")
+            result = await runner_factory()
+            if not result.get("health_verified"):
+                raise RuntimeError("health_verification_failed")
+            update("running", "verify", 90, 2, "running", "健康检查通过，正在保存结果")
+            with self.lock:
+                state = self.tasks.get(task_id)
+                if state:
+                    state["status"] = "completed"; state["progress"] = 100; state["phase"] = "complete"
+                    for step in state["steps"]: step["status"] = "success"
+                    state["result"] = {"health_verified": True}
+                    state["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+                    self._persist()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            with self.lock:
+                state = self.tasks.get(task_id)
+                if state:
+                    state["status"] = "failed"; state["phase"] = "failed"; state["error"] = "镜像更新未完成，原实例配置已保留或已回滚。"
+                    state["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+                    self._persist()
+        finally:
+            with self.lock:
+                self.runners.pop(task_id, None)
+
+
+managed_image_update_tasks = ManagedImageUpdateTaskManager()
+
+
+def _managed_image_update_instance(instance_handle: str):
+    if re.fullmatch(r"i-[a-f0-9]{32}", instance_handle or "") is None:
+        raise HTTPException(status_code=404, detail="managed_instance_not_found")
+    instance = _resolve_stored_instance_handle(instance_handle)
+    if (
+        not instance
+        or not instance.managed
+        or str(instance.ownership or "") != "managed"
+        or instance.project != "chatgpt2api"
+        or instance.strategy != "isolated"
+        or instance.deployment_mode != "compose"
+        or not hmac.compare_digest(public_instance_handle(instance.target_id, instance.id), instance_handle)
+    ):
+        raise HTTPException(status_code=404, detail="managed_instance_not_found")
+    target = extensions_store.get_target(instance.target_id)
+    if not target or target.target_role != "isolated-development":
+        raise HTTPException(status_code=403, detail="isolated_development_only")
+    return instance, target
+
+
+def _stored_ssh_credential(instance, target) -> SSHCredential:
+    saved = credential_vault.get(instance.id)
+    if saved.ssh_password and saved.ssh_private_key:
+        raise ValueError("saved_ssh_credential_invalid")
+    if not saved.ssh_password and not saved.ssh_private_key:
+        raise PermissionError("saved_ssh_credential_required")
+    elevation = "password_sudo" if saved.sudo_password else "none"
+    return SSHCredential(
+        password=saved.ssh_password,
+        private_key=saved.ssh_private_key,
+        passphrase=saved.ssh_passphrase,
+        sudo_password=saved.sudo_password,
+        elevation=elevation,
+    )
+
+
+def _take_managed_image_update_plan(plan_id: str) -> dict:
+    now = time.time()
+    with _managed_image_update_plans_lock:
+        expired = [key for key, item in _managed_image_update_plans.items()
+                   if float(item.get("expires_at", 0)) <= now]
+        for key in expired:
+            _managed_image_update_plans.pop(key, None)
+        plan = _managed_image_update_plans.get(plan_id)
+        if plan:
+            _managed_image_update_instance(plan.get("instance_handle", ""))
+            _managed_image_update_plans.pop(plan_id, None)
+    if not plan:
+        raise HTTPException(status_code=409, detail="managed_image_update_plan_unavailable")
+    return plan
 
 
 @app.get("/api/extensions/vault/status")
@@ -3692,46 +8267,187 @@ async def extension_vault_lock():
 @app.get("/api/extensions/vault/credentials")
 async def extension_vault_list():
     try:
-        return {"credentials": credential_vault.list_metadata()}
+        credentials = []
+        for item in credential_vault.list_metadata():
+            instance = extensions_store.get_instance(item.get("instance_id", ""))
+            if (
+                not instance
+                or instance.managed is not True
+                or str(instance.ownership or "") != "managed"
+            ):
+                continue
+            credentials.append({
+                "instance_handle": public_instance_handle(instance.target_id, instance.id),
+                "updated_at": item.get("updated_at", ""),
+                "fields": list(item.get("fields", [])),
+            })
+        return {"credentials": credentials}
     except Exception as exc:
         _vault_error(exc)
 
 
 @app.get("/api/extensions/vault/credentials/{instance_id}")
 async def extension_vault_get(instance_id: str):
-    _managed_vault_instance(instance_id)
+    instance = _managed_vault_instance(instance_id)
     try:
-        return {"instance_id": instance_id, "credential": credential_vault.get(instance_id).model_dump()}
+        return {
+            "instance_handle": public_instance_handle(instance.target_id, instance.id),
+            "credential": credential_vault.get(instance.id).model_dump(),
+        }
     except Exception as exc:
         _vault_error(exc)
 
 
 @app.put("/api/extensions/vault/credentials/{instance_id}")
 async def extension_vault_upsert(instance_id: str, body: ManagedCredentialUpsertRequest):
-    _managed_vault_instance(instance_id)
+    instance = _managed_vault_instance(instance_id)
     try:
-        return {"credential": credential_vault.upsert(instance_id, body.credential)}
+        try:
+            existing = credential_vault.get(instance.id)
+        except KeyError:
+            existing = None
+        values = body.credential.model_dump()
+        push_fields = ("genbox_push_key", "genbox_push_source_id", "genbox_push_url")
+        submitted_push = any(values[name] for name in push_fields)
+        if submitted_push:
+            raise ValueError("GenBox Push configuration must use the dedicated confirmation flow")
+        elif existing:
+            old = existing.model_dump()
+            values.update({name: old[name] for name in push_fields})
+        saved = credential_vault.upsert(instance.id, ManagedCredential(**values))
+        return {"credential": {
+            "instance_handle": public_instance_handle(instance.target_id, instance.id),
+            "updated_at": saved.get("updated_at", ""),
+            "fields": list(saved.get("fields", [])),
+        }}
     except Exception as exc:
+        if isinstance(exc, ValueError) and str(exc).startswith(("Push", "GenBox Push")):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         _vault_error(exc)
 
 
 @app.delete("/api/extensions/vault/credentials/{instance_id}")
 async def extension_vault_delete(instance_id: str):
-    _managed_vault_instance(instance_id)
+    instance = _managed_vault_instance(instance_id)
     try:
-        if not credential_vault.delete(instance_id):
-            raise KeyError(instance_id)
+        if not credential_vault.delete(instance.id):
+            raise KeyError(instance.id)
         return {"deleted": True}
     except Exception as exc:
         _vault_error(exc)
 
 
+@app.delete("/api/extensions/vault/credentials/{instance_id}/push-key")
+async def extension_vault_delete_push_key(instance_id: str):
+    """Delete only the local Push-key fields; never revoke or alter the source."""
+    instance = _managed_vault_instance(instance_id)
+    try:
+        saved = credential_vault.get(instance.id)
+        values = saved.model_dump()
+        values.update({"genbox_push_key": "", "genbox_push_source_id": "", "genbox_push_url": ""})
+        if any(values.get(name) for name in ("admin_key", "ssh_password", "ssh_private_key", "username", "password", "api_key", "note")):
+            credential_vault.upsert(instance.id, ManagedCredential(**values))
+        else:
+            credential_vault.delete(instance.id)
+        return {"deleted": True, "remote_unchanged": True}
+    except Exception as exc:
+        _vault_error(exc)
+
+
+@app.post("/api/extensions/instances/image-update/plan")
+async def extension_managed_image_update_plan(body: ManagedImageUpdatePlanRequest):
+    """Prepare a reviewed update for one GenBox-managed isolated instance."""
+    if not is_immutable_image_reference(body.image):
+        raise HTTPException(status_code=400, detail="immutable_image_required")
+    instance, target = _managed_image_update_instance(body.instance_handle)
+    try:
+        # This checks that the vault is unlocked and contains a usable SSH
+        # credential without returning or persisting any secret material.
+        _stored_ssh_credential(instance, target)
+    except Exception as exc:
+        _vault_error(exc)
+    plan_id = "iu-" + secrets.token_urlsafe(24)
+    expires_at = time.time() + _MANAGED_IMAGE_UPDATE_PLAN_TTL_SECONDS
+    plan = {
+        "plan_id": plan_id,
+        "instance_id": instance.id,
+        "instance_handle": body.instance_handle,
+        "target_id": target.id,
+        "image": body.image.strip(),
+        "expires_at": expires_at,
+    }
+    with _managed_image_update_plans_lock:
+        _managed_image_update_plans[plan_id] = plan
+    return {
+        "plan_id": plan_id,
+        "instance_handle": body.instance_handle,
+        "image": body.image.strip(),
+        "expires_at": int(expires_at),
+        "operations": ["pull_immutable_image", "backup_configuration", "recreate_app", "verify_health"],
+    }
+
+
+@app.post("/api/extensions/instances/image-update/apply")
+async def extension_managed_image_update_apply(body: ManagedImageUpdateApplyRequest):
+    """Consume one update plan and return a task immediately."""
+    plan = _take_managed_image_update_plan(body.plan_id)
+    instance, target = _managed_image_update_instance(plan["instance_handle"])
+    if instance.id != plan["instance_id"] or target.id != plan["target_id"]:
+        raise HTTPException(status_code=409, detail="managed_image_update_context_changed")
+    try:
+        credential = _stored_ssh_credential(instance, target)
+    except Exception as exc:
+        _vault_error(exc)
+
+    async def run_update():
+        try:
+            return await update_managed_image(
+                instance_id=instance.id, target=target, credential=credential, image=plan["image"],
+            )
+        finally:
+            credential.password = None
+            credential.private_key = None
+            credential.passphrase = None
+            credential.sudo_password = None
+
+    task_id = managed_image_update_tasks.create(plan["instance_handle"], plan["image"], run_update)
+    return {"ok": True, "task_id": task_id, "instance_handle": plan["instance_handle"], "image": plan["image"]}
+
+
+@app.get("/api/extensions/instances/image-update/tasks")
+async def extension_managed_image_update_task_list(instance_handle: str | None = None):
+    if instance_handle and re.fullmatch(r"i-[a-f0-9]{32}", instance_handle) is None:
+        raise HTTPException(status_code=400, detail="managed_instance_handle_invalid")
+    if instance_handle:
+        _managed_image_update_instance(instance_handle)
+    return {"tasks": managed_image_update_tasks.list(instance_handle)}
+
+
+@app.get("/api/extensions/instances/image-update/tasks/{task_id}")
+async def extension_managed_image_update_task_status(task_id: str):
+    state = managed_image_update_tasks.get(task_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="managed_image_update_task_not_found")
+    _managed_image_update_instance(state["instance_handle"])
+    return state
+
+
 @app.post("/api/extensions/instances/reset-admin-key")
 async def extension_reset_admin_key(body: ExtensionKeyResetRequest):
+    body = _bind_confirmed_extension_target(body)
     try:
+        instance = _resolve_stored_instance_handle(body.instance_id, body.target.id)
+        if not instance:
+            raise PermissionError("managed_instance_not_found")
+        body = body.model_copy(update={"instance_id": instance.id})
         return await reset_managed_admin_key(body)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)[:240]) from exc
+        raise _safe_extension_ssh_error(
+            exc,
+            error="管理员密钥轮换未完成，原始错误已隐藏。",
+            code="extension_key_reset_failed",
+            stage="admin_key_reset",
+        ) from exc
 
 
 @app.post("/api/extensions/tasks/{task_id}/cancel")
@@ -3743,6 +8459,7 @@ async def extension_cancel_task(task_id: str):
 
 @app.post("/api/extensions/network/connect")
 async def extension_connect_network(body: NetworkConnectRequest):
+    body = _bind_confirmed_extension_target(body)
     task_id = network_tasks.create(body)
     return {"task_id": task_id}
 
@@ -3819,65 +8536,70 @@ def _first_run_setup() -> None:
     if not interactive:
         _write_env({"APP_MODE": "prod"})
         print(
-            "[Setup] Non-interactive startup selected production mode. "
-            "Configure ADMIN_KEY in the executable data .env before starting."
+            "[Setup] Non-interactive startup selected production mode / "
+            "非交互式启动已选择生产模式。Configure ADMIN_KEY in the executable "
+            "data .env before starting / 请先在可执行文件数据目录的 .env 中配置 ADMIN_KEY。"
         )
         return
 
-    print("GenBox first-run setup")
-    print("[1] Local desktop (development mode, localhost only)")
-    print("[2] Server/VPS (production mode with authentication)")
-    print("[3] Docker/headless (production mode; configure ADMIN_KEY manually)")
+    print("GenBox first-run setup / GenBox 首次启动设置")
+    print("[1] Local desktop / 本地桌面（开发模式，仅限本机）")
+    print("[2] Server/VPS / 服务器或 VPS（带身份认证的生产模式）")
+    print("[3] Docker/headless / Docker 或无界面（生产模式；需手动配置 ADMIN_KEY）")
 
     while True:
         try:
-            choice = input("Select deployment mode (1/2/3): ").strip()
+            choice = input("Select deployment mode (1/2/3) / 选择部署模式（1/2/3）：").strip()
         except (EOFError, KeyboardInterrupt):
             _write_env({"APP_MODE": "prod"})
             print(
-                "[Setup] Input ended; production mode selected. "
-                "Configure ADMIN_KEY before starting."
+                "[Setup] Input ended; production mode selected / 输入结束，已选择生产模式。"
+                " Configure ADMIN_KEY before starting / 启动前请配置 ADMIN_KEY。"
             )
             return
 
         if choice == "1":
             _write_env({"APP_MODE": "dev"})
-            print("[Setup] Local mode enabled; access is restricted to this computer.")
+            print("[Setup] Local mode enabled; access is restricted to this computer. / "
+                  "本地模式已启用；访问仅限此电脑。")
             return
 
         if choice == "2":
             _write_env({"APP_MODE": "prod"})
             origins = input(
-                "Allowed browser origins (comma-separated, Enter for defaults): "
+                "Allowed browser origins / 允许的浏览器来源（逗号分隔，回车使用默认值）："
             ).strip()
             if origins:
                 _write_env({"ALLOWED_ORIGINS": origins})
             admin_key = generate_admin_key()
-            print("[Setup] Production mode enabled. Save this administrator key now:")
+            print("[Setup] Production mode enabled. Save this administrator key now. / "
+                  "生产模式已启用，请立即保存管理员密钥：")
             print(admin_key)
             return
 
         if choice == "3":
             _write_env({"APP_MODE": "prod"})
             print(
-                "[Setup] Docker/headless production mode enabled. "
-                "Set ADMIN_KEY in .env before starting the service."
+                "[Setup] Docker/headless production mode enabled. / Docker 或无界面生产模式已启用。"
+                " Set ADMIN_KEY in .env before starting the service. / 启动服务前请在 .env 中设置 ADMIN_KEY。"
             )
             return
 
-        print("[Setup] Enter 1, 2, or 3.")
+        print("[Setup] Enter 1, 2, or 3. / 请输入 1、2 或 3。")
 
 
 def prepare_runtime_environment(executable_data_dir: Path, bundle_dir: Path) -> Optional[Path]:
     """Reload runtime environment from user data, falling back to bundle defaults."""
     from dotenv import load_dotenv
-    from config import PROCESS_ENV_GENBOX_PORT
+    from config import PROCESS_ENV_APP_MODE, PROCESS_ENV_GENBOX_PORT
 
     executable_env = Path(executable_data_dir) / ".env"
     bundle_env = Path(bundle_dir) / ".env"
     selected_env = executable_env if executable_env.is_file() else bundle_env
     if selected_env.is_file():
         load_dotenv(selected_env, override=True)
+    if PROCESS_ENV_APP_MODE is not None:
+        os.environ["APP_MODE"] = PROCESS_ENV_APP_MODE
     if PROCESS_ENV_GENBOX_PORT is not None:
         os.environ["GENBOX_PORT"] = PROCESS_ENV_GENBOX_PORT
 
@@ -3909,6 +8631,10 @@ def run_http_server(app_mode: str, port: int, host: Optional[str] = None) -> Non
 
 def run_application() -> None:
     """Prepare first-run state, reload it in-process, enforce auth, and serve."""
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     _first_run_setup()
     prepare_runtime_environment(BASE_DIR, BASE_PATH)
 
@@ -3917,18 +8643,19 @@ def run_application() -> None:
     try:
         port = int(os.getenv("GENBOX_PORT", "8891"))
     except ValueError as exc:
-        raise SystemExit("[Startup] GENBOX_PORT must be a valid integer.") from exc
+        raise SystemExit("[Startup] GENBOX_PORT must be a valid integer / GENBOX_PORT 必须是有效整数。") from exc
     if not 1 <= port <= 65535:
-        raise SystemExit("[Startup] GENBOX_PORT must be between 1 and 65535.")
+        raise SystemExit("[Startup] GENBOX_PORT must be between 1 and 65535 / GENBOX_PORT 必须在 1 到 65535 之间。")
 
     _require_production_admin_key(app_mode)
 
     local_host = "127.0.0.1" if app_mode == "dev" else "localhost"
     local_url = f"http://{local_host}:{port}"
     mode_str = "PRODUCTION" if is_prod_mode() else "DEVELOPMENT"
-    print(f"[GenBox] v{__version__} | {mode_str} | {local_url}")
-    print(f"[GenBox] Media: {GALLERY_DIR}")
-    print(f"[GenBox] Providers: {STORAGE_DIR / 'providers.json'}")
+    mode_label = f"{mode_str} / {'生产模式' if is_prod_mode() else '开发模式'}"
+    print(f"[GenBox] v{__version__} | {mode_label} | {local_url}")
+    print(f"[GenBox] Media / 媒体目录: {GALLERY_DIR}")
+    print(f"[GenBox] Providers / Provider 配置: {STORAGE_DIR / 'providers.json'}")
 
     if (
         getattr(sys, "frozen", False)

@@ -238,3 +238,567 @@ because GenBox communicates with it over an API, SSH, Docker, or a network.
 - Release packages include the GPL text and `THIRD_PARTY_NOTICES.md`.
 - Bundled third-party code, assets, or service artifacts require documented
   provenance and compatible distribution terms before release.
+
+## ADR-013: AI Repair Is Advisory-First And Deterministically Bounded
+
+**Status:** Accepted
+**Date:** 2026-07-17
+
+### Context
+
+Future Store apps need useful diagnosis and repair guidance without exposing
+credentials, turning model output into shell, or allowing unreviewed operational
+history to become trusted automation.
+
+### Decision
+
+Run deterministic checks and fallback guidance before AI diagnosis. Send only
+minimal sanitized evidence to a dedicated user-selected diagnostic model. AI
+returns a structured proposal and cannot execute arbitrary shell or obtain direct
+root access. Any mutation requires explicit authorization for the exact owned
+target and an adapter-defined allowlisted action, followed by rollback-aware
+deterministic health verification.
+
+Sanitized experience records progress through `draft`, `reviewed`, `verified`,
+and `deprecated`. Human review and reproducible evidence are required before an
+experience becomes `verified`; raw logs are never used for self-training or
+automatic promotion.
+
+### Consequences
+
+- Model unavailability or low confidence falls back to deterministic guidance.
+- External instances remain advisory/read-only until ownership and adoption are
+  explicitly verified.
+- Repair automation grows through reviewed adapter capabilities, not free-form
+  model commands or accumulated raw logs.
+
+## ADR-014: Deployment, SSH Session, And Private-Network Completion Are Separate States
+
+**Status:** Accepted
+**Date:** 2026-07-18
+
+### Context
+
+A deployed remote service can be healthy while the VPS-to-GenBox private route
+is still incomplete. SSH credentials are session secrets and may be cleared or
+lost across refresh and restart, while the confirmed public host fingerprint is
+safe target metadata. Treating these facts as one wizard step caused false
+completion, repeated SSH tests, concurrent authentication attempts, and unsafe
+one-time credential delivery.
+
+### Decision
+
+Track service deployment, SSH session verification, and private-network
+verification independently. A historical completed deployment resumes at
+network selection unless an unclaimed one-time service credential must first be
+shown visibly. The final step requires a completed network task and its
+application-level probe; a service console URL can never satisfy the GenBox
+private-URL check.
+
+SSH and sudo credentials remain session-only unless a future explicit encrypted
+target-vault flow is separately accepted. Exactly one SSH authentication method
+is required before any SSH or network-task side effect. Confirmed public host
+fingerprints may be persisted with target metadata. A Phase 3 network task may
+perform the credential-bearing SSH connection directly, so a separate SSH test
+is needed only to establish or change the host fingerprint or to diagnose SSH.
+
+### Consequences
+
+- Browser actions use single-flight locks and discard stale authentication
+  responses after target, account, port, authentication mode, or credential
+  changes.
+- Restart recovery cannot infer private-network success from deployment history.
+- Credentials cleared after task creation must be re-entered, with explicit UI
+  notice; they do not enter target files, task stores, URLs, or browser storage.
+- Network-task persistence remains a follow-up requirement so an interrupted
+  Phase 3 task can be restored independently of deployment history.
+
+## ADR-015: Local Lab Processes Require Owned Runtime Identity
+
+**Status:** Accepted
+**Date:** 2026-07-18
+
+### Context
+
+A browser can retain a GenBox page after the Python backend stops, and static
+files can be newer than a still-running backend. The previous Windows scripts
+also used conflicting ports and terminated whichever process happened to own a
+port. These conditions made runtime failures look like SSH password failures.
+
+### Decision
+
+Manage the development Lab through one external launcher on port `8892`. The
+launcher writes an atomic, non-secret ownership record containing PID, process
+creation time, repository, mode, port, Git HEAD, and source fingerprint. It may
+stop only a process whose record, process identity, port ownership, and GenBox
+runtime health all match. Any ambiguity fails closed.
+
+Expose a no-store runtime identity only in development mode. Local browser
+heartbeats use it to display the loaded runtime and to lock backend-dependent
+Extension Center controls when the page is cached, the backend is stopped, or
+the loaded source differs. Browser HTTP routes do not stop or restart GenBox.
+
+### Consequences
+
+- A foreign service on `8892`, a reused PID, a corrupt record, or an old source
+  snapshot is reported and left untouched.
+- One legacy manually started Lab may require explicit identity verification
+  and one-time shutdown before the launcher takes ownership.
+- Runtime identity contains no credentials, configuration paths, providers, or
+  remote host facts and is unavailable in production. Local production UI uses
+  the existing non-secret setup-status contract for heartbeat instead.
+- Source edits require a Lab restart before their backend behavior can be
+  accepted, even when Git HEAD has not changed.
+
+## ADR-016: Tailscale Serve Destinations Use Validated MagicDNS
+
+**Status:** Accepted
+**Date:** 2026-07-19
+
+### Context
+
+Tailscale exposes both a node `100.x` address and a MagicDNS name. GenBox
+initially discarded the URL returned by `tailscale serve` and rebuilt an HTTP
+destination from the raw IP. Peer connectivity succeeded, but the Serve HTTP
+router returned 404 because the request did not use the expected MagicDNS host.
+
+### Decision
+
+Use the validated local `100.64.0.0/10` IPv4 address only for peer identity and
+reachability. Use the exact validated `.ts.net` MagicDNS name and the configured
+Serve port for the VPS application probe, the saved GenBox destination, and all
+future Push configuration. The destination validator rejects loopback, public
+hosts, raw Tailscale IP URLs, credentials, paths, query strings, fragments,
+wrong ports, and MagicDNS names that do not match the current local node.
+
+Do not silently fall back to an IP URL when MagicDNS resolution fails. Report a
+DNS-specific recovery action instead, because a fallback could pass a transport
+check while saving a destination that later HTTP clients cannot use correctly.
+
+### Consequences
+
+- Phase 4 sender work consumes a stable MagicDNS base URL from Phase 3.
+- Device renames, Tailnet changes, disabled MagicDNS, or DNS-policy changes
+  require fresh application-level verification before replacing the saved URL.
+- Node IPs and DNS names remain non-secret runtime metadata, but real values are
+  excluded from stable documentation and public examples.
+
+## ADR-017: Deployment Safety Contract Owns Phase 4 Execution Invariants
+
+**Status:** Accepted
+**Date:** 2026-07-22
+
+### Decision
+
+`docs/deployment-invariants.md` is the versioned normative owner for Phase 4
+deployment field classification, evidence handling, ownership lifecycle, and
+side-effect ordering. Architecture and lifecycle documents link to it rather
+than restating its rules. A contract revision requires implementation and a
+new independent fixed-commit review before it can support acceptance evidence.
+
+### Consequences
+
+Local/mock results cannot replace isolated-VPS evidence, and no public task,
+diagnostic, or browser surface may become an alternate store for operational
+identities or secrets.
+
+## ADR-018: Personal Users Pair Through An Existing Trusted SSH Session
+
+**Status:** Accepted
+**Date:** 2026-07-23
+
+### Context
+
+The current local Phase 4 implementation requires a user to manually confirm a
+canonical SSH host-key algorithm plus `SHA256:` fingerprint before credentials
+can be used. That remains a valid fail-closed safety boundary, but asking a
+personal user to understand and independently compare a long fingerprint is a
+poor default experience. SSH credentials alone cannot prove that GenBox reached
+the intended host.
+
+### Decision
+
+The local SSH compatibility path uses trusted SSH-session pairing for first-time
+host trust. It is not a user-visible all-in-one connection step: the current
+onboarding isolates server details, identity confirmation, and credential
+checks. After the user saves a target host, port, and username, GenBox creates
+a short-lived, single-use, in-memory challenge bound to the saved target
+identity version and candidate host-key algorithm/fingerprint pair. The user
+runs a GenBox-generated fixed, versioned one-line helper in an SSH terminal
+session they already trust and pastes its one-line response into GenBox.
+
+Pairing completion re-probes the host and rejects mismatched identity, expired
+or replayed challenge, edited target, unsupported algorithm, malformed response,
+or conflict with an existing saved trust record. It persists only the canonical
+algorithm/fingerprint pair and never weakens host-key verification. Start and
+completion endpoints accept no SSH credential and cause no GenBox remote
+command. The helper is backend-owned, never browser-provided shell.
+
+The trusted terminal session or known-host record is an external trust anchor
+supplied by the user. It is neither evidence of VPS ownership nor a substitute
+for SSH credentials. The existing manual provider-console or known-host check
+remains an advanced fallback for users without an accessible, readable,
+OpenSSH-compatible trusted session or with custom host-key paths. Cancellation
+persists nothing. Provider-account verification is out of scope.
+
+### Consequences
+
+The primary UI can say that server identity has been verified and reserve the
+algorithm/fingerprint for advanced details. The pairing challenge, helper,
+response, credentials, raw pairing observations, and command text are confined
+to dedicated authenticated pairing handling and must not enter public task,
+status, instance, or diagnostic projections; durable target, TaskStore, or
+runtime records; ordinary logs; browser storage; screenshots, URLs, or Git. The
+canonical trust pair is the only permitted saved outcome. Current pairing work
+has only local test and browser evidence; it still requires separately
+authorized isolated-VPS/browser single-image E2E work before it contributes to
+Phase 4 acceptance.
+
+## ADR-019: Message Channels Are Event-Driven Adapters With Capability-Scoped Commands
+
+**Status:** Accepted
+**Date:** 2026-07-23
+
+### Context
+
+Future users want to receive GenBox events and trigger selected actions through
+message channels such as Telegram, Feishu, or later approved platforms. These
+platforms do not share one auth or delivery model: some favor consumer bot and
+login flows, others require tenant or administrator approval, and some separate
+their bot and login ecosystems entirely. If GenBox treats them as interchangeable
+"chat login" providers or lets them submit free-form commands, message-channel
+support would erode the same safety boundaries already established for
+deployment, Push, and repair.
+
+### Decision
+
+Future message-channel support will use an event-driven adapter model with four
+separate responsibilities:
+
+- a versioned channel registry for capability and risk metadata
+- a channel-specific auth broker for binding users or workspaces to external
+  message identities
+- an outbound event outbox for non-secret notifications
+- an authenticated inbound gateway that maps validated callbacks to fixed
+  backend-owned GenBox intents
+
+Message-channel identity is not GenBox administrator identity. A channel binding
+grants only its explicit capabilities and must not imply deployment ownership,
+Push source identity, or repair authorization. Inbound channel actions may call
+existing workflows such as saved generation presets, task status lookup, or a
+bounded import request, but they may not submit arbitrary shell, unrestricted
+VPS commands, or free-form repair mutations.
+
+Platform-specific auth models remain distinct. GenBox must not force Telegram,
+Feishu, QQ, or later channels into a fake universal OAuth abstraction that
+hides their trust and review differences. The first implementation should prove
+one independently verified channel end to end before expanding to additional
+channels.
+
+### Consequences
+
+- Message channels become a separate future phase, not a shortcut around Phase 4
+  image-transfer evidence.
+- Channel tokens, app secrets, signing secrets, callback payloads, and bound
+  user identities follow the same secret, logging, browser-storage, and Git
+  restrictions as other GenBox credentials.
+- Unsupported channels remain explicit planned states until their auth, webhook,
+  media, rate-limit, and recovery contracts are implemented.
+- High-risk actions may require an additional GenBox confirmation layer even
+  after the message channel itself is authenticated.
+
+## ADR-020: Server Connector Is The Future Default, SSH Remains A Working Fallback
+
+**Status:** Accepted
+**Date:** 2026-07-27
+
+### Context
+
+The current deployment path can operate through SSH after host identity is
+confirmed and a session-only credential is supplied. This is deploy-capable but
+asks a beginner to manage a trusted terminal and a temporary credential. A
+server connector can eventually offer a simpler model: an agent installed by
+the user on the intended server initiates a restricted, authenticated connection
+back to GenBox and accepts only capability-scoped operations.
+
+There is no installable agent, authenticated relay/private-network transport,
+device enrollment, or allowlisted connector-operation adapter in this release.
+Calling a visual placeholder "connected" would block the working Phase 4 path
+and create a false security claim.
+
+### Decision
+
+Present the server connector as the preferred future path, with its actual
+availability shown explicitly. Until all connector prerequisites exist, the UI
+must expose a single obvious SSH continuation and preserve the current SSH
+deployment, discovery, safety-plan, and private-network sequence unchanged.
+
+A deploy-capable connector requires all of the following before it can replace
+SSH for a target:
+
+- an installable, versioned agent with an independently identifiable device key
+- one-time enrollment, expiry, rotation, revocation, and target binding
+- an authenticated outbound relay or an established private-network transport
+- signed, capability-scoped backend intents and agent-side allowlisted actions
+- redacted audit events and no secret-bearing command/output persistence
+- adapter-level discovery, deployment, recovery, and local/isolated-VPS tests
+
+GenBox will not embed an interactive web terminal. Browser requests remain
+unable to submit arbitrary shell commands. OAuth may be a future cloud-provider
+selection or ownership signal for a particular provider, but it is not a
+generic replacement for access to arbitrary existing SSH servers.
+
+Whenever SSH is used, canonical host-key algorithm and SHA-256 fingerprint
+verification remain mandatory. The connector may simplify credentials, but it
+must not silently change the SSH trust model or weaken the existing fail-closed
+host-key checks.
+
+### Consequences
+
+The current increment is an honest UI and protocol boundary, not a connector
+implementation and not end-to-end server evidence. It makes the primary
+product direction visible without delaying Phase 4's existing deploy-capable
+route. Connector implementation becomes a separate, testable milestone; its
+availability cannot be inferred from copy, a catalog item, an enrollment code,
+or a mock state.
+
+## ADR-021: Personal Server Onboarding Separates Identity From Credentials
+
+**Status:** Accepted
+**Date:** 2026-07-27
+
+### Context
+
+The former user-visible `连接服务器` step combined target metadata, host-key
+identity, session credentials, and deployment permission checks in one panel.
+The backend intentionally kept these states separate, but the shared UI made a
+successful identity confirmation look like a loop back to an empty password
+field. Personal users should not need to interpret a fingerprint, but a changed
+host identity remains a meaningful wrong-server or interception risk.
+
+### Decision
+
+Replace the mega-step with a single deployment task containing separate,
+mutually exclusive server-detail, identity-confirmation, credential-check, and
+recovery views. The normal UI reports plain-language identity state; canonical
+SSH algorithm and SHA-256 fingerprint verification remains backend-enforced and
+available only in advanced diagnostics.
+
+An identity change clears every session credential and can only enter the
+dedicated reconfirmation view. It never restores a password as masked text and
+does not silently accept a new identity. SSH remains the current deploy-capable
+path; the future connector is not made functional by this UX change.
+
+### Consequences
+
+- Personal users see one next action at a time without weakening target trust,
+  secret handling, fixed backend operations, source retention, or environment
+  isolation.
+- Existing SSH discovery, safety-plan, deployment, and private-network stages
+  remain reusable after the credential check succeeds.
+- The pairing protocol remains an SSH confirmation capability, not a universal
+  first-screen requirement or a replacement for credentials.
+- When a saved host identity changes, the user must explicitly clear the local
+  trust record before a new confirmation can be saved. That reset clears only
+  the stored algorithm/fingerprint and invalidates unfinished pairing records;
+  it never contacts the host, restores credentials, or accepts a replacement
+  identity automatically.
+
+## ADR-022: Managed Push Sources Use Explicit Show-Once Or Vault-Save Flow
+
+**Status:** Accepted (revised 2026-08-06)
+**Date:** 2026-07-30; revised 2026-08-06
+
+### Context
+
+The Push receiver previously recognized only a static `GENBOX_PUSH_KEYS`
+environment mapping. That leaves a beginner who completed guided deployment and
+private-network setup with no safe way to create a per-instance sender key.
+Putting the Push key in ordinary extension configuration, delivery tasks, or
+browser-managed storage would make it retrievable outside its intended flow.
+
+### Decision
+
+GenBox maintains a separate local managed-source registry. Each record binds a
+random source ID to the registered target and managed instance and persists
+only an active flag, timestamps, random salt, and PBKDF2-HMAC-SHA256 verifier.
+Provisioning and rotation return a raw Push key exactly once; list operations
+return metadata only. Revocation retains an inactive tombstone. Authentication
+checks the managed registry before the legacy environment mapping, and any
+known revoked source or unreadable registry fails closed.
+
+Removing a registered target deactivates every managed source bound to that
+target before its target record is deleted.
+
+The browser can request provisioning only with an opaque instance handle. The
+backend resolves the target, instance, and verified private destination itself;
+the browser cannot bind a key to an arbitrary URL, source ID, or raw instance
+ID. Push keys are never stored in browser storage, URLs, normal logs, task
+records, public instance/source projections, or screenshots. They are not
+saved locally by default. A user may explicitly check “permanently save to the
+local vault” and confirm a warning for a newly issued key. Only the existing
+encrypted local vault may hold it, and only while unlocked. Rotation requires
+fresh confirmation before replacing a local copy. Locking the vault prevents
+Push-key reads. Deleting the local copy is vault-only and never revokes or
+changes the remote Push source. Cleanup deletion logic is unchanged.
+
+### Consequences
+
+The guided final step can safely hand a user destination configuration for the
+isolated sender. It does not configure chatgpt2api remotely or complete the
+sender implementation. The legacy environment mapping remains available for
+existing sources, while a managed source can be independently rotated or
+revoked without changing administrator authentication. Local vault persistence
+is a user-controlled opt-in and is never implied by provisioning or rotation.
+
+## ADR-023: Opaque Instance Handles Survive Local Restarts
+
+**Status:** Accepted
+**Date:** 2026-07-30
+
+### Decision
+
+Derive browser-facing managed-instance and resume handles with an HMAC key
+generated once and retained only in the local ignored `storage/` directory.
+The key is not a user credential and never appears in browser state, URLs,
+tasks, logs, or Git. A missing key is created atomically; an invalid key fails
+closed.
+
+### Consequences
+
+Task recovery and managed Push-source actions keep referring to the same
+opaque instance after a local GenBox restart, while raw target and instance IDs
+remain absent from browser requests.
+
+## ADR-024: v2.6.0 Stable Release Scope And Base
+
+**Status:** Accepted
+**Date:** 2026-08-20
+
+### Context
+
+The first stable release after the rc.1..rc.8 candidate series needed an
+agreed version, base lineage, and claim boundary.
+
+### Decision
+
+Publish stable **v2.6.0** from the rc.8 candidate lineage. Its scope is
+"client + extension center + image Push receiving". The release materials do
+not claim sender-side source-file cleanup, Phase 6 completion, or upstream
+delivery; those remain pending and are described only as such. The receiver
+returns `safe_to_delete_source=false`, and source-image deletion stays
+disabled.
+
+### Consequences
+
+Release notes, changelog, READMEs, and the integration contract describe only
+verified receiver work. Harmless cleanup claim is prevented even if a later
+phase completes sender-side work in another repository.
+
+## ADR-025: Phase 6 Closed As Receiver-Grant-Verification Scope (Line A)
+
+**Status:** Accepted
+**Date:** 2026-08-20
+
+### Context
+
+Phase 6 "Verified Source Cleanup" required destructive execution, adversarial
+approval, isolated-VPS acceptance, host authority, and human authorization
+that remain external evidence. Meanwhile the scoped v2.6.0 release pins the
+receiver's `safe_to_delete_source` field to `false` (`main.py:3621`), so the
+receiver never grants deletion permission. Treating Phase 6 as
+incomplete-and-blanked would block Phase 7/8 on evidence that a scoped release
+cannot produce by design.
+
+### Decision
+
+Close Phase 6 under **Line A** as receiver-grant-verification scope: the
+acceptance criterion "only a matching authenticated receipt with
+`safe_to_delete_source=true` authorizes deletion" is satisfied structurally
+because the returned value never permits deletion. No destructive execution,
+no adversarial approval, no sender cleanup release, and no CI/macOS or
+isolated-VPS claim. Sender destructive cleanup is deferred to an explicit
+future milestone that must pass clean-deployment evidence (Phase 7) and
+independent review before any sender release can enable deletion.
+
+### Consequences
+
+Phase 7 (Sanitized GitHub Redeployment) and Phase 8 (Upstream Delivery,
+proposal PRs) can proceed without fabricating Phase 6 completeness. The
+deferred sender-cleanup milestone keeps the "no destructive remote command
+without verification" rule intact and requires fresh authorization when queued.
+
+## ADR-026: Sender Source-Image Cleanup Is A Per-Action User Selection
+
+**Status:** Accepted
+**Date:** 2026-08-20
+
+### Context
+
+ADR-025 deferred sender destructive cleanup to an explicit future milestone.
+With Phase 7 evidence complete and the Phase 8 proposal PRs open, the user
+decided how that cleanup should behave: for both manual one-shot forwarding and
+scheduled forwarding, whether to delete the source image is a **user choice per
+action**, not a forced or hard-coded position. This relaxes nothing about the
+receipt precondition; it refines the sender-side opt-in granularity.
+
+### Decision
+
+- Sender-side manual one-shot Push and scheduled Push each expose a per-run
+  "delete source after successful push" selection, explicitly chosen by the
+  user for that action, defaulting off.
+- There is no forced fixed choice: deletion is never assumed, never hidden in a
+  global config deny/allow without per-run context, and never tied to a
+  per-generation checkbox.
+- Deletion still requires all of: the user's per-run selection, an authenticated
+  matching receipt with `safe_to_delete_source=true`, and source bytes matching
+  the receipt SHA-256.
+- The mechanism follows and threads the ADR-024/025 receiver boundary: the
+  v2.6.0 receiver returns `false`; a future receiver grant path must reproduce
+  the same digest/identity gating before it can return `true`.
+
+### Consequences
+
+- Sender deletes a source only when the user selected deletion for that exact
+  manual or scheduled run and the grant conditions hold; otherwise the source is
+  always retained.
+- Phase 9 (Sender Push Source Cleanup) is the next roadmap phase after Phase 8.
+- Historical evidence documents keep their `false` records as audit trail; a
+  future receiver change re-proves the grant path under the scoped release
+  process.
+
+## ADR-027: Automatic Self-Update Requires Signed Manifests And An Embedded Public Key
+
+**Status:** Accepted
+**Date:** 2026-09-03
+
+### Context
+
+The existing updater could accept browser-selected mirrors and download URLs,
+pull mutable source or container state, replace executable files, and restart
+the application without a trusted release signature. TLS and a release page do
+not establish artifact authenticity when GenBox has no embedded release public
+key and no signed-manifest production process.
+
+### Decision
+
+Automatic source, executable, and Docker update application is disabled and
+fails closed before DNS, HTTP, Git, file replacement, or restart activity. The
+browser cannot provide an update URL or mirror. GenBox may perform only a
+bounded, read-only check against the fixed canonical GitHub latest-release API
+over verified HTTPS and may direct the user to the fixed canonical GitHub
+Releases page for manual installation.
+
+Automatic application may be reconsidered only after all supported release
+forms are covered by a versioned signed manifest, the verification public key
+is embedded in GenBox, signature and artifact digest checks occur before any
+replacement or restart, rollback behavior is defined, and hostile-input and
+failure-path tests demonstrate that unverified artifacts cannot execute.
+
+### Consequences
+
+- `/api/update/apply` returns structured `update_apply_unavailable`; its request
+  body is an empty forbid-extra model and its query string accepts no input.
+- Browser mirror selection and arbitrary download routing are retired.
+- Release availability remains informational. Users verify and install from the
+  canonical GitHub Release manually until the signed update chain exists.

@@ -7,6 +7,7 @@
 __pycache__
 *.pyc
 *.pyo
+.pytest*
 .venv
 .release
 venv
@@ -33,6 +34,7 @@ memory/
 wiki-knowledge/
 artifacts/
 *.md
+!THIRD_PARTY_NOTICES.md
 
 # 存储数据（运行时挂载）
 storage/

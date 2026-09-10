@@ -36,6 +36,14 @@ source code and command-line instructions.
 6. Present deployed service URLs, API endpoints, login information, and
    one-time credentials with clear open and copy actions.
 7. Establish a reusable deployment-adapter model for additional services.
+8. After the core integration is verified, evolve the catalog into a GenBox
+   Store with Installed, Recommended, and All views backed by honest capability,
+   environment, license, and risk metadata.
+9. Provide an advisory-first Repair Copilot that explains sanitized diagnoses
+   and offers only user-authorized, adapter-allowlisted repair actions.
+10. Add optional message-channel notifications and capability-scoped bot
+    interaction so users can observe and trigger selected GenBox workflows
+    without turning a chat channel into a general remote shell.
 
 ## Primary User Journeys
 
@@ -68,6 +76,45 @@ receipt contains a matching SHA-256 and explicitly permits source deletion.
 The user selects an available catalog item, follows environment discovery and
 network steps, reviews a deployment plan, deploys an isolated service, and
 receives its status, console URL, API URL, login guidance, and one-time secrets.
+
+### First-Time VPS Trust For Personal Users
+
+For a personal user who already has a trusted SSH terminal session, GenBox now
+provides a local trusted SSH-session pairing flow. After saving the target host,
+port, and username, GenBox presents one fixed, one-line helper and accepts a
+one-line response pasted back by the user. The page reports the result in plain
+language and keeps the technical host identity in advanced details. This local
+capability is covered by local tests; isolated-VPS and cross-project E2E
+verification remain pending.
+
+The already trusted terminal session or its known-host record is a user-supplied
+trust anchor for the initial pairing; it does not prove VPS ownership and does
+not replace SSH credentials. Users without an accessible trusted session use a
+safe advanced fallback such as their provider console or an existing known-host
+record. A provider-account verification flow is outside the current scope.
+
+### Find And Repair A Compatible Service
+
+After the core delivery phases, the user can see installed apps, environment-
+appropriate recommendations, and the full catalog. When a managed app fails,
+deterministic checks run first; Repair Copilot may then explain sanitized
+evidence and propose a bounded action for explicit approval and health recheck.
+
+### Operate Through A Message Channel
+
+After the core transfer and deployment workflows are verified, the user may bind
+an optional message channel such as Telegram, Feishu, or a later approved
+platform. GenBox can send status updates, completed image or video results,
+deployment notices, and retry prompts to that channel. The user can then invoke
+selected fixed actions such as starting a saved generation preset, checking task
+status, or requesting a bounded image-import workflow from a trusted remote
+source.
+
+Message-channel interaction is a convenience layer over existing GenBox
+capabilities, not a replacement for backend authorization or workflow safety.
+It does not grant arbitrary shell access, does not make a third-party chat
+identity equal to a GenBox administrator, and does not bypass existing review,
+network, or deletion constraints.
 
 ## Service Catalog Scope
 
@@ -115,6 +162,16 @@ health checks, delivery information, rollback, and tests are implemented.
 - Public exposure of GenBox without an authenticated private network or a
   properly secured HTTPS endpoint.
 - Treating a UI placeholder or command plan as a completed provider adapter.
+- Letting a catalog manifest, recommendation, or AI response grant deployment or
+  repair capability without a verified backend adapter.
+- Treating a third-party message account, bot session, or platform OAuth result
+  as equivalent to GenBox administrator authentication.
+- Letting a message channel submit arbitrary shell, unrestricted VPS commands,
+  or other unbounded remote mutations.
+- Training on raw operational logs or sending secrets, personal data, user media,
+  prompts, host identities, or credentials to a diagnostic model.
+- Giving AI arbitrary shell access, direct root control, or permission to mutate
+  an external instance without verified ownership and explicit authorization.
 
 ## Terms
 
@@ -127,3 +184,11 @@ health checks, delivery information, rollback, and tests are implemented.
   whether the source is safe to delete.
 - **Delivery information**: service URLs, login guidance, and one-time secrets
   presented after deployment.
+- **Trusted SSH-session pairing**: local first-time host-identity confirmation
+  using a user-operated helper in an already trusted SSH terminal session;
+  isolated-VPS verification remains a separate gate.
+- **Message channel**: an external conversation surface such as Telegram,
+  Feishu, or a later approved platform that may receive notifications or submit
+  fixed GenBox intents after explicit binding.
+- **Channel binding**: an explicit link between a GenBox user or workspace and a
+  specific external message identity plus its permitted capabilities.

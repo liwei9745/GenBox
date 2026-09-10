@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GenBox</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=31">
+  <link rel="stylesheet" href="/static/css/app.css?v=38">
   <link rel="stylesheet" href="/static/css/pages.css?v=17">
 </head>
 <body>
@@ -23,8 +23,9 @@
     <button class="btn-secondary" onclick="zoomReset(event)"><span data-i18n="common.reset">重置</span></button>
     <a id="lightbox-dl" href="" download class="btn-secondary"><span data-i18n="common.download_original">⬇ 下载原图</span></a>
     <button class="btn-secondary" onclick="openCompareFromLightbox(event)"><span data-i18n="common.compare">🔀 对比</span></button>
-    <button class="btn-secondary btn-action-i2i" onclick="sendToImageToImage(event)"><span data-i18n="common.image_to_image">🎯 图生图</span></button>
+    <button class="btn-secondary btn-action-i2i" onclick="sendToPrecisionEdit(event)"><span data-i18n="common.precision_edit">🎯 精准改图</span></button>
     <button class="btn-secondary btn-action-i2v" onclick="sendToVideo(event)"><span data-i18n="common.create_video">🎬 生视频</span></button>
+    <button class="btn-secondary" onclick="toggleLightboxImageFullscreen(event)" title="仅全屏当前图片" aria-label="仅全屏当前图片"><span aria-hidden="true">⛶</span><span>图片全屏</span></button>
     <button class="btn-secondary" onclick="closeLightbox(event)"><span data-i18n="common.close_icon">✕ 关闭</span></button>
   </div>
   <div id="lightbox-info"></div>
@@ -34,6 +35,25 @@
       <button class="btn-ghost" onclick="copyLightboxPrompt()"><span data-i18n="common.copy_icon">📋 复制</span></button>
     </div>
     <div id="lightbox-prompt"></div>
+    <div id="lightbox-prompt-chunks" class="lightbox-prompt-chunks" aria-live="polite"></div>
+  </div>
+</div>
+
+<!-- Precision image-only viewer. It is deliberately separate from the workbench fullscreen root. -->
+<div id="precisionImageFullscreen" class="precision-image-fullscreen hidden" role="dialog" aria-modal="true" aria-label="当前图片全屏查看" tabindex="-1" onclick="if(event.target===this)closePrecisionImageFullscreen()" ondblclick="if(event.target===this || (event.target && event.target.closest && event.target.closest('#precisionImageFullscreenImg')))closePrecisionImageFullscreen()">
+  <button type="button" class="precision-image-fullscreen-close" onclick="closePrecisionImageFullscreen()" aria-label="退出图片全屏">×</button>
+  <div class="precision-image-fullscreen-content">
+    <figure class="precision-image-fullscreen-figure">
+      <img id="precisionImageFullscreenImg" src="" alt="">
+      <figcaption id="precisionImageFullscreenCaption"></figcaption>
+    </figure>
+    <aside id="precisionImageFullscreenPromptPanel" class="precision-image-fullscreen-prompts hidden" aria-label="提示词历史">
+      <div class="precision-image-fullscreen-prompt-heading">
+        <strong data-i18n="lightbox.image_prompt">📝 生图提示词</strong>
+        <button type="button" class="btn-ghost" id="btnPrecisionImageFullscreenCopyPrompt" onclick="copyPrecisionImageFullscreenPrompt(event)"><span data-i18n="common.copy_icon">📋 复制</span></button>
+      </div>
+      <div id="precisionImageFullscreenPromptHistory" class="precision-image-fullscreen-prompt-history" aria-live="polite"></div>
+    </aside>
   </div>
 </div>
 
@@ -160,7 +180,7 @@
       <div class="update-modal-actions">
         <button class="btn-ghost" onclick="closeUpdateModal()"><span data-i18n="update.later">稍后</span></button>
         <a class="btn-secondary" id="updateDownloadLink" href="https://github.com/liwei9745/GenBox/releases" target="_blank" rel="noopener noreferrer"><span data-i18n="update.download">前往下载</span></a>
-        <button class="btn-primary" id="updateApplyBtn" onclick="applyGlobalUpdate()"><span data-i18n="update.apply">立即更新</span></button>
+        <button class="btn-primary" id="updateApplyBtn" onclick="applyGlobalUpdate()" disabled aria-disabled="true"><span data-i18n="update.auto_apply_unavailable">自动更新暂不可用</span></button>
       </div>
     </div>
   </div>
@@ -303,7 +323,7 @@
 
     <!-- ════════════════ PAGE: Generate ════════════════ -->
     <div id="pageGenerate" class="page-content hidden">
-      <div class="creator-mode-bar"><div class="page-heading creator-heading"><div class="page-heading-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m5 17 5-5 4 4 2-2 3 3M17 7v4m-2-2h4"/></svg></div><div class="page-heading-copy"><span class="page-heading-kicker">GENBOX IMAGE STUDIO</span><strong id="imageWorkbenchTitle"><span data-i18n="creator.image_multi_title">多模型生图对比</span></strong><span id="imageWorkbenchHint"><span data-i18n="creator.image_multi_hint">同一提示词同时调用多个模型，快速比较结果。</span></span></div></div><label class="creator-single-picker"><span><span data-i18n="creator.current_model">当前模型</span></span><select id="imageSingleProvider" onchange="selectSingleCreatorProvider('image',this.value)"></select></label><div class="creator-mode-switch"><button id="imageModeMulti" class="active" onclick="setCreatorWorkbenchMode('image','multi')"><span data-i18n="creator.multi_mode">多模型对比</span></button><button id="imageModeSingle" onclick="setCreatorWorkbenchMode('image','single')"><span data-i18n="creator.single_mode">单模型工作台</span></button></div></div>
+      <div class="creator-mode-bar"><div class="page-heading creator-heading"><div class="page-heading-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m5 17 5-5 4 4 2-2 3 3M17 7v4m-2-2h4"/></svg></div><div class="page-heading-copy"><span class="page-heading-kicker">GENBOX IMAGE STUDIO</span><strong id="imageWorkbenchTitle"><span data-i18n="creator.image_multi_title">多模型生图对比</span></strong><span id="imageWorkbenchHint"><span data-i18n="creator.image_multi_hint">同一提示词同时调用多个模型，快速比较结果。</span></span></div></div><label class="creator-single-picker"><span><span data-i18n="creator.current_model">当前模型</span></span><select id="imageSingleProvider" onchange="selectSingleCreatorProvider('image',this.value)"></select></label><div class="creator-mode-switch"><button id="imageModeMulti" class="active" onclick="setCreatorWorkbenchMode('image','multi')"><span data-i18n="creator.multi_mode">多模型对比</span></button><button id="imageModeSingle" onclick="setCreatorWorkbenchMode('image','single')"><span data-i18n="creator.single_mode">单模型工作台</span></button><button id="imageModePrecision" onclick="setCreatorWorkbenchMode('image','precision')"><span data-i18n="creator.precision_edit">🎯 精准改图</span></button></div></div>
       <div class="generate-layout">
 
         <!-- Left: Models + Settings -->
@@ -357,6 +377,10 @@
                 <button class="ratio-btn" data-ratio="auto" onclick="setRatio(this,'auto')" style="grid-column:span 2;">auto</button>
               </div>
               <input type="hidden" id="selRatio" value="1:1">
+              <label class="flex items-start gap-6 mt-6 text-xs text-muted">
+                <input type="checkbox" id="chkExactRatioCrop" disabled style="margin-top:2px;accent-color:var(--accent);">
+                <span data-i18n="creator.exact_ratio_crop">精确裁切到所选比例（可能裁掉画面边缘，默认关闭）</span>
+              </label>
             </div>
             <div class="mb-10">
               <div class="param-label"><span data-i18n="creator.quantity">生成数量</span></div>
@@ -424,7 +448,7 @@
                   <button id="progressCloseBtn" onclick="document.getElementById('progressBox').classList.add('hidden')" class="hidden text-xs p-4 rounded" style="border:1px solid var(--border);background:var(--bg-surface);color:var(--text-muted);cursor:pointer;"><span data-i18n="common.close_icon">✕ 关闭</span></button>
                 </div>
               </div>
-              <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+              <div id="generationProgressBar" class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0%"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
             </div>
           </div>
 
@@ -438,9 +462,9 @@
                   <div class="sub-tabs">
                     <button class="sub-tab active" id="subTabT2I" onclick="switchSubTab('t2i')"><span data-i18n="creator.t2i">📝 文生图</span></button>
                     <button class="sub-tab" id="subTabI2I" onclick="switchSubTab('i2i')"><span data-i18n="creator.i2i">🖼 图生图</span></button>
-                    <button class="sub-tab" id="subTabVAR" onclick="switchSubTab('variation')"><span data-i18n="creator.variation">🔄 变形</span></button>
+                    <button class="sub-tab" id="subTabVAR" onclick="switchSubTab('inpaint')" style="display:none" aria-hidden="true" tabindex="-1"><span data-i18n="creator.inpaint">🖌 局部重绘</span></button>
+                    <button class="sub-tab" id="subTabPrecisionEdit" onclick="setCreatorWorkbenchMode('image','precision')" aria-controls="panelPrecisionEdit" aria-selected="false"><span data-i18n="creator.precision_edit">🎯 精准改图</span></button>
                   </div>
-                  <button class="btn-primary" id="btnGen" onclick="doGenerate()"><span data-i18n="creator.generate_image">🚀 生成图片</span></button>
                 </div>
               </div>
 
@@ -533,12 +557,13 @@
                     <div class="param-label mb-8"><span data-i18n="creator.reference_image">参考图片</span></div>
                     <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()" style="height:100%;min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;">
                       <img id="uploadPreview" class="upload-preview-img hidden" src="" style="max-height:60px;object-fit:contain;">
+                      <div id="uploadPreviewStrip" class="upload-preview-strip"></div>
                       <div id="uploadPlaceholder" style="text-align:center;">
                         <div class="text-base mb-4">🖼</div>
                         <div class="text-xs text-muted"><span data-i18n="creator.upload_reference">点击或拖拽上传</span></div>
                       </div>
                     </div>
-                    <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
+                    <input type="file" id="fileInput" accept="image/*" multiple class="hidden" onchange="handleFileSelect(event)">
                   </div>
                   <!-- 右侧：修改提示词 (80%) -->
                   <div style="flex:1;display:flex;flex-direction:column;">
@@ -548,18 +573,432 @@
                 </div>
               </div>
 
-              <!-- VAR Panel -->
-              <div class="glass-card hidden" id="panelVAR">
-                <div class="param-label mb-8"><span data-i18n="creator.source_image">源图片</span></div>
-                <div class="upload-zone" id="uploadZoneVar" onclick="document.getElementById('fileInputVar').click()">
-                  <div class="text-lg mb-6">🔄</div>
-                  <div class="text-sm text-muted"><span data-i18n="creator.upload_source">点击或拖拽上传源图片</span></div>
-                  <img id="uploadPreviewVar" class="upload-preview-img hidden" src="">
+              <!-- Precision Edit Panel: annotation-driven image editing. -->
+              <div class="glass-card hidden precision-edit-panel" id="panelPrecisionEdit" role="tabpanel" aria-labelledby="subTabPrecisionEdit">
+                <div class="precision-edit-workspace">
+                  <div class="precision-edit-stage-column">
+                    <div class="precision-edit-stage-heading">
+                      <div>
+                        <div class="precision-canvas-title-row">
+                          <div class="precision-canvas-title"><span class="param-label" data-i18n="creator.precision_edit_canvas">批注画布</span><div class="precision-workbench-help hidden" id="precisionWorkbenchHelp"><button type="button" class="precision-workbench-help-trigger" id="precisionWorkbenchHelpTrigger" aria-label="查看精准改图帮助" data-i18n-aria-label="creator.precision_help_label" aria-controls="precisionWorkbenchHelpPopover" aria-expanded="false">?</button><div class="precision-workbench-help-popover hidden" id="precisionWorkbenchHelpPopover" role="dialog" aria-modal="false" aria-labelledby="precisionWorkbenchHelpTitle"><strong id="precisionWorkbenchHelpTitle" data-i18n="creator.precision_help_title">精准改图操作说明</strong><p data-i18n="creator.precision_help_steps">选择图片，在画布上标注位置，为每处写明修改要求，再提交给编辑模型。</p><p data-i18n="creator.precision_help_send_result">生成结果也可以通过“精准改图”操作直接发送到这里。</p><a href="https://github.com/liwei9745/GenBox/blob/master/docs/CLIENT-QUICKSTART.md#start--启动" target="_blank" rel="noopener noreferrer" data-i18n="creator.precision_config_docs">打开项目内配置说明</a></div></div><span id="precisionCanvasDimensions" class="text-xs text-muted" aria-live="polite"></span></div>
+                          <div class="precision-stage-actions"><button type="button" class="btn-ghost precision-docs-trigger" id="btnPrecisionDocs" onclick="openPrecisionDocsDialog()" aria-haspopup="dialog" aria-controls="precisionDocsDialog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H19v17H7.5A2.5 2.5 0 0 0 5 21.5z"/><path d="M5 4.5v17M9 7h6m-6 4h6"/></svg><span data-i18n="creator.precision_docs_open">文档说明</span></button></div>
+                        </div>
+                        <div class="precision-canvas-meta"><div class="precision-zoom-control"><label for="precisionViewZoom" data-i18n="creator.precision_zoom">查看缩放</label><input id="precisionViewZoom" type="range" min="50" max="200" step="10" value="100" aria-label="查看缩放" data-i18n-aria-label="creator.precision_zoom"><output id="precisionViewZoomValue" for="precisionViewZoom">100%</output><button type="button" class="btn-ghost" id="btnPrecisionZoomFit" data-i18n="creator.precision_zoom_fit">适合窗口</button></div><small data-i18n="creator.precision_zoom_hint">只调整查看大小，不改变图片尺寸。按住 Shift 滚轮可缩放。</small></div>
+                      </div>
+                      <section id="precisionSessionPanel" class="precision-session-panel precision-canvas-session" aria-label="精准改图版本" data-i18n-aria-label="creator.precision_versions">
+                        <div class="precision-version-control-groups">
+                          <div class="precision-version-group precision-shortcut-group" role="group" aria-label="版本快捷按钮" data-i18n-aria-label="creator.precision_version_shortcuts">
+                            <div class="precision-primary-workbench-actions"><div class="precision-source-actions precision-primary-action-cluster"><button type="button" id="btnPrecisionUseSelectedAsBase" class="btn-secondary precision-version-base-action" onclick="useSelectedPrecisionVersionAsBase()" disabled aria-disabled="true" data-i18n="creator.precision_use_as_base">设为下一次底图</button><div class="precision-source-actions hidden" id="precisionSourceActions"><button type="button" class="btn-ghost precision-source-action precision-source-menu-trigger" id="btnPrecisionReplaceSource" onclick="togglePrecisionSourceMenu()" aria-haspopup="menu" aria-controls="precisionSourceMenu" aria-expanded="false"><span aria-hidden="true">↻</span><span data-i18n="creator.precision_replace_image">更换图片</span><span class="precision-source-menu-caret" aria-hidden="true">⌄</span></button><div class="precision-source-menu" id="precisionSourceMenu" role="menu" aria-label="更换图片来源" hidden><button type="button" class="precision-source-menu-item" id="btnPrecisionReplaceLocal" role="menuitem" onclick="choosePrecisionLocalSource()"><span aria-hidden="true">＋</span><span><strong data-i18n="creator.precision_edit_local_upload">本地上传</strong><small>从此设备选择一张图片</small></span></button><button type="button" class="precision-source-menu-item" id="btnPrecisionReplaceFromGallery" role="menuitem" onclick="choosePrecisionGallerySource()"><span aria-hidden="true">▦</span><span><strong data-i18n="creator.precision_edit_from_gallery">从图库选择</strong><small>使用 GenBox 图库中的图片</small></span></button></div><span id="precisionReplaceDisabledHint" class="sr-only precision-source-action-status" role="status" aria-live="polite" data-i18n="creator.precision_replace_task_active">请先停止当前精准改图任务，再更换图片。</span></div></div></div>
+                            <div id="precisionVersionRail" class="precision-version-rail" role="tablist" aria-label="版本快捷栏" data-i18n-aria-label="creator.precision_version_shortcuts" aria-orientation="horizontal"></div>
+                          </div>
+                          <div class="precision-version-group precision-display-mode-group" role="group" aria-label="显示模式" data-i18n-aria-label="creator.precision_display_mode">
+                            <span class="precision-version-group-label" data-i18n="creator.precision_display_mode">显示模式</span>
+                            <div class="precision-compare-modes" role="group" aria-label="版本视图" data-i18n-aria-label="creator.precision_version_view">
+                              <button type="button" class="btn-ghost" data-precision-view="before" onclick="setPrecisionVersionView('before')" data-i18n="creator.precision_before">修改前</button>
+                              <button type="button" class="btn-secondary" data-precision-view="after" onclick="setPrecisionVersionView('after')" data-i18n="creator.precision_after">修改后</button>
+                              <button type="button" class="btn-ghost" data-precision-view="compare" onclick="setPrecisionVersionView('compare')" data-i18n="creator.precision_compare">对比</button>
+                            </div>
+                            <div class="precision-session-fullscreen-actions">
+                          <button type="button" id="btnPrecisionImageFullscreen" class="btn-ghost precision-version-fullscreen" onclick="openPrecisionSelectedImageFullscreen()" title="仅全屏当前选定图片" data-i18n-title="creator.precision_image_fullscreen_tooltip" aria-label="仅全屏当前选定图片" data-i18n-aria-label="creator.precision_image_fullscreen_label"><span aria-hidden="true">▣</span><span data-i18n="creator.precision_image_fullscreen">图片全屏</span></button>
+                          <button type="button" id="btnPrecisionFullscreen" class="btn-ghost precision-version-fullscreen" onclick="togglePrecisionCompareFullscreen()" title="全屏工作台（也可双击画布）" data-i18n-title="creator.precision_fullscreen_tooltip" aria-label="全屏工作台" data-i18n-aria-label="creator.precision_fullscreen_label" aria-describedby="precisionFullscreenHint" aria-pressed="false"><span aria-hidden="true">⛶</span><span data-i18n="creator.precision_fullscreen">全屏</span></button>
+                            </div>
+                          </div>
+                      </section>
+                    </div>
+
+                    <div class="precision-canvas-shell is-empty" id="precisionCanvasShell">
+                      <div id="precisionCanvasSurface" class="precision-canvas-surface hidden">
+                      <img id="precisionBaseImage" class="precision-base-image hidden" src="" alt="">
+                      <canvas id="precisionAnnotationCanvas" class="precision-annotation-canvas" tabindex="0" aria-label="精准改图批注画布" data-i18n-aria-label="creator.precision_edit_canvas_label" aria-describedby="precisionCanvasInteractionHint precisionFullscreenHint" title="选择标注后拖动节点编辑；双击画布切换全屏" data-i18n-title="creator.precision_canvas_interaction_hint"></canvas>
+                      <input id="precisionTextEditor" class="precision-text-editor hidden" type="text" maxlength="160" autocomplete="off" placeholder="输入批注文字" data-i18n-placeholder="creator.precision_edit_text_placeholder">
+                      <section id="precisionAnnotationInstructionPopover" class="precision-annotation-instruction-popover" role="dialog" aria-modal="false" aria-labelledby="precisionAnnotationInstructionTitle" aria-describedby="precisionAnnotationInstructionSelection" hidden aria-hidden="true">
+                        <div id="precisionAnnotationInstructionDragHandle" class="precision-annotation-instruction-drag-handle" role="presentation" aria-hidden="true"></div>
+                        <div class="precision-annotation-instruction-heading">
+                          <div class="precision-annotation-instruction-copy"><strong id="precisionAnnotationInstructionTitle">修改说明</strong><span id="precisionAnnotationInstructionSelection"></span></div>
+                          <div class="precision-annotation-instruction-actions">
+                            <button type="button" id="btnPrecisionAnnotationInstructionConfirm" class="btn-ghost precision-annotation-instruction-confirm" aria-label="确定修改说明" title="确定修改说明"><span aria-hidden="true">✓</span></button>
+                            <button type="button" id="btnPrecisionAnnotationInstructionClose" class="btn-ghost precision-annotation-instruction-close" aria-label="关闭修改说明"><span aria-hidden="true">×</span></button>
+                          </div>
+                        </div>
+                        <label class="sr-only" for="precisionAnnotationInstructionText">选中标注的修改说明</label>
+                        <textarea id="precisionAnnotationInstructionText" rows="3" maxlength="160" autocomplete="off" placeholder="描述此处需要怎样修改"></textarea>
+                      </section>
+                      <div id="precisionCompareStage" class="precision-compare-stage" tabindex="0" aria-describedby="precisionFullscreenHint" title="双击画布切换全屏" data-i18n-title="creator.precision_fullscreen_double_click">
+                        <img id="precisionCompareBefore" alt="修改前" data-i18n-alt="creator.precision_before">
+                        <div id="precisionCompareAfterWrap" class="precision-compare-after-wrap"><img id="precisionCompareAfter" alt="修改后" data-i18n-alt="creator.precision_after"></div>
+                          <input id="precisionCompareSlider" type="range" min="0" max="100" value="50" aria-label="对比滑块" data-i18n-aria-label="creator.precision_compare_slider" oninput="updatePrecisionCompareSlider(this.value)">
+                        </div>
+                        <div id="precisionCanvasImageInfo" class="precision-canvas-image-info" aria-live="polite" hidden></div>
+                      </div>
+                      <button type="button" id="precisionCanvasResizeHandle" class="precision-canvas-resize-handle" aria-label="调整画布显示大小" data-i18n-aria-label="creator.precision_canvas_resize_label" aria-controls="precisionCanvasShell" title="拖动或使用左右方向键调整画布显示大小" data-i18n-title="creator.precision_canvas_resize_tooltip"></button>
+                      <div class="precision-canvas-empty" id="precisionUploadZone">
+                        <span class="precision-empty-icon" aria-hidden="true">＋</span>
+                        <strong data-i18n="creator.precision_edit_upload">选择一张要修改的图片</strong>
+                        <small data-i18n="creator.precision_edit_upload_hint">也可以从文生图结果直接发送到这里</small>
+                        <div class="precision-empty-actions">
+                          <button type="button" class="btn-primary" id="btnPrecisionUpload" onclick="requestPrecisionLocalSource()"><span data-i18n="creator.precision_edit_local_upload">本地上传</span></button>
+                          <button type="button" class="btn-secondary" id="btnPrecisionGallery" onclick="openPrecisionGalleryPicker()"><span data-i18n="creator.precision_edit_from_gallery">从图库选择</span></button>
+                        </div>
+                      </div>
+                    </div>
+                    <p id="precisionCanvasInteractionHint" class="sr-only" data-i18n="creator.precision_canvas_interaction_hint">选择标注后可拖动控制节点调整形状或箭头端点；双击文字重新编辑，双击画布切换全屏。</p>
+                    <p id="precisionFullscreenHint" class="sr-only" role="status" aria-live="polite" data-i18n="creator.precision_fullscreen_hint">全屏会显示完整工作台；再次双击画布、按 Esc 或使用全屏按钮可退出。</p>
+                    <input type="file" id="precisionFileInput" accept="image/*" class="hidden" aria-label="上传精准改图图片" data-i18n-aria-label="creator.precision_edit_local_upload">
+
+                    <div class="precision-toolbar" role="toolbar" aria-label="精准改图批注工具" data-i18n-aria-label="creator.precision_edit_toolbar">
+                      <div class="precision-toolbar-row precision-toolbar-primary">
+                        <section class="precision-toolbar-section precision-shape-tools" aria-label="形状" data-i18n-aria-label="creator.precision_shapes">
+                        <span class="precision-toolbar-section-label" data-i18n="creator.precision_shapes">形状</span>
+                        <div class="precision-tool-group" role="group" aria-label="批注类型" data-i18n-aria-label="creator.precision_edit_annotation_group">
+                          <button type="button" class="btn-secondary precision-tool active" id="precisionToolSelect" data-precision-tool="select" aria-keyshortcuts="V" aria-pressed="true" title="选择和移动（V）" data-i18n-title="creator.precision_edit_select"><span aria-hidden="true">↖</span><span data-i18n="creator.precision_edit_select">选择/移动</span></button>
+                          <button type="button" class="btn-ghost precision-tool" id="precisionToolEllipse" data-precision-tool="ellipse" aria-keyshortcuts="O" aria-pressed="false" title="椭圆（O）" data-i18n-title="creator.precision_edit_ellipse"><span aria-hidden="true">○</span><span data-i18n="creator.precision_edit_ellipse">椭圆</span></button>
+                          <button type="button" class="btn-ghost precision-tool" id="precisionToolArrow" data-precision-tool="arrow" aria-keyshortcuts="A" aria-pressed="false" title="箭头（A）" data-i18n-title="creator.precision_edit_arrow"><span aria-hidden="true">↗</span><span data-i18n="creator.precision_edit_arrow">箭头</span></button>
+                          <button type="button" class="btn-ghost precision-tool" id="precisionToolRect" data-precision-tool="rectangle" aria-keyshortcuts="R" aria-pressed="false" title="矩形（R）" data-i18n-title="creator.precision_edit_rectangle"><span aria-hidden="true">□</span><span data-i18n="creator.precision_edit_rectangle">矩形</span></button>
+                          <button type="button" class="btn-ghost precision-tool" id="precisionToolBrush" data-precision-tool="brush" aria-keyshortcuts="B" aria-pressed="false" title="画笔（B）" data-i18n-title="creator.precision_edit_brush"><span aria-hidden="true">✎</span><span data-i18n="creator.precision_edit_brush">画笔</span></button>
+                          <button type="button" class="btn-ghost precision-tool" id="precisionToolText" data-precision-tool="text" aria-keyshortcuts="T" aria-pressed="false" title="文字（T）" data-i18n-title="creator.precision_edit_text"><span aria-hidden="true">T</span><span data-i18n="creator.precision_edit_text">文字</span></button>
+                        </div>
+                        </section>
+                        <section class="precision-toolbar-section precision-manual-tool-group" aria-label="手动编辑" data-i18n-aria-label="creator.precision_manual_edit">
+                        <span class="precision-toolbar-section-label" data-i18n="creator.precision_manual_edit">手动编辑</span>
+                        <button type="button" class="btn-ghost precision-tool" id="precisionToolEraser" data-precision-tool="eraser" aria-keyshortcuts="E" aria-pressed="false" aria-describedby="precisionEraserHint" title="橡皮擦（E）：点击选中标注可删除，涂过画笔轨迹可擦除" data-i18n-title="creator.precision_edit_eraser_hint"><span aria-hidden="true">⌫</span><span data-i18n="creator.precision_edit_eraser">橡皮擦</span></button>
+                        <small class="sr-only precision-eraser-hint" id="precisionEraserHint" data-i18n="creator.precision_edit_eraser_hint">橡皮擦：点击删除选中标注；拖过画笔轨迹擦除，可撤销。</small>
+                        <div class="precision-style-controls" aria-label="批注样式" data-i18n-aria-label="creator.precision_edit_style_group">
+                          <label class="precision-color-control" for="precisionAnnotationColor"><span data-i18n="creator.precision_edit_color_short">颜色</span><input type="color" id="precisionAnnotationColor" value="#ef4444" title="批注颜色" data-i18n-title="creator.precision_edit_color"></label>
+                          <label class="precision-width-control" for="precisionStrokeWidth"><span data-i18n="creator.precision_edit_stroke">线宽</span><input type="range" id="precisionStrokeWidth" min="2" max="16" step="1" value="5" title="线宽" data-i18n-title="creator.precision_edit_stroke"><output id="precisionStrokeWidthValue" for="precisionStrokeWidth">5</output></label>
+                          <label class="precision-width-control precision-text-size-control" for="precisionTextSize"><span data-i18n="creator.precision_edit_text_size">文字大小</span><input type="range" id="precisionTextSize" min="12" max="96" step="1" value="24" title="文字大小" data-i18n-title="creator.precision_edit_text_size"><output id="precisionTextSizeValue" for="precisionTextSize">24</output></label>
+                        </div>
+                        </section>
+                      </div>
+                      <div class="precision-toolbar-row precision-toolbar-history">
+                        <section class="precision-toolbar-section precision-history-section" aria-label="历史" data-i18n-aria-label="creator.precision_history">
+                          <span class="precision-toolbar-section-label" data-i18n="creator.precision_history">历史</span>
+                          <div class="precision-history-actions" role="group" aria-label="批注历史" data-i18n-aria-label="creator.precision_edit_history_group">
+                            <button type="button" class="btn-ghost precision-history-button" id="btnPrecisionUndo" disabled title="撤销" data-i18n-title="creator.precision_edit_undo"><span aria-hidden="true">↶</span><span data-i18n="creator.precision_edit_undo">撤销</span></button>
+                            <button type="button" class="btn-ghost precision-history-button" id="btnPrecisionRedo" disabled title="重做" data-i18n-title="creator.precision_edit_redo"><span aria-hidden="true">↷</span><span data-i18n="creator.precision_edit_redo">重做</span></button>
+                            <button type="button" class="btn-ghost precision-visibility-button" id="btnPrecisionToggleAnnotations" aria-pressed="true" title="显示批注" data-i18n-title="creator.precision_edit_annotations"><span aria-hidden="true">◉</span><span data-i18n="creator.precision_edit_annotations">批注</span></button>
+                            <button type="button" class="btn-ghost precision-clear-button" id="btnPrecisionClear" disabled title="清除批注" data-i18n-title="creator.precision_edit_clear"><span data-i18n="creator.precision_edit_clear">清除</span></button>
+                          </div>
+                        </section>
+                      </div>
+                    </div>
+                    <button type="button" id="precisionCanvasVerticalResizeHandle" class="precision-canvas-vertical-resize-handle" role="separator" aria-orientation="horizontal" aria-controls="precisionCanvasShell precisionSessionShowcase" aria-valuemin="300" aria-valuemax="900" aria-valuenow="620" aria-label="调整全屏画布与图库高度" title="拖动或使用上下方向键调整全屏画布与图库高度" hidden><span aria-hidden="true"></span></button>
+                    <div id="precisionGalleryCommandBar" class="precision-gallery-command-bar" role="group" aria-label="精准改图生成操作">
+                      <button type="button" class="btn-primary precision-generate-action-button" id="btnGen" onclick="doGenerate()"><span data-i18n="creator.generate_image">🚀 生成图片</span></button>
+                      <button type="button" class="btn-secondary hidden" id="btnStopGen" onclick="cancelCurrentGeneration()"><span data-i18n="creator.stop_generation">⏹ 停止生成</span></button>
+                    </div>
+                    <section id="precisionAnnotationSummary" class="precision-annotation-summary" aria-label="已确认的修改说明" hidden>
+                      <div class="precision-annotation-summary-heading"><span aria-hidden="true">✦</span><strong>已确认的修改说明</strong><small>点击任意卡片继续编辑</small></div>
+                      <div id="precisionAnnotationSummaryCards" class="precision-annotation-summary-cards" role="list"></div>
+                    </section>
+                    <section id="precisionSessionShowcase" class="precision-session-showcase" aria-label="精准改图图库" data-precision-gallery-render-target="current-session">
+                      <button type="button" id="btnPrecisionSessionShowcaseToggle" class="precision-session-showcase-toggle" onclick="togglePrecisionSessionShowcase()" aria-controls="precisionSessionShowcaseContent" aria-expanded="false"><span aria-hidden="true">▦</span><span data-i18n="creator.precision_session_gallery_show">显示精准改图图库</span><span id="precisionSessionResultCount" class="precision-session-result-count" aria-live="polite">0</span><span class="precision-session-showcase-caret" aria-hidden="true">⌄</span></button>
+                      <div id="precisionSessionShowcaseContent" class="precision-session-showcase-content" aria-hidden="true" inert>
+                        <div class="precision-session-showcase-content-inner">
+                          <div class="precision-session-showcase-topbar">
+                            <div class="precision-session-showcase-heading"><div class="precision-session-showcase-title"><span class="precision-version-group-label" data-i18n="creator.precision_session_gallery_title">精准改图图库</span><small data-i18n="creator.precision_session_gallery_poster_hint">全部改图结果</small></div></div>
+                            <div id="precisionSessionSummary" class="precision-session-summary" role="status" aria-live="polite" aria-atomic="true"></div>
+                            <section class="precision-workflow-history" aria-labelledby="precisionWorkflowHistoryTitle">
+                              <div class="precision-workflow-history-filters" role="group" aria-label="历史改图筛选" data-i18n-aria-label="creator.precision_workflow_history_filters">
+                              <button type="button" class="btn-primary precision-workflow-history-filter-toggle" id="btnPrecisionWorkflowHistoryFilter" onclick="togglePrecisionWorkflowHistoryFilter()" aria-haspopup="dialog" aria-controls="precisionWorkflowHistoryFilterPopover" aria-expanded="false"><span aria-hidden="true">▦</span><span id="precisionWorkflowHistoryTitle" data-i18n="creator.precision_workflow_history_filter_trigger">工作流筛选</span><span aria-hidden="true">⌄</span></button>
+                              <div id="precisionWorkflowHistoryFilterPopover" class="precision-workflow-history-popover" role="dialog" aria-modal="true" aria-labelledby="precisionWorkflowHistoryFilterTitle" tabindex="-1" hidden>
+                                <div class="precision-workflow-history-popover-heading"><div><strong id="precisionWorkflowHistoryFilterTitle" data-i18n="creator.precision_workflow_history_filter_title">选择历史改图工作流</strong><small id="precisionWorkflowHistoryStatus" role="status" aria-live="polite"></small></div><div><button type="button" class="btn-ghost precision-workflow-history-refresh" id="btnPrecisionWorkflowHistoryRefresh" onclick="loadPrecisionWorkflowHistory(true)" title="刷新历史改图工作流" data-i18n-title="creator.precision_workflow_history_refresh" aria-label="刷新历史改图工作流" data-i18n-aria-label="creator.precision_workflow_history_refresh"><span aria-hidden="true">↻</span></button><button type="button" class="btn-ghost" onclick="setPrecisionWorkflowHistoryFilterOpen(false,true)" aria-label="关闭"><span aria-hidden="true">×</span></button></div></div>
+                                <div class="precision-workflow-history-calendar-actions" role="group" aria-label="快捷日期范围"><div class="precision-workflow-history-range-presets"><button type="button" class="btn-ghost" data-workflow-date-range="3d" onclick="setPrecisionWorkflowHistoryDateRange('3d')">近3日</button><button type="button" class="btn-ghost" data-workflow-date-range="5d" onclick="setPrecisionWorkflowHistoryDateRange('5d')">近5日</button><button type="button" class="btn-ghost" data-workflow-date-range="week" onclick="setPrecisionWorkflowHistoryDateRange('week')">周</button><button type="button" class="btn-ghost" data-workflow-date-range="month" onclick="setPrecisionWorkflowHistoryDateRange('month')">月</button><button type="button" class="btn-ghost" data-workflow-date-range="quarter" onclick="setPrecisionWorkflowHistoryDateRange('quarter')">季度</button><button type="button" class="btn-ghost" data-workflow-date-range="half-year" onclick="setPrecisionWorkflowHistoryDateRange('half-year')">半年</button><button type="button" class="btn-ghost" data-workflow-date-range="year" onclick="setPrecisionWorkflowHistoryDateRange('year')">年</button></div><button type="button" class="btn-ghost precision-workflow-history-calendar-clear" id="btnPrecisionWorkflowHistoryDateClear" onclick="clearPrecisionWorkflowHistoryDateFilter()">清除</button></div>
+                                <div class="precision-workflow-history-calendar-toolbar"><button type="button" class="btn-ghost" aria-label="上个月" onclick="shiftPrecisionWorkflowHistoryCalendar(-1)"><span aria-hidden="true">‹</span></button><strong id="precisionWorkflowHistoryCalendarLabel"></strong><button type="button" class="btn-ghost" aria-label="下个月" onclick="shiftPrecisionWorkflowHistoryCalendar(1)"><span aria-hidden="true">›</span></button></div>
+                                <div id="precisionWorkflowHistoryCalendar" class="precision-workflow-history-calendar" role="grid" aria-label="历史改图日期日历"></div>
+                                <p class="precision-workflow-history-calendar-hint">高亮日期表示有历史精准改图工作流</p>
+                                <div id="precisionWorkflowHistoryList" class="precision-workflow-history-list" role="list"></div>
+                              </div>
+                              <div id="precisionWorkflowHistoryActionPopover" class="precision-workflow-history-action-popover" role="dialog" aria-modal="true" aria-labelledby="precisionWorkflowHistoryActionTitle" tabindex="-1" hidden><strong id="precisionWorkflowHistoryActionTitle" data-i18n="creator.precision_workflow_history_action_title">选择操作</strong><button type="button" class="btn-ghost" onclick="viewPrecisionWorkflowHistoryImage()" data-i18n="creator.precision_workflow_history_view_image">查看改图图片</button><button type="button" class="btn-secondary" onclick="restorePrecisionWorkflowHistory()" data-i18n="creator.precision_workflow_history_restore">恢复历史改图工作台</button></div>
+                              </div>
+                            </section>
+                          </div>
+                          <div id="precisionSessionGallery" class="precision-session-gallery" role="list" aria-live="polite"></div>
+                          <div id="precisionPromptStrip" class="precision-prompt-strip" aria-live="polite" hidden></div>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+
+                  <aside class="precision-edit-inspector" aria-label="精准改图设置" data-i18n-aria-label="creator.precision_edit">
+                    <button type="button" id="precisionInspectorResizeHandle" class="precision-inspector-resize-handle" role="separator" aria-orientation="vertical" aria-valuemin="280" aria-valuemax="560" aria-valuenow="360" aria-label="调整功能侧栏宽度" title="拖动或使用左右方向键调整功能侧栏宽度"><span aria-hidden="true"></span></button>
+                    <section class="precision-edit-actions" aria-label="主体处理" data-i18n-aria-label="creator.precision_subject_actions">
+                      <section class="precision-quick-tools" aria-labelledby="precisionQuickToolsTitle">
+                        <div class="precision-quick-heading"><span class="param-label" id="precisionQuickToolsTitle" data-i18n="creator.precision_quick_tools">智能处理</span><small class="sr-only" data-i18n="creator.precision_quick_hint">先选功能，再在画布上圈出位置。</small></div>
+                        <p class="precision-start-hint precision-smart-start-hint" data-i18n="creator.precision_start_local">人物抠图、边缘精修在本地完成，可切换算法比较效果；AI 消除需涂选区域，再用所选在线模型生成。</p>
+                        <div class="precision-action-group"><span data-i18n="creator.precision_ai_remove">AI 消除</span><div><button type="button" class="btn-ghost" onclick="startPrecisionAiErase('people')" data-i18n="creator.precision_remove_people">消除路人</button><button type="button" class="btn-ghost" onclick="startPrecisionAiErase('watermark')" data-i18n="creator.precision_remove_watermark">消除水印</button></div></div>
+                        <div class="precision-action-group"><span data-i18n="creator.precision_manual_selection">手动选区</span><div><button type="button" class="btn-ghost" onclick="setPrecisionEditTool('brush')" data-i18n="creator.precision_edit_brush">涂抹</button></div></div>
+                        <section class="precision-guidance-controls precision-guidance-pill" id="precisionGuidanceCard" data-state="collapsed" aria-labelledby="precisionGuidanceTitle">
+                          <button type="button" class="precision-guidance-pill-toggle" id="btnPrecisionGuidanceToggle" aria-expanded="false" aria-controls="precisionGuidanceBody">
+                            <span class="precision-guidance-pill-icon" aria-hidden="true">◎</span>
+                            <span class="param-label precision-guidance-pill-title" id="precisionGuidanceTitle" data-i18n="creator.precision_guidance_title">改图策略</span>
+                            <span class="precision-guidance-pill-status" id="precisionGuidanceStatus" aria-live="polite">标准 · 批注编辑</span>
+                            <span class="precision-guidance-pill-caret" aria-hidden="true">⌄</span>
+                          </button>
+                          <div class="precision-guidance-pill-body" id="precisionGuidanceBody" aria-hidden="true" hidden>
+                            <p class="precision-guidance-pill-description" data-i18n="creator.precision_guidance_hint">策略影响模型处理重点；局部选区仍是模型指导，不是已验证的像素遮罩。</p>
+                            <div class="precision-guidance-row">
+                              <span class="precision-picker-label" data-i18n="creator.precision_strategy">处理策略</span>
+                              <div class="precision-size-modes" role="group" aria-label="精准改图策略" data-i18n-aria-label="creator.precision_strategy">
+                                <button type="button" id="btnPrecisionStrategyFine" class="btn-ghost" aria-pressed="false" onclick="setPrecisionEditStrategy('fine')" data-i18n="creator.precision_strategy_fine">精细</button>
+                                <button type="button" id="btnPrecisionStrategyStandard" class="btn-secondary" aria-pressed="true" onclick="setPrecisionEditStrategy('standard')" data-i18n="creator.precision_strategy_standard">标准</button>
+                                <button type="button" id="btnPrecisionStrategyFast" class="btn-ghost" aria-pressed="false" onclick="setPrecisionEditStrategy('fast')" data-i18n="creator.precision_strategy_fast">快速</button>
+                              </div>
+                            </div>
+                            <div class="precision-guidance-row">
+                              <span class="precision-picker-label" data-i18n="creator.precision_selection_mode">选区语义</span>
+                              <div class="precision-size-modes" role="group" aria-label="精准改图选区语义" data-i18n-aria-label="creator.precision_selection_mode">
+                                <button type="button" id="btnPrecisionSelectionAnnotation" class="btn-secondary" aria-pressed="true" onclick="setPrecisionEditSelectionMode('annotation')" data-i18n="creator.precision_selection_annotation">批注编辑</button>
+                                <button type="button" id="btnPrecisionSelectionLocal" class="btn-ghost" aria-pressed="false" onclick="setPrecisionEditSelectionMode('local')" data-i18n="creator.precision_selection_local">局部选区</button>
+                              </div>
+                            </div>
+                            <small id="precisionSelectionModeHint" class="precision-selection-mode-hint" data-i18n="creator.precision_selection_annotation_hint">批注编辑：先用画笔、矩形或椭圆标出位置，再填写对应的修改说明。</small>
+                            <label id="precisionSelectionFeatherControl" class="precision-selection-feather hidden" for="precisionSelectionFeather">
+                              <span data-i18n="creator.precision_selection_feather">选区羽化</span>
+                              <input id="precisionSelectionFeather" type="range" min="0" max="64" step="1" value="0" disabled>
+                              <output id="precisionSelectionFeatherValue" for="precisionSelectionFeather">0</output><span>px</span>
+                            </label>
+                          </div>
+                        </section>
+                        <div class="precision-cutout-tool precision-cutout-glass-panel" aria-labelledby="precisionCutoutTitle">
+                          <div class="precision-cutout-heading"><div class="precision-cutout-heading-copy"><span id="precisionCutoutTitle" data-i18n="creator.cutout_person">一键抠出人物</span><small data-i18n="creator.cutout_person_hint">需要安装本地透明背景抠图组件；未安装时按钮会保持不可用。</small></div><span class="precision-help-tip"><button type="button" class="precision-help-trigger" aria-describedby="precisionCutoutHelp" aria-label="查看抠图说明" data-i18n-aria-label="creator.cutout_help_label">?</button><span id="precisionCutoutHelp" class="precision-help-content" role="tooltip" data-i18n="creator.cutout_person_hint">需要安装本地透明背景抠图组件；未安装时按钮会保持不可用。</span></span></div>
+                          <div id="precisionCutoutModeSwitch" class="precision-cutout-mode-switch" role="tablist" aria-label="抠图模式" data-i18n-aria-label="creator.cutout_mode_label">
+                            <button type="button" id="btnPrecisionCutoutSimpleMode" role="tab" aria-selected="true" aria-controls="precisionCutoutSimplePanel" data-i18n="creator.cutout_mode_simple">简易模式</button>
+                            <button type="button" id="btnPrecisionCutoutProfessionalMode" role="tab" aria-selected="false" aria-controls="precisionCutoutProfessionalDialog" data-i18n="creator.cutout_mode_professional">专业模式</button>
+                          </div>
+                          <section id="precisionCutoutSimplePanel" class="precision-cutout-simple-panel" aria-live="polite">
+                            <div><strong data-i18n="creator.cutout_simple_ready_title">本地人物抠图</strong><small id="precisionCutoutSimpleAlgorithm" data-i18n="creator.cutout_algorithm_checking">正在检查已验证算法…</small></div>
+                            <button type="button" id="btnPrecisionCutoutSimple" class="btn-secondary" disabled data-i18n="creator.cutout_person_start">抠出人物</button>
+                          </section>
+                          <button type="button" id="btnPrecisionCutoutProfessionalOpen" class="btn-ghost precision-cutout-professional-open" aria-haspopup="dialog" aria-controls="precisionCutoutProfessionalDialog" aria-expanded="false" data-i18n="creator.cutout_professional_open">打开专业设置</button>
+                          <div class="precision-cutout-adapter-picker" id="precisionCutoutAdapterPicker" data-details-expanded="false" aria-labelledby="precisionCutoutAlgorithmLabel">
+                            <div class="precision-cutout-adapter-picker-row">
+                              <label for="precisionCutoutAlgorithm"><span id="precisionCutoutAlgorithmLabel" data-i18n="creator.cutout_algorithm_label">抠图算法</span><select id="precisionCutoutAlgorithm" disabled aria-describedby="precisionCutoutAlgorithmStatus"><option data-i18n="creator.cutout_algorithm_checking">正在检查已验证算法…</option></select></label>
+                              <div class="precision-cutout-adapter-actions"><button type="button" class="btn-ghost precision-cutout-capability-refresh" id="btnPrecisionCutoutCapabilityRefresh" title="重新检查本地模型和算法能力" data-i18n-title="creator.cutout_capability_refresh_tooltip"><span aria-hidden="true">↻</span><span data-i18n="creator.cutout_capability_refresh">重新检查</span></button><button type="button" class="btn-ghost precision-cutout-adapter-details-toggle" id="btnPrecisionCutoutAdapterDetails" aria-expanded="false" aria-controls="precisionCutoutAdapterDetails"><span data-i18n="creator.cutout_algorithm_details">候选详情</span><span class="precision-cutout-model-toggle-icon" aria-hidden="true">⌄</span></button></div>
+                            </div>
+                            <small id="precisionCutoutAlgorithmStatus" role="status" aria-live="polite" data-i18n="creator.cutout_algorithm_checking">正在检查已验证算法…</small>
+                            <div class="precision-cutout-adapter-details hidden" id="precisionCutoutAdapterDetails" aria-hidden="true"></div>
+                          </div>
+                          <div class="precision-cutout-model-install" id="precisionCutoutModelInstall" data-state="checking" data-details-expanded="false" aria-labelledby="precisionCutoutModelTitle" aria-busy="true">
+                            <div class="precision-cutout-model-summary" id="btnPrecisionCutoutModelDetails" role="button" tabindex="0" aria-expanded="false" aria-controls="precisionCutoutModelDetails">
+                              <div class="precision-cutout-model-state">
+                                <span class="precision-cutout-model-indicator" aria-hidden="true"></span>
+                                <div><strong id="precisionCutoutModelTitle" data-i18n="creator.cutout_model_title">本地抠图模型</strong><span id="precisionCutoutModelStatus" role="status" aria-live="polite" data-i18n="creator.cutout_model_checking">正在检查模型状态…</span></div>
+                              </div>
+                              <span class="precision-cutout-model-toggle" aria-hidden="true" aria-expanded="false">
+                                <span data-i18n="creator.cutout_model_details">详情</span><span class="precision-cutout-model-toggle-icon" aria-hidden="true">⌄</span>
+                              </span>
+                            </div>
+                            <div class="precision-cutout-model-details hidden" id="precisionCutoutModelDetails" aria-hidden="true">
+                              <dl class="precision-cutout-model-facts">
+                                <div><dt data-i18n="creator.cutout_model_source">来源</dt><dd id="precisionCutoutModelSource">rembg-u2net-human-seg-v0.0.0</dd></div>
+                                <div><dt data-i18n="creator.cutout_model_size">大小</dt><dd id="precisionCutoutModelSize" data-i18n="creator.cutout_model_size_approx">约 176 MB</dd></div>
+                                <div><dt data-i18n="creator.cutout_model_verification">校验</dt><dd data-i18n="creator.cutout_model_verification_value">文件大小、SHA-256 与 MD5 双指纹</dd></div>
+                                <div><dt data-i18n="creator.cutout_model_runtime_probe">启用条件</dt><dd data-i18n="creator.cutout_model_runtime_probe_value">校验通过且本地运行能力探测可执行</dd></div>
+                                <div><dt data-i18n="creator.cutout_model_path">本地路径</dt><dd><code id="precisionCutoutModelPath">storage/models/cutout/u2net_human_seg.onnx</code></dd></div>
+                              </dl>
+                              <p class="precision-cutout-model-note" data-i18n="creator.cutout_model_not_bundled">模型不随 GenBox 安装包内嵌。当前版本保留固定来源与许可证信息页，但自动下载保持禁用。</p>
+                              <p class="precision-cutout-model-warning" id="precisionCutoutModelWarning" data-i18n="creator.cutout_model_license_warning">注意：模型转换链、训练数据来源及商业使用权利均为 UNVERIFIED，因此当前版本禁用自动下载。</p>
+                              <div class="precision-cutout-model-progress hidden" id="precisionCutoutModelProgress">
+                                <progress id="precisionCutoutModelProgressBar" max="100" value="0" aria-label="模型下载进度" data-i18n-aria-label="creator.cutout_model_progress_label"></progress>
+                                <span id="precisionCutoutModelProgressText">0%</span>
+                              </div>
+                              <div class="precision-cutout-model-actions">
+                                <button type="button" class="btn-secondary" id="btnPrecisionCutoutModelInstall" data-i18n="creator.cutout_model_install">下载并安装</button>
+                                <button type="button" class="btn-ghost hidden" id="btnPrecisionCutoutModelCancel" data-i18n="creator.cutout_model_cancel">取消下载</button>
+                                <button type="button" class="btn-secondary hidden" id="btnPrecisionCutoutModelRetry" data-i18n="creator.cutout_model_retry">重试</button>
+                                <button type="button" class="btn-ghost hidden" id="btnPrecisionCutoutModelRemoveCorrupt" data-i18n="creator.cutout_model_remove_corrupt">删除损坏文件</button>
+                                <button type="button" class="btn-ghost hidden" id="btnPrecisionCutoutModelDelete" data-i18n="creator.cutout_model_delete">删除模型</button>
+                              </div>
+                            </div>
+                          </div>
+                          <div class="precision-cutout-actions">
+                            <button type="button" id="btnPrecisionCutout" class="btn-secondary" disabled data-i18n="creator.cutout_person_start">抠出人物</button>
+                            <button type="button" id="btnPrecisionCutoutRefine" class="btn-secondary" disabled aria-describedby="precisionCutoutSelectionHint" data-i18n="creator.cutout_refine">精修透明边缘</button>
+                            <button type="button" id="btnPrecisionCutoutCancel" class="btn-ghost hidden" disabled data-i18n="creator.cutout_cancel_wait">取消等待</button>
+                          </div>
+                          <div class="precision-cutout-refine-controls">
+                            <label class="precision-cutout-feather" for="precisionCutoutFeather"><span data-i18n="creator.cutout_refine_feather">羽化</span><input id="precisionCutoutFeather" type="range" min="0" max="64" step="1" value="0"><output id="precisionCutoutFeatherValue" for="precisionCutoutFeather">0</output><span>px</span></label>
+                            <label class="precision-cutout-selection"><input id="precisionCutoutUseSelection" type="checkbox" disabled><span data-i18n="creator.cutout_refine_use_selection">仅精修画布选区</span></label>
+                            <label class="precision-cutout-restore" for="precisionCutoutRestoreMode"><input id="precisionCutoutRestoreMode" type="checkbox" disabled aria-describedby="precisionCutoutRestoreHint"><span data-i18n="creator.cutout_restore_foreground">还原前景</span></label>
+                            <label class="precision-cutout-restore-alpha" for="precisionCutoutRestoreMinAlpha"><span data-i18n="creator.cutout_restore_min_alpha">最低不透明度</span><input id="precisionCutoutRestoreMinAlpha" type="range" min="0" max="255" step="1" value="255" disabled><output id="precisionCutoutRestoreMinAlphaValue" for="precisionCutoutRestoreMinAlpha">255</output><span>alpha</span></label>
+                            <small id="precisionCutoutRestoreHint" data-i18n="creator.cutout_restore_hint">需要已有透明抠图版本和画布选区，系统会用原始底图在所选区域内恢复前景。</small>
+                            <small id="precisionCutoutSelectionHint" data-i18n="creator.cutout_refine_selection_empty">用画笔、矩形或椭圆标出选区后可启用。</small>
+                            <small class="precision-cutout-flow-hint" data-i18n="creator.cutout_refine_flow_hint">操作顺序：先抠出人物并选中透明版本，再调羽化；需要局部处理时勾选“仅精修画布选区”。</small>
+                          </div>
+                          <span id="precisionCutoutStatus" role="status" aria-live="polite" data-i18n="creator.cutout_unconfigured_clear">当前未安装透明背景抠图组件，可先用画笔圈选后交给编辑模型处理。</span>
+                        </div>
+                        <section id="precisionCutoutProfessionalDialog" class="precision-cutout-professional-dialog" role="dialog" aria-modal="true" aria-labelledby="precisionCutoutProfessionalTitle" hidden>
+                          <button type="button" id="precisionCutoutProfessionalResizeHandle" class="precision-cutout-professional-resize-handle" role="separator" aria-orientation="vertical" aria-controls="precisionCutoutProfessionalDialog precisionCanvasShell" aria-valuemin="320" aria-valuemax="560" aria-valuenow="410" aria-label="调整专业工具侧栏宽度" title="拖动或使用左右方向键调整专业工具侧栏宽度"><span aria-hidden="true"></span></button>
+                          <div class="precision-cutout-professional-card">
+                            <header><div><strong id="precisionCutoutProfessionalTitle" data-i18n="creator.cutout_professional_title">专业抠图设置</strong><small data-i18n="creator.cutout_professional_hint">仅显示本机已验证可运行的算法；不会下载或调用第三方在线服务。</small></div><div class="precision-cutout-professional-header-actions"><button type="button" id="btnPrecisionCutoutProfessionalCollapse" class="btn-ghost" aria-label="收起专业工具侧栏" title="收起专业工具侧栏"><span aria-hidden="true">›</span></button><button type="button" id="btnPrecisionCutoutProfessionalClose" class="btn-ghost" aria-label="返回精准改图工作台" title="返回精准改图工作台"><span aria-hidden="true">←</span><span>返回</span></button></div></header>
+                            <div class="precision-cutout-professional-body">
+                              <label for="precisionCutoutProfessionalAlgorithm"><span data-i18n="creator.cutout_algorithm_label">抠图算法</span><select id="precisionCutoutProfessionalAlgorithm" disabled aria-describedby="precisionCutoutProfessionalAlgorithmStatus"><option data-i18n="creator.cutout_algorithm_checking">正在检查已验证算法…</option></select></label>
+                              <small id="precisionCutoutProfessionalAlgorithmStatus" role="status" aria-live="polite" data-i18n="creator.cutout_algorithm_checking">正在检查已验证算法…</small>
+                              <div class="precision-cutout-professional-actions"><button type="button" id="btnPrecisionCutoutProfessionalRun" class="btn-secondary" disabled data-i18n="creator.cutout_person_start">抠出人物</button><button type="button" id="btnPrecisionCutoutProfessionalRefresh" class="btn-ghost" data-i18n="creator.cutout_capability_refresh">重新检查</button></div>
+                              <section class="precision-cutout-professional-refine" aria-labelledby="precisionCutoutProfessionalRefineTitle"><strong id="precisionCutoutProfessionalRefineTitle" data-i18n="creator.cutout_refine">精修透明边缘</strong><label class="precision-cutout-feather" for="precisionCutoutProfessionalFeather"><span data-i18n="creator.cutout_refine_feather">羽化</span><input id="precisionCutoutProfessionalFeather" type="range" min="0" max="64" step="1" value="0" disabled><output id="precisionCutoutProfessionalFeatherValue" for="precisionCutoutProfessionalFeather">0</output><span>px</span></label><label class="precision-cutout-selection"><input id="precisionCutoutProfessionalUseSelection" type="checkbox" disabled><span data-i18n="creator.cutout_refine_use_selection">仅精修画布选区</span></label><label class="precision-cutout-restore"><input id="precisionCutoutProfessionalRestoreMode" type="checkbox" disabled><span data-i18n="creator.cutout_restore_foreground">还原前景</span></label><label class="precision-cutout-restore-alpha" for="precisionCutoutProfessionalRestoreMinAlpha"><span data-i18n="creator.cutout_restore_min_alpha">最低不透明度</span><input id="precisionCutoutProfessionalRestoreMinAlpha" type="range" min="0" max="255" step="1" value="255" disabled><output id="precisionCutoutProfessionalRestoreMinAlphaValue" for="precisionCutoutProfessionalRestoreMinAlpha">255</output><span>alpha</span></label><small id="precisionCutoutProfessionalRefineHint" data-i18n="creator.cutout_refine_selection_empty">用画笔、矩形或椭圆标出选区后可启用。</small><button type="button" id="btnPrecisionCutoutProfessionalRefine" class="btn-secondary" disabled data-i18n="creator.cutout_refine">精修透明边缘</button></section>
+                            </div>
+                          </div>
+                        </section>
+                      </section>
+                      <section class="precision-size-tool" aria-labelledby="precisionSizeTitle">
+                        <div class="precision-size-heading">
+                          <div class="precision-size-heading-copy"><span class="param-label" id="precisionSizeTitle" data-i18n="creator.precision_size_title">智能扩图与画布适配</span><small id="precisionSizeHint" class="sr-only" data-i18n="creator.precision_size_preserve_hint">默认保持原图尺寸和比例，不会套用文生图设置。</small></div>
+                          <p class="precision-start-hint" data-i18n="creator.precision_start_size">改变尺寸：1. 选尺寸方式（模型尺寸严格匹配；裁切适配会本地裁切缩放）；2. 选预设，按提示授权试用；3. 选构图说明并按需修改。加载底图后即可点击“生成图片”。</p>
+                          <div class="precision-size-modes" role="group" aria-label="画布尺寸模式" data-i18n-aria-label="creator.precision_size_title">
+                            <button type="button" id="btnPrecisionSizePreserve" class="btn-secondary" aria-pressed="true" onclick="setPrecisionSizeMode('preserve')" data-i18n="creator.precision_size_preserve">保持原图</button>
+                            <button type="button" id="btnPrecisionSizeResize" class="btn-ghost" aria-pressed="false" onclick="setPrecisionSizeMode('resize')" data-i18n="creator.precision_size_resize">改变尺寸</button>
+                          </div>
+                        </div>
+                        <div id="precisionResizeFields" class="precision-resize-fields hidden">
+                          <label class="precision-resize-mode-field" for="precisionResizeMode"><span class="precision-resize-mode-label" data-i18n="creator.precision_size_mode">尺寸方式</span><span class="precision-resize-mode-separator" aria-hidden="true">|</span><span class="precision-resize-mode-select"><select id="precisionResizeMode" aria-describedby="precisionResizeModeHint"><option value="strict" data-i18n="creator.precision_size_mode_strict">模型尺寸</option><option value="fit_crop" data-i18n="creator.precision_size_mode_fit_crop">裁切适配</option></select></span></label>
+                          <small id="precisionResizeModeHint" class="precision-resize-mode-hint" data-i18n="creator.precision_size_mode_strict_hint">只显示当前模型已确认的官方尺寸；不会自动裁切或拉伸。</small>
+                          <label id="precisionSizePreset" for="precisionResizePreset"><span id="precisionResizePresetLabel" data-i18n="creator.precision_size_model_preset">模型尺寸预设</span><select id="precisionResizePreset"><option value="custom" data-precision-resize-mode="fit_crop" data-i18n="creator.precision_size_custom">自定义</option><optgroup label="模型尺寸 · 1K" data-precision-resize-mode="strict"><option value="1024x1024">1K · 1:1 · 1024 × 1024</option><option value="1168x656">1K · 16:9 · 1168 × 656</option><option value="656x1168">1K · 9:16 · 656 × 1168</option><option value="1024x768">1K · 4:3 · 1024 × 768</option><option value="768x1024">1K · 3:4 · 768 × 1024</option><option value="1008x672">1K · 3:2 · 1008 × 672</option><option value="672x1008">1K · 2:3 · 672 × 1008</option><option value="1344x576">1K · 21:9 · 1344 × 576</option><option value="576x1344">1K · 9:21 · 576 × 1344</option></optgroup><optgroup label="模型尺寸 · 2K" data-precision-resize-mode="strict"><option value="2048x2048">2K · 1:1 · 2048 × 2048</option><option value="2048x1152">2K · 16:9 · 2048 × 1152</option><option value="1152x2048">2K · 9:16 · 1152 × 2048</option><option value="2048x1536">2K · 4:3 · 2048 × 1536</option><option value="1536x2048">2K · 3:4 · 1536 × 2048</option><option value="2016x1344">2K · 3:2 · 2016 × 1344</option><option value="1344x2016">2K · 2:3 · 1344 × 2016</option><option value="2544x1088">2K · 21:9 · 2544 × 1088</option><option value="1088x2544">2K · 9:21 · 1088 × 2544</option></optgroup><optgroup label="模型尺寸 · 4K" data-precision-resize-mode="strict"><option value="2880x2880">4K · 1:1 · 2880 × 2880</option><option value="3840x2160">4K · 16:9 · 3840 × 2160</option><option value="2160x3840">4K · 9:16 · 2160 × 3840</option><option value="3328x2480">4K · 4:3 · 3328 × 2480</option><option value="2480x3328">4K · 3:4 · 2480 × 3328</option><option value="3520x2352">4K · 3:2 · 3520 × 2352</option><option value="2352x3520">4K · 2:3 · 2352 × 3520</option><option value="3840x1648">4K · 21:9 · 3840 × 1648</option><option value="1648x3840">4K · 9:21 · 1648 × 3840</option></optgroup><optgroup label="裁切适配 · 常用修图尺寸" data-precision-resize-mode="fit_crop"><option value="1024x1024">1K · 1:1 · 1024 × 1024</option><option value="1536x1024">常用横图 · 3:2 · 1536 × 1024</option><option value="1024x1536">常用竖图 · 2:3 · 1024 × 1536</option><option value="1536x864">常用宽屏 · 16:9 · 1536 × 864</option><option value="864x1536">常用竖屏 · 9:16 · 864 × 1536</option><option value="1792x768">常用超宽 · 21:9 · 1792 × 768</option><option value="2048x1152">常用横幅 · 16:9 · 2048 × 1152</option><option value="1152x2048">常用长图 · 9:16 · 1152 × 2048</option><option value="3840x1648">大幅超宽交付 · 21:9 · 3840 × 1648</option></optgroup></select></label>
+                          <div id="precisionResizeCustomFields" class="precision-resize-custom-fields hidden"><div class="precision-size-inputs"><label for="precisionResizeWidth"><span data-i18n="creator.precision_size_width">宽度 (px)</span><input id="precisionResizeWidth" type="number" min="64" max="3840" step="16" value="1024" oninput="markPrecisionResizeCustom()"></label><span aria-hidden="true">×</span><label for="precisionResizeHeight"><span data-i18n="creator.precision_size_height">高度 (px)</span><input id="precisionResizeHeight" type="number" min="64" max="3840" step="16" value="1024" oninput="markPrecisionResizeCustom()"></label></div></div>
+                          <small id="precisionAspectRatioHint" class="precision-aspect-ratio-hint" aria-live="polite" data-i18n="creator.precision_aspect_ratio_hint_empty">选择目标尺寸后，GenBox 会发送像素尺寸；后端会由尺寸推导构图比例约束。</small>
+                          <div id="precisionResizeCapability" class="precision-size-capability" role="group" aria-label="当前尺寸模型支持状态" data-i18n-aria-label="creator.precision_size_capability_label">
+                            <small id="precisionResizeCapabilityStatus" role="status" aria-live="polite" data-i18n="creator.precision_size_capability_model_required">先选择并确认一个精准改图模型，再确认当前目标尺寸。</small>
+                            <div class="precision-size-capability-actions">
+                              <button type="button" id="btnPrecisionConfirmResizeSize" class="btn-secondary" hidden disabled data-i18n="creator.precision_size_confirm_action_empty">确认当前尺寸</button>
+                              <button type="button" id="btnPrecisionRevokeResizeSize" class="btn-ghost" hidden disabled data-i18n="creator.precision_size_revoke_action_empty">撤销当前尺寸确认</button>
+                            </div>
+                          </div>
+                          <div id="precisionResizePresetEditor" class="precision-size-preset-editor hidden">
+                            <label for="precisionResizePresetName"><span data-i18n="creator.precision_size_preset_name">预设名称</span><input id="precisionResizePresetName" type="text" maxlength="40" autocomplete="off" placeholder="例如：横版封面" data-i18n-placeholder="creator.precision_size_preset_name_placeholder"></label>
+                            <div class="precision-size-preset-actions" role="group" aria-label="已保存尺寸预设" data-i18n-aria-label="creator.precision_size_saved_actions">
+                              <button type="button" id="btnPrecisionSaveResizePreset" class="btn-secondary" data-i18n="creator.precision_size_save_preset">保存当前尺寸</button>
+                              <button type="button" id="btnPrecisionDeleteResizePreset" class="btn-ghost" disabled data-i18n="creator.precision_size_delete_preset">删除所选</button>
+                              <button type="button" id="btnPrecisionResetResizePresets" class="btn-ghost" disabled data-i18n="creator.precision_size_reset_presets">重置已保存</button>
+                            </div>
+                            <small id="precisionResizePresetStatus" class="precision-size-preset-status" role="status" aria-live="polite"></small>
+                          </div>
+                          <label for="precisionResizePromptPreset"><span data-i18n="creator.precision_size_prompt_preset">构图说明预设</span><select id="precisionResizePromptPreset" aria-describedby="precisionResizePromptPresetHint"><option value="" data-i18n="creator.precision_size_prompt_preset_choose">选择后追加到构图说明</option><option value="creator.precision_size_prompt_preset_keep_style_subject" data-i18n="creator.precision_size_prompt_preset_keep_style_subject">保持原有画面风格与主体元素，向四周自然扩展</option><option value="creator.precision_size_prompt_preset_keep_person" data-i18n="creator.precision_size_prompt_preset_keep_person">保持人物大小和位置，补全背景</option><option value="creator.precision_size_prompt_preset_center_subject" data-i18n="creator.precision_size_prompt_preset_center_subject">主体居中，扩展环境并保持光影一致</option><option value="creator.precision_size_prompt_preset_extend_left" data-i18n="creator.precision_size_prompt_preset_extend_left">向左延展场景并保持透视</option><option value="creator.precision_size_prompt_preset_extend_right" data-i18n="creator.precision_size_prompt_preset_extend_right">向右延展场景并保持透视</option><option value="creator.precision_size_prompt_preset_banner" data-i18n="creator.precision_size_prompt_preset_banner">扩展为横幅构图并保留关键元素</option></select></label>
+                          <small id="precisionResizePromptPresetHint" data-i18n="creator.precision_size_prompt_preset_append_hint">选择预设会替换当前构图说明；之后仍可自由编辑。</small>
+                          <label for="precisionResizePrompt"><span data-i18n="creator.precision_size_instruction">构图调整说明</span><textarea id="precisionResizePrompt" rows="2" maxlength="500" required aria-required="true" placeholder="例如：向左右扩展背景，人物大小和位置保持不变" data-i18n-placeholder="creator.precision_size_instruction_placeholder"></textarea></label>
+                          <small data-i18n="creator.precision_size_resize_hint">只有开启改变尺寸时才会把目标尺寸交给模型；模型不支持时会明确报错，不会偷偷裁切或拉伸。</small>
+                        </div>
+                      </section>
+                    <section class="precision-edit-list" aria-labelledby="precisionEditListTitle" hidden>
+                      <div class="precision-preview-heading">
+                        <span class="param-label" id="precisionEditListTitle" data-i18n="creator.precision_edit_changes">修改列表</span>
+                        <span id="precisionAnnotationCount" class="precision-annotation-count">0</span>
+                      </div>
+                      <div id="precisionEditObjectList" class="precision-object-list" aria-live="polite"></div>
+                    </section>
+                    </section>
+                    <!-- Kept hidden for the existing annotation update chain; the main canvas is the only visible annotation surface. -->
+                    <div class="precision-edit-preview precision-annotation-compat" hidden aria-hidden="true">
+                      <div id="precisionPreviewFrame"><img id="precisionAnnotationPreview" class="hidden" src="" alt="" data-i18n-alt="creator.precision_edit_annotation_preview"><span id="precisionPreviewEmpty"></span></div>
+                    </div>
+                    <section id="precisionTaskMonitor" class="precision-task-monitor precision-task-log-panel precision-task-idle precision-task-collapsed" aria-label="处理进度" data-i18n-aria-label="creator.precision_processing_progress" aria-live="polite">
+                      <div class="precision-task-heading">
+                        <span class="precision-task-heading-icon" aria-hidden="true">◌</span>
+                        <span class="param-label" data-i18n="creator.precision_processing_progress">处理进度</span>
+                        <span id="precisionTaskStatus" class="precision-task-status"></span>
+                        <button type="button" id="btnPrecisionTaskMonitorToggle" class="precision-task-monitor-toggle" aria-expanded="false" aria-controls="precisionTaskMonitorBody" aria-label="展开处理进度" title="展开处理进度" onclick="togglePrecisionTaskMonitor()"><span class="precision-task-monitor-toggle-icon" aria-hidden="true">⌄</span><span class="sr-only">展开</span></button>
+                      </div>
+                      <div id="precisionTaskMonitorBody" class="precision-task-monitor-body" aria-hidden="true">
+                        <div class="precision-task-progress"><div id="precisionTaskProgressBar" class="precision-task-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="precisionTaskProgressFill" class="precision-task-progress-fill"></span></div><span id="precisionTaskProgress"></span><span id="precisionTaskElapsed"></span></div>
+                        <pre id="precisionTaskLog" class="precision-task-log"></pre>
+                        <p class="precision-task-empty" data-i18n="creator.precision_processing_empty">提交改图后，这里会显示当前阶段、结果和可恢复的错误信息。</p>
+                      </div>
+                    </section>
+                    <details class="precision-model-picker" id="precisionModelPicker" aria-labelledby="precisionModelPickerTitle">
+                      <summary class="precision-model-summary" id="btnPrecisionModelPickerToggle"><span class="param-label" id="precisionModelPickerTitle" data-i18n="creator.precision_edit_model_picker">选择模型</span><span class="precision-model-summary-caret" aria-hidden="true">⌄</span></summary>
+                      <div class="precision-model-picker-body">
+                      <p class="precision-start-hint" data-i18n="creator.precision_start_model">第一步：选模型端点 → 在“显示模型”中勾选并确定 → 选择编辑模型。显示“待确认”时，仅在确认支持改图后启用；没有端点请先到“模型设置”配置。</p>
+                      <label for="precisionEditProviderEndpoint">
+                        <span class="precision-picker-label" data-i18n="creator.precision_edit_endpoint_select">模型端点</span>
+                        <select id="precisionEditProviderEndpoint" onchange="selectPrecisionEditEndpoint()" disabled><option value="" data-i18n="creator.precision_edit_no_endpoint">暂无可用端点</option></select>
+                      </label>
+                      <label for="precisionEditProviderModel">
+                        <span class="precision-picker-label" data-i18n="creator.precision_edit_model_select">图片编辑模型</span>
+                      <select id="precisionEditProviderModel" onchange="selectPrecisionEditModel(this.value)" disabled>
+                        <option value="" data-i18n="creator.precision_edit_no_model">暂无已验证的精准改图模型</option>
+                      </select>
+                      </label>
+                      <div id="precisionEditModelVisibility" class="precision-model-visibility" aria-live="polite"></div>
+                      <small id="precisionProviderStatus" role="status" aria-live="polite" data-i18n="creator.precision_edit_model_hint">这里只显示已确认支持图片编辑的模型；自定义模型需要手动确认一次。</small>
+                      <div id="precisionEditCompatibilityOption" class="precision-model-compatibility hidden">
+                        <input type="checkbox" id="precisionEditGptImage2Compatibility">
+                        <label for="precisionEditGptImage2Compatibility" data-i18n="creator.precision_edit_compatibility_label">按 GPT Image 2 精准改图方式调用</label>
+                        <span class="precision-help-tip"><button type="button" class="precision-help-trigger" aria-describedby="precisionEditCompatibilityHelp" aria-label="查看兼容方式说明" data-i18n-aria-label="creator.precision_edit_compatibility_help_label">?</button><span id="precisionEditCompatibilityHelp" class="precision-help-content" role="tooltip" data-i18n="creator.precision_edit_compatibility_help">仅在你已验证当前模型是 GPT Image 2 的上游别名时选择；真实模型 ID 仍会原样提交。</span></span>
+                      </div>
+                      <div class="precision-model-authorization-actions">
+                        <button type="button" id="btnPrecisionAuthorizeModel" class="btn-secondary" onclick="authorizePrecisionEditModel()" data-i18n="creator.precision_edit_authorize" disabled>确认支持并启用</button>
+                        <button type="button" id="btnPrecisionRevokeModel" class="btn-ghost hidden" onclick="revokePrecisionEditModel()" data-i18n="creator.precision_edit_revoke" disabled>撤销确认</button>
+                      </div>
+                      <small id="precisionModelAuthorizationHint" data-i18n="creator.precision_edit_authorize_hint">仅在你确认该端点和模型支持 OpenAI 兼容图片编辑时启用。</small>
+                      </div>
+                    </details>
+                  </aside>
                 </div>
-                <input type="file" id="fileInputVar" accept="image/*" class="hidden" onchange="handleFileSelectVar(event)">
-                <div class="mt-12 flex gap-12">
-                  <div style="flex:1;"><div class="param-label"><span data-i18n="creator.output_size">输出尺寸</span></div><select id="varSize" class="w-full"><option value="1024x1024">1024×1024</option><option value="512x512">512×512</option><option value="256x256">256×256</option></select></div>
-                  <div style="flex:1;"><div class="param-label"><span data-i18n="creator.count">数量</span></div><select id="varCount" class="w-full"><option value="1">1</option><option value="2">2</option><option value="4">4</option></select></div>
+
+                <canvas id="precisionCompositeCanvas" class="hidden" aria-hidden="true"></canvas>
+                <input type="hidden" id="precisionSourceData" value="">
+                <input type="hidden" id="precisionAnnotationData" value="">
+                <input type="hidden" id="precisionCompositeData" value="">
+                <input type="hidden" id="precisionSourceMediaId" value="">
+              </div>
+
+              <!-- Inpaint Panel -->
+              <div class="glass-card hidden" id="panelVAR">
+                <div class="inpaint-panel">
+                  <div class="inpaint-explainer">
+                    <div>
+                      <div class="param-label"><span data-i18n="creator.inpaint_base_image">底图</span></div>
+                      <p><span data-i18n="creator.inpaint_mask_hint">在需要修改的区域涂白；黑色区域会保持不变。</span></p>
+                    </div>
+                    <div class="inpaint-mask-key" aria-hidden="true"><span class="inpaint-key-edit"></span><span data-i18n="creator.inpaint_edit_area">白色：编辑</span><span class="inpaint-key-keep"></span><span data-i18n="creator.inpaint_keep_area">黑色：保留</span></div>
+                  </div>
+
+                  <div class="inpaint-editor-grid">
+                    <div class="inpaint-source-column">
+                      <div class="param-label mb-8"><span data-i18n="creator.inpaint_base_image">底图</span></div>
+                      <div class="upload-zone inpaint-upload-zone" id="inpaintUploadZone" role="button" tabindex="0" onclick="openInpaintFilePicker(event)" onkeydown="openInpaintFilePicker(event)" aria-label="上传局部重绘底图" data-i18n-aria-label="creator.inpaint_upload" title="上传局部重绘底图" data-i18n-title="creator.inpaint_upload">
+                        <div id="inpaintUploadPlaceholder" style="text-align:center;">
+                          <div class="text-base mb-4">🖼</div>
+                          <div class="text-xs text-muted"><span data-i18n="creator.inpaint_upload">点击或拖拽上传一张底图</span></div>
+                        </div>
+                        <img id="inpaintUploadPreview" class="upload-preview-img hidden" src="" alt="">
+                      </div>
+                      <input type="file" id="fileInputInpaint" accept="image/*" class="hidden" onchange="handleInpaintFileSelect(event)">
+                    </div>
+
+                    <div class="inpaint-editor-column">
+                      <div class="inpaint-canvas-heading">
+                        <div class="param-label"><span data-i18n="creator.inpaint_mask">编辑遮罩</span></div>
+                        <span id="inpaintCanvasDimensions" class="text-xs text-muted"></span>
+                      </div>
+                      <div class="inpaint-canvas-shell is-empty" id="inpaintCanvasShell">
+                        <img id="inpaintBaseImage" class="inpaint-base-image hidden" src="" alt="">
+                        <canvas id="inpaintMaskCanvas" class="inpaint-mask-canvas" aria-label="编辑遮罩" data-i18n-aria-label="creator.inpaint_canvas_label" title="编辑遮罩" data-i18n-title="creator.inpaint_canvas_label"></canvas>
+                        <div class="inpaint-canvas-empty" id="inpaintCanvasEmpty"><span data-i18n="creator.inpaint_canvas_empty">上传底图后即可涂抹需要修改的区域</span></div>
+                      </div>
+                      <div class="inpaint-toolbar" role="toolbar" aria-label="局部重绘工具" data-i18n-aria-label="creator.inpaint_toolbar_label">
+                        <div class="inpaint-tool-group" role="group" aria-label="遮罩工具" data-i18n-aria-label="creator.inpaint_tool_group_label">
+                          <button type="button" class="btn-secondary inpaint-tool active" id="inpaintToolBrush" onclick="setInpaintTool('brush')" title="画笔" data-i18n-title="creator.inpaint_brush" aria-pressed="true"><span data-i18n="creator.inpaint_brush">画笔</span></button>
+                          <button type="button" class="btn-ghost inpaint-tool" id="inpaintToolEraser" onclick="setInpaintTool('eraser')" title="橡皮" data-i18n-title="creator.inpaint_eraser" aria-pressed="false"><span data-i18n="creator.inpaint_eraser">橡皮</span></button>
+                        </div>
+                        <label class="inpaint-brush-size" for="inpaintBrushSize"><span data-i18n="creator.inpaint_brush_size">笔刷</span><input id="inpaintBrushSize" type="range" min="8" max="240" step="1" value="48" oninput="setInpaintBrushSize(this.value)" aria-label="笔刷尺寸" data-i18n-aria-label="creator.inpaint_brush_size" title="笔刷尺寸" data-i18n-title="creator.inpaint_brush_size"><output id="inpaintBrushSizeValue" for="inpaintBrushSize">48</output></label>
+                        <div class="inpaint-tool-group inpaint-history-actions" role="group" aria-label="遮罩历史" data-i18n-aria-label="creator.inpaint_history_group_label">
+                          <button type="button" class="btn-ghost inpaint-icon-button" id="btnInpaintUndo" onclick="undoInpaintMask()" title="撤销" data-i18n-title="creator.inpaint_undo" disabled><span aria-hidden="true">↶</span><span class="sr-only" data-i18n="creator.inpaint_undo">撤销</span></button>
+                          <button type="button" class="btn-ghost inpaint-icon-button" id="btnInpaintRedo" onclick="redoInpaintMask()" title="重做" data-i18n-title="creator.inpaint_redo" disabled><span aria-hidden="true">↷</span><span class="sr-only" data-i18n="creator.inpaint_redo">重做</span></button>
+                          <button type="button" class="btn-ghost inpaint-clear-button" id="btnInpaintClear" onclick="clearInpaintMask()" title="清空遮罩" data-i18n-title="creator.inpaint_clear_mask" disabled><span data-i18n="creator.inpaint_clear">清空</span></button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="inpaint-prompt-field">
+                    <div class="param-label mb-8"><span data-i18n="creator.inpaint_prompt">修改提示词</span></div>
+                    <textarea id="txtPromptInpaint" rows="3" placeholder="描述希望如何修改已涂抹的区域..." data-i18n-placeholder="creator.inpaint_prompt_placeholder"></textarea>
+                  </div>
+                  <div id="inpaintProviderStatus" class="inpaint-provider-status" role="status" aria-live="polite"></div>
+                  <div id="generationModelHelp" class="generation-model-help" role="note" aria-live="polite"></div>
+                  <label class="inpaint-manual-choice">
+                    <input type="checkbox" id="inpaintManualChoice" onchange="setInpaintManualChoice(this.checked)">
+                    <span data-i18n="creator.inpaint_manual_choice">允许手动选择未确认支持的模型（提交时仍会检查）</span>
+                  </label>
                 </div>
               </div>
             </div>
@@ -596,6 +1035,7 @@
         <select id="gallerySortBy" onchange="applyGallerySort()" class="media-filter-select"><option value="created_at_desc"><span data-i18n="library.time_desc">时间 ↓</span></option><option value="created_at_asc"><span data-i18n="library.time_asc">时间 ↑</span></option><option value="model_asc"><span data-i18n="library.provider_az">Provider A-Z</span></option><option value="model_desc"><span data-i18n="library.provider_za">Provider Z-A</span></option><option value="prompt_asc"><span data-i18n="library.prompt_az">提示词 A-Z</span></option></select>
         <select id="galleryProviderFilter" onchange="applyMediaFilters()" class="media-filter-select"><option value=""><span data-i18n="library.all_providers">所有 Provider</span></option></select>
         <select id="galleryGroupMode" onchange="applyMediaFilters()" class="media-filter-select"><option value="flat"><span data-i18n="library.flat">平铺展示</span></option><option value="model"><span data-i18n="library.grouped">按模型分组</span></option></select>
+        <label class="media-date-filter"><span>日期</span><input type="date" id="galleryDateFrom" onchange="applyMediaFilters()" aria-label="开始日期"><span aria-hidden="true">–</span><input type="date" id="galleryDateTo" onchange="applyMediaFilters()" aria-label="结束日期"></label>
         <input type="text" id="gallerySearchInput" class="media-search-input" placeholder="搜索提示词.." oninput="applyMediaFilters()" data-i18n-placeholder="common.search_prompt">
         <button class="btn-ghost" onclick="toggleGallerySelectMode()" id="btnGallerySelect"><span data-i18n="library.select_mode">☑ 选择模式</span></button>
         <button class="btn-ghost hidden" onclick="selectAllGallery()" id="btnSelAll" style="color:var(--accent);"><span data-i18n="library.select_all">全选</span></button>
@@ -792,6 +1232,15 @@
         </div>
         <div class="extension-console-meta"><span>CHATGPT2API</span><strong id="extensionOverallStatus" class="extension-status"><span data-i18n="common.not_configured">Not configured</span></strong></div>
       </header>
+      <div id="backendOfflineBanner" class="backend-offline-banner hidden" role="alert">
+        <div><b data-i18n="runtime.offline_title">GenBox 后端未运行</b><span data-i18n="runtime.offline_detail">当前只是浏览器保留的旧页面，连接和部署操作已暂停。</span></div>
+        <button type="button" class="btn-secondary" onclick="checkRuntimeStatus(true)" data-i18n="runtime.recheck">重新检测</button>
+      </div>
+      <section id="extStore" class="extension-store glass-panel" aria-labelledby="extStoreTitle">
+        <div class="extension-store-heading"><div><span data-i18n="extensions.store_kicker">GENBOX STORE</span><h2 id="extStoreTitle" data-i18n="extensions.store_title">Extension Store</h2><p data-i18n="extensions.store_help">Read-only catalog views with backend-authorized actions.</p></div><button type="button" class="btn-ghost" id="extStoreRefreshBtn" onclick="extensionLoadStore()" data-i18n="common.refresh">Refresh</button></div>
+        <div class="extension-store-tabs" role="tablist" aria-label="Extension Store views" data-i18n-aria-label="extensions.store_views_label"><button type="button" class="active" role="tab" aria-selected="true" data-store-view="installed" onclick="extensionStoreView('installed')" data-i18n="extensions.store_installed">Installed</button><button type="button" role="tab" aria-selected="false" data-store-view="recommended" onclick="extensionStoreView('recommended')" data-i18n="extensions.store_recommended">Recommended</button><button type="button" role="tab" aria-selected="false" data-store-view="all" onclick="extensionStoreView('all')" data-i18n="common.all">All</button></div>
+        <div id="extStoreItems" class="extension-store-items" aria-live="polite"></div>
+      </section>
       <section class="extension-deployed glass-panel">
         <div class="ext-deployed-collapsed">
           <span><span data-i18n="extensions.drawer_hint">服务面板已收纳至右侧，可随时查看运行状态、访问地址与密钥管理</span></span>
@@ -805,7 +1254,7 @@
       <div class="extension-layout">
         <nav class="extension-step-nav" aria-label="部署步骤" data-i18n-aria-label="extensions.steps_label">
           <ol id="extensionSteps">
-            <li class="active" data-step="1" aria-current="step" tabindex="0" role="button" onclick="extensionGoToStep(1)" onkeydown="extensionStepKey(event,1)"><b>1</b><span><span data-i18n="extensions.step_vps">VPS 信息</span></span></li>
+            <li class="active" data-step="1" aria-current="step" tabindex="0" role="button" onclick="extensionGoToStep(1)" onkeydown="extensionStepKey(event,1)"><b>1</b><span><span data-i18n="extensions.step_start_deploy">开始部署</span></span></li>
             <li data-step="2" tabindex="0" role="button" onclick="extensionGoToStep(2)" onkeydown="extensionStepKey(event,2)"><b>2</b><span><span data-i18n="extensions.step_deploy">部署服务</span></span></li>
             <li data-step="3" tabindex="0" role="button" onclick="extensionGoToStep(3)" onkeydown="extensionStepKey(event,3)"><b>3</b><span><span data-i18n="extensions.step_choose_network">选择链路</span></span></li>
             <li data-step="4" tabindex="0" role="button" onclick="extensionGoToStep(4)" onkeydown="extensionStepKey(event,4)"><b>4</b><span><span data-i18n="extensions.step_configure">配置连接</span></span></li>
@@ -813,40 +1262,108 @@
           </ol>
         </nav>
         <section class="extension-workspace glass-panel">
+          <section id="extNoviceGuide" class="extension-novice-guide hidden" aria-live="polite">
+            <div class="extension-guide-heading"><span data-i18n="extensions.guide_kicker">当前只做一件事</span><h2 id="extGuideTitle"><span data-i18n="extensions.guide_connect_title">部署 GenBox 扩展服务</span></h2></div>
+            <div class="extension-guide-grid">
+              <div><b data-i18n="extensions.guide_found">系统已发现</b><p id="extGuideFound"></p></div>
+              <div><b data-i18n="extensions.guide_action">你现在只需</b><p id="extGuideAction"></p></div>
+              <div><b data-i18n="extensions.guide_after">完成后会</b><p id="extGuideAfter"></p></div>
+            </div>
+            <div class="extension-guide-actions"><button type="button" class="btn-ghost" id="extGuideAdvancedBtn" onclick="extensionToggleAdvanced()" aria-expanded="false"><span data-i18n="extensions.show_advanced">查看高级设置和日志</span></button><button type="button" class="btn-secondary hidden" id="extGuideNewDeploymentBtn" onclick="extensionStartNewIsolatedDeployment()"><span data-i18n="extensions.start_new_isolated">新建隔离实例</span></button><button type="button" class="btn-primary" id="extGuidePrimaryBtn" onclick="extensionPrimaryAction()"><span data-i18n="common.continue">继续</span></button></div>
+          </section>
           <div class="extension-pane" data-pane="1">
-            <h2 tabindex="-1"><span data-i18n="extensions.connect_vps">连接 VPS</span></h2>
+            <section id="extOnboardingLanding" class="extension-connection-paths" aria-labelledby="extConnectionPathsTitle">
+              <div class="extension-connection-paths-heading"><span data-i18n="extensions.connection_path_kicker">Connection method</span><h3 id="extConnectionPathsTitle"><span data-i18n="extensions.connection_path_title">Choose the connection method that fits you</span></h3><p data-i18n="extensions.connection_path_help">A server connector is the future default; until it is truly available, SSH still completes the current deployment flow.</p></div>
+              <div class="extension-connection-path-grid">
+                <article class="extension-connection-option extension-connection-option-recommended" aria-labelledby="extConnectorPathTitle">
+                  <div><span class="extension-connection-status" data-i18n="extensions.connection_connector_status">In preparation</span><h4 id="extConnectorPathTitle" data-i18n="extensions.connection_connector_title">Server connector (recommended)</h4></div>
+                  <p data-i18n="extensions.connection_connector_body">The connector runs on your server and initiates a restricted connection; it does not give SSH passwords or private keys to the browser.</p>
+                  <small data-i18n="extensions.connection_connector_unavailable">This version has no installable connector or trusted transport yet, so it cannot claim to be connected or deploy.</small>
+                </article>
+                <article class="extension-connection-option" aria-labelledby="extSshPathTitle">
+                  <div><span class="extension-connection-status extension-connection-status-ready" data-i18n="extensions.connection_ssh_status">Available now</span><h4 id="extSshPathTitle" data-i18n="extensions.connection_ssh_title">SSH connection (advanced)</h4></div>
+                  <p data-i18n="extensions.connection_ssh_body">This is the complete path available now: save the server, confirm its identity, enter a temporary credential, and test deployment access.</p>
+                  <button type="button" class="btn-primary" id="extUseSshFallbackBtn" onclick="extensionBeginSshSetup()" data-i18n="extensions.personal_start_ssh">使用 SSH 设置服务器</button>
+                </article>
+              </div>
+            </section>
+            <section id="extOnboardingDetails" class="hidden">
+            <h2 tabindex="-1"><span data-i18n="extensions.personal_server_details">填写服务器资料</span></h2>
             <div class="extension-target-bar">
               <label><span data-i18n="extensions.saved_vps">已保存 VPS</span><select id="extTargetSelect" onchange="extensionLoadTarget(this.value)"><option value=""><span data-i18n="extensions.current_unsaved">当前未保存</span></option></select></label>
-              <button type="button" class="btn-ghost" onclick="extensionNewTarget()"><span data-i18n="extensions.new_vps">新增 VPS</span></button>
-              <button type="button" class="btn-secondary" onclick="extensionSaveTarget()"><span data-i18n="common.save">保存</span></button>
+              <button type="button" class="btn-ghost" id="extNewTargetBtn" onclick="extensionNewTarget()"><span data-i18n="extensions.new_vps">新增 VPS</span></button>
+              <button type="button" class="btn-secondary" id="extSaveTargetBtn" onclick="extensionSaveTarget()"><span data-i18n="common.save">保存</span></button>
               <button type="button" class="btn-ghost extension-delete-target" id="extDeleteTarget" onclick="extensionDeleteTarget()" disabled><span data-i18n="common.delete">删除</span></button>
             </div>
             <div class="extension-form-grid">
               <label><span data-i18n="extensions.name">名称</span><input id="extName" value="我的 VPS" autocomplete="off"></label>
-              <label><span data-i18n="extensions.host">IP 地址或域名</span><input id="extHost" placeholder="192.0.2.10" autocomplete="off"></label>
-              <label><span data-i18n="extensions.ssh_port">SSH 端口</span><input id="extPort" type="number" value="22" min="1" max="65535"></label>
-              <label><span data-i18n="extensions.ssh_username">SSH 用户名</span><input id="extUsername" value="ubuntu" autocomplete="username"></label>
+              <label><span data-i18n="extensions.host">IP 地址或域名</span><input id="extHost" placeholder="192.0.2.10" autocomplete="off" oninput="extensionConnectionChanged()"></label>
+              <label><span data-i18n="extensions.ssh_port">SSH 端口</span><input id="extPort" type="number" value="22" min="1" max="65535" oninput="extensionConnectionChanged()"></label>
+              <label><span data-i18n="extensions.ssh_username">SSH 用户名</span><input id="extUsername" value="" autocomplete="username" oninput="extensionConnectionChanged()"></label>
+              <label class="extension-target-role"><span data-i18n="extensions.target_role">这台服务器的用途</span><select id="extTargetRole" onchange="extensionTargetRoleChanged()"><option value="isolated-development" data-i18n="extensions.target_role_isolated">隔离开发机（推荐）</option><option value="production-read-only" data-i18n="extensions.target_role_production">生产机，只读检查</option></select><small data-i18n="extensions.target_role_help">请按服务器实际用途选择。生产机只允许读取检查，不会用于部署。</small></label>
             </div>
-            <fieldset class="extension-auth"><legend><span data-i18n="extensions.auth_method">鉴权方式</span></legend>
+            </section>
+            <section id="extOnboardingIdentity" class="extension-onboarding-view hidden" aria-live="polite">
+              <div class="extension-onboarding-heading"><span data-i18n="extensions.personal_identity_kicker">安全确认</span><h2 id="extOnboardingIdentityTitle" tabindex="-1" data-i18n="extensions.personal_identity_title">确认这就是你的服务器</h2><p data-i18n="extensions.personal_identity_help">这一步完成前不会使用 SSH 密码或私钥。</p></div>
+              <div class="extension-actions"><button type="button" class="btn-ghost" onclick="extensionShowServerDetails()" data-i18n="extensions.personal_edit_server">返回修改服务器资料</button></div>
+            </section>
+            <section id="extHostKeyReconfirmation" class="extension-identity-recovery hidden" role="status">
+              <b data-i18n="extensions.identity_reconfirm_credential_title">先确认服务器身份</b>
+              <p data-i18n="extensions.identity_reconfirm_credential_body">本次 SSH 凭据已清除。完成服务器身份确认后，才需要重新输入密码或私钥。</p>
+              <div class="extension-actions"><button type="button" id="extHostKeyResetBtn" class="btn-danger" onclick="extensionResetHostKey()" data-i18n="extensions.identity_reset_action">清除旧记录并重新确认</button></div>
+            </section>
+            <section id="extOnboardingCredentials" class="extension-onboarding-view hidden">
+              <div class="extension-onboarding-heading"><span data-i18n="extensions.personal_access_kicker">访问检查</span><h2 tabindex="-1" data-i18n="extensions.personal_access_title">输入本次连接凭据</h2><p data-i18n="extensions.personal_access_help">凭据只用于这次检查，关闭页面后不会保留。</p></div>
+            <fieldset id="extAuth" class="extension-auth"><legend><span data-i18n="extensions.auth_method">鉴权方式</span></legend>
               <div class="extension-segments">
                 <button type="button" class="active" data-auth="password" onclick="extensionSetAuth('password')"><span data-i18n="extensions.password">密码</span></button>
                 <button type="button" data-auth="key" onclick="extensionSetAuth('key')"><span data-i18n="extensions.private_key">SSH 私钥</span></button>
               </div>
-              <label id="extPasswordWrap"><span data-i18n="extensions.ssh_password">SSH 密码</span><input id="extPassword" type="password" autocomplete="current-password"></label>
-              <label id="extKeyWrap" class="hidden"><span data-i18n="extensions.private_key">SSH 私钥</span><textarea id="extPrivateKey" rows="6" spellcheck="false"></textarea></label>
-              <label><span data-i18n="extensions.sudo_password">sudo 密码（留空则复用 SSH 密码）</span><input id="extSudoPassword" type="password" autocomplete="off" placeholder="仅非 root 且需要提权时使用" data-i18n-placeholder="extensions.sudo_placeholder"></label>
+              <label id="extPasswordWrap"><span data-i18n="extensions.ssh_password">SSH 密码</span><div class="extension-copy-row"><input id="extPassword" type="password" autocomplete="off" oninput="extensionCredentialChanged()"><button type="button" class="btn-secondary" aria-label="显示 SSH 密码" aria-pressed="false" title="显示 SSH 密码" onclick="extensionTogglePassword('extPassword',this)">👁</button></div></label>
+              <label id="extKeyWrap" class="hidden"><span data-i18n="extensions.private_key">SSH 私钥</span><textarea id="extPrivateKey" rows="6" spellcheck="false" oninput="extensionCredentialChanged()"></textarea></label>
+              <label id="extPassphraseWrap" class="hidden"><span data-i18n="extensions.key_passphrase">SSH 私钥口令（仅当前会话）</span><div class="extension-copy-row"><input id="extPassphrase" type="password" autocomplete="off" oninput="extensionCredentialChanged()"><button type="button" class="btn-secondary" aria-label="显示 SSH 私钥口令" aria-pressed="false" title="显示 SSH 私钥口令" onclick="extensionTogglePassword('extPassphrase',this)">👁</button></div></label>
+              <details id="extElevationPanel" class="extension-advanced-credentials"><summary data-i18n="extensions.advanced_deployment_access">高级部署权限（本次不用填）</summary><p data-i18n="extensions.advanced_deployment_access_help">只读环境检查不会使用 sudo。只有准备部署或私网设置时，才按实际需要填写。</p><label><span data-i18n="extensions.elevation_mode">提权方式</span><select id="extElevation" onchange="extensionCredentialChanged()"><option value="none" selected data-i18n="extensions.elevation_none">不使用 sudo</option><option value="passwordless_sudo" data-i18n="extensions.elevation_passwordless">免密 sudo</option><option value="password_sudo" data-i18n="extensions.elevation_password">密码 sudo</option></select></label><label><span data-i18n="extensions.sudo_password">sudo 密码（默认不复用 SSH 密码）</span><div class="extension-copy-row"><input id="extSudoPassword" type="password" autocomplete="off" placeholder="仅密码 sudo 时使用" data-i18n-placeholder="extensions.sudo_placeholder" oninput="extensionCredentialChanged()"><button type="button" class="btn-secondary" aria-label="显示 sudo 密码" aria-pressed="false" title="显示 sudo 密码" onclick="extensionTogglePassword('extSudoPassword',this)">👁</button></div></label><label class="extension-checkbox"><input id="extReuseSshPassword" type="checkbox" onchange="extensionCredentialChanged()"><span data-i18n="extensions.reuse_ssh_password">本次请求显式使用 SSH 密码作为 sudo 密码</span></label></details>
             </fieldset>
-            <div id="extHostKeyConfirm" class="extension-confirm hidden" role="alert"></div>
-            <div class="extension-actions"><button class="btn-secondary" onclick="extensionTestSSH(false)"><span data-i18n="extensions.test_connection">测试连接</span></button><button class="btn-primary" onclick="extensionNext(2)"><span data-i18n="common.next">下一步</span></button></div>
+            <p id="extCredentialNotice" class="extension-credential-notice" role="status"><span data-i18n="extensions.ssh_not_saved_notice">保存 VPS 连接信息，但不保存 SSH 密码、私钥或 sudo 密码；关闭页面或重启后需要重新输入。</span></p>
+            <div class="extension-actions"><button type="button" class="btn-primary" id="extCredentialTestBtn" onclick="extensionDiscover()" data-i18n="extensions.personal_check_continue">运行只读检查</button></div>
+            </section>
+            <section id="extHostKeyPairing" class="extension-confirm" aria-live="polite">
+              <div class="extension-pairing-heading"><span class="extension-pairing-kicker" data-i18n="extensions.host_key_pairing_kicker">当前只做一件事</span><b data-i18n="extensions.host_key_pairing_title">确认这台服务器</b><p data-i18n="extensions.host_key_pairing_help">在你平时用来登录这台服务器的终端中完成确认。GenBox 不会要求你输入密码或私钥。</p></div>
+              <ol class="extension-pairing-steps" aria-label="主机身份确认步骤">
+                <li id="extHostKeyPairingStepStart" class="active"><b>1</b><span><strong data-i18n="extensions.host_key_pairing_step_start">生成确认码</strong><small data-i18n="extensions.host_key_pairing_step_start_help">一次确认只在短时间内有效</small></span></li>
+                <li id="extHostKeyPairingStepCommand"><b>2</b><span><strong data-i18n="extensions.host_key_pairing_step_command">复制确认工具并运行</strong><small data-i18n="extensions.host_key_pairing_step_command_help">只在你已信任的终端运行这一行</small></span></li>
+                <li id="extHostKeyPairingStepResponse"><b>3</b><span><strong data-i18n="extensions.host_key_pairing_step_response">粘贴确认码</strong><small data-i18n="extensions.host_key_pairing_step_response_help">粘贴后会立即隐藏内容</small></span></li>
+              </ol>
+              <div id="extHostKeyPairingStart" class="extension-actions extension-pairing-start"><button type="button" class="btn-primary" id="extHostKeyPairingStartBtn" onclick="extensionStartHostKeyPairing()" data-i18n="extensions.host_key_pairing_start">开始确认</button><button type="button" class="btn-secondary" id="extHostKeyPairingHelpBtn" onclick="extensionToggleHostKeyPairingHelp()" aria-controls="extHostKeyPairingHelp" aria-expanded="false" data-i18n="extensions.host_key_pairing_help_button">没有已登录终端？</button><button type="button" class="btn-secondary hidden" id="extHostKeyPairingManualBtn" onclick="extensionStartHostKeySetup()" data-i18n="extensions.host_key_pairing_manual">改用手动核对</button></div>
+              <section id="extHostKeyPairingHelp" class="extension-pairing-help hidden" aria-labelledby="extHostKeyPairingHelpTitle"><b id="extHostKeyPairingHelpTitle" data-i18n="extensions.host_key_pairing_help_title">没有已登录终端时怎么办</b><p data-i18n="extensions.host_key_pairing_help_body">先不要开始确认。请使用服务商控制台、已有的 known_hosts 记录，或向管理员索取可信的服务器公开身份。</p><p data-i18n="extensions.host_key_pairing_help_safety">打开高级核对只会显示下一步，不会连接服务器，也不会读取或保存密码、私钥。</p><button type="button" class="btn-secondary" id="extHostKeyPairingAdvancedBtn" onclick="extensionOpenHostKeyManualHelp()" data-i18n="extensions.host_key_pairing_open_advanced">打开高级核对</button></section>
+              <div id="extHostKeyPairingCommandWrap" class="hidden"><label><span data-i18n="extensions.host_key_pairing_command">第 2 步：复制确认工具到终端</span><div class="extension-pairing-command-row"><textarea id="extHostKeyPairingCommand" readonly rows="3" autocomplete="off"></textarea><button type="button" class="btn-secondary" id="extHostKeyPairingCopyBtn" onclick="extensionCopyHostKeyPairingCommand()" data-i18n="extensions.host_key_pairing_copy">复制</button></div></label><label><span data-i18n="extensions.host_key_pairing_response">第 3 步：粘贴确认码</span><textarea id="extHostKeyPairingResponse" rows="2" autocomplete="off" spellcheck="false" data-i18n-placeholder="extensions.host_key_pairing_response_placeholder" placeholder="从终端粘贴确认码"></textarea></label><p id="extHostKeyPairingReceived" class="extension-credential-notice hidden" role="status" data-i18n="extensions.host_key_pairing_received">确认码已接收，可以确认这台服务器。</p><div class="extension-actions"><button type="button" class="btn-secondary" id="extHostKeyPairingClearBtn" onclick="extensionClearHostKeyPairingResponse()" data-i18n="extensions.host_key_pairing_clear">重新粘贴</button><button type="button" class="btn-secondary" id="extHostKeyPairingCancelBtn" onclick="extensionCancelHostKeyPairing()" data-i18n="extensions.host_key_pairing_restart">重新开始</button><button type="button" class="btn-primary" id="extHostKeyPairingCompleteBtn" onclick="extensionCompleteHostKeyPairing()" data-i18n="extensions.host_key_pairing_complete">确认这台服务器</button></div><p id="extHostKeyPairingExpiry" class="extension-credential-notice" role="status"></p></div>
+              <p id="extHostKeyPairingState" class="extension-pairing-state" role="status" aria-live="polite"></p>
+            </section>
+            <section id="extHostKeyConfirm" class="extension-confirm hidden" aria-live="polite">
+              <b data-i18n="extensions.host_key_candidate_title">待核对的 SSH 主机身份</b>
+              <p data-i18n="extensions.host_key_independent_check">请通过服务商控制台或既有可信记录，独立核对下面的算法和完整指纹。</p>
+              <dl>
+                <dt data-i18n="extensions.host_key_algorithm">算法</dt><dd><code id="extHostKeyAlgorithmValue"></code></dd>
+                <dt data-i18n="extensions.host_key_fingerprint">完整 SHA-256 指纹</dt><dd><code id="extHostKeyFingerprintValue"></code></dd>
+              </dl>
+              <p data-i18n="extensions.host_key_confirmation_scope">确认只保存服务器公开身份，不代表 SSH 认证、部署或网络连接已经完成。</p>
+              <div class="extension-actions">
+                <button type="button" class="btn-secondary" onclick="extensionProbeHostKey()" data-i18n="extensions.read_again">重新读取</button>
+                <button type="button" class="btn-primary" id="extHostKeyConfirmBtn" onclick="extensionConfirmHostKey()" disabled data-i18n="extensions.confirm_host_key_pair">算法和指纹均已独立核对</button>
+              </div>
+            </section>
+            <section id="extOnboardingReady" class="extension-onboarding-view extension-onboarding-ready hidden" aria-live="polite"><div class="extension-onboarding-heading"><span data-i18n="extensions.personal_ready_kicker">检查完成</span><h2 tabindex="-1" data-i18n="extensions.personal_ready_title">服务器可以开始部署</h2><p data-i18n="extensions.personal_ready_help">下一步会读取服务器环境并生成安全部署计划。</p></div><div class="extension-actions"><button type="button" class="btn-primary" onclick="extensionBeginDeploymentPlanning()" data-i18n="extensions.personal_begin_planning">准备部署方案</button></div></section>
+            <div class="extension-actions extension-advanced-only"><button class="btn-secondary" id="extStepHostKeyBtn" onclick="extensionStartHostKeySetup()" disabled><span data-i18n="extensions.read_confirm_host_key">读取并确认主机指纹</span></button><button class="btn-secondary" id="extTestSshBtn" onclick="extensionTestSSH()" disabled><span id="extTestSshLabel" data-i18n="extensions.ssh_deploy_diagnostic">测试 SSH 与部署权限</span></button><button class="btn-primary" id="extSshNextBtn" onclick="extensionSshNext()" disabled><span id="extSshNextLabel" data-i18n="common.next">下一步</span></button></div>
           </div>
           <div class="extension-pane hidden" data-pane="2">
             <h2 tabindex="-1"><span data-i18n="extensions.deploy_chatgpt2api">部署 chatgpt2api</span></h2>
+            <div id="extDeploymentOptions" class="hidden">
             <section class="extension-batch-selector" aria-labelledby="extBatchTitle"><div class="extension-batch-heading"><div><span>DEPLOYMENT TARGETS</span><h3 id="extBatchTitle"><span data-i18n="extensions.choose_deploy_targets">选择本次部署的 VPS</span></h3><p><span data-i18n="extensions.batch_hint">可规划多台服务器；真正部署时仍会逐台确认 SSH 凭据和安全计划。</span></p></div><div class="extension-batch-actions"><button class="btn-ghost" type="button" onclick="extensionSelectAllBatchTargets()"><span data-i18n="library.select_all">全选</span></button><button class="btn-primary" type="button" onclick="extensionSaveBatchTargets()"><span data-i18n="extensions.save_selection">保存选择</span></button></div></div><div id="extBatchTargets" class="extension-batch-targets"></div><div id="extBatchSummary" class="extension-batch-summary"><span data-i18n="extensions.no_server_selected">尚未选择服务器</span></div></section>
             <div class="extension-catalog-preview">
               <div class="extension-catalog-heading"><b><span data-i18n="extensions.catalog">应用目录</span></b><span><span data-i18n="extensions.catalog_hint">当前仅 chatgpt2api 可部署，其余模板为规划占位</span></span></div>
               <div id="extCatalogGroups" class="extension-catalog-groups"></div>
             </div>
-            <div class="extension-discovery-bar"><div><b><span data-i18n="extensions.discover_first">先检测，再决定</span></b><span><span data-i18n="extensions.readonly_hint">仅执行只读命令，不修改已有服务</span></span></div><button class="btn-primary" id="extDiscoverBtn" onclick="extensionDiscover()"><span data-i18n="extensions.discover">检测 VPS 环境</span></button></div>
+            <div class="extension-discovery-bar extension-advanced-only"><div><b><span data-i18n="extensions.discover_first">先检测，再决定</span></b><span><span data-i18n="extensions.readonly_hint">仅执行只读命令，不修改已有服务</span></span></div><button class="btn-primary" id="extDiscoverBtn" onclick="extensionDiscover()"><span data-i18n="extensions.discover">检测 VPS 环境</span></button></div>
             <div id="extDiscoveryResult" class="extension-discovery-result hidden">
               <div id="extEnvironmentSummary" class="extension-metrics"></div>
               <div><b><span data-i18n="extensions.discovered_instances">发现的实例</span></b><div id="extExistingInstances" class="extension-instance-list"></div></div>
@@ -857,7 +1374,7 @@
               <label><input type="radio" name="extIntent" value="first-install" onchange="extensionSelectIntent(this)"><span><b><span data-i18n="extensions.intent_production">首次部署正式服务</span></b><small><span data-i18n="extensions.intent_production_hint">推荐新建生产实例</span></small></span></label>
             </fieldset>
             <fieldset class="extension-choice-group"><legend><span data-i18n="extensions.strategy">实例策略</span></legend>
-              <label><input type="radio" name="extStrategy" value="existing"><span><b><span data-i18n="extensions.strategy_existing">接入已有实例</span></b><small><span data-i18n="extensions.strategy_existing_hint">不重建、不迁移数据，适合已有健康服务</span></small></span></label>
+              <label><input type="radio" name="extStrategy" value="existing"><span><b><span data-i18n="extensions.strategy_existing">确认并在 GenBox 本地登记</span></b><small><span data-i18n="extensions.strategy_existing_hint">远程实例保持不变；GenBox 会在本地登记容器、状态、数据目录和所有权</span></small></span></label>
               <label class="selected"><input type="radio" name="extStrategy" value="isolated" checked><span><b><span data-i18n="extensions.strategy_isolated">创建隔离测试实例</span></b><small><span data-i18n="extensions.strategy_isolated_hint">独立端口、目录和 Compose 项目，推荐开发验收</span></small></span></label>
               <label><input type="radio" name="extStrategy" value="new"><span><b><span data-i18n="extensions.strategy_new">新建生产实例</span></b><small><span data-i18n="extensions.strategy_new_hint">没有可用实例时使用，部署前仍会预览全部变更</span></small></span></label>
             </fieldset>
@@ -869,12 +1386,35 @@
               <div class="extension-clone-warning"><span data-i18n="extensions.working_copy_warning">工作副本含账号等敏感业务配置，仅用于独立开发验收。源实例保持运行且不会被写入。</span></div>
             </fieldset>
             <fieldset class="extension-choice-group"><legend><span data-i18n="extensions.deploy_method">部署方式</span></legend><div id="extDeploymentModes" class="extension-mode-list"><span class="extension-placeholder"><span data-i18n="extensions.method_after_discovery">检测环境后显示推荐方式</span></span></div></fieldset>
-            <div class="extension-form-grid"><label><span data-i18n="extensions.instance_name">实例名称</span><input id="extInstanceId" value="chatgpt2api-dev" pattern="[a-z0-9-]+"></label><label><span data-i18n="extensions.service_port">服务端口</span><input id="extServicePort" type="number" value="33010" min="1" max="65535"></label><label><span data-i18n="extensions.container_image">容器镜像</span><input id="extImage" value="ghcr.io/yukkcat/chatgpt2api:latest"></label></div>
+            <div class="extension-form-grid"><label><span data-i18n="extensions.instance_name">实例名称</span><input id="extInstanceId" value="chatgpt2api-dev" pattern="[a-z0-9-]+"></label><label><span data-i18n="extensions.service_port">服务端口</span><input id="extServicePort" type="number" value="33010" min="1" max="65535"></label><label class="extension-image-field"><span data-i18n="extensions.container_image">容器镜像</span><select id="extImagePreset" onchange="extensionSelectImagePreset(this)" aria-describedby="extImagePresetHelp"><option value="project" data-i18n="extensions.image_preset_project">GenBox 集成构建镜像（推荐）</option><option value="upstream" data-i18n="extensions.image_preset_upstream">yukkcat 镜像（未集成 GenBox）</option><option value="custom" data-i18n="extensions.image_preset_custom">自定义不可变镜像</option></select><small id="extImagePresetHelp" data-i18n="extensions.image_source_select_help">只有选择“自定义不可变镜像”后，才可以手动填写摘要。</small><div class="extension-image-input-row"><input id="extImage" value="ghcr.io/liwei9745/chatgpt2api@sha256:c9357b45b1339d2be4e4a02eb48f059562890f14bd9757b924d7fd7621b9e076" placeholder="registry.example/chatgpt2api@sha256:..." aria-describedby="extImageHelp extImagePresetNotice extImageCheckStatus" autocomplete="off" readonly><button type="button" class="btn-secondary" id="extImageCheckBtn" onclick="extensionCheckImageIntegration()"><span data-i18n="extensions.image_check_action">检查 GenBox 联动</span></button></div><small id="extImageHelp" data-i18n="extensions.image_source_help">请填写隔离开发机能拉取的不可变镜像地址。本机 Docker 标签和 latest 不能直接部署。</small><small id="extImagePresetNotice" role="status" aria-live="polite" data-i18n="extensions.image_preset_project_status">已选择 GenBox 集成构建镜像。</small><small id="extImageCheckStatus" class="extension-image-check-status" role="status" aria-live="polite" data-i18n="extensions.image_check_idle">未检查。此操作不会拉取、启动或部署镜像。</small></label></div>
             <div id="extPlanPreview" class="extension-plan-preview hidden"></div>
+            <section id="extPlanConfirm" class="extension-inline-confirm hidden" data-genbox-inline-confirm="plan" role="dialog" aria-modal="false" aria-labelledby="extPlanConfirmTitle">
+              <div>
+                <span data-i18n="extensions.plan_confirm_kicker">部署前复核</span>
+                <h3 id="extPlanConfirmTitle" data-i18n="extensions.plan_confirm_title">允许只读复核并生成计划</h3>
+                <p data-i18n="extensions.plan_confirm_body">GenBox 将再次读取隔离开发机的端口、目录和隔离状态，不会部署、拉取镜像或修改服务。</p>
+              </div>
+              <div class="extension-inline-confirm-actions">
+                <button type="button" class="btn-ghost" onclick="extensionCancelPlanConfirmation()" data-i18n="common.cancel">取消</button>
+                <button type="button" class="btn-primary" id="extPlanConfirmBtn" onclick="extensionConfirmPlanDiscovery()" data-i18n="extensions.plan_confirm_continue">继续生成计划</button>
+              </div>
+            </section>
+            </div>
             <div class="extension-progress"><div><span id="extProgressLabel"><span data-i18n="common.waiting">等待开始</span></span><span id="extProgressPercent">0%</span></div><div class="extension-progress-track"><div id="extProgressFill"></div></div></div>
             <ol id="extTimeline" class="extension-timeline"></ol>
             <pre id="extLogs" class="extension-logs" aria-live="polite"></pre>
-            <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(1)"><span data-i18n="common.previous">上一步</span></button><button class="btn-secondary" id="extPlanBtn" onclick="extensionCreatePlan()"><span data-i18n="extensions.create_plan">生成安全计划</span></button><button class="btn-primary" id="extDeployBtn" onclick="extensionStartDeploy()" disabled><span data-i18n="extensions.confirm_deploy">确认并部署</span></button><button class="btn-secondary" onclick="extensionNext(3)"><span data-i18n="extensions.continue_network">继续配置链路</span></button></div>
+            <div class="extension-actions extension-advanced-only"><button class="btn-ghost" onclick="extensionNext(1)"><span data-i18n="common.previous">上一步</span></button><button class="btn-secondary" id="extPlanBtn" onclick="extensionCreatePlan()"><span data-i18n="extensions.create_plan">生成安全计划</span></button><button class="btn-primary" id="extDeployBtn" onclick="extensionStartDeploy()" disabled><span data-i18n="extensions.confirm_deploy">确认并部署</span></button><button class="btn-secondary" onclick="extensionNext(3)"><span data-i18n="extensions.continue_network">继续配置链路</span></button></div>
+            <section id="extDeployConfirm" class="extension-inline-confirm hidden" data-genbox-inline-confirm="deploy" role="dialog" aria-modal="false" aria-labelledby="extDeployConfirmTitle">
+              <div>
+                <span data-i18n="extensions.deploy_confirm_kicker">最后一步</span>
+                <h3 id="extDeployConfirmTitle" data-i18n="extensions.deploy_confirm_title">确认开始隔离部署</h3>
+                <p data-i18n="extensions.deploy_confirm_body">确认后才会在已保存的隔离开发机上创建新实例；现有服务和生产实例不会被修改。</p>
+              </div>
+              <div class="extension-inline-confirm-actions">
+                <button type="button" class="btn-ghost" onclick="extensionCancelDeploymentConfirmation()" data-i18n="common.cancel">取消</button>
+                <button type="button" class="btn-primary" id="extDeployConfirmBtn" onclick="extensionConfirmDeployment()" data-i18n="extensions.deploy_confirm_continue">确认并开始部署</button>
+              </div>
+            </section>
           </div>
           <div class="extension-pane hidden" data-pane="3">
             <h2 tabindex="-1"><span data-i18n="extensions.choose_primary_network">选择主连接方式</span></h2>
@@ -883,7 +1423,7 @@
                 <div class="extension-endpoint-head"><div><span><span data-i18n="extensions.this_computer">这台电脑</span></span><b id="extLocalEndpointTitle"><span data-i18n="extensions.local_endpoint">GenBox 本机端</span></b></div><strong id="extLocalTailscaleState"><span data-i18n="extensions.waiting_detection">等待检测</span></strong></div>
                 <p id="extLocalTailscaleDetail"><span data-i18n="extensions.local_network_hint">检查网络工具，并开放 GenBox 私网入口。</span></p>
                 <dl><dt><span data-i18n="extensions.genbox_page">GenBox 页面</span></dt><dd id="extLocalAppPort"><span data-i18n="extensions.waiting_detection">等待检测</span></dd><dt><span data-i18n="extensions.private_entry">私网入口</span></dt><dd id="extLocalServePort"><span data-i18n="extensions.waiting_detection">等待检测</span></dd></dl>
-                <div class="extension-actions extension-inline-actions">
+                <div class="extension-actions extension-inline-actions extension-advanced-only">
                   <button class="btn-secondary" onclick="extensionCheckLocalTailscale()"><span data-i18n="extensions.detect_again">重新检测</span></button>
                   <button class="btn-primary" id="extLocalInstallBtn" onclick="extensionInstallLocalTailscale()"><span data-i18n="common.install">安装</span></button>
                   <button class="btn-primary" id="extLocalLoginBtn" onclick="extensionLoginLocalTailscale()"><span data-i18n="auth.login">登录</span></button>
@@ -893,46 +1433,57 @@
               </section>
               <section class="extension-endpoint" aria-labelledby="extRemoteEndpointTitle">
                 <div class="extension-endpoint-head"><div><span><span data-i18n="extensions.remote_server">远程服务器</span></span><b id="extRemoteEndpointTitle"><span data-i18n="extensions.vps_endpoint">VPS 端</span></b></div><strong id="extRemoteNetworkState"><span data-i18n="extensions.waiting_configuration">等待配置</span></strong></div>
-                <p id="extRemoteNetworkDetail"><span data-i18n="extensions.remote_auto_hint">GenBox 会通过已确认的 SSH 连接自动安装并加入同一个网络。</span></p>
-                <label><span data-i18n="extensions.operation_mode">处理方式</span><select id="extRemoteNetworkMode" onchange="extensionSetRemoteNetworkMode()"><option value="auto"><span data-i18n="extensions.auto_connect">自动安装并连接</span></option><option value="existing"><span data-i18n="extensions.existing_connect">已有工具，只连接和检测</span></option><option value="manual" disabled><span data-i18n="extensions.manual_later">我手动配置，稍后检测（后续开放）</span></option></select></label>
+                <p id="extRemoteNetworkDetail"><span data-i18n="extensions.remote_auto_hint">GenBox 会先检查 VPS，再按真实状态安装、启动或加入网络。</span></p>
+                <label><span data-i18n="extensions.operation_mode">处理方式</span><select id="extRemoteNetworkMode" onchange="extensionNetworkModeChanged(this.value)"><option value="auto" selected data-i18n="extensions.auto_connect">自动检查、安装并加入</option><option value="existing" data-i18n="extensions.existing_connect">高级：只检测已有连接</option></select></label>
                 <dl><dt><span data-i18n="extensions.primary_network">当前主链路</span></dt><dd id="extRemotePrimaryNetwork">Tailscale</dd><dt><span data-i18n="extensions.backup_network">备用链路</span></dt><dd id="extRemoteBackupNetworks"><span data-i18n="extensions.switch_later">以后可添加并一键切换</span></dd></dl>
               </section>
             </div>
-            <div id="extTailscaleKeyGuide" class="extension-key-guide">
+            <div id="extTailscaleKeyGuide" class="extension-key-guide extension-advanced-only hidden" aria-hidden="true">
               <div><b><span data-i18n="extensions.no_auth_key">还没有一次性 Auth Key？</span></b><span><span data-i18n="extensions.auth_key_intro">打开官方密钥页面，创建后回到下一步粘贴即可。</span></span></div>
               <a class="btn-secondary" href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener noreferrer"><span data-i18n="extensions.open_tailscale_keys">打开 Tailscale 密钥页面</span></a>
               <ol><li><span data-i18n="extensions.key_step_1">找到 Auth keys，点击 Generate auth key</span></li><li><span data-i18n="extensions.key_step_2">Reusable 关闭，Ephemeral 关闭，Pre-approved 开启</span></li><li><span data-i18n="extensions.key_step_3">有效期选 1 天，Tags 留空，然后生成</span></li></ol>
             </div>
-            <div class="extension-network-options">
+            <div class="extension-network-options extension-advanced-only">
               <label class="selected"><input type="radio" name="extNetwork" value="tailscale" checked onchange="extensionSelectNetwork(this)"><b>Tailscale Personal</b><span><span data-i18n="extensions.tailscale_hint">推荐，个人免费，安装和维护最简单</span></span></label>
-              <label><input type="radio" name="extNetwork" value="netbird" onchange="extensionSelectNetwork(this)"><b>NetBird</b><span><span data-i18n="extensions.netbird_hint">开源，可使用云服务或自托管控制面</span></span></label>
-              <label><input type="radio" name="extNetwork" value="cloudflare" onchange="extensionSelectNetwork(this)"><b>Cloudflare Tunnel</b><span><span data-i18n="extensions.cloudflare_hint">适合已有 Cloudflare 域名的用户</span></span></label>
+              <label><input type="radio" name="extNetwork" value="netbird" disabled><b>NetBird</b><span><span data-i18n="extensions.network_not_ready">尚未完成端到端验证，暂不可用</span></span></label>
+              <label><input type="radio" name="extNetwork" value="cloudflare" disabled><b>Cloudflare Tunnel</b><span><span data-i18n="extensions.network_not_ready">尚未完成端到端验证，暂不可用</span></span></label>
             </div>
-            <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(2)"><span data-i18n="common.previous">上一步</span></button><button class="btn-primary" onclick="extensionNext(4)"><span data-i18n="extensions.configure_option">配置此方案</span></button></div>
+            <div class="extension-actions extension-advanced-only"><button class="btn-ghost" onclick="extensionNext(2)"><span data-i18n="common.previous">上一步</span></button><button class="btn-primary" onclick="extensionNext(4)"><span data-i18n="extensions.configure_option">配置此方案</span></button></div>
           </div>
           <div class="extension-pane hidden" data-pane="4">
             <h2 tabindex="-1"><span data-i18n="extensions.step_configure">配置连接</span></h2>
-            <div class="extension-network-toolbar"><div><span>TAILSCALE ADMIN</span><p><span data-i18n="extensions.admin_console_hint">需要查看设备是否在线？可直接打开官方管理控制台。</span></p></div><a class="btn-secondary" href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener noreferrer"><span data-i18n="extensions.open_tailscale_admin">打开 Tailscale 管理控制台</span></a></div>
+            <div class="extension-network-toolbar extension-advanced-only"><div><span>TAILSCALE ADMIN</span><p><span data-i18n="extensions.admin_console_hint">需要查看设备是否在线？可直接打开官方管理控制台。</span></p></div><a class="btn-secondary" href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener noreferrer"><span data-i18n="extensions.open_tailscale_admin">打开 Tailscale 管理控制台</span></a></div>
             <div class="extension-network-form">
               <div class="extension-placeholder"><b id="extNetworkTitle">Tailscale Personal</b><p id="extNetworkHelp"><span data-i18n="extensions.choose_operation_first">请先选择这次要执行的操作。</span></p></div>
-              <fieldset class="extension-network-mode-cards"><legend><span data-i18n="extensions.operation_question">这次要做什么？</span></legend>
-                <label class="selected"><input type="radio" name="extNetworkOperation" value="auto" checked onchange="extensionChooseNetworkMode(this)"><span><b><span data-i18n="extensions.first_connect">首次安装并连接</span></b><small><span data-i18n="extensions.first_connect_hint">VPS 还没有加入私有网络，需要一次性 Auth Key。</span></small></span></label>
-                <label><input type="radio" name="extNetworkOperation" value="existing" onchange="extensionChooseNetworkMode(this)"><span><b><span data-i18n="extensions.recheck_existing">已安装，重新检测连接</span></b><small><span data-i18n="extensions.recheck_existing_hint">不重复安装，不需要 Auth Key，只检查互通和 GenBox 访问。</span></small></span></label>
+              <fieldset class="extension-network-mode-cards extension-advanced-only"><legend><span data-i18n="extensions.operation_question">这次要做什么？</span></legend>
+                <label class="selected"><input type="radio" name="extNetworkOperation" value="auto" checked onchange="extensionNetworkModeChanged(this.value)"><span><b data-i18n="extensions.first_connect">自动准备 VPS</b><small data-i18n="extensions.first_connect_hint">系统先检测；缺什么才处理什么，不会重复安装。</small></span></label>
+                <label><input type="radio" name="extNetworkOperation" value="existing" onchange="extensionNetworkModeChanged(this.value)"><span><b><span data-i18n="extensions.recheck_existing">已安装，重新检测连接</span></b><small><span data-i18n="extensions.recheck_existing_hint">不重复安装，不需要 Auth Key，只检查互通和 GenBox 访问。</span></small></span></label>
               </fieldset>
-              <div id="extNetworkKeySteps" class="extension-key-steps"><a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener noreferrer"><span data-i18n="extensions.key_page_link">没有 Key？点击打开官方生成页面</span></a><span><span data-i18n="extensions.paste_prefix">生成后，把以</span> <code>tskey-auth-</code> <span data-i18n="extensions.paste_suffix">开头的内容粘贴到下面。</span></span></div>
-              <label id="extTokenLabel"><span data-i18n="extensions.auth_key_label">一次性 Auth Key</span><input id="extNetworkToken" type="password" autocomplete="off" placeholder="粘贴 tskey-auth-..." data-i18n-placeholder="extensions.auth_key_placeholder"></label>
-              <label><span data-i18n="extensions.device_name">设备名称</span><input id="extDeviceName" value="genbox-vps" pattern="[A-Za-z0-9._-]+"></label>
-              <label id="extManagementWrap" class="hidden"><span data-i18n="extensions.management_url">Management URL（自托管 NetBird 可选）</span><input id="extManagementUrl" placeholder="https://netbird.example.com"></label>
-              <section id="extMobileJoin" class="extension-mobile-join" aria-labelledby="extMobileJoinTitle">
+              <section id="extNetworkAuthKeyPanel" class="extension-auth-key-panel" aria-labelledby="extNetworkAuthKeyTitle">
+                <div><b id="extNetworkAuthKeyTitle" data-i18n="extensions.auth_key_ticket_title">给 VPS 一张一次性入网票据</b><p data-i18n="extensions.auth_key_safe_help">这不是账号密码。GenBox 只在本次任务中使用，任务创建后立即从页面清除，不写入浏览器存储、任务记录或日志。</p></div>
+                <label><span data-i18n="extensions.auth_key_label">一次性 Auth Key</span><div class="extension-copy-row"><input id="extNetworkToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="4096" placeholder="粘贴一次性 Auth Key" data-i18n-placeholder="extensions.auth_key_placeholder"><button type="button" class="btn-secondary" aria-label="显示 Auth Key" aria-pressed="false" title="显示 Auth Key" onclick="extensionTogglePassword('extNetworkToken',this)">👁</button></div></label>
+                <div class="extension-auth-key-actions"><a class="btn-secondary" href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener noreferrer" data-i18n="extensions.open_tailscale_keys">打开 Tailscale 密钥页面</a><small data-i18n="extensions.auth_key_options_help">建议：Reusable 关闭、Ephemeral 关闭；需要设备审批时开启 Pre-approved。</small></div>
+              </section>
+              <div id="extNetworkKeySteps" class="extension-key-steps hidden" aria-hidden="true"></div>
+              <label class="extension-advanced-only"><span data-i18n="extensions.device_name">设备名称</span><input id="extDeviceName" value="genbox-vps" pattern="[A-Za-z0-9._-]+"></label>
+              <section id="extMobileJoin" class="extension-mobile-join extension-advanced-only" aria-labelledby="extMobileJoinTitle">
                 <div class="extension-mobile-copy"><span class="extension-mobile-kicker"><span data-i18n="extensions.mobile_optional">可选 · 手机也要访问 GenBox 时使用</span></span><h3 id="extMobileJoinTitle"><span data-i18n="extensions.mobile_title">用手机扫码安装 Tailscale</span></h3><ol><li><span data-i18n="extensions.mobile_step_1">手机扫描右侧二维码，安装 Tailscale。</span></li><li><span data-i18n="extensions.mobile_step_2">使用与这台电脑相同的 Tailscale 账号登录。</span></li><li><span data-i18n="extensions.mobile_step_3">连接完成后，手机即可通过私网地址访问 GenBox。</span></li></ol><div class="extension-mobile-links"><a class="btn-secondary" href="https://tailscale.com/download/ios" target="_blank" rel="noopener noreferrer">iPhone / iPad</a><a class="btn-secondary" href="https://tailscale.com/download/android" target="_blank" rel="noopener noreferrer">Android</a></div><p><span data-i18n="extensions.mobile_privacy">二维码只打开 Tailscale 官方下载页，不包含 Auth Key、密码或其他私密信息。</span></p></div>
                 <a class="extension-mobile-qr" href="https://tailscale.com/download" target="_blank" rel="noopener noreferrer" aria-label="打开 Tailscale 官方下载页" data-i18n-aria-label="extensions.mobile_download_label"><img src="/static/assets/tailscale-mobile-download-qr.png" alt="Tailscale 官方下载页二维码" width="168" height="168"><span><span data-i18n="extensions.scan_download">扫码打开官方下载页</span></span></a>
               </section>
+              <section id="extNetworkHostKey" class="extension-confirm hidden" aria-live="polite">
+                <b data-i18n="extensions.host_key_return_title">请先完成步骤 1 的主机身份确认</b>
+                <p data-i18n="extensions.host_key_return_help">步骤 4 不会跳过部署与本机网络准备；请返回步骤 1，独立核对算法和完整指纹后再按顺序继续。</p>
+                <code id="extNetworkHostKeyValue"></code>
+                <div class="extension-actions">
+                  <button type="button" class="btn-primary" id="extNetworkHostKeyProbeBtn" onclick="extensionReturnHostKeySetup()" data-i18n="extensions.return_step1_host_key">返回步骤 1 核对主机身份</button>
+                </div>
+              </section>
               <div class="extension-progress"><div><span id="extNetworkProgressLabel"><span data-i18n="extensions.waiting_connection">等待连接</span></span><span id="extNetworkProgressPercent">0%</span></div><div class="extension-progress-track"><div id="extNetworkProgressFill"></div></div></div>
               <ol id="extNetworkTimeline" class="extension-timeline"></ol>
-              <pre id="extNetworkLogs" class="extension-logs" aria-live="polite"></pre>
-              <div id="extNetworkRecovery" class="extension-network-recovery hidden"><span><span data-i18n="extensions.recheck_note">已经安装并加入网络？无需新 Key，可只重新检查。</span></span><button class="btn-secondary" onclick="extensionRetryNetworkCheck()"><span data-i18n="extensions.recheck_link">重新检查链路</span></button></div>
+              <pre id="extNetworkLogs" class="extension-logs extension-advanced-only" aria-live="polite"></pre>
+              <div id="extNetworkRecovery" class="extension-network-recovery hidden"><div><b data-i18n="extensions.recovery_title">这一步没有完成</b><p id="extNetworkRecoveryDetail"></p><small id="extNetworkDiagnosticDetail"></small></div><button class="btn-secondary" id="extNetworkRecoveryBtn" onclick="extensionRetryNetworkCheck()"><span data-i18n="extensions.recheck_link">按提示重新检测</span></button></div>
             </div>
-            <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(3)"><span data-i18n="common.previous">上一步</span></button><button class="btn-primary" id="extNetworkConnectBtn" onclick="extensionConnectNetwork()"><span data-i18n="extensions.install_connect">安装并连接</span></button></div>
+            <div class="extension-actions extension-advanced-only"><button class="btn-ghost" onclick="extensionNext(3)"><span data-i18n="common.previous">上一步</span></button><button class="btn-primary" id="extNetworkConnectBtn" onclick="extensionConnectNetwork()"><span data-i18n="extensions.start_network_check">开始自动连接和测试</span></button></div>
           </div>
           <div class="extension-pane hidden" data-pane="5">
             <h2 tabindex="-1"><span data-i18n="extensions.verify_finish">验证并完成</span></h2>
@@ -952,6 +1503,30 @@
               <button class="btn-ghost" onclick="extensionResetAdminKey()"><span data-i18n="extensions.lost_key">管理密钥丢失？重置此实例</span></button>
             </div>
             <section id="extSuccessBanner" class="extension-success-banner hidden"><span class="extension-success-icon" aria-hidden="true">&#10003;</span><div><span>PRIVATE LINK READY</span><h3><span data-i18n="extensions.success_title">恭喜你，GenBox 私有链路已经打通</span></h3><p><span data-i18n="extensions.success_copy">接下来，你可以让远程 AI 服务安全地把图片送入 GenBox 媒体库，享受自动归档、统一管理与跨设备访问的流畅体验。</span></p></div></section>
+            <section id="extConsoleLogin" class="extension-console-login hidden" aria-labelledby="extConsoleLoginTitle">
+              <div><span data-i18n="extensions.console_login_kicker">下一步</span><h3 id="extConsoleLoginTitle"><span data-i18n="extensions.console_login_title">登录 chatgpt2api 控制台</span></h3><p data-i18n="extensions.console_login_help">已将本次交付的管理密钥带入下方输入框。你也可以手动替换它；点击后会复制密钥并打开私网控制台。</p></div>
+              <label><span data-i18n="extensions.console_url">控制台地址</span><input id="extConsoleLoginUrl" readonly></label>
+              <label><span data-i18n="extensions.admin_key">管理密钥</span><div class="extension-copy-row"><input id="extConsoleLoginKey" type="password" autocomplete="off" spellcheck="false" oninput="extensionConsoleLoginKeyChanged()" data-i18n-placeholder="extensions.console_login_key_placeholder" placeholder="粘贴或修改管理密钥"><button type="button" class="btn-secondary" aria-label="显示管理密钥" aria-pressed="false" title="显示管理密钥" onclick="extensionTogglePassword('extConsoleLoginKey',this)">👁</button></div><small id="extConsoleLoginKeyStatus" class="extension-console-login-status" aria-live="polite"></small></label>
+              <button type="button" class="btn-ghost extension-console-login-refill" id="extConsoleLoginRefill" onclick="extensionUseDeliveredAdminKey()"><span data-i18n="extensions.use_delivered_admin_key">使用本次交付的管理密钥</span></button>
+              <div class="extension-console-login-actions"><button type="button" class="btn-secondary" onclick="extensionOpenConsoleOnly()"><span data-i18n="extensions.open_console_only">仅打开控制台</span></button><button type="button" class="btn-primary" onclick="extensionOpenConsoleLogin()"><span data-i18n="extensions.copy_key_open_console">复制密钥并打开控制台</span></button></div>
+            </section>
+            <section id="extPushSource" class="extension-console-login hidden" aria-labelledby="extPushSourceTitle">
+              <div><span data-i18n="extensions.push_source_kicker">图片 Push 配置</span><h3 id="extPushSourceTitle"><span data-i18n="extensions.push_source_title">连接 chatgpt2api 与 GenBox</span></h3><p data-i18n="extensions.push_source_help">为这个隔离实例创建独立的 GenBox Push 凭据。密钥只会在创建或轮换后显示一次。</p></div>
+              <div id="extPushSourceStatus" class="extension-push-source-status" role="status" aria-live="polite"></div>
+              <div class="extension-push-state-grid" role="status" aria-live="polite" aria-label="Push 配置状态" data-i18n-aria-label="extensions.push_state_summary">
+                <div><span data-i18n="extensions.push_state_configuration">来源配置</span><strong id="extPushConfiguredState"></strong></div>
+                <div><span data-i18n="extensions.push_state_validity">来源有效性</span><strong id="extPushValidityState"></strong></div>
+                <div><span data-i18n="extensions.push_state_local_copy">本地副本</span><strong id="extPushLocalState"></strong></div>
+                <div><span data-i18n="extensions.push_state_remote_auth">远端认证</span><strong id="extPushRemoteAuthState"></strong></div>
+              </div>
+              <label><span data-i18n="extensions.push_destination_url">GenBox Push 地址</span><div class="extension-copy-row"><input id="extPushDestinationUrl" readonly><button type="button" class="btn-secondary" onclick="extensionCopy('extPushDestinationUrl')"><span data-i18n="common.copy">复制</span></button></div></label>
+              <label><span data-i18n="extensions.push_source_id">来源 ID</span><div class="extension-copy-row"><input id="extPushSourceId" readonly><button type="button" class="btn-secondary" onclick="extensionCopy('extPushSourceId')"><span data-i18n="common.copy">复制</span></button></div></label>
+              <label><span data-i18n="extensions.push_key">Push 密钥</span><div class="extension-copy-row"><input id="extPushKey" type="password" readonly autocomplete="off" spellcheck="false" data-i18n-placeholder="extensions.push_key_hidden" placeholder="仅创建或轮换后显示"><button type="button" class="btn-secondary" aria-label="显示 Push 密钥" aria-pressed="false" title="显示 Push 密钥" onclick="extensionTogglePassword('extPushKey',this)">👁</button></div></label>
+               <label class="extension-checkbox extension-push-save-choice"><input id="extPushSaveOptIn" type="checkbox" onchange="extensionPushSaveChoiceChanged()"><span><b data-i18n="extensions.push_save_choice_title">保存本机副本</b><small data-i18n="extensions.push_save_locally">加密保存这个新 Push 密钥到本机凭证库</small></span></label>
+               <label class="extension-checkbox extension-push-save-choice"><input id="extPushGrantDelete" type="checkbox" onchange="extensionPushGrantDeleteChanged()"><span><b data-i18n="extensions.push_grant_delete_title">允许授权删除源图</b><small data-i18n="extensions.push_grant_delete_hint">默认关闭。打开后，发送端仍必须逐次勾选删除，并收到匹配回执后才可删除。</small></span></label>
+              <p id="extPushSaveWarning" class="ext-reset-hint hidden" data-i18n="extensions.push_save_warning">仅在本机凭证库已解锁时保存。取消或未勾选时，密钥只显示一次。</p>
+              <div class="extension-console-login-actions"><button type="button" class="btn-secondary" id="extPushCreateBtn" onclick="extensionCreatePushSource()"><span data-i18n="extensions.push_create">创建 Push 凭据</span></button><button type="button" class="btn-primary hidden" id="extPushCopyBtn" onclick="extensionCopyPushConfiguration()"><span data-i18n="extensions.push_copy_configuration">复制配置</span></button><button type="button" class="btn-secondary hidden" id="extPushSaveBtn" onclick="extensionSavePushConfiguration()"><span data-i18n="extensions.push_save_to_vault">保存到本机凭证库</span></button><button type="button" class="btn-secondary hidden" id="extPushDeleteLocalBtn" onclick="extensionDeleteLocalPushKey()"><span data-i18n="extensions.push_delete_local">删除本机 Push Key 副本</span></button><button type="button" class="btn-secondary hidden" id="extPushRotateBtn" onclick="extensionRotatePushSource()"><span data-i18n="extensions.push_rotate">轮换密钥</span></button><button type="button" class="btn-ghost hidden" id="extPushRevokeBtn" onclick="extensionRevokePushSource()"><span data-i18n="extensions.push_revoke">撤销来源</span></button><span id="extPushDeleteLocalHint" class="extension-action-hint hidden" data-i18n="extensions.push_delete_local_locked">请先解锁凭证库，再删除本机 Push Key 副本。</span></div>
+            </section>
             <div class="extension-actions"><button class="btn-ghost" onclick="extensionNext(4)"><span data-i18n="common.previous">上一步</span></button></div>
           </div>
           <div id="extensionMessage" class="extension-message" role="status" aria-live="polite"></div>
@@ -970,10 +1545,50 @@
           </button>
         </header>
         <div class="ext-drawer-body">
-          <div class="ext-vault-toolbar"><div><b><span data-i18n="extensions.vault">本机凭证库</span></b><span id="extVaultStatus"><span data-i18n="extensions.checking">正在检查…</span></span></div><input id="extVaultPassword" type="password" autocomplete="off" placeholder="解锁密码（至少 8 位）" data-i18n-placeholder="extensions.vault_password"><button class="btn-secondary" id="extVaultUnlockBtn" onclick="extensionVaultUnlock()"><span data-i18n="extensions.setup_unlock">设置 / 解锁</span></button><button class="btn-ghost" id="extVaultLockBtn" onclick="extensionVaultLock()"><span data-i18n="extensions.lock">锁定</span></button></div>
+          <div class="ext-vault-toolbar"><div><b><span data-i18n="extensions.vault">本机凭证库</span></b><span id="extVaultStatus"><span data-i18n="extensions.checking">正在检查…</span></span></div><input id="extVaultPassword" type="password" autocomplete="off" placeholder="解锁密码（至少 8 位）" data-i18n-placeholder="extensions.vault_password" onkeydown="extensionVaultPasswordKeydown(event)"><button class="btn-secondary" id="extVaultUnlockBtn" onclick="extensionVaultUnlock()"><span data-i18n="extensions.setup_unlock">设置 / 解锁</span></button><button class="btn-ghost hidden" id="extVaultLockBtn" onclick="extensionVaultToggle()"><span data-i18n="extensions.lock">锁定</span></button></div>
           <div id="extDrawerList" class="ext-bento"><span class="extension-placeholder"><span data-i18n="common.loading_ellipsis">正在加载…</span></span></div>
         </div>
       </aside>
+
+      <!-- Push configuration opened from a deployed service card -->
+      <div id="extPushConfigModal" class="ext-reset-modal hidden" role="dialog" aria-modal="true" aria-labelledby="extPushConfigTitle">
+        <div class="ext-reset-box glass-panel ext-push-config-box">
+          <button type="button" class="ext-modal-close" aria-label="Close" title="Close" onclick="extensionClosePushConfiguration()">&#215;</button>
+          <h3 id="extPushConfigTitle" data-i18n="extensions.push_config_title">GenBox Push 配置</h3>
+          <div id="extPushConfigInstance" class="ext-reset-instance"></div>
+          <p class="ext-reset-hint" data-i18n="extensions.push_source_help">为这个隔离实例创建独立的 GenBox Push 凭据。密钥只会在创建或轮换后显示一次。</p>
+          <div id="extPushConfigBody"></div>
+        </div>
+      </div>
+
+      <!-- Explicit in-app confirmation. No Push key or confirmation token is rendered here. -->
+      <div id="extPushSaveConfirmModal" class="ext-reset-modal ext-push-save-confirm-modal hidden" role="dialog" aria-modal="true" aria-labelledby="extPushSaveConfirmTitle" aria-describedby="extPushSaveConfirmText">
+        <div class="ext-reset-box glass-panel ext-push-save-confirm-box">
+          <h3 id="extPushSaveConfirmTitle" data-i18n="extensions.push_save_confirm_title">确认保存 Push 密钥</h3>
+          <p id="extPushSaveConfirmText" class="ext-reset-hint" data-i18n="extensions.push_save_confirm">确认将这个新 Push 密钥加密保存到本机凭证库？之后仍需凭证库解锁密码才能读取。</p>
+          <p class="extension-push-confirm-safety" data-i18n="extensions.push_save_confirm_safety">确认后才会向本机服务申请一次性保存凭据；取消不会保存，也不会申请或消费确认凭据。</p>
+          <div class="ext-reset-actions">
+            <button type="button" class="btn-ghost" id="extPushSaveConfirmCancelBtn" onclick="extensionCancelPushSaveConfirmation()"><span data-i18n="common.cancel">取消</span></button>
+            <button type="button" class="btn-primary" id="extPushSaveConfirmBtn" onclick="extensionConfirmPushSave()"><span data-i18n="extensions.push_save_confirm_action">确认保存</span></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controlled update for an already registered isolated service -->
+      <div id="extImageUpdateModal" class="ext-reset-modal hidden" role="dialog" aria-modal="true" aria-labelledby="extImageUpdateTitle">
+        <div class="ext-reset-box glass-panel">
+          <h3 id="extImageUpdateTitle"><span data-i18n="extensions.update_image_title">更新隔离实例镜像</span></h3>
+          <p class="ext-reset-hint" data-i18n="extensions.update_image_warning">只会更新已登记的隔离开发实例。镜像必须使用不可变的 @sha256 摘要；生产实例不会出现在这里。</p>
+          <div id="extImageUpdateInstance" class="ext-reset-instance"></div>
+          <label><span data-i18n="extensions.update_image_digest">新镜像摘要地址</span><input id="extImageUpdateDigest" type="text" autocomplete="off" spellcheck="false" placeholder="registry.example/chatgpt2api@sha256:..." data-i18n-placeholder="extensions.image_source_placeholder"></label>
+          <div id="extImageUpdatePlan" class="ext-reset-result hidden"></div>
+          <div class="ext-reset-actions">
+            <button class="btn-ghost" type="button" onclick="extensionCloseImageUpdateModal()"><span data-i18n="common.cancel">取消</span></button>
+            <button class="btn-secondary" type="button" id="extImageUpdatePlanBtn" onclick="extensionPlanImageUpdate()"><span data-i18n="extensions.review_update">生成核对清单</span></button>
+            <button class="btn-primary" type="button" id="extImageUpdateApplyBtn" onclick="extensionApplyImageUpdate()" disabled><span data-i18n="extensions.confirm_update">确认更新</span></button>
+          </div>
+        </div>
+      </div>
 
       <!-- Reset managed key modal -->
       <div id="extResetKeyModal" class="ext-reset-modal hidden" role="dialog" aria-modal="true" aria-label="重置管理密钥" data-i18n-aria-label="extensions.reset_key_label">
@@ -981,9 +1596,12 @@
           <h3><span data-i18n="extensions.reset_key_label">重置管理密钥</span></h3>
           <p class="ext-reset-hint"><span data-i18n="extensions.reset_warning">为安全起见，重置需要重新验证该实例所属 VPS 的所有权。密钥仅在本机显示一次；旧密钥立即失效。</span></p>
           <div id="extResetInstance" class="ext-reset-instance"></div>
-          <label><span data-i18n="extensions.ssh_password">SSH 密码</span><input id="extResetPassword" type="password" autocomplete="current-password"></label>
-          <label><span data-i18n="extensions.or_private_key">或 SSH 私钥</span><textarea id="extResetKey" rows="4" spellcheck="false"></textarea></label>
-          <label><span data-i18n="extensions.sudo_password">sudo 密码（留空则复用 SSH 密码）</span><input id="extResetSudo" type="password" autocomplete="off"></label>
+          <label><span data-i18n="extensions.ssh_password">SSH 密码</span><input id="extResetPassword" type="password" autocomplete="off" oninput="extensionResetCredentialChanged()"></label>
+          <label><span data-i18n="extensions.or_private_key">或 SSH 私钥</span><textarea id="extResetKey" rows="4" spellcheck="false" autocomplete="off" oninput="extensionResetCredentialChanged()"></textarea></label>
+          <label><span data-i18n="extensions.key_passphrase">SSH 私钥口令</span><input id="extResetPassphrase" type="password" autocomplete="off"></label>
+          <label><span data-i18n="extensions.elevation_mode">提权方式</span><select id="extResetElevation" onchange="extensionResetCredentialChanged()"><option value="none" selected data-i18n="extensions.elevation_none">不使用 sudo</option><option value="passwordless_sudo" data-i18n="extensions.elevation_passwordless">免密 sudo</option><option value="password_sudo" data-i18n="extensions.elevation_password">密码 sudo</option></select></label>
+          <label><span data-i18n="extensions.sudo_password">sudo 密码（默认不复用 SSH 密码）</span><input id="extResetSudo" type="password" autocomplete="off"></label>
+          <label class="extension-checkbox"><input id="extResetReuseSshPassword" type="checkbox" onchange="extensionResetCredentialChanged()"><span data-i18n="extensions.reuse_ssh_password">本次请求显式使用 SSH 密码作为 sudo 密码</span></label>
           <div id="extResetKeyResult" class="ext-reset-result hidden">
             <label><span data-i18n="extensions.new_key_once">新管理密钥（仅本次显示）</span><div class="extension-copy-row"><input id="extResetKeyNew" type="password" readonly><button class="btn-secondary" onclick="extensionRevealKey('extResetKeyNew')"><span data-i18n="common.show">显示</span></button><button class="btn-primary" onclick="extensionCopy('extResetKeyNew')"><span data-i18n="common.copy">复制</span></button></div></label>
             <div class="ext-reset-save"><input id="extResetVaultPassword" type="password" autocomplete="off" placeholder="凭证库解锁密码（如已锁定）" data-i18n-placeholder="extensions.vault_password_locked"><button class="btn-secondary" onclick="extensionSaveResetCredential()"><span data-i18n="extensions.save_local_copy">保存 / 更新本地副本</span></button></div>
@@ -997,18 +1615,23 @@
 
       <!-- Local managed-instance credential modal -->
       <div id="extCredentialModal" class="ext-reset-modal hidden" role="dialog" aria-modal="true" aria-label="本机保存的凭证" data-i18n-aria-label="extensions.saved_credential_label">
-        <div class="ext-reset-box glass-panel">
+        <div class="ext-reset-box glass-panel ext-credential-box">
+          <button type="button" class="ext-modal-close" aria-label="Close" title="Close" onclick="extensionCloseCredentialModal()">&#215;</button>
           <h3><span data-i18n="extensions.saved_credential_label">本机保存的凭证</span></h3><div id="extCredentialInstance" class="ext-reset-instance"></div>
-           <label><span data-i18n="extensions.admin_key">管理密钥</span><input id="extCredentialAdminKey" type="password" autocomplete="off"></label>
-           <label><span data-i18n="extensions.vps_password">VPS SSH 密码</span><input id="extCredentialSshPassword" type="password" autocomplete="off"></label>
-           <label><span data-i18n="extensions.vps_private_key">VPS SSH 私钥</span><textarea id="extCredentialSshPrivateKey" rows="4" spellcheck="false"></textarea></label>
-           <label><span data-i18n="extensions.key_passphrase">SSH 私钥口令</span><input id="extCredentialSshPassphrase" type="password" autocomplete="off"></label>
-           <label><span data-i18n="extensions.vps_sudo">VPS sudo 密码</span><input id="extCredentialSudoPassword" type="password" autocomplete="off"></label>
+           <label><span data-i18n="extensions.admin_key">管理密钥</span><div class="extension-copy-row"><input id="extCredentialAdminKey" type="password" autocomplete="off"><button type="button" class="btn-secondary ext-secret-toggle" aria-label="显示管理密钥" aria-pressed="false" title="显示管理密钥" onclick="extensionToggleCredentialSecret('extCredentialAdminKey',this)">👁</button></div></label>
+           <label><span data-i18n="extensions.vps_password">VPS SSH 密码</span><div class="extension-copy-row"><input id="extCredentialSshPassword" type="password" autocomplete="off"><button type="button" class="btn-secondary ext-secret-toggle" aria-label="显示 VPS SSH 密码" aria-pressed="false" title="显示 VPS SSH 密码" onclick="extensionToggleCredentialSecret('extCredentialSshPassword',this)">👁</button></div></label>
+           <label><span data-i18n="extensions.vps_private_key">VPS SSH 私钥</span><div class="extension-copy-row"><textarea id="extCredentialSshPrivateKey" class="ext-secret-textarea is-masked" rows="4" spellcheck="false" readonly></textarea><button type="button" class="btn-secondary ext-secret-toggle" aria-label="显示 VPS SSH 私钥" aria-pressed="false" title="显示 VPS SSH 私钥" onclick="extensionToggleCredentialSecret('extCredentialSshPrivateKey',this)">👁</button></div></label>
+           <label><span data-i18n="extensions.key_passphrase">SSH 私钥口令</span><div class="extension-copy-row"><input id="extCredentialSshPassphrase" type="password" autocomplete="off"><button type="button" class="btn-secondary ext-secret-toggle" aria-label="显示 SSH 私钥口令" aria-pressed="false" title="显示 SSH 私钥口令" onclick="extensionToggleCredentialSecret('extCredentialSshPassphrase',this)">👁</button></div></label>
+           <label><span data-i18n="extensions.vps_sudo">VPS sudo 密码</span><div class="extension-copy-row"><input id="extCredentialSudoPassword" type="password" autocomplete="off"><button type="button" class="btn-secondary ext-secret-toggle" aria-label="显示 VPS sudo 密码" aria-pressed="false" title="显示 VPS sudo 密码" onclick="extensionToggleCredentialSecret('extCredentialSudoPassword',this)">👁</button></div></label>
            <label><span data-i18n="extensions.username">用户名</span><input id="extCredentialUsername" autocomplete="off"></label>
-          <label><span data-i18n="extensions.password">密码</span><input id="extCredentialPassword" type="password" autocomplete="off"></label>
-          <label>API Key<input id="extCredentialApiKey" type="password" autocomplete="off"></label>
+          <label><span data-i18n="extensions.password">密码</span><div class="extension-copy-row"><input id="extCredentialPassword" type="password" autocomplete="off"><button type="button" class="btn-secondary ext-secret-toggle" aria-label="显示密码" aria-pressed="false" title="显示密码" onclick="extensionToggleCredentialSecret('extCredentialPassword',this)">👁</button></div></label>
+          <label>API Key<div class="extension-copy-row"><input id="extCredentialApiKey" type="password" autocomplete="off"><button type="button" class="btn-secondary ext-secret-toggle" aria-label="显示 API Key" aria-pressed="false" title="显示 API Key" onclick="extensionToggleCredentialSecret('extCredentialApiKey',this)">👁</button></div></label>
+          <label>GenBox Push Key<div class="extension-copy-row"><input id="extCredentialGenboxPushKey" type="password" autocomplete="off" readonly><button type="button" class="btn-secondary ext-secret-toggle" aria-label="显示 GenBox Push Key" aria-pressed="false" title="显示 GenBox Push Key" onclick="extensionToggleCredentialSecret('extCredentialGenboxPushKey',this)">👁</button></div></label>
+          <label>GenBox Push Source ID<input id="extCredentialGenboxPushSourceId" autocomplete="off" readonly></label>
+          <label>GenBox Push URL<input id="extCredentialGenboxPushUrl" autocomplete="off" readonly></label>
+          <p class="ext-reset-hint" data-i18n="extensions.push_saved_fields_readonly">Push 配置在这里仅供查看和复制。创建、轮换或保存新密钥请使用“GenBox Push 配置”。</p>
           <label><span data-i18n="extensions.note">备注</span><textarea id="extCredentialNote" rows="3"></textarea></label>
-          <div class="ext-credential-tools"><button class="btn-secondary" onclick="extensionRevealCredentialFields()"><span data-i18n="extensions.reveal">显示 / 隐藏</span></button><button class="btn-secondary" onclick="extensionCopyCredential()"><span data-i18n="extensions.copy_admin_key">复制管理密钥</span></button></div>
+          <div class="ext-credential-tools"><button class="btn-secondary" onclick="extensionCopyCredential()"><span data-i18n="extensions.copy_admin_key">复制管理密钥</span></button><button class="btn-secondary" onclick="extensionCopySavedPushConfiguration()"><span data-i18n="extensions.push_copy_configuration">复制 GenBox Push 配置</span></button></div>
           <div class="ext-reset-actions"><button class="btn-ghost" onclick="extensionCloseCredentialModal()"><span data-i18n="common.cancel">取消</span></button><button class="btn-ghost ext-danger" onclick="extensionDeleteCredential()"><span data-i18n="extensions.delete_local">删除本地副本</span></button><button class="btn-primary" onclick="extensionSaveCredential()"><span data-i18n="extensions.save_changes">保存修改</span></button></div>
         </div>
       </div>
@@ -1025,7 +1648,7 @@
      MAC DOCK
      ═══════════════════════════════════════════════════════════════ -->
 <div id="dockRevealZone" class="dock-reveal-zone" aria-hidden="true"></div>
-<button id="dockRevealHandle" class="dock-reveal-handle" type="button" onclick="toggleDockPinned()" aria-label="展开底部导航" aria-expanded="false" title="展开底部导航" data-i18n-aria-label="dock.expand" data-i18n-title="dock.expand"><span></span></button>
+<button id="dockRevealHandle" class="dock-reveal-handle" type="button" onclick="toggleDockReveal()" aria-label="展开底部导航" aria-expanded="false" title="展开底部导航" data-i18n-aria-label="dock.expand" data-i18n-title="dock.expand"><span></span></button>
 <nav class="dock" id="macDock">
   <div class="dock-item active" data-page="dashboard" onclick="switchNav('dashboard',document.getElementById('navDashboard'))" title="系统看板" data-i18n-title="nav.dashboard">
     <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 16v-4m5 4V8m5 8v-6"/></svg></div>
@@ -1067,11 +1690,64 @@
     <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M8 9h8m-8 4h8m-8 4h5"/></svg></div>
     <div class="dock-dot"></div>
   </div>
+  <button id="dockPinButton" class="dock-item dock-action dock-pin-control" type="button" onclick="toggleDockPinned()" aria-pressed="false" aria-label="锁定底部导航" title="锁定底部导航" data-i18n-aria-label="dock.pin" data-i18n-title="dock.pin">
+    <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="10" width="10" height="10" rx="2"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/></svg></div>
+    <div class="dock-dot"></div>
+  </button>
   <div class="dock-item dock-action" onclick="location.reload()" title="刷新页面" data-i18n-title="nav.refresh">
     <div class="dock-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.2 8a7 7 0 0 1 11.6-1L20 12M4 12l2.2 5a7 7 0 0 0 11.6-1"/></svg></div>
     <div class="dock-dot"></div>
   </div>
 </nav>
+
+<!-- Precision edit documentation dialog -->
+<div id="precisionDocsDialog" class="precision-docs-dialog hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="precisionDocsTitle" aria-describedby="precisionDocsIntro">
+  <div class="glass-panel precision-docs-panel" id="precisionDocsPanel" tabindex="-1">
+    <header class="precision-docs-header">
+      <div><span class="precision-docs-kicker" data-i18n="creator.precision_docs_kicker">操作文档</span><h2 id="precisionDocsTitle" data-i18n="creator.precision_docs_title">精准改图</h2></div>
+      <button type="button" class="btn-ghost precision-docs-close" id="btnPrecisionDocsClose" onclick="closePrecisionDocsDialog()" aria-label="关闭精准改图文档" data-i18n-aria-label="creator.precision_docs_close"><span aria-hidden="true">×</span></button>
+    </header>
+    <div class="precision-docs-body" id="precisionDocsBody" tabindex="0">
+      <p id="precisionDocsIntro" class="precision-docs-intro" data-i18n="creator.precision_docs_intro">在一个工作台中完成轻量批注、透明抠图、纯尺寸扩图和版本比较；这里不会提供图层栈或全局滤镜。</p>
+      <section class="precision-quick-navigation" aria-labelledby="precisionQuickNavigationTitle">
+        <h3 id="precisionQuickNavigationTitle" data-i18n="creator.precision_start_title">快速上手</h3>
+        <p data-i18n="creator.precision_start_nav_hint">按顺序完成前四步；点击步骤可定位操作区，不会提交任务。以后可从“文档说明”再次打开。</p>
+        <ol class="precision-docs-steps">
+          <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('model')" data-i18n="creator.precision_start_nav_model">选择模型</button><p data-i18n="creator.precision_start_model">第一步：选模型端点 → 在“显示模型”中勾选并确定 → 选择编辑模型。显示“待确认”时，仅在确认支持改图后启用；没有端点请先到“模型设置”配置。</p></li>
+          <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('source')" data-i18n="creator.precision_start_nav_source">加载底图</button><p data-i18n="creator.precision_start_source">本地上传或从图库选择一张图。局部改图时，用画笔或形状标出位置，并填写修改说明。</p></li>
+          <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('size')" data-i18n="creator.precision_start_nav_size">尺寸与构图</button><p data-i18n="creator.precision_start_size">改变尺寸：1. 选尺寸方式（模型尺寸严格匹配；裁切适配会本地裁切缩放）；2. 选预设，按提示授权试用；3. 选构图说明并按需修改。加载底图后即可点击“生成图片”。</p></li>
+          <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('generate')" data-i18n="creator.precision_start_nav_generate">生成与查看</button><p data-i18n="creator.precision_start_generate">检查底图和说明后，点击“生成图片”提交一次在线请求，可能计费；失败不会自动重试。完成后切换版本查看尺寸、时间及前后对比。</p></li>
+          <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('local')" data-i18n="creator.precision_start_nav_local">可选：本地处理</button><p data-i18n="creator.precision_start_local">人物抠图、边缘精修在本地完成，可切换算法比较效果；AI 消除需涂选区域，再用所选在线模型生成。</p></li>
+        </ol>
+      </section>
+      <section aria-labelledby="precisionDocsShapes"><h3 id="precisionDocsShapes" data-i18n="creator.precision_docs_shapes_title">形状与二次编辑</h3><p data-i18n="creator.precision_docs_shapes_body">用椭圆、矩形、箭头或画笔标出修改位置。切换到“选择/移动”后可拖动已有批注；形状使用控制点缩放，箭头直接拖动起点或终点。按住 Alt 再绘制可避免误选已有形状。</p></section>
+      <section aria-labelledby="precisionDocsEraser"><h3 id="precisionDocsEraser" data-i18n="creator.precision_docs_eraser_title">橡皮擦与历史</h3><p data-i18n="creator.precision_docs_eraser_body">橡皮擦可点击删除选中的对象，也可在画笔轨迹上拖动擦除；移动、缩放、擦除和清除都可撤销/重做。</p></section>
+      <section aria-labelledby="precisionDocsText"><h3 id="precisionDocsText" data-i18n="creator.precision_docs_text_title">文字批注</h3><p data-i18n="creator.precision_docs_text_body">文字工具单击画布添加文字；切到“选择/移动”后可拖动移动，双击已有文字可再次编辑，选中后可调整字号和颜色。</p></section>
+      <section aria-labelledby="precisionDocsShortcuts"><h3 id="precisionDocsShortcuts" data-i18n="creator.precision_docs_shortcuts_title">工具快捷键</h3><p data-i18n="creator.precision_docs_shortcuts_body">工作台激活时可直接按 V 选择/移动、O 椭圆、A 箭头、R 矩形、B 画笔、E 橡皮擦、T 文字。输入框、下拉框和文字编辑状态下不会触发快捷键。</p></section>
+      <section aria-labelledby="precisionDocsCutout"><h3 id="precisionDocsCutout" data-i18n="creator.precision_docs_cutout_title">抠图、羽化与选区</h3><p data-i18n="creator.precision_docs_cutout_body">一键抠图会追加真实透明 PNG 版本。选择透明版本后可用 0–64 px 羽化精修 alpha 边缘；勾选“仅精修画布选区”时，画笔、矩形或椭圆会作为局部选区。棋盘格只用于预览，不会改变文件透明度。</p></section>
+      <section class="precision-docs-model-guide" aria-labelledby="precisionDocsCutoutModel">
+        <h3 id="precisionDocsCutoutModel" data-i18n="creator.precision_docs_cutout_model_title">本地人物抠图模型</h3>
+        <p data-i18n="creator.precision_docs_cutout_model_purpose">该 ONNX 模型只在本机进行人物分割，为“一键抠出人物”生成透明背景；它不是精准改图 Provider，也不会把图片发送给模型下载站。</p>
+        <div class="precision-docs-links" aria-label="模型资料链接" data-i18n-aria-label="creator.precision_docs_cutout_model_links_label">
+          <a href="https://github.com/liwei9745/GenBox/blob/master/docs/CUTOUT-MODEL-GUIDE.md" target="_blank" rel="noopener noreferrer" data-i18n="creator.precision_docs_cutout_model_project_guide">GenBox 手动安装与校验指南</a>
+          <a href="https://github.com/danielgatis/rembg/releases/tag/v0.0.0" target="_blank" rel="noopener noreferrer" data-i18n="creator.precision_docs_cutout_model_upstream">rembg 上游模型发布页</a>
+          <a href="https://github.com/xuebinqin/U-2-Net" target="_blank" rel="noopener noreferrer" data-i18n="creator.precision_docs_cutout_model_official">U²-Net 官方项目</a>
+        </div>
+        <ol class="precision-docs-steps">
+          <li data-i18n="creator.precision_docs_cutout_model_step_download">从上游发布页手动下载文件 u2net_human_seg.onnx。</li>
+          <li><span data-i18n="creator.precision_docs_cutout_model_step_place">在 GenBox 数据目录下创建对应文件夹，并把文件放到所有系统统一的相对位置：</span> <code>storage/models/cutout/u2net_human_seg.onnx</code></li>
+          <li data-i18n="creator.precision_docs_cutout_model_step_verify">返回工作台刷新状态；只有文件校验和本地运行能力探测都通过后，一键抠图才会启用。</li>
+        </ol>
+        <p class="precision-docs-warning" data-i18n="creator.precision_docs_cutout_model_boundary">当前自动下载未启用。模型转换链、训练数据来源、授权与商业使用权利尚未由 GenBox 验证；下载或使用前请自行阅读上游资料并确认适用于你的场景。</p>
+      </section>
+      <section aria-labelledby="precisionDocsResize"><h3 id="precisionDocsResize" data-i18n="creator.precision_docs_resize_title">纯尺寸扩图</h3><p data-i18n="creator.precision_docs_resize_body">无需批注也可开启“改变尺寸”。“模型尺寸”优先使用当前模型已声明的原生尺寸；未声明候选需要逐项用户授权试用，实际输出仍须严格校验。“裁切适配”使用常用修图尺寸，模型完成一次改图后由 GenBox 在本地裁切缩放到目标尺寸。</p></section>
+      <section aria-labelledby="precisionDocsVersions"><h3 id="precisionDocsVersions" data-i18n="creator.precision_docs_versions_title">版本与对比</h3><p data-i18n="creator.precision_docs_versions_body">版本栏用于浏览结果；“修改前”显示父版本，“修改后”显示所选版本，“对比”可拖动分隔线。左下角显示对应图片的实际尺寸及可用的版本时间（不是拍摄时间）。生成完成后会把新结果设为下一次底图；也可手动选择旧版本并点“设为下一次底图”。从工作流恢复可继续编辑。</p></section>
+      <section aria-labelledby="precisionDocsFullscreen"><h3 id="precisionDocsFullscreen" data-i18n="creator.precision_docs_fullscreen_title">全屏与节点编辑</h3><p data-i18n="creator.precision_docs_fullscreen_body">双击主画布可进入或退出完整工作台全屏，也可使用“全屏”按钮；按 Esc 可退出。选择已有标注后拖动控制节点可调整形状和箭头端点，双击文字可再次编辑。</p></section>
+      <section aria-labelledby="precisionDocsModels"><h3 id="precisionDocsModels" data-i18n="creator.precision_docs_models_title">模型筛选</h3><p data-i18n="creator.precision_docs_models_body">先选模型端点，再用“显示模型”按系列勾选常用模型，点“确定”保存到本机；“取消”丢弃本次修改。分组不代表支持改图。选择编辑模型后，尺寸状态随当前端点和模型更新；授权试用仅对该端点、模型和尺寸有效，不会自动生成，也不保证上游成功。失败或 503 不等于尺寸不支持；检查原因后再决定是否手动重试。</p></section>
+    </div>
+    <footer class="precision-docs-footer"><button type="button" class="btn-primary" id="precisionDocsDone" onclick="closePrecisionDocsDialog()" data-i18n="common.done">完成</button></footer>
+  </div>
+</div>
 
 <!-- ══════════════════ 远程同步弹窗 ══════════════════ -->
 <div id="syncModal" class="modal-overlay sync-modal" role="dialog" aria-modal="true" aria-labelledby="syncModalTitle">
@@ -1158,7 +1834,7 @@
 </div>
 
 <link rel="stylesheet" href="/static/css/sync.css?v=8">
-<link rel="stylesheet" href="/static/css/extensions.css?v=4">
+<link rel="stylesheet" href="/static/css/extensions.css?v=9">
   <script>
     (function () {
       var next = 'zh-CN';
@@ -1183,9 +1859,28 @@
       } catch (error3) {}
     })();
   </script>
-  <script src="/static/js/i18n.js?v=6"></script>
-<script src="/static/js/app-all.js?v=35"></script>
+  <script>
+    (function () {
+      window.readDockMode = function () {
+        try {
+          var mode = window.localStorage.getItem('igs_dock_mode');
+          if (mode === 'auto' || mode === 'visible' || mode === 'hidden') return mode;
+          return window.localStorage.getItem('igs_dock_pinned') === '1' ? 'visible' : 'auto';
+        } catch (error) {
+          return 'auto';
+        }
+      };
+      window.persistDockMode = function (mode) {
+        try {
+          window.localStorage.setItem('igs_dock_mode', mode);
+          window.localStorage.setItem('igs_dock_pinned', mode === 'visible' ? '1' : '0');
+        } catch (error) {}
+      };
+    })();
+  </script>
+  <script src="/static/js/i18n.js?v=34"></script>
+<script src="/static/js/app-all.js?v=49"></script>
 <script src="/static/js/sync.js?v=7"></script>
-<script src="/static/js/extensions.js?v=8"></script>
+  <script src="/static/js/extensions.js?v=38"></script>
 </body>
 </html>

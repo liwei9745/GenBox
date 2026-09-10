@@ -12,10 +12,11 @@ chatgpt2api. The current GenBox receiver details are in
 | Capability | GenBox | chatgpt2api | Overall State |
 |---|---|---|---|
 | Pull remote image list and import | Implemented | Existing compatible API required | Implemented in GenBox; live verification pending |
-| Receive one pushed image | Implemented | Sender missing in this repository | Partial |
-| Per-generation Push selection | Receiver ready | Planned | Planned |
-| Manual batch Push | Receiver reusable | Planned | Planned |
-| Scheduled incremental Push | Receiver reusable | Planned | Planned |
+| Receive one pushed image | Receiver and managed source provisioning verified | Sender shared Push service and isolated Studio Push verified | Isolated-VPS single-image Push and idempotent retry verified; clean deployment remains pending |
+| Per-generation Push selection | Receiver ready | Sender implementation and isolated Studio browser workflow verified | Isolated-VPS evidence verified; clean deployment remains pending |
+| Manual Gallery Push | Receiver and receipt contract verified | Sender Gallery control and retry state verified in the isolated development clone | Isolated manual selected-image Push verified |
+| Manual batch Push | Receiver reusable | Sender workflow and failed-only retry verified on the isolated development clone | Isolated interruption/recovery and retry evidence verified; clean deployment remains pending |
+| Scheduled incremental Push | Receiver reusable | Sender schedule, durable cursor, and worker lease verified on the isolated development clone | Isolated late-arrival and concurrent-worker evidence verified; clean deployment remains pending |
 | Receipt-gated source cleanup | Receipt field implemented | Planned | Planned |
 | Guided Compose deployment | Implemented in code | Deployable target | Live clone verification pending |
 | Private-network setup | Adapter code exists | Endpoint participant | Live verification pending |
@@ -33,6 +34,29 @@ chatgpt2api needs a GenBox destination with:
 - Schedule settings stored separately from destination identity.
 
 Secrets must be masked on read and excluded from normal logs and exports.
+
+## Managed Source Provisioning
+
+For a GenBox-managed isolated `chatgpt2api` instance, the Extensions final step
+can create a source-specific credential without asking the user to edit
+`GENBOX_PUSH_KEYS`. The browser submits only the instance's opaque handle.
+GenBox resolves the registered managed instance and its previously verified
+private-network URL, then returns the destination URL, source ID, and a newly
+generated Push key once. The browser never supplies a target URL, raw instance
+ID, source ID, or Push key to the provisioning API.
+
+The registry persists a random salt and PBKDF2-HMAC-SHA256 verifier, never the
+raw key. Listing returns metadata only. Rotation replaces the verifier and
+returns a new raw key once; revocation retains an inactive record so that the
+same source ID cannot fall back to an old legacy environment credential. Push
+keys are excluded from browser storage, URLs, ordinary task records, and
+normal logs. Deleting a registered target deactivates all of its managed
+sources before the target record is removed. The legacy `GENBOX_PUSH_KEYS`
+mapping remains supported only for source IDs unknown to the managed registry.
+
+This provisions receiver-side configuration only. It does not write remote
+chatgpt2api settings, prove the sender can use the credentials, or prove an
+end-to-end image Push.
 
 ## Push Request V1
 
@@ -53,24 +77,42 @@ Multipart fields:
 
 - `image`: image bytes.
 - `remote_path`: stable source-relative path, required.
+- `source_sha256`: sender-computed SHA-256, optional; when supplied it must
+  match the uploaded bytes.
 - `created_at`: source creation time, optional.
 - `prompt`: generation prompt, optional.
 - `model`: model identity, optional.
 
 GenBox validates credentials, media type, image structure, size, and content
 hash before importing. The endpoint must remain safe for idempotent retry.
+When `source_sha256` is supplied, a malformed or mismatched value is rejected
+before any receiver state is committed.
+
+`GET /api/sync/push/status` uses the same authenticated source headers and
+returns the v1 contract version plus the maximum image byte limit used by that
+running receiver process. A sender should use this probe for destination
+compatibility and keep its source when the probe or Push request fails.
 
 ## Receipt Requirements
 
 A successful receipt includes enough information for the sender to verify:
 
+- Push contract version (`v1` for the current receiver).
 - Request succeeded.
 - GenBox accepted or had already imported the same content.
 - GenBox-computed SHA-256 matches the sender's bytes.
 - The local file was committed.
-- `safe_to_delete_source` confirms receiver-side commit eligibility. The current
-  v1 receiver returns `true` after a successful or idempotent committed import;
-  it does not by itself activate sender-side deletion.
+- `safe_to_delete_source` confirms receiver-side commit eligibility. The
+  receiver returns `false` by default so a plain successful or idempotent
+  committed import never grants source-deletion permission by itself
+  (ADR-024/026). A managed Push source may be explicitly granted by its owner
+  to receive deletion eligibility; when granted, the receipt returns `true`
+  **only** for a committed import of this exact source path and content
+  (`imported` or `already-imported`), never for a duplicate-local import from
+  another path and never when the request bytes do not match the requested
+  source SHA-256. The sender in the current receiver release does not delete by
+  default and only deletes after a per-action user selection plus the granted
+  receipt and a live SHA-256 match.
 
 The sender persists the source path, content hash, result, receipt, attempts,
 last error, and timestamps. HTTP success alone does not authorize deletion.
@@ -118,6 +160,11 @@ GenBox should retain, when available:
 - Prompt and model.
 - SHA-256 and import time.
 
+The receiver may also preserve the source content SHA-256 in GenBox-owned image
+metadata so a restart can rebuild content identity from the durable manifest.
+This is an internal recovery aid, not a substitute for the authenticated
+receipt hash or permission to delete the sender's source.
+
 At minimum, imported images must be identifiable in the media library as remote
 chatgpt2api media. Tag naming and filtering behavior require UI acceptance tests.
 
@@ -134,13 +181,17 @@ chatgpt2api media. Tag naming and filtering behavior require UI acceptance tests
 
 ## Source Cleanup
 
-Cleanup is a separate, explicit user option. It runs after transfer state is
-durably committed. Before deletion, the sender rechecks source content identity,
-receipt authentication, matching SHA-256, and `safe_to_delete_source=true`.
+Cleanup is a separate, explicit user option. For both manual one-shot forwarding
+and scheduled forwarding the user selects per action whether to delete the
+source after a successful push; there is no forced fixed choice (ADR-026). The
+sender deletes only after transfer state is durably committed and it rechecks
+source content identity, receipt authentication, matching SHA-256, and
+`safe_to_delete_source=true`.
 
 Development environments do not automatically delete sources. Production
-cleanup requires dry-run output, audit records, and clear reclaimed-space
-reporting.
+cleanup requires the per-run user selection, dry-run output, audit records, and
+clear reclaimed-space reporting. A receipt without an explicit grant never
+authorizes deletion.
 
 ## Compatibility And Versioning
 

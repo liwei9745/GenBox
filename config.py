@@ -5,16 +5,22 @@
 """
 import json
 import os
+import re
 import sys
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from pydantic import BaseModel
 
 from dotenv import load_dotenv
 
 # Capture trusted process injection before any dotenv file can mutate os.environ.
-# Runtime reloads may override other values, but an orchestrator-provided
-# container port must remain authoritative over a host-facing .env value.
+# Runtime reloads may override other values, but orchestrator-provided runtime
+# mode and container port must remain authoritative over .env values.
+PROCESS_ENV_APP_MODE = (
+    os.environ["APP_MODE"] if "APP_MODE" in os.environ else None
+)
 PROCESS_ENV_GENBOX_PORT = (
     os.environ["GENBOX_PORT"] if "GENBOX_PORT" in os.environ else None
 )
@@ -51,6 +57,14 @@ GALLERY_DIR.mkdir(exist_ok=True)
 PROVIDERS_FILE = STORAGE_DIR / "providers.json"
 
 
+def verify_ssl_enabled() -> bool:
+    """Verify outbound TLS unless an operator explicitly opts out."""
+    configured = os.getenv("VERIFY_SSL")
+    if configured is None:
+        return True
+    return configured.strip().lower() not in {"false", "0", "no", "off"}
+
+
 # ──────────────────────────────────────────────────────────────
 # 数据模型
 # ──────────────────────────────────────────────────────────────
@@ -71,6 +85,375 @@ class EndpointConfig(BaseModel):
         return short_url
 
 
+def _is_masked_secret(value: str) -> bool:
+    return "****" in str(value or "")
+
+
+class PrecisionEditProfile(str, Enum):
+    """Allowlisted request shapes for annotation-based image editing."""
+
+    OPENAI_IMAGES_EDITS_MULTIPART_REPEATED_IMAGE = (
+        "openai_images_edits_multipart_repeated_image"
+    )
+    OPENAI_IMAGES_EDITS_MULTIPART_IMAGE_ARRAY = (
+        "openai_images_edits_multipart_image_array"
+    )
+    OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE = (
+        "openai_images_edits_multipart_single_source_image"
+    )
+
+
+PRECISION_EDIT_CAPABILITY = "precision_edit"
+PRECISION_MODEL_ALIAS_FIELDS = ("alias_of", "canonical_model")
+PRECISION_MODEL_SIZE_FIELDS = ("supported_sizes", "supportedSizes", "sizes", "dimensions")
+PRECISION_MODEL_SIZE_POLICY_FIELD = "size_policy"
+PRECISION_GPT_IMAGE_2_FLEXIBLE_SIZE_POLICY = "gpt_image_2_flexible"
+PRECISION_MODEL_ALIAS_MAX_DEPTH = 1
+PRECISION_MODEL_DEFAULT_MAX_OUTPUT_PIXELS = 64 * 1024 * 1024
+
+# Exact-size legality for the documented gpt-image-2 image protocol.  These
+# limits intentionally remain separate from the generic capability validator:
+# custom/OpenAI-compatible providers may expose legacy dimensions such as
+# 64x64, while gpt-image-2 requests must satisfy the protocol itself.
+GPT_IMAGE_2_SIZE_ALIGNMENT = 16
+GPT_IMAGE_2_MIN_OUTPUT_PIXELS = 655_360
+GPT_IMAGE_2_MAX_OUTPUT_PIXELS = 8_294_400
+GPT_IMAGE_2_MAX_SIDE = 3_840
+GPT_IMAGE_2_EXPERIMENTAL_MAX_WIDTH = 2_560
+GPT_IMAGE_2_EXPERIMENTAL_MAX_HEIGHT = 1_440
+GPT_IMAGE_2_CANONICAL_PRESETS = {
+    "1k": "1024x1024",
+    "2k": "2048x1152",
+    "4k": "3840x2160",
+}
+
+# This is a documentation catalogue, not a provider capability grant.  The
+# public GPT Image 2 documentation names the three standard GPT Image sizes,
+# gives 1536x864 as a flexible-size example, recommends QHD as a dependable
+# upper target, and labels UHD-class requests as experimental.  A gateway can
+# still return a different canvas, so strict dispatch must continue to use
+# only the selected connection's explicit ``supported_sizes`` declaration.
+GPT_IMAGE_2_DOCUMENTED_SIZE_PRESETS = (
+    {
+        "id": "standard-square",
+        "size": "1024x1024",
+        "tier": "standard",
+        "ratio": "1:1",
+        "evidence": "official_standard",
+        "experimental": False,
+    },
+    {
+        "id": "standard-landscape",
+        "size": "1536x1024",
+        "tier": "standard",
+        "ratio": "3:2",
+        "evidence": "official_standard",
+        "experimental": False,
+    },
+    {
+        "id": "standard-portrait",
+        "size": "1024x1536",
+        "tier": "standard",
+        "ratio": "2:3",
+        "evidence": "official_standard",
+        "experimental": False,
+    },
+    {
+        "id": "flexible-example-landscape",
+        "size": "1536x864",
+        "tier": "flexible",
+        "ratio": "16:9",
+        "evidence": "official_example",
+        "experimental": False,
+    },
+    {
+        "id": "qhd-landscape",
+        "size": "2560x1440",
+        "tier": "2k",
+        "ratio": "16:9",
+        "evidence": "official_recommended",
+        "experimental": False,
+    },
+    {
+        "id": "uhd-landscape",
+        "size": "3840x2160",
+        "tier": "4k",
+        "ratio": "16:9",
+        "evidence": "official_experimental",
+        "experimental": True,
+    },
+)
+
+GPT_IMAGE_DOCUMENTED_STANDARD_MODELS = frozenset(
+    {"gpt-image-1", "gpt-image-1.5", "gpt-image-1-mini"}
+)
+
+
+def documented_precision_model_size_presets(canonical_model: object) -> Tuple[Dict[str, Any], ...]:
+    """Return non-authorizing model-documentation presets for one canonical model.
+
+    This helper deliberately does not infer gateway support.  Consumers must
+    intersect any display catalogue with persisted model capability metadata
+    before enabling a strict resize submission.
+    """
+    if canonical_model in GPT_IMAGE_DOCUMENTED_STANDARD_MODELS:
+        return tuple(item for item in GPT_IMAGE_2_DOCUMENTED_SIZE_PRESETS if item["tier"] == "standard")
+    if canonical_model != "gpt-image-2":
+        return ()
+    return tuple(dict(item) for item in GPT_IMAGE_2_DOCUMENTED_SIZE_PRESETS)
+
+
+@dataclass(frozen=True)
+class PrecisionModelCapabilityResolution:
+    """Fail-closed effective capability for one selected provider model."""
+
+    selected_model: str
+    canonical_model: str = ""
+    capability: Optional[Dict[str, Any]] = None
+    supported_sizes: Tuple[str, ...] = ()
+    alias_depth: int = 0
+    structure_valid: bool = False
+    precision_edit_confirmed: bool = False
+    size_declaration_present: bool = False
+    size_declaration_valid: bool = False
+    flexible_sizes: bool = False
+    reason: str = "precision_model_unknown"
+
+
+def normalize_precision_capability_size(
+    value: object,
+    *,
+    max_output_pixels: int = PRECISION_MODEL_DEFAULT_MAX_OUTPUT_PIXELS,
+) -> Optional[str]:
+    """Accept only canonical WIDTHxHEIGHT strings within precision limits."""
+    if not isinstance(value, str):
+        return None
+    match = re.fullmatch(r"([1-9]\d{1,4})x([1-9]\d{1,4})", value)
+    if not match:
+        return None
+    width, height = int(match.group(1)), int(match.group(2))
+    if (
+        width < 64
+        or height < 64
+        or width > 8192
+        or height > 8192
+        or width * height > max_output_pixels
+    ):
+        return None
+    normalized = f"{width}x{height}"
+    return normalized if normalized == value else None
+
+
+def gpt_image_2_size_error(value: object) -> Optional[Tuple[str, str]]:
+    """Return a structured legality error for one exact gpt-image-2 size.
+
+    This helper does not inspect provider declarations.  A size can be legal
+    under the upstream protocol and still be rejected later when the selected
+    provider/model has not explicitly declared support for it.
+    """
+    if not isinstance(value, str):
+        return "precision_target_size_invalid", "size must be WIDTHxHEIGHT"
+    match = re.fullmatch(r"([1-9]\d{1,4})x([1-9]\d{1,4})", value)
+    if not match:
+        return "precision_target_size_invalid", "size must be WIDTHxHEIGHT"
+    width, height = int(match.group(1)), int(match.group(2))
+    if width > GPT_IMAGE_2_MAX_SIDE or height > GPT_IMAGE_2_MAX_SIDE:
+        return "precision_target_size_side_exceeded", "gpt-image-2 dimensions cannot exceed 3840 pixels per side"
+    if width % GPT_IMAGE_2_SIZE_ALIGNMENT or height % GPT_IMAGE_2_SIZE_ALIGNMENT:
+        return "precision_target_size_alignment_invalid", "gpt-image-2 dimensions must be divisible by 16"
+    ratio = width / height
+    if ratio < (1 / 3) or ratio > 3:
+        return "precision_target_size_aspect_invalid", "gpt-image-2 aspect ratio must be between 1:3 and 3:1"
+    pixels = width * height
+    if pixels < GPT_IMAGE_2_MIN_OUTPUT_PIXELS:
+        return "precision_target_size_pixels_too_small", "gpt-image-2 output must contain at least 655360 pixels"
+    if pixels > GPT_IMAGE_2_MAX_OUTPUT_PIXELS:
+        return "precision_target_size_pixels_exceeded", "gpt-image-2 output cannot exceed 8294400 pixels"
+    return None
+
+
+def validate_gpt_image_2_size(value: object) -> Tuple[bool, str]:
+    """Return ``(is_valid, reason_code)`` for an exact gpt-image-2 size."""
+    error = gpt_image_2_size_error(value)
+    return (error is None, "" if error is None else error[0])
+
+
+def precision_capability_size_declaration(
+    capability: object,
+    *,
+    max_output_pixels: int = PRECISION_MODEL_DEFAULT_MAX_OUTPUT_PIXELS,
+) -> Tuple[bool, bool, Tuple[str, ...], str]:
+    """Return strict size metadata without accepting partial invalid declarations."""
+    if not isinstance(capability, dict):
+        return False, False, (), "precision_size_declaration_missing"
+
+    present_fields = [field for field in PRECISION_MODEL_SIZE_FIELDS if field in capability]
+    if not present_fields:
+        return False, False, (), "precision_size_declaration_missing"
+
+    field_sizes = []
+    for field in present_fields:
+        raw_values = capability[field]
+        if isinstance(raw_values, str):
+            values = [raw_values]
+        elif isinstance(raw_values, (list, tuple)):
+            values = list(raw_values)
+        else:
+            return True, False, (), "precision_size_declaration_invalid"
+        if not values:
+            return True, False, (), "precision_size_declaration_invalid"
+
+        sizes = []
+        seen = set()
+        for value in values:
+            normalized = normalize_precision_capability_size(
+                value,
+                max_output_pixels=max_output_pixels,
+            )
+            if normalized is None:
+                return True, False, (), "precision_size_declaration_invalid"
+            if normalized not in seen:
+                sizes.append(normalized)
+                seen.add(normalized)
+        field_sizes.append(tuple(sizes))
+
+    first_sizes = field_sizes[0]
+    first_set = set(first_sizes)
+    if any(set(sizes) != first_set for sizes in field_sizes[1:]):
+        return True, False, (), "precision_size_declaration_collision"
+    return True, True, first_sizes, ""
+
+
+def precision_capability_flexible_size_policy(capability: object) -> Tuple[bool, bool, str]:
+    """Read the opt-in flexible-size policy without treating unknown values as safe.
+
+    The policy is intentionally separate from ``supported_sizes``: a precise
+    whitelist remains the default for every model, while the GPT Image 2
+    envelope can be explicitly enabled only after operator confirmation.
+    """
+    if not isinstance(capability, dict):
+        return False, False, "precision_size_policy_invalid"
+    if PRECISION_MODEL_SIZE_POLICY_FIELD not in capability:
+        return True, False, ""
+    value = capability.get(PRECISION_MODEL_SIZE_POLICY_FIELD)
+    if value == PRECISION_GPT_IMAGE_2_FLEXIBLE_SIZE_POLICY:
+        return True, True, ""
+    return False, False, "precision_size_policy_invalid"
+
+
+def _precision_model_alias_target(capability: object) -> Tuple[Optional[str], str]:
+    if not isinstance(capability, dict):
+        return None, ""
+    present_fields = [field for field in PRECISION_MODEL_ALIAS_FIELDS if field in capability]
+    if not present_fields:
+        return None, ""
+
+    targets = []
+    for field in present_fields:
+        raw_target = capability[field]
+        if not isinstance(raw_target, str) or not raw_target or raw_target != raw_target.strip():
+            return None, "precision_alias_target_invalid"
+        targets.append(raw_target)
+    if len(set(targets)) != 1:
+        return None, "precision_alias_target_collision"
+    return targets[0], ""
+
+
+def resolve_precision_model_capability(
+    model_capabilities: object,
+    selected_model: object,
+    *,
+    max_output_pixels: int = PRECISION_MODEL_DEFAULT_MAX_OUTPUT_PIXELS,
+) -> PrecisionModelCapabilityResolution:
+    """Resolve one direct alias to one canonical capability without name guessing."""
+    model_id = selected_model if isinstance(selected_model, str) else ""
+    if not model_id or model_id != model_id.strip() or not isinstance(model_capabilities, dict):
+        return PrecisionModelCapabilityResolution(selected_model=model_id)
+
+    selected = model_capabilities.get(model_id)
+    if model_id in model_capabilities and not isinstance(selected, dict):
+        return PrecisionModelCapabilityResolution(
+            selected_model=model_id,
+            reason="precision_model_record_invalid",
+        )
+    if selected is None:
+        selected = {}
+
+    alias_target, alias_error = _precision_model_alias_target(selected)
+    if alias_error:
+        return PrecisionModelCapabilityResolution(selected_model=model_id, reason=alias_error)
+
+    canonical_model = model_id
+    canonical = selected
+    alias_depth = 0
+    if alias_target is not None:
+        if alias_target == model_id:
+            return PrecisionModelCapabilityResolution(
+                selected_model=model_id,
+                reason="precision_alias_cycle",
+            )
+        alias_depth = 1
+        canonical_model = alias_target
+        canonical = model_capabilities.get(canonical_model)
+        if not isinstance(canonical, dict):
+            return PrecisionModelCapabilityResolution(
+                selected_model=model_id,
+                canonical_model=canonical_model,
+                alias_depth=alias_depth,
+                reason="precision_alias_target_unknown",
+            )
+        next_target, next_error = _precision_model_alias_target(canonical)
+        if next_error:
+            return PrecisionModelCapabilityResolution(
+                selected_model=model_id,
+                canonical_model=canonical_model,
+                alias_depth=alias_depth,
+                reason=next_error,
+            )
+        if next_target is not None:
+            reason = (
+                "precision_alias_cycle"
+                if next_target in {model_id, canonical_model}
+                else "precision_alias_chain_too_deep"
+            )
+            return PrecisionModelCapabilityResolution(
+                selected_model=model_id,
+                canonical_model=canonical_model,
+                alias_depth=alias_depth,
+                reason=reason,
+            )
+
+    size_present, size_valid, sizes, size_reason = precision_capability_size_declaration(
+        canonical,
+        max_output_pixels=max_output_pixels,
+    )
+    policy_valid, flexible_sizes, policy_reason = precision_capability_flexible_size_policy(canonical)
+    precision_confirmed = canonical.get(PRECISION_EDIT_CAPABILITY) is True
+    reason = ""
+    if not precision_confirmed:
+        reason = "precision_edit_unconfirmed"
+    elif not size_present:
+        reason = "precision_size_declaration_missing"
+    elif not size_valid:
+        reason = size_reason
+    elif not policy_valid:
+        reason = policy_reason
+
+    return PrecisionModelCapabilityResolution(
+        selected_model=model_id,
+        canonical_model=canonical_model,
+        capability=canonical,
+        supported_sizes=sizes,
+        alias_depth=alias_depth,
+        structure_valid=True,
+        precision_edit_confirmed=precision_confirmed,
+        size_declaration_present=size_present,
+        size_declaration_valid=size_valid,
+        flexible_sizes=flexible_sizes and policy_valid,
+        reason=reason,
+    )
+
+
 class ProviderConfig(BaseModel):
     """单个 Provider 配置"""
     id: str                    # 唯一标识 (如 gpt-image, gemini, my-flux)
@@ -88,24 +471,29 @@ class ProviderConfig(BaseModel):
     color: str = "#0ea5e9"     # UI 卡片颜色
     display_name: str = ""     # 看板分组显示名称（空=使用 name）
     capabilities: Dict[str, bool] = {}  # 能力声明: {"t2i": True, "i2i": True, "i2v": False}
+    precision_edit_profile: Optional[PrecisionEditProfile] = None
     skip_proxy: bool = False   # 跳过全局代理（直连）
     endpoint_type: str = "auto"  # 端点协议类型: auto|openai|gemini|qwen|agnes|volc_ark_plan|volc_ark
     extra: Dict[str, Any] = {} # 扩展参数
 
     def get_effective_keys(self) -> List[str]:
         """获取有效的 API Key 列表（api_keys 优先，fallback 到 api_key）"""
-        keys = [k for k in (self.api_keys or []) if k and k.strip()]
-        if not keys and self.api_key and self.api_key.strip():
+        keys = [k for k in (self.api_keys or []) if k and k.strip() and not _is_masked_secret(k)]
+        if not keys and self.api_key and self.api_key.strip() and not _is_masked_secret(self.api_key):
             keys = [self.api_key.strip()]
         return keys
 
     def get_active_endpoints(self) -> List[EndpointConfig]:
         """获取启用的端点列表；如果没有端点则从 base_url+api_key 构造一个"""
-        active = [ep for ep in (self.endpoints or []) if ep.enabled and ep.url and ep.key]
+        active = [
+            ep for ep in (self.endpoints or [])
+            if ep.enabled and ep.url and ep.key and not _is_masked_secret(ep.key)
+        ]
         if active:
             return active
-        if self.base_url and (self.api_key or self.get_effective_keys()):
-            key = self.api_key or (self.get_effective_keys()[0] if self.get_effective_keys() else "")
+        effective_keys = self.get_effective_keys()
+        if self.base_url and effective_keys:
+            key = effective_keys[0] if effective_keys else self.api_key
             return [EndpointConfig(url=self.base_url, key=key)]
         return []
 

@@ -42,15 +42,17 @@ Tailscale 官方客户端或浏览器完成，GenBox 不接触 Tailnet 账号密
 `tailscale serve --bg --http=8893 http://127.0.0.1:8892`；正式交付使用
 `tailscale serve --bg --http=8892 http://127.0.0.1:8891`。入口端口与上游应用端口必须
 分别配置和验证。当前 GenBox 进程实际绑定 `0.0.0.0:8891`；后续可以在不影响本地使用
-和容器部署的前提下评估是否收紧监听范围。当前 Tailscale Serve 配置与状态检测仍把入口
-和上游视为同一端口，必须按当前环境验证对应映射后才能完成真实链路
-验收。
+和容器部署的前提下评估是否收紧监听范围。Tailscale Serve 的 HTTP 入口使用本机经过
+验证的 MagicDNS 名称；`100.x` 地址只用于设备身份与连通性检查，不能替代最终 HTTP
+目标。禁止在 MagicDNS 失败时静默保存原始 IP URL。
 
 VPS 注册后，任务必须同时通过以下检查才标记成功：
 
 - 本机 `tailscale ping` 可到达 VPS 的 `100.x.x.x` 地址。
-- VPS 可通过本机 Tailscale 地址访问 GenBox。
-- 最终生成的 chatgpt2api GenBox URL 使用 Tailscale 地址而非公网地址或 `127.0.0.1`。
+- VPS 可解析本机 MagicDNS 名称，并通过 Serve 入口访问 GenBox 的
+  `/api/setup/status`。
+- 最终生成的 chatgpt2api GenBox URL 使用经过验证的 `.ts.net` MagicDNS 名称，而非
+  原始 `100.x` 地址、公网地址或 `127.0.0.1`。
 
 每一步都由服务端返回阶段、百分比、日志（已脱敏）和恢复动作。刷新页面后通过
 任务 ID 查询状态；中断任务必须标记为“需要处理”，不能假装仍在运行。
@@ -127,7 +129,7 @@ VPS 注册后，任务必须同时通过以下检查才标记成功：
 
 ### Phase A：扩展页与 SSH 编排基础
 
-- GenBox `扩展功能` 页面和 5 步状态机
+- GenBox `扩展功能` 页面、个人服务器部署入口和后续部署状态机
 - 目标存储、任务进度、取消/重试
 - SSH 主机指纹、固定部署清单、Docker 健康检查
 - 不接入生产 VPS 自动切换
@@ -169,3 +171,31 @@ The wizard keeps one active primary network. Successfully verified providers are
 remembered as available networks so a later phase can add one-click switching and
 recovery. Switching must re-run endpoint and HTTP checks before replacing the
 stored Push URL.
+
+### Trusted SSH-Session Pairing (Current SSH Compatibility Path)
+
+The personal-server onboarding keeps server details, host identity, and session
+credentials in separate views. When the user selects the currently available
+SSH path, a saved target without a trusted identity enters a dedicated
+confirmation view with no credential fields. A user who already trusts an SSH
+terminal session may run the GenBox-generated fixed one-line helper there and
+paste its one-line response into GenBox. The normal UI reports success plainly;
+the technical identity belongs in advanced details.
+
+The protocol uses a short-lived, single-use, in-memory challenge bound to the
+saved target identity version and candidate host-key pair. Completion re-probes
+and rejects mismatch, expiry, replay, target edits, unsupported algorithms,
+malformed responses, and conflicts with saved trust records. Start and
+completion accept no SSH credential and cause no GenBox remote command. The
+helper is backend-owned and fixed/versioned; the browser never supplies shell.
+
+An existing terminal session or known-host record is a user-supplied external
+trust anchor, not VPS ownership evidence and not a password or key substitute.
+The canonical trust pair is the only permitted saved outcome. Transient
+challenge, helper, and response material must not appear in public task,
+status, instance, or diagnostic projections; durable target, TaskStore, or
+runtime records; ordinary logs; browser storage; screenshots, URLs, or Git.
+Cancellation saves nothing. Users without an OpenSSH-compatible readable trusted
+session, including custom host-key paths, fall back to provider-console,
+known-host, or manual advanced verification.
+Provider-account verification is out of scope.

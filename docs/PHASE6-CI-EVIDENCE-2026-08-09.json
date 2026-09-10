@@ -1,0 +1,46 @@
+{
+  "date": "2026-08-09",
+  "scope": "non-destructive exact-SHA CI convergence",
+  "genbox": {
+    "baseline_sha": "5a0f42dd155e377a4a2cab0c42057cde6ee4bede",
+    "local_head": "83f04181ec9c9ae768129a5ebb4c7abadab6035e",
+    "focused_tests": {"passed": 65, "skipped": 0},
+    "full_tests": {"passed": 611, "skipped": 0},
+    "browser_tests": {"passed": 8, "skipped": 0},
+    "docker_runtime": "PASS",
+    "packaged_smoke": "PASS",
+    "hosted_ci": {
+      "run_id": 31300431651,
+      "sha": "79038f298c1f3e94f3bc8015146a2cefbff8fbad",
+      "status": "FAIL",
+      "reason": "Playwright missing during browser-test collection"
+    },
+    "post_fix_sha": "05c7f3b7d978136005a8bc7031f763efae9feab9",
+    "post_fix_hosted_ci": "UNVERIFIED_PUSH_TLS_FAILURE"
+  },
+  "sender": {
+    "baseline_sha": "19c2fdbb23a97c713b53955942d325fb725708d1",
+    "local_head": "19c2fdbb23a97c713b53955942d325fb725708d1",
+    "full_tests": {"passed": 168, "skipped": 18, "subtests": 249},
+    "focused_tests": {"passed": 127, "skipped": 7, "subtests": 20},
+    "docker_runtime": "PASS",
+    "hosted_ci": "UNVERIFIED_WORKFLOW_NOT_ON_DEFAULT_BRANCH"
+  },
+  "security": {
+    "cleanup": "fail-closed; not executed",
+    "unlink": "not executed",
+    "execute_marker": "not created",
+    "vps_or_production": "not contacted",
+    "leak_scan": "no actual secret; sender placeholder only"
+  },
+  "external_gates": [
+    "exact-SHA post-fix hosted CI and macOS",
+    "isolated VPS authority",
+    "real cleanup approval",
+    "human UAT",
+    "clean redeployment",
+    "Phase 7",
+    "G-Store executable adapters",
+    "Release/tag/RC"
+  ]
+}

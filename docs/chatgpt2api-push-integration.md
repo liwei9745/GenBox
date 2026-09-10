@@ -16,21 +16,40 @@ GenBox 保留现有“本地主动拉取”模式作为无入站网络条件下�
 - Header `X-GenBox-Key`: 与来源身份绑定的独立 API Key
 - File `image`: 图片二进制，默认最大 25 MiB
 - Form `remote_path`: chatgpt2api 中的稳定相对路径，必填
+- Form `source_sha256`: 发送端预计算的图片 SHA-256，可选；提供时必须与上传字节匹配
 - Form `created_at`, `prompt`, `model`: 可选元数据
 
-GenBox 通过 `GENBOX_PUSH_KEYS` 配置来源身份：
+GenBox continues to support the legacy `GENBOX_PUSH_KEYS` environment mapping
+for pre-existing or externally managed source IDs:
 
 ```env
 GENBOX_PUSH_KEYS={"chatgpt2api-vps":"replace-with-a-long-random-key"}
 ```
 
-该路径不接受或要求 `X-Admin-Key`。专用来源密钥泄漏时可以只吊销一个 VPS，
-而不影响 GenBox 管理员会话。
+For a GenBox-managed isolated chatgpt2api instance, the Extensions final step
+can instead provision one random source ID and Push key. The raw key is returned
+only at creation or rotation; GenBox persists only a PBKDF2-HMAC-SHA256
+verifier. A revoked managed source remains a tombstone and must not fall back to
+a matching legacy environment value. This path does not accept or require
+`X-Admin-Key`. A source-key leak can therefore be revoked without rotating the
+GenBox administrator key.
 
-当前成功响应包含 `sha256`、`local_file` 和
-`safe_to_delete_source=true`。该字段只表示 GenBox 已安全提交本次内容，不表示发送端
-应默认删除源文件；发送端仍必须检查用户独立 opt-in、回执哈希和源文件当前哈希。相同
-`source_id + remote_path + sha256` 重试会返回 `already-imported`，不会重复落库。
+当前成功响应包含 `contract_version="v1"`、`sha256`、`local_file` 和
+`safe_to_delete_source`。该字段表示 GenBox 是否在本回执授予源文件删除资格，默认
+为 `false`：普通成功或幂等重放都不会自行授予删除权限。只有满足以下全部条件时才
+为 `true`：
+
+- 该 `X-GenBox-Source` 是在 GenBox 扩展中心创建的受管 Push 来源，且其所有者已在
+  Push 来源设置中显式开启「允许授权删除源图」（默认关闭）；
+- 本次请求提交的正是该来源这条路径与内容（`imported` 或 `already-imported`）；
+- 从其它路径撞库的 `duplicate-local`、任何回执/哈希不匹配都不会授予删除。
+
+发送端仍必须检查用户独立 opt-in、回执哈希和源文件当前哈希；`true` 不等于默认删除
+源文件。相同 `source_id + remote_path + sha256` 重试会返回 `already-imported`，
+不会重复落库。发送端可先调用带同样认证 Header 的 `GET /api/sync/push/status`，
+获得 v1 协议版本和当前运行进程的图片字节上限；预检或推送失败时必须保留源文件。
+若提供的 `source_sha256` 格式错误或与图片不匹配，GenBox 会在写入任何接收端状态
+前返回 422。
 
 ## chatgpt2api 侧设计
 

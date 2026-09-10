@@ -229,12 +229,13 @@ window.openLightboxFromGallery = function(itemId) {
       break;
     }
   }
-  if (!item) { console.error('[Gallery] \u672A\u627E\u5230\u56FE\u7247\u6570\u636E itemId:', itemId); alert('\u65E0\u6CD5\u6253\u5F00\u56FE\u7247\uFF1A\u672A\u627E\u5230\u6570\u636E'); return; }
-  if (!item.local_path) { console.error('[Gallery] local_path \u4E3A\u7A7A:', item); alert('\u65E0\u6CD5\u6253\u5F00\u56FE\u7247\uFF1A\u8DEF\u5F84\u65E0\u6548'); return; }
+  if (!item) { console.error('[Gallery] item_not_found'); alert('\u65E0\u6CD5\u6253\u5F00\u56FE\u7247\uFF1A\u672A\u627E\u5230\u6570\u636E'); return; }
+  if (!item.local_path) { console.error('[Gallery] invalid_local_path'); alert('\u65E0\u6CD5\u6253\u5F00\u56FE\u7247\uFF1A\u8DEF\u5F84\u65E0\u6548'); return; }
   var f = item.local_path.split(/[\\/]/).pop();
   var pInfo = window.findProvider(item.model) || {name: item.model, color: '#5b8def'};
   var src = '/api/gallery/image/' + encodeURIComponent(f);
   var prompt = item.prompt || '';
+  console.log('[Gallery] lightbox_opened');
   window.openLightbox(src, pInfo.name, prompt);
 };
 

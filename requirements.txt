@@ -1,4 +1,6 @@
 # Runtime dependencies. Build and test tools live in separate requirement files.
+-r requirements-cutout.txt
+
 fastapi==0.139.0
 uvicorn[standard]==0.51.0
 python-multipart==0.0.32
@@ -7,6 +9,7 @@ httpx==0.28.1
 aiofiles==25.1.0
 requests==2.34.2
 asyncssh==2.24.0
+bcrypt==5.0.0
 
 pillow==12.3.0
 cryptography==49.0.0

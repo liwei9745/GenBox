@@ -45,6 +45,7 @@
     "common.delete_icon":{"zh-CN":"🗑 删除","en":"🗑 Delete"},
     "common.download_original":{"zh-CN":"⬇ 下载原图","en":"⬇ Download original"},
     "common.image_to_image":{"zh-CN":"🎯 图生图","en":"🎯 Image to image"},
+    "common.precision_edit":{"zh-CN":"🎯 精准改图","en":"🎯 Precise image edit"},
     "common.create_video":{"zh-CN":"🎬 生视频","en":"🎬 Create video"},
     "common.insert":{"zh-CN":"📥 插入","en":"📥 Insert"},
     "common.search_prompt":{"zh-CN":"搜索提示词..","en":"Search prompts..."},
@@ -83,7 +84,6 @@
     "update.ignore":{"zh-CN":"忽略此版本","en":"Ignore this version"},
     "update.later":{"zh-CN":"稍后","en":"Later"},
     "update.download":{"zh-CN":"前往下载","en":"Go to download"},
-    "update.apply":{"zh-CN":"立即更新","en":"Update now"},
     "update.checking":{"zh-CN":"检查更新...","en":"Checking for updates..."},
     "update.open_status":{"zh-CN":"点击查看更新状态","en":"View update status"},
     "auth.required":{"zh-CN":"需要认证","en":"Authentication required"},
@@ -122,6 +122,7 @@
     "creator.quality":{"zh-CN":"质量","en":"Quality"},
     "creator.size":{"zh-CN":"尺寸","en":"Size"},
     "creator.aspect_ratio":{"zh-CN":"宽高比","en":"Aspect ratio"},
+    "creator.exact_ratio_crop":{"zh-CN":"精确裁切到所选比例（可能裁掉画面边缘，默认关闭）","en":"Crop exactly to the selected ratio (may trim edges; off by default)"},
     "creator.quantity":{"zh-CN":"生成数量","en":"Quantity"},
     "creator.save_settings":{"zh-CN":"💾 保存设置","en":"💾 Save settings"},
     "creator.strength":{"zh-CN":"变换强度","en":"Variation strength"},
@@ -134,7 +135,91 @@
     "creator.t2i":{"zh-CN":"📝 文生图","en":"📝 Text to image"},
     "creator.i2i":{"zh-CN":"🖼 图生图","en":"🖼 Image to image"},
     "creator.variation":{"zh-CN":"🔄 变形","en":"🔄 Variation"},
+    "creator.inpaint":{"zh-CN":"🖌 局部重绘","en":"🖌 Inpaint"},
+    "creator.codex_edit":{"zh-CN":"🪄 Codex 改图","en":"🪄 Codex Image Edit"},
+    "creator.codex_edit_hint":{"zh-CN":"上传一张或多张参考图，描述你想怎么改，GenBox 会通过当前图片编辑模型生成新图。原图会保留。","en":"Upload one or more reference images and describe the changes. GenBox uses the selected image-editing model and keeps the originals."},
+    "creator.precision_edit":{"zh-CN":"🎯 精准改图","en":"🎯 Precise Image Edit"},
+    "creator.precision_edit_hint":{"zh-CN":"上传图片，标出要改哪里，再写清楚怎么改。","en":"Upload an image, mark where to edit, then describe the change."},
+    "creator.precision_edit_canvas_hint":{"zh-CN":"上传图片，用箭头、矩形或文字指出要改哪里，再写清楚怎么改。","en":"Upload an image, use arrows, rectangles, or text to mark the area, then describe the change."},
+    "creator.precision_edit_empty":{"zh-CN":"从文生图结果的灯箱点击“精准改图”，即可开始批注。","en":"Open a text-to-image result in the lightbox and choose Precise Image Edit to start annotating."},
+    "creator.precision_edit_canvas_label":{"zh-CN":"精准改图批注画布","en":"Precise image edit annotation canvas"},
+    "creator.precision_edit_title":{"zh-CN":"🎯 精准改图","en":"🎯 Precise Image Edit"},
+    "creator.precision_edit_annotation_badge":{"zh-CN":"批注式改图","en":"Annotation edit"},
+    "creator.precision_edit_canvas":{"zh-CN":"批注画布","en":"Annotation canvas"},
+    "creator.precision_edit_choose_image":{"zh-CN":"选择原图","en":"Choose image"},
+    "creator.precision_edit_local_upload":{"zh-CN":"本地上传","en":"Upload from device"},
+    "creator.precision_edit_from_gallery":{"zh-CN":"从图库选择","en":"Choose from library"},
+    "creator.precision_edit_loading_gallery":{"zh-CN":"正在加载图库图片...","en":"Loading library images..."},
+    "creator.precision_edit_gallery_empty":{"zh-CN":"图库中暂无可用图片。","en":"No images are available in the library."},
+    "creator.precision_edit_gallery_loaded":{"zh-CN":"已从图库载入图片，可以开始批注。","en":"Image loaded from the library. You can start annotating."},
+    "creator.precision_edit_text_placeholder":{"zh-CN":"输入批注文字","en":"Enter annotation text"},
+    "creator.precision_edit_upload":{"zh-CN":"选择一张要修改的图片","en":"Choose an image to edit"},
+    "creator.precision_edit_upload_hint":{"zh-CN":"也可以从文生图结果直接发送到这里","en":"You can also send an image here from a generated result"},
+    "creator.precision_edit_toolbar":{"zh-CN":"精准改图批注工具","en":"Precise edit annotation tools"},
+    "creator.precision_edit_select":{"zh-CN":"选择","en":"Select"},
+    "creator.precision_edit_arrow":{"zh-CN":"箭头","en":"Arrow"},
+    "creator.precision_edit_rectangle":{"zh-CN":"矩形","en":"Rectangle"},
+    "creator.precision_edit_text":{"zh-CN":"文字","en":"Text"},
+    "creator.precision_edit_color":{"zh-CN":"批注颜色","en":"Annotation color"},
+    "creator.precision_edit_color_short":{"zh-CN":"颜色","en":"Color"},
+    "creator.precision_edit_stroke":{"zh-CN":"线宽","en":"Line width"},
+    "creator.precision_edit_undo":{"zh-CN":"撤销","en":"Undo"},
+    "creator.precision_edit_redo":{"zh-CN":"重做","en":"Redo"},
+    "creator.precision_edit_annotations":{"zh-CN":"显示批注","en":"Show annotations"},
+    "creator.precision_edit_clear":{"zh-CN":"清除批注","en":"Clear annotations"},
+    "creator.precision_edit_instruction":{"zh-CN":"修改说明","en":"Edit instruction"},
+    "creator.precision_edit_instruction_placeholder":{"zh-CN":"例如：把箭头指向的杯子改成透明玻璃杯，其他内容保持不变。","en":"For example: replace the cup indicated by the arrow with a clear glass cup and keep everything else unchanged."},
+    "creator.precision_edit_guidance":{"zh-CN":"批注负责指出位置，修改说明负责告诉模型怎么改；未标注区域应尽量保持不变。","en":"Annotations identify the location; the instruction explains the change. Unmarked areas should remain unchanged where possible."},
+    "creator.precision_guidance_title":{"zh-CN":"改图策略","en":"Edit controls"},
+    "creator.precision_guidance_hint":{"zh-CN":"策略影响模型处理重点；局部选区是模型指导，不是已验证的像素遮罩。","en":"The strategy changes the model's focus. A local selection is model guidance, not a verified pixel mask."},
+    "creator.precision_strategy":{"zh-CN":"处理策略","en":"Processing strategy"},
+    "creator.precision_strategy_fine":{"zh-CN":"精细","en":"Fine"},
+    "creator.precision_strategy_standard":{"zh-CN":"标准","en":"Standard"},
+    "creator.precision_strategy_fast":{"zh-CN":"快速","en":"Fast"},
+    "creator.precision_selection_mode":{"zh-CN":"选区语义","en":"Selection meaning"},
+    "creator.precision_selection_annotation":{"zh-CN":"批注编辑","en":"Annotation edit"},
+    "creator.precision_selection_local":{"zh-CN":"局部选区","en":"Local selection"},
+    "creator.precision_selection_annotation_hint":{"zh-CN":"批注编辑：先用画笔、矩形或椭圆标出位置，再填写对应的修改说明。","en":"Annotation edit: mark a location with the brush, rectangle, or ellipse, then enter its change instruction."},
+    "creator.precision_selection_local_hint":{"zh-CN":"局部选区：先选画笔、矩形或椭圆，再在画布上圈出一个或多个区域。","en":"Local selection: choose the brush, rectangle, or ellipse, then draw one or more regions on the canvas."},
+    "creator.precision_selection_feather":{"zh-CN":"选区羽化","en":"Selection feather"},
+    "creator.precision_selection_local_required":{"zh-CN":"局部选区模式需要至少一个矩形、椭圆或画笔选区。","en":"Local selection mode needs at least one rectangle, ellipse, or brush selection."},
+    "creator.precision_selection_feather_hint":{"zh-CN":"羽化只作为局部选区边缘的模型指导，范围为 0 到 64px。","en":"Feather guides the local selection edge only and is limited to 0–64px."},
+    "creator.precision_edit_annotation_preview":{"zh-CN":"批注图预览","en":"Annotated image preview"},
+    "creator.precision_edit_preview_empty":{"zh-CN":"添加批注后，这里会显示提交给模型的批注图。","en":"The annotated image sent to the model will appear here after you add annotations."},
+    "creator.precision_edit_model_notice":{"zh-CN":"需要支持图片编辑和参考图理解的模型","en":"Requires a model that supports image editing and reference-image understanding"},
+    "creator.precision_edit_model_hint":{"zh-CN":"这里只显示已确认支持图片编辑的模型；自定义模型需要手动确认一次。","en":"Only confirmed image-editing models are shown. Custom models require one manual confirmation."},
+    "creator.precision_edit_model_select":{"zh-CN":"编辑模型","en":"Editing model"},
+    "creator.precision_edit_no_model":{"zh-CN":"暂无已验证的精准改图模型","en":"No verified precise-edit model available"},
+    "creator.precision_edit_no_endpoint":{"zh-CN":"暂无可用端点","en":"No available endpoint"},
+    "creator.precision_edit_endpoint_select":{"zh-CN":"模型端点","en":"Model endpoint"},
+    "creator.precision_edit_authorize":{"zh-CN":"确认支持并启用","en":"Confirm support and enable"},
+    "creator.precision_edit_authorize_hint":{"zh-CN":"仅在你确认该端点和模型支持 OpenAI 兼容图片编辑时启用。","en":"Enable only after confirming this endpoint and model support OpenAI-compatible image editing."},
+    "creator.precision_edit_authorize_confirm":{"zh-CN":"我确认已验证该端点和模型支持 OpenAI 兼容图片编辑。启用后仍会在提交时校验。","en":"I confirm this endpoint and model support OpenAI-compatible image editing. Submission remains validated."},
+    "creator.precision_edit_authorize_saved":{"zh-CN":"已保存用户确认，可以提交精准改图。","en":"User confirmation saved. Precise edit can now be submitted."},
+    "creator.precision_edit_compatibility_label":{"zh-CN":"按 GPT Image 2 精准改图方式调用","en":"Use the GPT Image 2 precision-edit contract"},
+    "creator.precision_edit_compatibility_help_label":{"zh-CN":"查看兼容方式说明","en":"View compatibility guidance"},
+    "creator.precision_edit_compatibility_help":{"zh-CN":"仅在你已验证当前模型是 GPT Image 2 的上游别名时选择；真实模型 ID 仍会原样提交。","en":"Select only after verifying that this model is an upstream alias of GPT Image 2. The real model ID is still submitted unchanged."},
+    "creator.precision_edit_compatibility_confirm":{"zh-CN":"我确认当前模型是 GPT Image 2 的上游别名，并同意保存兼容映射、继承已确认尺寸及单源图片调用合约。继续吗？","en":"I confirm this model is an upstream GPT Image 2 alias and agree to save the compatibility mapping, confirmed sizes, and single-source image contract. Continue?"},
+    "creator.precision_edit_revoke":{"zh-CN":"撤销确认","en":"Revoke confirmation"},
+    "creator.precision_edit_revoke_confirm":{"zh-CN":"撤销当前模型的精准改图确认和兼容映射？撤销后将不能提交，直到再次确认。","en":"Revoke this model's precision-edit confirmation and compatibility mapping? Submission will be blocked until it is confirmed again."},
+    "creator.precision_edit_revoked":{"zh-CN":"已撤销当前模型的精准改图确认。","en":"Precision-edit confirmation revoked for the current model."},
+    "creator.precision_edit_authorized":{"zh-CN":"已启用","en":"Enabled"},
+    "creator.precision_edit_unconfirmed":{"zh-CN":"待确认","en":"Unconfirmed"},
+    "creator.precision_edit_tools":{"zh-CN":"批注工具","en":"Annotation tools"},
+    "creator.precision_tool_select":{"zh-CN":"选择","en":"Select"},
+    "creator.precision_tool_arrow":{"zh-CN":"箭头","en":"Arrow"},
+    "creator.precision_tool_rect":{"zh-CN":"矩形","en":"Rectangle"},
+    "creator.precision_tool_text":{"zh-CN":"文字","en":"Text"},
+    "creator.precision_annotations_visible":{"zh-CN":"显示批注","en":"Show annotations"},
+    "creator.precision_clear":{"zh-CN":"清除全部批注","en":"Clear all annotations"},
+    "creator.precision_edit_prompt":{"zh-CN":"修改说明","en":"Edit instruction"},
+    "creator.precision_edit_prompt_placeholder":{"zh-CN":"结合批注，描述希望如何修改...","en":"Describe the requested change together with the annotations..."},
+    "creator.precision_text_prompt":{"zh-CN":"输入这条批注的内容","en":"Enter this annotation"},
+    "creator.precision_source_required":{"zh-CN":"请先从文生图结果的灯箱发送一张图片。","en":"Send an image from a text-to-image result lightbox first."},
+    "creator.precision_annotation_required":{"zh-CN":"请至少添加一个箭头、矩形或文字批注，指出需要修改的位置。","en":"Add at least one arrow, rectangle, or text note to identify what should change."},
+    "creator.precision_ready":{"zh-CN":"批注已准备好。请选择支持图片编辑的模型后提交。","en":"Annotations are ready. Choose an image-editing model before submitting."},
     "creator.generate_image":{"zh-CN":"🚀 生成图片","en":"🚀 Generate image"},
+    "creator.stop_generation":{"zh-CN":"⏹ 停止生成","en":"⏹ Stop generation"},
     "creator.newbie_mode":{"zh-CN":"📝 新手模式","en":"📝 Beginner mode"},
     "creator.pro_mode":{"zh-CN":"🎯 专业模式","en":"🎯 Pro mode"},
     "creator.prompt_label":{"zh-CN":"提示词 Prompt","en":"Prompt"},
@@ -256,6 +341,10 @@
     "extensions.current_unsaved":{"zh-CN":"当前未保存","en":"Current target is not saved"},
     "extensions.new_vps":{"zh-CN":"新增 VPS","en":"New VPS"},
     "extensions.name":{"zh-CN":"名称","en":"Name"},
+    "extensions.target_role":{"zh-CN":"这台服务器的用途","en":"Server purpose"},
+    "extensions.target_role_isolated":{"zh-CN":"隔离开发机（推荐）","en":"Isolated development (recommended)"},
+    "extensions.target_role_production":{"zh-CN":"生产机，只读检查","en":"Production, read-only checks"},
+    "extensions.target_role_help":{"zh-CN":"请按服务器实际用途选择。生产机只允许读取检查，不会用于部署。","en":"Choose the real purpose. Production targets allow read-only checks and cannot be deployed to."},
     "extensions.host":{"zh-CN":"IP 地址或域名","en":"IP address or hostname"},
     "extensions.ssh_port":{"zh-CN":"SSH 端口","en":"SSH port"},
     "extensions.ssh_username":{"zh-CN":"SSH 用户名","en":"SSH username"},
@@ -263,8 +352,13 @@
     "extensions.password":{"zh-CN":"密码","en":"Password"},
     "extensions.private_key":{"zh-CN":"SSH 私钥","en":"SSH private key"},
     "extensions.ssh_password":{"zh-CN":"SSH 密码","en":"SSH password"},
-    "extensions.sudo_password":{"zh-CN":"sudo 密码（留空则复用 SSH 密码）","en":"sudo password (leave blank to reuse the SSH password)"},
-    "extensions.sudo_placeholder":{"zh-CN":"仅非 root 且需要提权时使用","en":"Only needed for a non-root user that requires elevation"},
+    "extensions.sudo_password":{"zh-CN":"sudo 密码（默认不复用 SSH 密码）","en":"sudo password (SSH password reuse is off by default)"},
+    "extensions.sudo_placeholder":{"zh-CN":"仅密码 sudo 时使用","en":"Use only with password sudo"},
+    "extensions.elevation_mode":{"zh-CN":"提权方式","en":"Elevation mode"},
+    "extensions.elevation_none":{"zh-CN":"不使用 sudo","en":"No sudo"},
+    "extensions.elevation_passwordless":{"zh-CN":"免密 sudo","en":"Passwordless sudo"},
+    "extensions.elevation_password":{"zh-CN":"密码 sudo","en":"Password sudo"},
+    "extensions.reuse_ssh_password":{"zh-CN":"本次请求显式使用 SSH 密码作为 sudo 密码","en":"Explicitly reuse the SSH password for sudo in this request"},
     "extensions.test_connection":{"zh-CN":"测试连接","en":"Test connection"},
     "extensions.deploy_chatgpt2api":{"zh-CN":"部署 chatgpt2api","en":"Deploy chatgpt2api"},
     "extensions.choose_deploy_targets":{"zh-CN":"选择本次部署的 VPS","en":"Choose VPS deployment targets"},
@@ -273,6 +367,32 @@
     "extensions.no_server_selected":{"zh-CN":"尚未选择服务器","en":"No servers selected"},
     "extensions.catalog":{"zh-CN":"应用目录","en":"Service catalog"},
     "extensions.catalog_hint":{"zh-CN":"当前仅 chatgpt2api 可部署，其余模板为规划占位","en":"Only chatgpt2api is deployable. Other templates are planning placeholders."},
+    "extensions.store_kicker":{"zh-CN":"GENBOX STORE","en":"GENBOX STORE"},
+    "extensions.store_title":{"zh-CN":"扩展商店","en":"Extension Store"},
+    "extensions.store_help":{"zh-CN":"只读目录视图；可执行动作由后端能力决定。","en":"Read-only catalog views; executable actions come from backend capabilities."},
+    "extensions.store_views_label":{"zh-CN":"扩展商店视图","en":"Extension Store views"},
+    "extensions.store_installed":{"zh-CN":"已安装","en":"Installed"},
+    "extensions.store_recommended":{"zh-CN":"推荐","en":"Recommended"},
+    "extensions.store_deploy":{"zh-CN":"部署","en":"Deploy"},
+    "extensions.store_external":{"zh-CN":"外部实例，仅查看","en":"External instance, read-only"},
+    "extensions.store_empty":{"zh-CN":"暂无已安装扩展。","en":"No installed extensions."},
+    "extensions.store_unknown_environment":{"zh-CN":"环境事实尚未验证，暂不提供推荐。","en":"Verified environment facts are unavailable, so recommendations are withheld."},
+    "extensions.store_load_failed":{"zh-CN":"商店暂时无法加载。","en":"The Store is temporarily unavailable."},
+    "extensions.store_managed":{"zh-CN":"受管实例","en":"Managed instance"},
+    "extensions.store_status_available":{"zh-CN":"可用","en":"Available"},
+    "extensions.store_status_planned":{"zh-CN":"规划中","en":"Planned"},
+    "extensions.store_status_repository_unverified":{"zh-CN":"仓库未验证","en":"Repository unverified"},
+    "extensions.store_status_unknown":{"zh-CN":"状态未知","en":"Unknown status"},
+    "extensions.store_planned_reason":{"zh-CN":"规划中：仅为目录条目，当前环境不可安装或执行。","en":"Planned: catalog-only entry; not installable or executable in this environment."},
+    "extensions.store_unverified_reason":{"zh-CN":"来源仓库尚未验证，执行能力被禁用。","en":"Repository source is unverified; execution is withheld."},
+    "extensions.store_unknown_reason":{"zh-CN":"条目状态未知，仅展示目录信息。","en":"Status unknown; informational catalog entry only."},
+    "extensions.store_unknown_value":{"zh-CN":"未知","en":"Unknown"},
+    "extensions.store_no_actions":{"zh-CN":"无可用操作","en":"No actions available"},
+    "extensions.store_readonly_hint":{"zh-CN":"只读，无管理操作","en":"Read-only, no management actions"},
+    "extensions.store_confidence":{"zh-CN":"置信度","en":"Confidence"},
+    "extensions.store_reasons_label":{"zh-CN":"推荐原因","en":"Why recommended"},
+    "extensions.store_unknown_facts_label":{"zh-CN":"未验证的环境事实","en":"Unknown environment facts"},
+    "extensions.store_all_empty":{"zh-CN":"目录当前为空。","en":"The catalog is currently empty."},
     "extensions.discover_first":{"zh-CN":"先检测，再决定","en":"Discover before deciding"},
     "extensions.readonly_hint":{"zh-CN":"仅执行只读命令，不修改已有服务","en":"Runs read-only commands and does not modify existing services"},
     "extensions.discover":{"zh-CN":"检测 VPS 环境","en":"Discover VPS environment"},
@@ -285,8 +405,8 @@
     "extensions.intent_production":{"zh-CN":"首次部署正式服务","en":"Deploy a new production service"},
     "extensions.intent_production_hint":{"zh-CN":"推荐新建生产实例","en":"Create a new production instance"},
     "extensions.strategy":{"zh-CN":"实例策略","en":"Instance strategy"},
-    "extensions.strategy_existing":{"zh-CN":"接入已有实例","en":"Connect an existing instance"},
-    "extensions.strategy_existing_hint":{"zh-CN":"不重建、不迁移数据，适合已有健康服务","en":"No rebuild or data migration. Use for an existing healthy service."},
+    "extensions.strategy_existing":{"zh-CN":"确认并在 GenBox 本地登记","en":"Confirm and register locally in GenBox"},
+    "extensions.strategy_existing_hint":{"zh-CN":"远程实例保持不变；GenBox 会在本地登记容器、状态、数据目录和所有权","en":"The remote instance stays unchanged; GenBox records its container, status, data directory, and ownership locally."},
     "extensions.strategy_isolated":{"zh-CN":"创建隔离测试实例","en":"Create an isolated test instance"},
     "extensions.strategy_isolated_hint":{"zh-CN":"独立端口、目录和 Compose 项目，推荐开发验收","en":"Uses a separate port, directory, and Compose project. Recommended for development acceptance."},
     "extensions.strategy_new":{"zh-CN":"新建生产实例","en":"Create a production instance"},
@@ -321,9 +441,9 @@
     "extensions.remote_server":{"zh-CN":"远程服务器","en":"Remote server"},
     "extensions.vps_endpoint":{"zh-CN":"VPS 端","en":"VPS endpoint"},
     "extensions.waiting_configuration":{"zh-CN":"等待配置","en":"Waiting for configuration"},
-    "extensions.remote_auto_hint":{"zh-CN":"GenBox 会通过已确认的 SSH 连接自动安装并加入同一个网络。","en":"GenBox will use the verified SSH connection to install the tool and join the same network."},
+    "extensions.remote_auto_hint":{"zh-CN":"GenBox 会先检查 VPS，再按真实状态安装、启动或加入网络，不会重复处理已经完成的步骤。","en":"GenBox checks the VPS first, then installs, starts, or enrolls only what is actually missing."},
     "extensions.operation_mode":{"zh-CN":"处理方式","en":"Operation mode"},
-    "extensions.auto_connect":{"zh-CN":"自动安装并连接","en":"Install and connect automatically"},
+    "extensions.auto_connect":{"zh-CN":"自动检查、安装并加入","en":"Check, install, and join automatically"},
     "extensions.existing_connect":{"zh-CN":"已有工具，只连接和检测","en":"Tool already installed; connect and verify only"},
     "extensions.manual_later":{"zh-CN":"我手动配置，稍后检测（后续开放）","en":"I will configure it manually and verify later (coming later)"},
     "extensions.primary_network":{"zh-CN":"当前主链路","en":"Current primary network"},
@@ -343,15 +463,41 @@
     "extensions.open_tailscale_admin":{"zh-CN":"打开 Tailscale 管理控制台","en":"Open Tailscale admin console"},
     "extensions.choose_operation_first":{"zh-CN":"请先选择这次要执行的操作。","en":"Choose the operation to run first."},
     "extensions.operation_question":{"zh-CN":"这次要做什么？","en":"What should happen this time?"},
-    "extensions.first_connect":{"zh-CN":"首次安装并连接","en":"Install and connect for the first time"},
-    "extensions.first_connect_hint":{"zh-CN":"VPS 还没有加入私有网络，需要一次性 Auth Key。","en":"The VPS has not joined the private network and needs a one-time Auth Key."},
+    "extensions.first_connect":{"zh-CN":"自动准备 VPS","en":"Prepare the VPS automatically"},
+    "extensions.first_connect_hint":{"zh-CN":"系统先检测；缺什么才处理什么，不会重复安装。","en":"The system checks first and handles only what is missing, without reinstalling."},
     "extensions.recheck_existing":{"zh-CN":"已安装，重新检测连接","en":"Already installed; recheck the connection"},
     "extensions.recheck_existing_hint":{"zh-CN":"不重复安装，不需要 Auth Key，只检查互通和 GenBox 访问。","en":"Does not reinstall and needs no Auth Key. It only checks peer connectivity and GenBox access."},
     "extensions.key_page_link":{"zh-CN":"没有 Key？点击打开官方生成页面","en":"No Key? Open the official generation page"},
     "extensions.paste_prefix":{"zh-CN":"生成后，把以","en":"After generation, paste the value beginning with"},
     "extensions.paste_suffix":{"zh-CN":"开头的内容粘贴到下面。","en":"below."},
     "extensions.auth_key_label":{"zh-CN":"一次性 Auth Key","en":"One-time Auth Key"},
-    "extensions.auth_key_placeholder":{"zh-CN":"粘贴 tskey-auth-...","en":"Paste tskey-auth-..."},
+    "extensions.auth_key_placeholder":{"zh-CN":"粘贴一次性 Auth Key","en":"Paste a one-time Auth Key"},
+    "extensions.auth_key_ticket_title":{"zh-CN":"给 VPS 一张一次性入网票据","en":"Give the VPS a one-time network ticket"},
+    "extensions.auth_key_safe_help":{"zh-CN":"这不是账号密码。GenBox 只在本次任务中使用，任务创建后立即从页面清除，不写入浏览器存储、任务记录或日志。","en":"This is not your account password. GenBox uses it only for this task, clears it from the page after task creation, and never stores it in browser storage, task records, or logs."},
+    "extensions.auth_key_options_help":{"zh-CN":"建议：Reusable 关闭、Ephemeral 关闭；需要设备审批时开启 Pre-approved。","en":"Recommended: Reusable off, Ephemeral off, and Pre-approved on when device approval is enabled."},
+    "extensions.auth_key_required":{"zh-CN":"自动准备 VPS 需要粘贴一个新的一次性 Auth Key。","en":"Automatic VPS preparation needs a new one-time Auth Key."},
+    "extensions.enter_auth_key":{"zh-CN":"输入 Auth Key","en":"Enter Auth Key"},
+    "extensions.new_auth_key":{"zh-CN":"生成新的 Auth Key","en":"Generate a new Auth Key"},
+    "extensions.read_address_again":{"zh-CN":"重新读取地址","en":"Read the address again"},
+    "extensions.recheck_peer":{"zh-CN":"重新检测互通","en":"Recheck connectivity"},
+    "extensions.check_local_entry":{"zh-CN":"检查本机私网入口","en":"Check the local private entry"},
+    "extensions.manual_check_required":{"zh-CN":"查看人工处理说明","en":"View manual recovery guidance"},
+    "extensions.network_context_changed":{"zh-CN":"VPS 或 SSH 信息已变化，旧任务结果不会覆盖当前页面。请使用当前信息重新开始。","en":"The VPS or SSH details changed. The old task result will not overwrite this page. Start again with the current details."},
+    "extensions.network_waiting_user":{"zh-CN":"检测已完成，现在只等你做一件事。","en":"Detection is complete and is waiting for one action from you."},
+    "extensions.guide_step4_waiting_user":{"zh-CN":"系统已经检查清楚","en":"The check is complete"},
+    "extensions.guide_step4_action_ready":{"zh-CN":"现在只需要完成系统提示的这一项","en":"Complete the one action shown below"},
+    "extensions.network_recovery_os_unsupported":{"zh-CN":"这个系统暂不在自动安装支持范围内。现有服务没有被修改。","en":"This operating system is not supported for automatic installation. Existing services were not changed."},
+    "extensions.network_recovery_repository_conflict":{"zh-CN":"VPS 已有不同的软件源配置，GenBox 已停止并且没有覆盖它。","en":"The VPS already has a different repository configuration. GenBox stopped without overwriting it."},
+    "extensions.network_recovery_repository_setup":{"zh-CN":"SSH 正常，但官方 Tailscale 软件源没有准备完成。请检查 VPS 网络和 sudo 权限。","en":"SSH works, but the official Tailscale repository could not be prepared. Check VPS networking and sudo access."},
+    "extensions.network_recovery_install":{"zh-CN":"SSH 正常，但 Tailscale 软件包没有安装完成。现有应用服务没有被修改。","en":"SSH works, but the Tailscale package was not installed. Existing application services were not changed."},
+    "extensions.network_recovery_service":{"zh-CN":"Tailscale 已安装，但后台服务没有成功运行。","en":"Tailscale is installed, but its background service is not running."},
+    "extensions.network_recovery_auth_key":{"zh-CN":"现在只差一次性 Auth Key。这不是 SSH 密码错误。","en":"Only a one-time Auth Key is needed now. This is not an SSH password error."},
+    "extensions.network_recovery_auth_file":{"zh-CN":"GenBox 无法以安全权限创建一次性密钥文件，已停止加入网络。","en":"GenBox could not create the one-time key file with safe permissions, so enrollment stopped."},
+    "extensions.network_recovery_auth_rejected":{"zh-CN":"这个 Auth Key 可能已使用、过期，或不属于同一个 Tailnet。请生成一个新的。","en":"This Auth Key may be used, expired, or from a different Tailnet. Generate a new one."},
+    "extensions.network_recovery_auth_cleanup":{"zh-CN":"一次性密钥临时文件未确认删除。请立即按提示人工清理后再继续。","en":"Deletion of the temporary Auth Key file was not confirmed. Follow the cleanup guidance before continuing."},
+    "extensions.network_recovery_no_ipv4":{"zh-CN":"VPS 已加入 Tailnet，但私网地址仍在同步。稍后重新读取即可，不会重复安装。","en":"The VPS joined the Tailnet, but its private address is still syncing. Read it again later; installation will not repeat."},
+    "extensions.network_recovery_peer":{"zh-CN":"电脑和 VPS 都已加入私网，但目前不能互相访问。请在 Tailscale 控制台确认两台设备在线。","en":"The computer and VPS joined the private network but cannot reach each other. Confirm both devices are online in the Tailscale console."},
+    "extensions.network_recovery_genbox":{"zh-CN":"私网已经连通，但 VPS 打不开 GenBox。通常是本机私网入口未启用或端口不一致。","en":"The private network works, but the VPS cannot open GenBox. Usually the local private entry is disabled or the ports do not match."},
     "extensions.device_name":{"zh-CN":"设备名称","en":"Device name"},
     "extensions.management_url":{"zh-CN":"Management URL（自托管 NetBird 可选）","en":"Management URL (optional for self-hosted NetBird)"},
     "extensions.mobile_optional":{"zh-CN":"可选 · 手机也要访问 GenBox 时使用","en":"Optional · Use when a phone also needs GenBox access"},
@@ -377,6 +523,111 @@
     "extensions.console_url":{"zh-CN":"控制台地址","en":"Console URL"},
     "extensions.api_url":{"zh-CN":"API 地址","en":"API URL"},
     "extensions.admin_key":{"zh-CN":"管理密钥","en":"Management key"},
+    "extensions.console_login_kicker":{"zh-CN":"下一步","en":"Next step"},
+    "extensions.console_login_title":{"zh-CN":"登录 chatgpt2api 控制台","en":"Sign in to the chatgpt2api console"},
+    "extensions.console_login_help":{"zh-CN":"已将本次交付的管理密钥带入下方输入框。你也可以手动替换它；点击后会复制密钥并打开私网控制台。","en":"The management key delivered in this session is prefilled below. You can replace it manually; the action copies it and opens the private console."},
+    "extensions.console_login_key_placeholder":{"zh-CN":"粘贴或修改管理密钥","en":"Paste or replace management key"},
+    "extensions.use_delivered_admin_key":{"zh-CN":"使用本次交付的管理密钥","en":"Use the management key delivered in this session"},
+    "extensions.console_login_key_delivered":{"zh-CN":"已自动带入本次交付的管理密钥。","en":"The management key delivered in this session is prefilled."},
+    "extensions.console_login_key_manual":{"zh-CN":"将使用你手动输入的管理密钥。","en":"Your manually entered management key will be used."},
+    "extensions.console_login_key_missing":{"zh-CN":"请粘贴管理密钥，或在本次页面中使用已交付的密钥。","en":"Paste a management key, or use the one delivered on this page."},
+    "extensions.console_login_key_cleared":{"zh-CN":"密钥已复制并从当前页面清除。","en":"The key was copied and cleared from this page."},
+    "extensions.console_login_delivery_unavailable":{"zh-CN":"本次交付的管理密钥已不在页面中，请手动粘贴或重置此实例的管理密钥。","en":"The management key delivered in this session is no longer on this page. Paste it manually or reset this instance's management key."},
+    "extensions.open_console_only":{"zh-CN":"仅打开控制台","en":"Open console only"},
+    "extensions.copy_key_open_console":{"zh-CN":"复制密钥并打开控制台","en":"Copy key and open console"},
+    "extensions.console_login_url_required":{"zh-CN":"控制台地址尚未准备好，请从已部署服务中打开控制台。","en":"The console address is not ready. Open the console from Deployed Services."},
+    "extensions.console_login_key_required":{"zh-CN":"请先粘贴管理密钥。","en":"Paste the management key first."},
+    "extensions.console_login_opened":{"zh-CN":"已复制管理密钥并打开控制台，请在新页面粘贴登录。","en":"The management key was copied and the console opened. Paste it on the new page to sign in."},
+    "extensions.start_new_isolated":{"zh-CN":"新建隔离实例","en":"Create new isolated instance"},
+    "extensions.new_isolated_started":{"zh-CN":"已开始新的隔离部署准备；现有受管实例不会被修改。","en":"A new isolated deployment is ready to plan. The existing managed instance will not be changed."},
+    "extensions.push_source_kicker":{"zh-CN":"图片 Push 配置","en":"Image Push setup"},
+    "extensions.push_config_title":{"zh-CN":"GenBox Push 配置","en":"GenBox Push configuration"},
+    "extensions.push_config_instance":{"zh-CN":"当前实例：","en":"Current instance:"},
+    "extensions.push_source_title":{"zh-CN":"连接 chatgpt2api 与 GenBox","en":"Connect chatgpt2api to GenBox"},
+    "extensions.push_source_help":{"zh-CN":"为这个隔离实例创建独立的 GenBox Push 凭据。密钥只会在创建或轮换后显示一次。","en":"Create an independent GenBox Push credential for this isolated instance. The key is shown only after creation or rotation."},
+    "extensions.push_destination_url":{"zh-CN":"GenBox Push 地址","en":"GenBox Push URL"},
+    "extensions.push_source_id":{"zh-CN":"来源 ID","en":"Source ID"},
+    "extensions.push_key":{"zh-CN":"Push 密钥","en":"Push key"},
+    "extensions.push_key_hidden":{"zh-CN":"仅创建或轮换后显示","en":"Shown only after create or rotate"},
+    "extensions.push_create":{"zh-CN":"创建 Push 凭据","en":"Create Push credentials"},
+    "extensions.push_copy_configuration":{"zh-CN":"复制配置","en":"Copy configuration"},
+    "extensions.push_rotate":{"zh-CN":"轮换密钥","en":"Rotate key"},
+    "extensions.push_revoke":{"zh-CN":"撤销来源","en":"Revoke source"},
+    "extensions.push_source_not_configured":{"zh-CN":"尚未创建 Push 凭据。创建后，将把地址、来源 ID 和一次性密钥填入 chatgpt2api。","en":"Push credentials have not been created. Create them, then enter the URL, source ID, and one-time key in chatgpt2api."},
+    "extensions.push_source_ready":{"zh-CN":"Push 凭据已启用。密钥不会再次显示；需要更换时请轮换。","en":"Push credentials are enabled. The key will not be shown again; rotate it when replacement is needed."},
+    "extensions.push_source_created":{"zh-CN":"Push 凭据已创建。请立即复制配置到 chatgpt2api。","en":"Push credentials were created. Copy the configuration to chatgpt2api now."},
+    "extensions.push_source_rotated":{"zh-CN":"Push 密钥已轮换，旧密钥已失效。请立即复制新配置。","en":"The Push key was rotated and the old key is invalid. Copy the new configuration now."},
+    "extensions.push_rotated_save_pending":{"zh-CN":"Push 密钥已轮换，旧密钥已失效；本机加密保存尚未完成。请解锁凭证库后点击“保存到本机凭证库”重试。","en":"The Push key was rotated and the old key is invalid, but local vault saving is pending. Unlock the vault, then choose Save to local vault to retry."},
+    "extensions.push_source_revoked":{"zh-CN":"Push 来源已撤销，chatgpt2api 将无法继续推送。","en":"The Push source was revoked and chatgpt2api can no longer push."},
+    "extensions.push_source_handle_missing":{"zh-CN":"当前没有可配置的受管 chatgpt2api 实例。","en":"There is no managed chatgpt2api instance available to configure."},
+    "extensions.push_copy_required":{"zh-CN":"请先创建或轮换 Push 密钥。","en":"Create or rotate the Push key first."},
+    "extensions.push_configuration_copied":{"zh-CN":"Push 配置已复制。","en":"Push configuration copied."},
+    "extensions.push_save_locally":{"zh-CN":"加密保存这个新 Push 密钥到本机凭证库","en":"Save this new Push key in the encrypted local vault"},
+    "extensions.push_save_choice_title":{"zh-CN":"保存本机副本","en":"Save a local copy"},
+    "extensions.push_save_warning":{"zh-CN":"仅在本机凭证库已解锁时保存。取消或未勾选时，密钥只显示一次。","en":"Only save while the local vault is unlocked. If unchecked, the key is shown once only."},
+    "extensions.push_saved_fields_readonly":{"zh-CN":"Push 配置在这里仅供查看和复制。创建、轮换或保存新密钥请使用“GenBox Push 配置”。","en":"Push settings are view-and-copy only here. Use GenBox Push Configuration to create, rotate, or save a new key."},
+    "extensions.push_save_confirm":{"zh-CN":"确认将这个新 Push 密钥加密保存到本机凭证库？之后仍需凭证库解锁密码才能读取。","en":"Confirm saving this new Push key in the encrypted local vault?"},
+    "extensions.push_save_confirm_title":{"zh-CN":"确认保存 Push 密钥","en":"Confirm Push key save"},
+    "extensions.push_save_confirm_safety":{"zh-CN":"确认后才会向本机服务申请一次性保存凭据；取消不会保存，也不会申请或消费确认凭据。","en":"The one-time save authorization is requested only after confirmation. Canceling neither saves nor requests or consumes it."},
+    "extensions.push_save_confirm_action":{"zh-CN":"确认保存","en":"Confirm save"},
+    "extensions.push_save_cancelled":{"zh-CN":"已取消保存，本机未申请或消费确认凭据。","en":"Save canceled; no local confirmation authorization was requested or consumed."},
+    "extensions.push_save_opt_in_required":{"zh-CN":"请先勾选本地保存并确认风险。","en":"Check local save and confirm the warning first."},
+    "extensions.push_saved_locally":{"zh-CN":"Push 密钥已加密保存到本机；远端来源未改变。","en":"The Push key was encrypted and saved locally; the remote source was unchanged."},
+    "extensions.push_delete_local":{"zh-CN":"删除本机 Push Key 副本","en":"Delete local Push key copy"},
+    "extensions.push_delete_local_locked":{"zh-CN":"请先解锁凭证库，再删除本机 Push Key 副本。","en":"Unlock the credential vault before deleting the local Push key copy."},
+    "extensions.push_delete_local_confirm":{"zh-CN":"只删除这个 Push Key 在本机凭证库中的副本吗？远端 Push 来源不会撤销或改变，其他本机凭证也会保留。","en":"Delete only this Push key's local vault copy? The remote Push source will not be revoked or changed, and other local credentials will be kept."},
+    "extensions.push_delete_local_unconfirmed":{"zh-CN":"本机未确认 Push Key 副本已安全删除。","en":"The local service did not confirm that the Push key copy was safely deleted."},
+    "extensions.push_deleted_locally":{"zh-CN":"本机 Push Key 副本已删除；远端来源和其他本机凭证未改变。","en":"The local Push key copy was deleted; the remote source and other local credentials were unchanged."},
+    "extensions.push_grant_delete_title":{"zh-CN":"允许授权删除源图","en":"Allow authorized source deletion"},
+    "extensions.push_grant_delete_hint":{"zh-CN":"默认关闭。打开后，发送端仍必须逐次勾选删除，并收到匹配回执后才可删除。","en":"Off by default. When enabled, the sender must still select deletion per action and receive a matching receipt before deletion."},
+    "extensions.push_grant_delete_enabled":{"zh-CN":"已开启源图删除授权。发送端仍需逐次勾选并收到匹配回执。","en":"Source-deletion grant enabled. The sender still needs per-action selection and a matching receipt."},
+    "extensions.push_grant_delete_disabled":{"zh-CN":"已关闭源图删除授权。源图将继续保留。","en":"Source-deletion grant disabled. Source images keep being retained."},
+    "extensions.push_state_summary":{"zh-CN":"Push 配置状态","en":"Push configuration status"},
+    "extensions.push_state_configuration":{"zh-CN":"来源配置","en":"Source configuration"},
+    "extensions.push_state_validity":{"zh-CN":"来源状态","en":"Source state"},
+    "extensions.push_state_local_copy":{"zh-CN":"本地副本","en":"Local copy"},
+    "extensions.push_state_remote_auth":{"zh-CN":"远端认证","en":"Remote authentication"},
+    "extensions.push_state_configured":{"zh-CN":"已配置","en":"Configured"},
+    "extensions.push_state_not_configured":{"zh-CN":"未配置","en":"Not configured"},
+    "extensions.push_state_valid":{"zh-CN":"未撤销","en":"Not revoked"},
+    "extensions.push_state_revoked":{"zh-CN":"已撤销","en":"Revoked"},
+    "extensions.push_state_not_available":{"zh-CN":"来源不存在","en":"Source does not exist"},
+    "extensions.push_state_saved_locally":{"zh-CN":"已加密保存","en":"Encrypted and saved"},
+    "extensions.push_state_not_saved_locally":{"zh-CN":"未保存","en":"Not saved"},
+    "extensions.push_state_auth_unverified":{"zh-CN":"未验证","en":"Unverified"},
+    "extensions.manage_push_configuration":{"zh-CN":"管理 Push 配置","en":"Manage Push configuration"},
+    "extensions.push_existing_opened":{"zh-CN":"已打开这个实例的 GenBox Push 配置。","en":"Opened this instance's GenBox Push configuration."},
+    "extensions.push_rotate_confirm":{"zh-CN":"轮换后，chatgpt2api 当前保存的 Push 密钥会立即失效。继续轮换吗？","en":"Rotation immediately invalidates the Push key currently stored in chatgpt2api. Continue?"},
+    "extensions.push_revoke_confirm":{"zh-CN":"撤销后，该 chatgpt2api 实例将不能再向 GenBox Push 图片。继续撤销吗？","en":"After revocation, this chatgpt2api instance cannot push images to GenBox. Continue?"},
+    "status.interrupted":{"zh-CN":"已中断","en":"Interrupted"},
+    "status.skipped":{"zh-CN":"无需处理","en":"No action needed"},
+    "status.needs_action":{"zh-CN":"等你操作","en":"Waiting for you"},
+    "extensions.task_interrupted":{"zh-CN":"部署任务因 GenBox 重启而中断。","en":"The deployment task was interrupted by a GenBox restart."},
+    "extensions.recovery_required":{"zh-CN":"需要恢复操作。","en":"Recovery action is required."},
+    "extensions.recovery_regenerate_plan":{"zh-CN":"请重新生成计划并重新提供凭证；不会自动重放远程部署。","en":"Regenerate the plan and provide credentials again; remote deployment will not be replayed automatically."},
+    "extensions.recovery_rotate_admin_key":{"zh-CN":"一次性管理密钥无法在重启后读取；请重新验证所有权后轮换密钥。","en":"The one-time management key cannot be read after restart; reverify ownership and rotate it."},
+    "extensions.deploy_failure_stage_prefix":{"zh-CN":"失败阶段：","en":"Failed stage: "},
+    "extensions.deploy_failure_reason_prefix":{"zh-CN":"原因：","en":"Reason: "},
+    "extensions.deploy_failure_recovery_prefix":{"zh-CN":"下一步：","en":"Next: "},
+    "extensions.deploy_failure_unknown_stage":{"zh-CN":"部署流程","en":"deployment process"},
+    "extensions.deploy_failure_unknown_reason":{"zh-CN":"部署未能安全完成。","en":"The deployment could not be completed safely."},
+    "extensions.deploy_failure_unknown_recovery":{"zh-CN":"请检查此 GenBox 管理的实例状态，并重新生成部署计划。","en":"Inspect the GenBox-managed instance state and regenerate the deployment plan."},
+    "extensions.deploy_error_host_key_confirmation_required":{"zh-CN":"继续前必须确认 SSH 主机指纹。","en":"The SSH host key must be confirmed before continuing."},
+    "extensions.deploy_error_connection_failed":{"zh-CN":"无法建立安全的 SSH 连接。","en":"The secure SSH connection could not be established."},
+    "extensions.deploy_error_docker_unavailable":{"zh-CN":"部署用户无法使用 Docker。","en":"Docker is unavailable to the deployment user."},
+    "extensions.deploy_error_preparation_failed":{"zh-CN":"无法安全准备托管部署目录或配置。","en":"The managed deployment directory or configuration could not be prepared safely."},
+    "extensions.deploy_error_image_prepare_failed":{"zh-CN":"无法准备指定的容器镜像。","en":"The approved container image could not be prepared."},
+    "extensions.deploy_error_service_start_failed":{"zh-CN":"托管服务未能启动。","en":"The managed service could not be started."},
+    "extensions.deploy_error_service_verification_failed":{"zh-CN":"服务没有通过就绪检查。","en":"The service did not pass its readiness check."},
+    "extensions.deploy_error_instance_registration_failed":{"zh-CN":"远程服务已成功，但 GenBox 未能在本地登记实例。","en":"The remote service succeeded, but GenBox could not register the instance locally."},
+    "extensions.deploy_recovery_confirm_host_key":{"zh-CN":"核对并确认主机指纹后，重新生成计划。","en":"Verify and confirm the host fingerprint, then regenerate the plan."},
+    "extensions.deploy_recovery_check_ssh_connection_and_credentials":{"zh-CN":"检查 SSH 网络、端口和凭据，然后重新生成计划。","en":"Check SSH networking, port, and credentials, then regenerate the plan."},
+    "extensions.deploy_recovery_fix_docker_access_and_regenerate_plan":{"zh-CN":"修复 Docker 或 sudo 权限后重新生成计划。","en":"Fix Docker or sudo access, then regenerate the plan."},
+    "extensions.deploy_recovery_inspect_owned_partial_deployment_and_regenerate_plan":{"zh-CN":"只检查 GenBox 所有的未完成目录，确认状态后重新生成计划。","en":"Inspect only the GenBox-owned partial deployment, confirm its state, then regenerate the plan."},
+    "extensions.deploy_recovery_check_image_access_and_regenerate_plan":{"zh-CN":"检查镜像名称和访问权限后重新生成计划。","en":"Check the image name and access, then regenerate the plan."},
+    "extensions.deploy_recovery_inspect_owned_instance_and_regenerate_plan":{"zh-CN":"检查 GenBox 所有的实例和容器状态后重新生成计划。","en":"Inspect the GenBox-owned instance and container state, then regenerate the plan."},
+    "extensions.deploy_recovery_verify_owned_instance_stopped_before_retry":{"zh-CN":"重试前先人工确认 GenBox 所有的实例已经停止。","en":"Before retrying, manually confirm that the GenBox-owned instance is stopped."},
+    "extensions.deploy_recovery_reconcile_owned_instance_registration":{"zh-CN":"核对远程 GenBox 所有权标记，再修复本地实例登记；不要重复部署。","en":"Reconcile the local registration against the remote GenBox ownership markers; do not redeploy."},
     "extensions.delivery_choice":{"zh-CN":"交付后如何处理","en":"After delivery"},
     "extensions.show_once":{"zh-CN":"仅本次显示","en":"Show this time only"},
     "extensions.save_encrypted":{"zh-CN":"加密保存在本机","en":"Save encrypted locally"},
@@ -392,6 +643,11 @@
     "extensions.success_copy":{"zh-CN":"接下来，你可以让远程 AI 服务安全地把图片送入 GenBox 媒体库，享受自动归档、统一管理与跨设备访问的流畅体验。","en":"Remote AI services can now deliver images safely to the GenBox media library for automatic organization, central management, and cross-device access."},
     "extensions.summary":{"zh-CN":"部署摘要","en":"Deployment summary"},
     "extensions.service":{"zh-CN":"服务","en":"Service"},
+    "extensions.target_name":{"zh-CN":"VPS 名称","en":"VPS name"},
+    "extensions.vps_host":{"zh-CN":"VPS 地址 / SSH 端口","en":"VPS address / SSH port"},
+    "extensions.deployed_at":{"zh-CN":"部署时间","en":"Deployed"},
+    "extensions.credential_saved_at":{"zh-CN":"凭证保存时间","en":"Credential saved"},
+    "extensions.view_details":{"zh-CN":"查看连接详情","en":"View connection details"},
     "extensions.primary_link":{"zh-CN":"主链路","en":"Primary network"},
     "extensions.credential":{"zh-CN":"凭证","en":"Credential"},
     "extensions.credential_session":{"zh-CN":"仅在当前任务中使用","en":"Used only for the current task"},
@@ -401,6 +657,7 @@
     "extensions.vault_password":{"zh-CN":"解锁密码（至少 8 位）","en":"Unlock password (at least 8 characters)"},
     "extensions.setup_unlock":{"zh-CN":"设置 / 解锁","en":"Set up / Unlock"},
     "extensions.lock":{"zh-CN":"锁定","en":"Lock"},
+    "extensions.unlock":{"zh-CN":"解锁","en":"Unlock"},
     "extensions.reset_key_label":{"zh-CN":"重置管理密钥","en":"Reset management key"},
     "extensions.reset_warning":{"zh-CN":"为安全起见，重置需要重新验证该实例所属 VPS 的所有权。密钥仅在本机显示一次；旧密钥立即失效。","en":"For security, resetting requires ownership verification of the instance's VPS. The new key is shown locally once and the old key is invalidated immediately."},
     "extensions.or_private_key":{"zh-CN":"或 SSH 私钥","en":"or SSH private key"},
@@ -420,7 +677,18 @@
     "extensions.delete_local":{"zh-CN":"删除本地副本","en":"Delete local copy"},
     "extensions.save_changes":{"zh-CN":"保存修改","en":"Save changes"},
     "footer.local_service":{"zh-CN":"GenBox · 本地服务","en":"GenBox · Local service"},
+    "runtime.online":{"zh-CN":"在线","en":"Online"},
+    "runtime.offline":{"zh-CN":"后端离线","en":"Backend offline"},
+    "runtime.offline_title":{"zh-CN":"GenBox 后端未运行","en":"GenBox backend is not running"},
+    "runtime.offline_detail":{"zh-CN":"当前只是浏览器保留的旧页面，连接和部署操作已暂停。","en":"This is only a browser-retained page. Connection and deployment actions are paused."},
+    "runtime.recheck":{"zh-CN":"重新检测","en":"Check again"},
     "dock.expand":{"zh-CN":"展开底部导航","en":"Expand bottom navigation"},
+    "dock.pin":{"zh-CN":"锁定底部导航","en":"Keep bottom navigation visible"},
+    "dock.unpin":{"zh-CN":"恢复自动隐藏","en":"Resume auto-hide"},
+    "dock.lock_shown":{"zh-CN":"锁定显示底部导航","en":"Lock bottom navigation visible"},
+    "dock.lock_hidden":{"zh-CN":"锁定隐藏底部导航","en":"Lock bottom navigation hidden"},
+    "dock.unlock_shown":{"zh-CN":"底部导航已锁定显示，点击恢复自动隐藏","en":"Bottom navigation is locked visible; activate to resume auto-hide"},
+    "dock.unlock_hidden":{"zh-CN":"底部导航已锁定隐藏，点击恢复自动隐藏","en":"Bottom navigation is locked hidden; activate to resume auto-hide"},
     "sync.title":{"zh-CN":"☁ 从远程 chatgpt2api 同步图片","en":"☁ Sync images from remote chatgpt2api"},
     "sync.close_label":{"zh-CN":"关闭远程同步窗口","en":"Close remote sync"},
     "sync.step_1":{"zh-CN":"填写并保存远程部署","en":"Enter and save a remote deployment"},
@@ -517,7 +785,7 @@
     "extensions.target_loaded_suffix":{"zh-CN":"。请重新输入 SSH 凭证后测试连接。","en":". Re-enter SSH credentials and test the connection."},
     "extensions.new_vps_name":{"zh-CN":"新 VPS","en":"New VPS"},
     "extensions.new_target_success":{"zh-CN":"已创建空白 VPS 配置。","en":"Created a blank VPS configuration."},
-    "extensions.target_required":{"zh-CN":"请填写名称、VPS 地址和 SSH 用户名。","en":"Enter a name, VPS address, and SSH username."},
+    "extensions.target_required":{"zh-CN":"请填写名称、VPS 地址、SSH 用户名，并选择服务器用途。","en":"Enter a name, VPS address, SSH username, and server purpose."},
     "extensions.target_saved":{"zh-CN":"VPS 配置保存成功。SSH 密码、私钥和 sudo 密码未保存。","en":"VPS configuration saved. SSH password, private key, and sudo password were not saved."},
     "extensions.target_delete_confirm":{"zh-CN":"删除这台 VPS 的已保存配置？","en":"Delete the saved configuration for this VPS?"},
     "extensions.target_deleted":{"zh-CN":"VPS 配置已删除。","en":"VPS configuration deleted."},
@@ -527,13 +795,13 @@
     "extensions.cloudflare_enroll":{"zh-CN":"使用 Cloudflare 控制台生成的 Tunnel Token 安装系统服务。","en":"Install the service with a Tunnel Token generated in the Cloudflare dashboard."},
     "extensions.tunnel_endpoint":{"zh-CN":"GenBox 隧道端","en":"GenBox tunnel endpoint"},
     "extensions.secret_not_saved_suffix":{"zh-CN":" 授权信息不会写入浏览器存储或任务日志。","en":" Authorization data is not written to browser storage or task logs."},
-    "extensions.tailscale_key_help_html":{"zh-CN":"<a href=\"https://login.tailscale.com/admin/settings/keys\" target=\"_blank\" rel=\"noopener noreferrer\">没有 Key？点击打开官方生成页面</a><span>生成后，把以 <code>tskey-auth-</code> 开头的内容粘贴到下面。</span>","en":"<a href=\"https://login.tailscale.com/admin/settings/keys\" target=\"_blank\" rel=\"noopener noreferrer\">No Key? Open the official generation page</a><span>Paste the value beginning with <code>tskey-auth-</code> below.</span>"},
+    "extensions.tailscale_key_help_html":{"zh-CN":"<a href=\"https://login.tailscale.com/admin/settings/keys\" target=\"_blank\" rel=\"noopener noreferrer\">没有 Key？点击打开官方生成页面</a><span>生成后，把完整的一次性 Auth Key 粘贴到下面。</span>","en":"<a href=\"https://login.tailscale.com/admin/settings/keys\" target=\"_blank\" rel=\"noopener noreferrer\">No Key? Open the official generation page</a><span>Paste the complete one-time Auth Key below.</span>"},
     "extensions.other_key_help_html":{"zh-CN":"<span>请从所选网络服务的控制台生成一次性授权信息，再粘贴到下面。</span>","en":"<span>Generate one-time authorization data in the selected network service, then paste it below.</span>"},
     "extensions.token_placeholder":{"zh-CN":"粘贴一次性授权信息","en":"Paste one-time authorization data"},
     "extensions.cloudflare_remote_hint":{"zh-CN":"GenBox 会建立安全隧道，VPS 只做访问检测。","en":"GenBox creates the secure tunnel; the VPS only verifies access."},
     "extensions.testing_ssh":{"zh-CN":"正在测试 SSH 连接…","en":"Testing SSH connection…"},
     "extensions.fingerprint_prefix":{"zh-CN":"首次连接主机指纹：<code>","en":"First connection host fingerprint: <code>"},
-    "extensions.fingerprint_confirm_html":{"zh-CN":"</code><br><button class=\"btn-secondary\" onclick=\"extensionTestSSH(true)\">确认并重新连接</button>","en":"</code><br><button class=\"btn-secondary\" onclick=\"extensionTestSSH(true)\">Confirm and reconnect</button>"},
+    "extensions.fingerprint_confirm_html":{"zh-CN":"</code><br><button class=\"btn-secondary\" id=\"extHostKeyConfirmBtn\" onclick=\"extensionTestSSH(true)\">确认指纹并认证</button>","en":"</code><br><button class=\"btn-secondary\" id=\"extHostKeyConfirmBtn\" onclick=\"extensionTestSSH(true)\">Confirm fingerprint and authenticate</button>"},
     "extensions.verify_fingerprint":{"zh-CN":"请核对并确认 VPS 主机指纹","en":"Verify and confirm the VPS host fingerprint"},
     "extensions.root_user":{"zh-CN":"root 用户","en":"root user"},
     "extensions.docker_access":{"zh-CN":"Docker 可直接使用","en":"Direct Docker access"},
@@ -555,6 +823,97 @@
     "extensions.existing_selected":{"zh-CN":"已选择已有实例。接入计划不会执行远程变更。","en":"Existing instance selected. The connection plan will make no remote changes."},
     "extensions.baseline_selected":{"zh-CN":"已选择生产镜像基线。请重新生成安全计划。","en":"Production image baseline selected. Regenerate the safety plan."},
     "extensions.verify_ssh_first":{"zh-CN":"请先返回第一步测试 SSH 并确认主机指纹。","en":"Return to step 1, test SSH, and confirm the host fingerprint first."},
+    "extensions.ssh_not_saved_notice":{"zh-CN":"保存 VPS 连接信息，但不保存 SSH 密码、私钥或 sudo 密码；关闭页面或重启后需要重新输入。","en":"VPS connection details are saved, but SSH passwords, private keys, and sudo passwords are not. Re-enter them after closing or restarting."},
+    "extensions.save_target_before_test":{"zh-CN":"请先保存当前 VPS 信息，再输入本次会话的 SSH 凭据。","en":"Save the current VPS details before entering SSH credentials for this session."},
+    "extensions.enter_ssh_password":{"zh-CN":"请输入本次会话使用的 SSH 密码；密码不会随 VPS 信息保存。","en":"Enter the SSH password for this session. It is not saved with the VPS details."},
+    "extensions.enter_ssh_private_key":{"zh-CN":"请粘贴本次会话使用的 SSH 私钥；私钥不会随 VPS 信息保存。","en":"Paste the SSH private key for this session. It is not saved with the VPS details."},
+    "extensions.ssh_ready_notice":{"zh-CN":"凭据已填写，可以进行一次 SSH 测试。测试期间按钮会锁定，避免重复请求。","en":"Credentials are ready for one SSH test. The button is locked while the request is running."},
+    "extensions.ssh_verified_notice":{"zh-CN":"本次会话的 SSH 已验证。修改地址、账号、端口或凭据后需要重新验证。","en":"SSH is verified for this session. Changing the address, account, port, or credentials requires verification again."},
+    "extensions.deploy_ready_network_pending":{"zh-CN":"服务已经部署完成，私网链路尚未完成。现在从“选择链路”继续，不会重复部署。","en":"The service is deployed, but the private network is not complete. Continue from Choose Network without redeploying."},
+    "extensions.start_network_check":{"zh-CN":"开始检测私网链路","en":"Start private-network check"},
+    "extensions.return_network_check":{"zh-CN":"返回链路检测","en":"Return to network check"},
+    "extensions.ssh_diag_password_requested":{"zh-CN":"诊断阶段：客户端已取得会话凭据，但认证尚未完成；请勿连续重试。","en":"Diagnostic stage: the client obtained the session credential, but authentication did not complete. Do not retry repeatedly."},
+    "extensions.ssh_diag_auth_started":{"zh-CN":"诊断阶段：SSH 认证已开始，但客户端尚未取得密码。","en":"Diagnostic stage: SSH authentication started before the client obtained a password."},
+    "extensions.ssh_diag_host_verified":{"zh-CN":"诊断阶段：主机指纹已确认，连接在认证开始前结束。","en":"Diagnostic stage: the host key was verified, but the connection ended before authentication started."},
+    "extensions.ssh_diag_transport":{"zh-CN":"诊断阶段：SSH 传输已建立，连接在主机确认或认证前结束。","en":"Diagnostic stage: SSH transport was established, but the connection ended before host verification or authentication."},
+    "extensions.ssh_safe_failure":{"zh-CN":"SSH 客户端认证未完成，原始错误已隐藏。不能据此判断密码错误，请勿连续重试。","en":"SSH client authentication did not complete. Raw details were hidden; do not retry repeatedly."},
+    "extensions.ssh_no_repair_loop":{"zh-CN":"请保留当前服务器身份记录和凭据页面；这不是重新配对步骤。","en":"Keep the current server identity and credential view; this is not a pairing step."},
+    "extensions.ssh_diagnostic_optional":{"zh-CN":"诊断 SSH（可选）","en":"Diagnose SSH (optional)"},
+    "extensions.ssh_deploy_diagnostic":{"zh-CN":"测试 SSH 与部署权限","en":"Test SSH and deployment access"},
+    "extensions.ssh_optional_notice":{"zh-CN":"凭据已填写。SSH 诊断是可选项，不是私网检测的前置条件。","en":"Credentials are ready. SSH diagnosis is optional and not a private-link prerequisite."},
+    "extensions.ssh_deploy_notice":{"zh-CN":"主机指纹已确认。现在测试 SSH 与部署权限，通过后即可继续部署。","en":"The host key is confirmed. Test SSH and deployment access before continuing."},
+    "extensions.read_confirm_host_key":{"zh-CN":"读取并确认主机指纹","en":"Read and confirm host key"},
+    "extensions.host_key_setup_notice":{"zh-CN":"请在步骤 1 读取主机身份，并通过服务商控制台或既有可信记录独立核对算法和完整指纹。","en":"In Step 1, read the host identity and independently verify both the algorithm and full fingerprint against the provider console or an existing trusted record."},
+    "extensions.host_key_pairing_kicker":{"zh-CN":"当前只做一件事","en":"ONE THING NOW"},
+    "extensions.host_key_pairing_title":{"zh-CN":"确认这台服务器","en":"Confirm this server"},
+    "extensions.host_key_pairing_help":{"zh-CN":"在你平时用来登录这台服务器的终端中完成确认。GenBox 不会要求你输入密码或私钥。","en":"Complete this in the terminal you normally use for this server. GenBox will not ask for your password or private key."},
+    "extensions.host_key_pairing_start":{"zh-CN":"开始确认服务器","en":"Start server confirmation"},
+    "extensions.host_key_pairing_help_button":{"zh-CN":"没有已登录终端？","en":"No signed-in terminal?"},
+    "extensions.host_key_pairing_help_hide":{"zh-CN":"收起帮助","en":"Hide help"},
+    "extensions.host_key_pairing_help_title":{"zh-CN":"没有已登录终端时怎么办","en":"No signed-in terminal?"},
+    "extensions.host_key_pairing_help_body":{"zh-CN":"先不要开始确认。请使用服务商控制台、已有的 known_hosts 记录，或向管理员索取可信的服务器公开身份。","en":"Do not start confirmation yet. Use your provider console, an existing known_hosts record, or ask an administrator for a trusted public server identity."},
+    "extensions.host_key_pairing_help_safety":{"zh-CN":"打开高级核对只会显示下一步，不会连接服务器，也不会读取或保存密码、私钥。","en":"Opening advanced verification only shows the next step. It does not connect to the server or read or save a password or private key."},
+    "extensions.host_key_pairing_open_advanced":{"zh-CN":"打开高级核对","en":"Open advanced verification"},
+    "extensions.host_key_pairing_manual":{"zh-CN":"改用手动核对","en":"Use manual verification"},
+    "extensions.host_key_pairing_starting":{"zh-CN":"正在准备一次性确认。","en":"Preparing one-time confirmation."},
+    "extensions.host_key_pairing_started":{"zh-CN":"复制确认工具到你已信任的终端运行，然后粘贴确认码。","en":"Copy the confirmation tool to your trusted terminal, run it, then paste the confirmation code."},
+    "extensions.host_key_pairing_command":{"zh-CN":"第 2 步：复制确认工具到终端","en":"Step 2: Copy the confirmation tool to your terminal"},
+    "extensions.host_key_pairing_response":{"zh-CN":"第 3 步：粘贴确认码","en":"Step 3: Paste the confirmation code"},
+    "extensions.host_key_pairing_copy":{"zh-CN":"复制","en":"Copy"},
+    "extensions.host_key_pairing_copied":{"zh-CN":"已复制。现在粘贴到已信任的终端运行。","en":"Copied. Paste it into your trusted terminal and run it."},
+    "extensions.host_key_pairing_copy_manual":{"zh-CN":"复制失败，请选中确认工具后手动复制。","en":"Copy failed. Select the confirmation tool and copy it manually."},
+    "extensions.host_key_pairing_response_placeholder":{"zh-CN":"从终端粘贴确认码","en":"Paste the confirmation code from your terminal"},
+    "extensions.host_key_pairing_step_start":{"zh-CN":"生成确认码","en":"Generate a confirmation code"},
+    "extensions.host_key_pairing_step_start_help":{"zh-CN":"一次确认只在短时间内有效","en":"Each confirmation is valid only briefly"},
+    "extensions.host_key_pairing_step_command":{"zh-CN":"复制确认工具并运行","en":"Copy and run the confirmation tool"},
+    "extensions.host_key_pairing_step_command_help":{"zh-CN":"只在你已信任的终端运行这一行","en":"Run this line only in a terminal you trust"},
+    "extensions.host_key_pairing_step_response":{"zh-CN":"粘贴确认码","en":"Paste the confirmation code"},
+    "extensions.host_key_pairing_step_response_help":{"zh-CN":"粘贴后会立即隐藏内容","en":"The content is hidden immediately after pasting"},
+    "extensions.host_key_pairing_received":{"zh-CN":"确认码已接收，可以确认这台服务器。","en":"Confirmation code received. You can confirm this server."},
+    "extensions.host_key_pairing_clear":{"zh-CN":"重新粘贴","en":"Paste again"},
+    "extensions.host_key_pairing_complete":{"zh-CN":"确认这台服务器","en":"Confirm this server"},
+    "extensions.host_key_pairing_restart":{"zh-CN":"重新开始","en":"Start over"},
+    "extensions.ssh_host_key_mismatch":{"zh-CN":"服务器身份发生变化，已停止 SSH 连接。请重新确认这台服务器；不会自动覆盖原记录。","en":"The server identity changed, so SSH stopped. Confirm this server again; the saved record will not be overwritten automatically."},
+    "extensions.identity_reconfirm_credential_title":{"zh-CN":"先确认服务器身份","en":"Confirm the server identity first"},
+    "extensions.identity_reconfirm_credential_body":{"zh-CN":"本次 SSH 凭据已清除。完成服务器身份确认后，才需要重新输入密码或私钥。","en":"The SSH credentials for this session were cleared. Enter a password or private key only after confirming the server identity."},
+    "extensions.identity_reset_action":{"zh-CN":"清除旧记录并重新确认","en":"Clear the old record and confirm again"},
+    "extensions.identity_reset_confirm":{"zh-CN":"这会仅清除本机保存的旧服务器身份记录，并使未完成的确认失效。不会连接服务器、不会保存密码，也不会自动接受新身份。是否继续？","en":"This only clears the locally saved old server identity and invalidates unfinished confirmations. It will not connect to the server, save credentials, or accept a new identity automatically. Continue?"},
+    "extensions.identity_reset_complete":{"zh-CN":"旧服务器身份记录已清除。请重新确认这台服务器。","en":"The old server identity record was cleared. Confirm this server again."},
+    "extensions.identity_reset_failed":{"zh-CN":"无法重置旧服务器身份记录。请重新载入页面后再试。","en":"The old server identity record could not be reset. Reload the page and try again."},
+    "extensions.identity_reset_guide_after":{"zh-CN":"清除后仍需你亲自确认新的服务器身份；不会自动连接或恢复密码。","en":"After clearing it, you still confirm the new server identity yourself; no connection or credential is restored automatically."},
+    "extensions.guide_step1_identity_changed":{"zh-CN":"服务器身份与之前记录不一致。","en":"The server identity does not match the previous record."},
+    "extensions.guide_step1_reconfirm_action":{"zh-CN":"请重新确认这台服务器。不要继续输入密码。","en":"Confirm this server again before entering a password."},
+    "extensions.host_key_pairing_expiry":{"zh-CN":"请尽快完成；配对信息不会保存到浏览器或 VPS 配置。","en":"Complete soon; pairing data is not saved in browser storage or VPS configuration."},
+    "extensions.host_key_pairing_expires_in":{"zh-CN":"此验证将在约","en":"This verification expires in about"},
+    "extensions.host_key_pairing_submitting":{"zh-CN":"正在提交验证结果，请稍候。","en":"Submitting the verification result. Please wait."},
+    "extensions.host_key_pairing_expired":{"zh-CN":"确认已过期，临时信息已清除。请重新开始确认。","en":"The confirmation expired and temporary data was cleared. Start again."},
+    "extensions.host_key_pairing_complete_success":{"zh-CN":"这台服务器已确认。现在可以输入 SSH 密码或私钥继续。","en":"This server is confirmed. You can now enter an SSH password or private key to continue."},
+    "extensions.host_key_pairing_cancelled":{"zh-CN":"配对已取消，未保存任何身份信息。","en":"Pairing cancelled; no identity information was saved."},
+    "extensions.host_key_pairing_cancel_cleanup_pending":{"zh-CN":"页面已清除配对信息；本机清理尚未确认，请稍后重新开始。","en":"Pairing data was cleared from this page, but local cleanup was not confirmed. Start again shortly."},
+    "extensions.host_key_pairing_invalid":{"zh-CN":"配对回执无效，请重新开始。","en":"The pairing response was invalid. Start again."},
+    "extensions.host_key_title":{"zh-CN":"确认 VPS 的 SSH 主机指纹","en":"Confirm the VPS SSH host key"},
+    "extensions.host_key_probe_help":{"zh-CN":"这里只读取服务器公开身份，不验证密码、不执行命令。","en":"This reads only the server public identity. It does not verify a password or run commands."},
+    "extensions.host_key_candidate_title":{"zh-CN":"待核对的 SSH 主机身份","en":"Candidate SSH host identity"},
+    "extensions.host_key_independent_check":{"zh-CN":"请通过服务商控制台或既有可信记录，独立核对下面的算法和完整指纹。","en":"Independently verify the algorithm and full fingerprint below against the provider console or an existing trusted record."},
+    "extensions.host_key_algorithm":{"zh-CN":"算法","en":"Algorithm"},
+    "extensions.host_key_fingerprint":{"zh-CN":"完整 SHA-256 指纹","en":"Full SHA-256 fingerprint"},
+    "extensions.host_key_confirmation_scope":{"zh-CN":"确认只保存服务器公开身份，不代表 SSH 认证、部署或网络连接已经完成。","en":"Confirmation saves only the server public identity; it does not mean SSH authentication, deployment, or networking is complete."},
+    "extensions.confirm_host_key_pair":{"zh-CN":"算法和指纹均已独立核对","en":"I independently verified both values"},
+    "extensions.read_again":{"zh-CN":"重新读取","en":"Read again"},
+    "extensions.host_key_return_title":{"zh-CN":"请先完成步骤 1 的主机身份确认","en":"Complete host identity confirmation in Step 1"},
+    "extensions.host_key_return_help":{"zh-CN":"请返回步骤 1，独立核对算法和完整指纹；步骤 2 部署与步骤 3 本机网络准备仍需按顺序完成。","en":"Return to Step 1 and independently verify the algorithm and full fingerprint. Step 2 deployment and Step 3 local network setup still remain in order."},
+    "extensions.return_step1_host_key":{"zh-CN":"返回步骤 1 核对主机身份","en":"Return to Step 1"},
+    "extensions.read_host_key":{"zh-CN":"读取主机指纹","en":"Read host key"},
+    "extensions.confirm_host_key":{"zh-CN":"我已核对并确认","en":"I reviewed and confirm"},
+    "extensions.host_key_not_read":{"zh-CN":"尚未读取主机指纹","en":"Host key not read yet"},
+    "extensions.reading_host_key":{"zh-CN":"正在读取 VPS 的公开 SSH 主机指纹，不会提交密码。","en":"Reading the public SSH host key without sending a password."},
+    "extensions.host_key_invalid_response":{"zh-CN":"VPS 没有返回受支持的主机密钥算法和规范 SHA-256 指纹。","en":"The VPS did not return a supported host-key algorithm and canonical SHA-256 fingerprint."},
+    "extensions.host_key_review":{"zh-CN":"候选主机身份已留在步骤 1。请独立核对算法和完整指纹；确认不代表 SSH 认证、部署或网络完成。","en":"The candidate host identity remains in Step 1. Independently verify the algorithm and full fingerprint; confirmation does not complete SSH authentication, deployment, or networking."},
+    "extensions.host_key_confirmed":{"zh-CN":"SSH 主机指纹已独立确认并保存。现在可以开始检测私网链路。","en":"The SSH host key was confirmed and saved independently. You can now check the private link."},
+    "extensions.host_key_confirmed_for_deploy":{"zh-CN":"SSH 主机指纹已保存。现在请测试 SSH 与部署权限。","en":"The SSH host key was saved. Now test SSH and deployment access."},
+    "extensions.host_key_confirm_in_network":{"zh-CN":"请返回步骤 1，独立核对主机密钥算法和完整指纹。","en":"Return to Step 1 and independently verify the host-key algorithm and full fingerprint."},
+    "extensions.deployment_target_mismatch":{"zh-CN":"该服务部署在另一台 VPS，请选择对应的服务器后继续。","en":"This service is deployed on another VPS. Select its server before continuing."},
+    "extensions.host_key_required_here":{"zh-CN":"开始私网检测前，请返回步骤 1 完成主机身份确认。","en":"Before checking the private link, return to Step 1 and complete host identity confirmation."},
     "extensions.discovery_failed_prefix":{"zh-CN":"环境检测失败：","en":"Environment discovery failed: "},
     "extensions.confirm_fingerprint_first":{"zh-CN":"请先确认 SSH 主机指纹。","en":"Confirm the SSH host fingerprint first."},
     "extensions.source_container":{"zh-CN":"源容器","en":"Source container"},
@@ -573,6 +932,28 @@
     "extensions.copy_estimate_suffix":{"zh-CN":" MB；源实例保持在线且只读。</p>","en":" MB; the source instance stays online and read-only.</p>"},
     "extensions.plan_ready":{"zh-CN":"安全计划已生成，10 分钟内确认有效。","en":"Safety plan generated and valid for 10 minutes."},
     "extensions.plan_failed_prefix":{"zh-CN":"无法生成计划：","en":"Could not generate plan: "},
+    "extensions.image_source_help":{"zh-CN":"请填写隔离开发机能拉取的不可变镜像地址。本机 Docker 标签和 latest 不能直接部署。","en":"Enter an immutable image address the isolated development machine can pull. Local Docker tags and latest cannot be deployed."},
+    "extensions.image_source_required":{"zh-CN":"请先准备可部署镜像：填写可由隔离开发机访问的 registry/name@sha256:<64 位摘要>。本机构建的镜像需要先通过可复现的交付流程提供给服务器。","en":"Prepare a deployable image first: enter registry/name@sha256:<64 hex digest> that the isolated development machine can access. A locally built image needs a reproducible delivery path before deployment."},
+    "extensions.image_source_mode":{"zh-CN":"镜像方案","en":"Image option"},
+    "extensions.image_source_select_help":{"zh-CN":"只有选择“自定义不可变镜像”后，才可以手动填写摘要。","en":"Manual digest entry is available only for the custom immutable image option."},
+    "extensions.image_preset_project":{"zh-CN":"GenBox 集成构建镜像（推荐）","en":"GenBox integration build (recommended)"},
+    "extensions.image_preset_project_hint":{"zh-CN":"当前项目维护，已包含 GenBox Push 联动代码；优先使用。","en":"Maintained by this project with GenBox Push integration; preferred."},
+    "extensions.image_preset_project_status":{"zh-CN":"已选择 GenBox 集成构建镜像。","en":"GenBox integration build selected."},
+    "extensions.image_preset_upstream":{"zh-CN":"yukkcat 镜像（未集成 GenBox）","en":"yukkcat image (no GenBox integration)"},
+    "extensions.image_preset_upstream_hint":{"zh-CN":"yukkcat/chatgpt2api 上游镜像不包含 GenBox Push 联动；是否继续部署由你决定。","en":"The yukkcat/chatgpt2api upstream image has no GenBox Push integration; you decide whether to deploy it."},
+    "extensions.image_preset_upstream_status":{"zh-CN":"该 yukkcat 镜像未集成 GenBox Push；你仍可继续部署，但不会自动联动。","en":"This yukkcat image has no GenBox Push integration. You may continue deployment, but it will not link to GenBox automatically."},
+    "extensions.image_preset_custom":{"zh-CN":"自定义不可变镜像","en":"Custom immutable image"},
+    "extensions.image_preset_custom_hint":{"zh-CN":"适用于你已核验的其他不可变镜像摘要。","en":"Use another immutable image digest that you have verified."},
+    "extensions.image_preset_custom_status":{"zh-CN":"请输入可由隔离开发机拉取的不可变镜像摘要。","en":"Enter an immutable image digest the isolated development machine can pull."},
+    "extensions.image_custom_placeholder":{"zh-CN":"registry/name@sha256:64 位摘要","en":"registry/name@sha256:64-hex-digest"},
+    "extensions.image_check_action":{"zh-CN":"检查 GenBox 联动","en":"Check GenBox integration"},
+    "extensions.image_check_idle":{"zh-CN":"未检查。此操作不会拉取、启动或部署镜像。","en":"Not checked. This does not pull, start, or deploy the image."},
+    "extensions.image_check_running":{"zh-CN":"正在核对本地集成目录，不会连接 VPS。","en":"Checking the local integration catalog; no VPS connection is made."},
+    "extensions.image_check_integrated":{"zh-CN":"已确认：该已登记镜像包含 GenBox Push v1 联动。","en":"Confirmed: this registered image includes GenBox Push v1 integration."},
+    "extensions.image_check_unknown":{"zh-CN":"无法确认：该自定义镜像不在本地集成目录。不会拉取或运行它；请仅部署已核验的镜像。","en":"Cannot confirm: this custom image is not in the local integration catalog. It was not pulled or run; deploy only an image you have verified."},
+    "extensions.image_check_not_integrated":{"zh-CN":"已确认：这是 yukkcat 上游镜像，但未集成 GenBox Push。是否继续部署由你决定。","en":"Confirmed: this is the yukkcat upstream image, but it has no GenBox Push integration. You decide whether to continue."},
+    "extensions.image_check_invalid":{"zh-CN":"请先填写不可变镜像摘要，再检查 GenBox 联动。","en":"Enter an immutable image digest before checking GenBox integration."},
+    "extensions.image_check_failed":{"zh-CN":"镜像联动检查暂时不可用。请检查摘要后重试。","en":"Image integration check is unavailable. Verify the digest and try again."},
     "extensions.connected_existing":{"zh-CN":"已接入","en":"Connected"},
     "extensions.delivery_failed_prefix":{"zh-CN":"实例已部署，但一次性密钥交付失败：","en":"Instance deployed, but one-time key delivery failed: "},
     "extensions.existing_key_placeholder":{"zh-CN":"请输入该实例现有管理密钥","en":"Enter the existing management key for this instance"},
@@ -598,6 +979,8 @@
     "extensions.not_generated":{"zh-CN":"未生成","en":"Not generated"},
     "extensions.network_complete":{"zh-CN":"网络连接和检查都已完成。","en":"Network connection and checks completed."},
     "extensions.connection_failed":{"zh-CN":"连接失败","en":"Connection failed"},
+    "extensions.network_not_ready":{"zh-CN":"尚未完成端到端验证，暂不可用","en":"Not ready: end-to-end verification is incomplete."},
+    "extensions.failed_phase_prefix":{"zh-CN":"失败阶段：","en":"Failed phase: "},
     "extensions.retry_credential_help":{"zh-CN":"不用新的 Tailscale Key。请回到第 1 步重新输入 SSH 密码或私钥，然后再点“重新检查链路”。","en":"No new Tailscale Key is needed. Return to step 1, re-enter the SSH password or private key, then select Recheck network."},
     "extensions.recheck_connection":{"zh-CN":"重新检测连接","en":"Recheck connection"},
     "extensions.recheck_help":{"zh-CN":"脚本会自动检查 VPS 是否在线、两台设备是否互通，以及 VPS 能否访问 GenBox。","en":"The workflow checks whether the VPS is online, whether both devices can reach each other, and whether the VPS can access GenBox."},
@@ -669,12 +1052,17 @@
     "task.network.remote_detect":{"zh-CN":"检查 VPS 环境","en":"Check VPS environment"},
     "task.network.remote_install":{"zh-CN":"安装网络工具","en":"Install network tool"},
     "task.network.remote_enroll":{"zh-CN":"加入同一个网络","en":"Join the same network"},
+    "task.network.remote_network_detect":{"zh-CN":"确认 VPS Tailscale 地址","en":"Confirm VPS Tailscale address"},
     "task.network.peer_verify":{"zh-CN":"检查两台设备互通","en":"Check peer connectivity"},
     "task.network.http_probe":{"zh-CN":"检查 VPS 能否访问 GenBox","en":"Check VPS access to GenBox"},
     "task.network.destination_ready":{"zh-CN":"保存可用访问地址","en":"Save reachable URL"},
     "status.cancelled":{"zh-CN":"已取消","en":"Cancelled"},
+    "status.generating_html":{"zh-CN":"⏳ 正在生成...","en":"⏳ Generating..."},
+    "status.cancelling_html":{"zh-CN":"⏹ 正在停止...","en":"⏹ Stopping..."},
+    "status.cancel_failed":{"zh-CN":"停止失败：","en":"Stop failed: "},
     "sync.zoom_title":{"zh-CN":"点击放大","en":"Click to enlarge"},
     "sync.zoom_aria_prefix":{"zh-CN":"放大预览 ","en":"Enlarge preview "},
+    "prompt.shuffle":{"zh-CN":"换一批","en":"Shuffle"},
     "prompt.category_style":{"zh-CN":"🎬 风格","en":"🎬 Style"},
     "prompt.cinematic":{"zh-CN":"电影感画面","en":"Cinematic scene"},
     "prompt.cyberpunk":{"zh-CN":"赛博朋克城市","en":"Cyberpunk city"},
@@ -785,6 +1173,7 @@
     "image.unavailable":{"zh-CN":"无法获取图片","en":"Could not retrieve image"},
     "image.data_failed":{"zh-CN":"获取图片数据失败","en":"Could not load image data"},
     "image.sent_i2i":{"zh-CN":"已发送到图生图模式","en":"Sent to image-to-image"},
+    "image.sent_precision_edit":{"zh-CN":"已发送到精准改图，请选择支持图片编辑的模型后提交","en":"Sent to precise image edit. Choose a verified image-editing model before submitting."},
     "image.load_failed":{"zh-CN":"加载图片失败: ","en":"Image loading failed: "},
     "image.sent_i2v":{"zh-CN":"已发送到图生视频模式","en":"Sent to image-to-video"},
     "image.load_failed_compact":{"zh-CN":"加载图片失败:","en":"Image loading failed: "},
@@ -812,17 +1201,12 @@
     "update.checking_progress":{"zh-CN":"正在检查更新...","en":"Checking for updates..."},
     "update.available_badge":{"zh-CN":"可更新","en":"Update available"},
     "update.available_suffix":{"zh-CN":"可用","en":"available"},
-    "update.speed_test":{"zh-CN":"测速","en":"Test speed"},
     "update.up_to_date_badge":{"zh-CN":"已是最新","en":"Up to date"},
     "update.up_to_date":{"zh-CN":"当前已是最新版本","en":"Already up to date"},
     "update.recheck":{"zh-CN":"重新检查","en":"Check again"},
     "update.check_failed_badge":{"zh-CN":"检查失败","en":"Check failed"},
     "update.check_failed_prefix":{"zh-CN":"检查失败: ","en":"Check failed: "},
-    "update.testing_mirrors":{"zh-CN":"正在测试 GitHub 镜像线路...","en":"Testing GitHub mirror routes..."},
-    "update.mirror_results":{"zh-CN":"GitHub 镜像测速","en":"GitHub mirror speed test"},
     "update.unavailable":{"zh-CN":"不可用","en":"Unavailable"},
-    "update.use_mirror":{"zh-CN":"使用此线路更新","en":"Update with this route"},
-    "update.speed_test_failed_prefix":{"zh-CN":"测速失败: ","en":"Speed test failed: "},
     "update.auto_check_off":{"zh-CN":"自动检查已关闭","en":"Automatic checking is off"},
     "update.check_failed":{"zh-CN":"更新检查失败","en":"Update check failed"},
     "update.ignored_suffix":{"zh-CN":"已忽略","en":"ignored"},
@@ -830,13 +1214,12 @@
     "update.found_new":{"zh-CN":"发现新版本","en":"New version found"},
     "update.no_notes":{"zh-CN":"暂无更新说明","en":"No release notes"},
     "update.none_available":{"zh-CN":"当前没有可用更新","en":"No updates are available right now."},
-    "update.updating":{"zh-CN":"更新中...","en":"Updating..."},
-    "update.updating_message":{"zh-CN":"正在更新，请保持此页面打开...","en":"Updating, please keep this page open..."},
     "update.success":{"zh-CN":"更新成功","en":"Update succeeded"},
-    "update.restart_soon":{"zh-CN":"服务将在 3 秒后重启...","en":"The service will restart in 3 seconds..."},
     "update.failed":{"zh-CN":"更新失败","en":"Update failed"},
     "update.failed_prefix":{"zh-CN":"更新失败: ","en":"Update failed: "},
-    "update.retry":{"zh-CN":"重试更新","en":"Retry update"},
+    "update.auto_apply_unavailable":{"zh-CN":"自动更新暂不可用","en":"Automatic update unavailable"},
+    "update.manual_install_guidance":{"zh-CN":"自动更新暂不可用。请仅从 GenBox 固定的 GitHub Releases 页面核对版本和发布资产后手动安装。","en":"Automatic update is unavailable. Use only the canonical GenBox GitHub Releases page, verify the version and release assets, then install manually."},
+    "update.open_verified_release":{"zh-CN":"打开固定 GitHub Release","en":"Open canonical GitHub Release"},
     "provider.empty_hint":{"zh-CN":"还没有 Provider。点击上方 [+ 添加] 创建一个。","en":"No providers yet. Click [+ Add] above to create one."},
     "provider.saved_prefix":{"zh-CN":"Provider \"","en":"Provider \""},
     "provider.saved_suffix":{"zh-CN":"” 已保存","en":"\" saved"},
@@ -909,6 +1292,7 @@
 
    ,"server.confirm_stop":{"zh-CN":"确定要停止服务吗？","en":"Are you sure you want to stop the server?"},
     "server.confirm_restart":{"zh-CN":"确定要重启服务吗？","en":"Are you sure you want to restart the server?"},
+    "server.use_lab_launcher":{"zh-CN":"为防止误停其他程序，请在项目目录运行 start-lab.ps1 stop 或 start-lab.ps1 restart。","en":"To avoid stopping another process, run start-lab.ps1 stop or start-lab.ps1 restart from the project directory."},
     "welcome.key_copied":{"zh-CN":"密钥已复制到剪贴板","en":"Key copied to clipboard"},
     "proxy.enable":{"zh-CN":"启用代理","en":"Enable proxy"},
     "proxy.host_placeholder":{"zh-CN":"主机 IP","en":"Host IP"},
@@ -944,6 +1328,47 @@
     "creator.i2i_hint":{"zh-CN":"上传参考图并描述想要的修改方向","en":"Upload a reference image and describe the edit direction"},
     "creator.variation_settings":{"zh-CN":"变体设置","en":"Variation settings"},
     "creator.variation_hint":{"zh-CN":"基于源图生成新的变化版本","en":"Generate new variations from the source image"},
+    "creator.inpaint_settings":{"zh-CN":"局部重绘设置","en":"Inpaint settings"},
+    "creator.inpaint_hint":{"zh-CN":"上传底图并涂白要修改的区域；提交前请先选择支持“图片编辑/局部重绘”的模型。","en":"Upload a base image, paint the areas to change in white, and select a model that supports image editing/inpainting before submitting."},
+    "creator.inpaint_base_image":{"zh-CN":"底图","en":"Base image"},
+    "creator.inpaint_mask_hint":{"zh-CN":"在需要修改的区域涂白；黑色区域会保持不变。","en":"Paint white over areas to edit; black areas are preserved."},
+    "creator.inpaint_edit_area":{"zh-CN":"白色：编辑","en":"White: edit"},
+    "creator.inpaint_keep_area":{"zh-CN":"黑色：保留","en":"Black: keep"},
+    "creator.inpaint_upload":{"zh-CN":"点击或拖拽上传一张底图","en":"Click or drag one base image here"},
+    "creator.inpaint_mask":{"zh-CN":"编辑遮罩","en":"Edit mask"},
+    "creator.inpaint_canvas_label":{"zh-CN":"局部重绘编辑遮罩","en":"Inpaint edit mask"},
+    "creator.inpaint_canvas_empty":{"zh-CN":"上传底图后即可涂抹需要修改的区域","en":"Upload a base image to paint the areas to change"},
+    "creator.inpaint_toolbar_label":{"zh-CN":"局部重绘工具","en":"Inpaint tools"},
+    "creator.inpaint_tool_group_label":{"zh-CN":"遮罩工具","en":"Mask tools"},
+    "creator.inpaint_history_group_label":{"zh-CN":"遮罩历史","en":"Mask history"},
+    "creator.inpaint_brush":{"zh-CN":"画笔","en":"Brush"},
+    "creator.inpaint_eraser":{"zh-CN":"橡皮","en":"Eraser"},
+    "creator.inpaint_brush_size":{"zh-CN":"笔刷尺寸","en":"Brush size"},
+    "creator.inpaint_undo":{"zh-CN":"撤销","en":"Undo"},
+    "creator.inpaint_redo":{"zh-CN":"重做","en":"Redo"},
+    "creator.inpaint_clear_mask":{"zh-CN":"清空遮罩","en":"Clear mask"},
+    "creator.inpaint_clear":{"zh-CN":"清空","en":"Clear"},
+    "creator.inpaint_prompt":{"zh-CN":"修改提示词","en":"Edit prompt"},
+    "creator.inpaint_prompt_placeholder":{"zh-CN":"描述希望如何修改已涂抹的区域...","en":"Describe how to change the painted areas..."},
+    "creator.inpaint_image_too_large":{"zh-CN":"底图像素过大，无法创建局部重绘遮罩。","en":"The base image is too large to create an inpaint mask."},
+    "creator.inpaint_base_required":{"zh-CN":"请先上传一张底图。","en":"Upload a base image first."},
+    "creator.inpaint_mask_required":{"zh-CN":"请在需要修改的区域涂抹遮罩。","en":"Paint a mask over the areas to change."},
+    "creator.inpaint_model_required":{"zh-CN":"请先选择一个生图 Provider。","en":"Select an image provider first."},
+    "creator.inpaint_protocol_unverified":{"zh-CN":"这个模型目前只能普通生图，暂时不能修改已有图片。请换一个标有“图片编辑/局部重绘”的模型。","en":"This model currently supports regular image generation only. Choose a model marked “Image editing/Inpaint” to edit an existing image."},
+    "creator.inpaint_provider_unsupported_reason":{"zh-CN":"这个模型不支持修改已有图片，请换一个支持“图片编辑/局部重绘”的模型。","en":"This model does not support editing an existing image. Choose one marked “Image editing/Inpaint”."},
+    "creator.inpaint_provider_unknown":{"zh-CN":"暂时无法确认这个模型是否支持局部重绘，因此没有提交任务。请选择明确标有“图片编辑/局部重绘”的模型。","en":"This model's inpainting support could not be confirmed, so no task was submitted. Choose one explicitly marked “Image editing/Inpaint”."},
+    "creator.inpaint_provider_unsupported":{"zh-CN":"当前模型不能做局部重绘","en":"The selected model cannot inpaint"},
+    "creator.inpaint_manual_choice":{"zh-CN":"允许手动选择未确认支持的模型（提交时仍会检查）","en":"Allow manual selection of models without confirmed support (checked again before submit)"},
+    "creator.model_help_t2i":{"zh-CN":"文生图：显示支持直接生成图片的模型。","en":"Text to image: models that can generate images directly are shown."},
+    "creator.model_help_i2i":{"zh-CN":"图生图：显示支持参考图片编辑的模型。","en":"Image to image: models that support editing a reference image are shown."},
+    "creator.model_help_precision_edit":{"zh-CN":"精准改图：显示支持参考图片编辑的模型；批注位置由模型理解，不等同于已验证的遮罩协议。","en":"Precise image edit: models that support reference-image editing are shown. Annotation positions are interpreted by the model and are not a verified mask protocol."},
+    "creator.model_help_inpaint":{"zh-CN":"局部重绘：只显示明确支持“图片编辑/遮罩”的模型。","en":"Inpaint: only models explicitly supporting image editing and masks are shown."},
+    "creator.model_help_available":{"zh-CN":"当前可用模型：","en":"Available models: "},
+    "creator.model_help_none":{"zh-CN":"当前没有已确认支持此功能的模型。自定义模型请在模型设置中配置对应能力。","en":"No model is confirmed for this feature yet. Configure the capability for a custom model in Model Settings."},
+    "creator.model_help_custom":{"zh-CN":"自定义模型提示：文生图需启用 t2i，图生图需启用 i2i，局部重绘需启用 inpaint_mask。","en":"Custom model hint: enable t2i for text-to-image, i2i for image-to-image, and inpaint_mask for inpainting."},
+    "creator.inpaint_model_unavailable":{"zh-CN":"该模型未确认支持局部重绘，当前不可选。可勾选下方“允许手动选择”进行配置。","en":"This model has no confirmed inpainting support and is unavailable. Enable manual selection below to configure it."},
+    "creator.inpaint_ready":{"zh-CN":"遮罩已准备好，可提交局部重绘。","en":"The mask is ready to submit for inpainting."},
+    "creator.inpaint_unavailable":{"zh-CN":"当前版本仅提供局部重绘入口，尚无可验证的遮罩协议，未提交任务。","en":"The inpaint entry is present, but no verified mask protocol is available in this version; no task was submitted."},
     "creator.generate_variation":{"zh-CN":"生成变体","en":"Generate variation"},
     "creator.prompt_title":{"zh-CN":"提示词 PROMPT","en":"Prompt"},
     "creator.prompt_hint":{"zh-CN":"输入画面描述后直接生成","en":"Enter a scene description and generate directly"},
@@ -952,6 +1377,13 @@
     "creator.assist_tools":{"zh-CN":"辅助工具","en":"Assist tools"},
     "creator.task_monitor":{"zh-CN":"任务监视器","en":"Task monitor"},
     "creator.task_summary":{"zh-CN":"生成时会自动展开进度和日志","en":"Progress and logs expand automatically during generation"},
+    "creator.precision_focus_show_preview":{"zh-CN":"展开实时预览","en":"Show live preview"},
+    "creator.precision_focus_hide_preview":{"zh-CN":"收起实时预览","en":"Hide live preview"},
+    "creator.precision_focus_show_tasks":{"zh-CN":"展开任务监视器","en":"Show task monitor"},
+    "creator.precision_focus_hide_tasks":{"zh-CN":"收起任务监视器","en":"Hide task monitor"},
+    "creator.precision_focus_result_ready":{"zh-CN":"生成结果已到达，可展开实时预览查看。","en":"Generation results are ready. Open live preview to view them."},
+    "creator.precision_focus_result_ready_short":{"zh-CN":"有新结果","en":"New result"},
+    "creator.precision_focus_task_running_short":{"zh-CN":"任务进行中","en":"Task running"},
     "creator.model_tasks":{"zh-CN":"模型任务","en":"Model tasks"},
     "creator.runtime_logs":{"zh-CN":"运行日志","en":"Runtime logs"},
     "creator.keep_recent":{"zh-CN":"保留最近创作记录","en":"Keep recent creation history"},
@@ -1224,6 +1656,196 @@
   MESSAGES['dashboard.ip_show'] = {"zh-CN":"显示 IP","en":"Show IP"};
   MESSAGES['dashboard.ip_hide'] = {"zh-CN":"隐藏 IP","en":"Hide IP"};
 
+  MESSAGES['common.continue'] = {"zh-CN":"继续","en":"Continue"};
+  MESSAGES['extensions.step_vps'] = {"zh-CN":"开始部署","en":"Start deployment"};
+  MESSAGES['extensions.step_deploy'] = {"zh-CN":"准备应用服务","en":"Prepare service"};
+  MESSAGES['extensions.step_choose_network'] = {"zh-CN":"准备本机网络","en":"Prepare local network"};
+  MESSAGES['extensions.step_configure'] = {"zh-CN":"连接并测试","en":"Connect and test"};
+  MESSAGES['extensions.step_verify'] = {"zh-CN":"完成","en":"Finish"};
+  MESSAGES['extensions.guide_kicker'] = {"zh-CN":"当前只做一件事","en":"One action at a time"};
+  MESSAGES['extensions.guide_connect_title'] = {"zh-CN":"部署 GenBox 扩展服务","en":"Deploy a GenBox extension service"};
+  MESSAGES['extensions.guide_found'] = {"zh-CN":"系统已发现","en":"GenBox found"};
+  MESSAGES['extensions.guide_action'] = {"zh-CN":"你现在只需","en":"Your only action"};
+  MESSAGES['extensions.guide_after'] = {"zh-CN":"完成后会","en":"Then GenBox will"};
+  MESSAGES['extensions.show_advanced'] = {"zh-CN":"查看高级设置和日志","en":"Show advanced settings and logs"};
+  MESSAGES['extensions.hide_advanced'] = {"zh-CN":"收起高级设置和日志","en":"Hide advanced settings and logs"};
+  MESSAGES['extensions.guide_step1_title'] = {"zh-CN":"先连接你的服务器","en":"Connect your server first"};
+  MESSAGES['extensions.guide_step1_unsaved'] = {"zh-CN":"这台 VPS 还没有保存。","en":"This VPS has not been saved yet."};
+  MESSAGES['extensions.guide_step1_save'] = {"zh-CN":"确认名称、地址和 SSH 用户，然后点“保存”。","en":"Confirm the name, address, and SSH user, then save."};
+  MESSAGES['extensions.guide_step1_saved'] = {"zh-CN":"VPS 信息已保存，还差一次服务器身份确认。","en":"The VPS is saved; its public identity still needs confirmation."};
+  MESSAGES['extensions.guide_step1_host_key'] = {"zh-CN":"在你已登录的终端中确认这台服务器；这一步不输入密码或私钥。","en":"Confirm this server in a terminal where you are already signed in; this does not enter a password or private key."};
+  MESSAGES['extensions.guide_step1_pairing_active'] = {"zh-CN":"把下方确认工具复制到已信任终端运行，再粘贴确认码。","en":"Copy the confirmation tool below into your trusted terminal, run it, then paste the confirmation code."};
+  MESSAGES['extensions.guide_step1_pairing_after'] = {"zh-CN":"粘贴后，点击“确认这台服务器”。","en":"After pasting, select Confirm this server."};
+  MESSAGES['extensions.guide_step1_identity_ready'] = {"zh-CN":"服务器身份已经确认。","en":"The server identity is confirmed."};
+  MESSAGES['extensions.guide_step1_credential'] = {"zh-CN":"输入本次使用的 SSH 密码或私钥。它只留在当前页面。","en":"Enter the SSH password or key for this session only."};
+  MESSAGES['extensions.guide_step1_credential_after'] = {"zh-CN":"服务器确认已经完成；填写后只运行一次环境读取，不会部署或使用 sudo。","en":"Server confirmation is complete. After entering credentials, GenBox performs one environment read only; it does not deploy or use sudo."};
+  MESSAGES['extensions.guide_step1_test'] = {"zh-CN":"让 GenBox 读取服务器环境，核对 Docker、端口和容量。","en":"Let GenBox read the server environment and check Docker, ports, and capacity."};
+  MESSAGES['extensions.guide_step1_connected'] = {"zh-CN":"只读环境检查已完成。","en":"The read-only environment check is complete."};
+  MESSAGES['extensions.guide_step1_next'] = {"zh-CN":"核对部署选项。","en":"Review deployment options."};
+  MESSAGES['extensions.guide_step1_next_after'] = {"zh-CN":"继续核对环境和方案，仍不会部署。","en":"Review the environment and plan next; deployment still will not start."};
+  MESSAGES['extensions.guide_step1_resume_ready'] = {"zh-CN":"已找到原来的应用服务和正确 VPS。","en":"The existing service and its VPS were found."};
+  MESSAGES['extensions.guide_step1_resume'] = {"zh-CN":"继续检查这台电脑的 Tailscale。","en":"Continue with this computer's Tailscale check."};
+  MESSAGES['extensions.guide_step1_resume_after'] = {"zh-CN":"不会重复部署应用。","en":"The service will not be deployed again."};
+  MESSAGES['extensions.connection_path_kicker'] = {"zh-CN":"连接方式","en":"Connection method"};
+  MESSAGES['extensions.connection_path_title'] = {"zh-CN":"先选择适合你的连接方式","en":"Choose the connection method that fits you"};
+  MESSAGES['extensions.connection_path_help'] = {"zh-CN":"服务器连接器是后续的默认方向；在它真正可用前，SSH 仍可完整完成当前部署流程。","en":"A server connector is the future default; until it is truly available, SSH still completes the current deployment flow."};
+  MESSAGES['extensions.connection_connector_status'] = {"zh-CN":"准备中","en":"In preparation"};
+  MESSAGES['extensions.connection_connector_title'] = {"zh-CN":"服务器连接器（推荐）","en":"Server connector (recommended)"};
+  MESSAGES['extensions.connection_connector_body'] = {"zh-CN":"连接器安装在你的服务器上，主动建立受限连接；它不会把 SSH 密码或私钥交给浏览器。","en":"The connector runs on your server and initiates a restricted connection; it does not give SSH passwords or private keys to the browser."};
+  MESSAGES['extensions.connection_connector_unavailable'] = {"zh-CN":"当前版本还没有可安装的连接器和受信传输通道，因此不能假装已经连接或用于部署。","en":"This version has no installable connector or trusted transport yet, so it cannot claim to be connected or deploy."};
+  MESSAGES['extensions.connection_ssh_status'] = {"zh-CN":"当前可用","en":"Available now"};
+  MESSAGES['extensions.connection_ssh_title'] = {"zh-CN":"SSH 连接（高级方式）","en":"SSH connection (advanced)"};
+  MESSAGES['extensions.connection_ssh_body'] = {"zh-CN":"这是当前完整可用的路径：保存服务器、确认服务器身份、临时输入凭据并测试部署权限。","en":"This is the complete path available now: save the server, confirm its identity, enter a temporary credential, and test deployment access."};
+  MESSAGES['extensions.connection_ssh_button'] = {"zh-CN":"使用 SSH 继续","en":"Continue with SSH"};
+  MESSAGES['extensions.ssh_fallback_selected'] = {"zh-CN":"已进入当前可用的 SSH 流程。先填写并保存服务器信息。","en":"The available SSH flow is selected. Fill in and save the server information first."};
+  MESSAGES['extensions.step_start_deploy'] = {"zh-CN":"开始部署","en":"Start deployment"};
+  MESSAGES['extensions.personal_start_ssh'] = {"zh-CN":"使用 SSH 设置服务器","en":"Set up with SSH"};
+  MESSAGES['extensions.personal_server_details'] = {"zh-CN":"填写服务器资料","en":"Add server details"};
+  MESSAGES['extensions.personal_identity_kicker'] = {"zh-CN":"安全确认","en":"Safety check"};
+  MESSAGES['extensions.personal_identity_title'] = {"zh-CN":"确认这就是你的服务器","en":"Confirm this is your server"};
+  MESSAGES['extensions.personal_identity_changed_title'] = {"zh-CN":"服务器身份发生变化","en":"The server identity changed"};
+  MESSAGES['extensions.personal_identity_help'] = {"zh-CN":"这一步完成前不会使用 SSH 密码或私钥。","en":"SSH passwords and private keys are not used until this step is complete."};
+  MESSAGES['extensions.personal_edit_server'] = {"zh-CN":"返回修改服务器资料","en":"Edit server details"};
+  MESSAGES['extensions.personal_access_kicker'] = {"zh-CN":"访问检查","en":"Access check"};
+  MESSAGES['extensions.personal_access_title'] = {"zh-CN":"运行一次只读检查","en":"Run one read-only check"};
+  MESSAGES['extensions.personal_access_help'] = {"zh-CN":"凭据只用于这次检查，关闭页面后不会保留。不会部署服务，也不会使用 sudo。","en":"Credentials are used only for this check and are not kept after the page closes. It does not deploy a service or use sudo."};
+  MESSAGES['extensions.personal_check_continue'] = {"zh-CN":"运行只读检查","en":"Run read-only check"};
+  MESSAGES['extensions.advanced_deployment_access'] = {"zh-CN":"高级部署权限（本次不用填）","en":"Advanced deployment access (not needed for this check)"};
+  MESSAGES['extensions.advanced_deployment_access_help'] = {"zh-CN":"只读环境检查不会使用 sudo。只有准备部署或私网设置时，才按实际需要填写。","en":"The read-only environment check does not use sudo. Provide these only when preparing deployment or private-network setup."};
+  MESSAGES['extensions.personal_ready_kicker'] = {"zh-CN":"检查完成","en":"Check complete"};
+  MESSAGES['extensions.personal_ready_title'] = {"zh-CN":"环境检查完成","en":"Environment check complete"};
+  MESSAGES['extensions.personal_ready_help'] = {"zh-CN":"下一步核对部署选项和安全计划；不会自动部署。","en":"Next, review deployment options and the safety plan; deployment will not start automatically."};
+  MESSAGES['extensions.personal_begin_planning'] = {"zh-CN":"核对部署选项","en":"Review deployment options"};
+  MESSAGES['extensions.personal_ssh_selected'] = {"zh-CN":"先填写服务器资料；系统会按顺序完成确认和检查。","en":"Add the server details first; GenBox will guide the next checks in order."};
+  MESSAGES['extensions.guide_step1_after'] = {"zh-CN":"安全进入下一步，不会修改现有服务。","en":"Move forward safely without changing the existing service."};
+  MESSAGES['extensions.enter_password_button'] = {"zh-CN":"去输入 SSH 密码","en":"Enter SSH password"};
+  MESSAGES['extensions.enter_private_key_button'] = {"zh-CN":"去输入 SSH 私钥","en":"Enter SSH private key"};
+  MESSAGES['extensions.guide_step2_title'] = {"zh-CN":"准备应用服务","en":"Prepare the service"};
+  MESSAGES['extensions.guide_step2_ready'] = {"zh-CN":"应用服务已经部署完成。","en":"The service is already deployed."};
+  MESSAGES['extensions.guide_step2_skip'] = {"zh-CN":"直接继续准备本机网络。","en":"Continue directly to local networking."};
+  MESSAGES['extensions.guide_step2_unknown'] = {"zh-CN":"还不知道 VPS 上有哪些服务和安装条件。","en":"The VPS environment has not been checked yet."};
+  MESSAGES['extensions.guide_step2_detect'] = {"zh-CN":"运行一次只读环境检测。","en":"Run one read-only environment check."};
+  MESSAGES['extensions.guide_step2_after'] = {"zh-CN":"给出推荐方案；部署前仍会让你确认。","en":"Recommend a plan and still ask before deployment."};
+  MESSAGES['extensions.guide_step2_discovering'] = {"zh-CN":"正在安全读取 VPS 环境，不会修改现有服务。","en":"Safely reading the VPS environment without changing existing services."};
+  MESSAGES['extensions.readonly_discovery_ready'] = {"zh-CN":"已可运行一次只读环境检查；部署权限会在真正部署前单独核对。","en":"A one-time read-only environment check is ready; deployment access is checked separately before an actual deployment."};
+  MESSAGES['extensions.readonly_discovery_timeout'] = {"zh-CN":"只读环境检查在限定时间内未完成，已停止本次检查。无需重新确认服务器身份；请检查 SSH 或 Docker 响应后再试。","en":"The read-only environment check did not finish in time and has stopped. You do not need to reconfirm the server identity; check SSH or Docker responsiveness before trying again."};
+  MESSAGES['extensions.discovery_ready_for_planning'] = {"zh-CN":"只读环境检查完成。现在可以核对部署选项；不会自动部署。","en":"Read-only environment check complete. You can now review deployment options; deployment will not start automatically."};
+  MESSAGES['extensions.discovery_deploy_access_limited'] = {"zh-CN":"只读环境检查完成，但当前会话尚未确认部署权限。请先核对结果；需要部署时再选择高级权限诊断。","en":"Read-only environment check complete, but deployment access is not confirmed for this session. Review the result first; use the advanced access diagnostic only when preparing to deploy."};
+  MESSAGES['extensions.discovery_deploy_access_action'] = {"zh-CN":"部署权限尚未确认。","en":"Deployment access is not confirmed."};
+  MESSAGES['extensions.discovery_deploy_access_after'] = {"zh-CN":"这不会重新配对或重新读取环境。","en":"This does not restart pairing or re-read the environment."};
+  MESSAGES['extensions.guide_step2_wait_discovery'] = {"zh-CN":"请稍等，检测结束后会自动告诉你下一步。","en":"Wait briefly; the next action will appear automatically."};
+  MESSAGES['extensions.guide_step2_discovered'] = {"zh-CN":"VPS 环境已经检测完成。","en":"The VPS environment check is complete."};
+  MESSAGES['extensions.guide_step2_make_plan'] = {"zh-CN":"根据检测结果生成一份可核对的安全计划。","en":"Generate a reviewable safety plan from the results."};
+  MESSAGES['extensions.guide_step2_image_needed'] = {"zh-CN":"部署镜像还没有准备好。","en":"The deployment image is not ready yet."};
+  MESSAGES['extensions.guide_step2_image_action'] = {"zh-CN":"先填写可由服务器拉取的镜像摘要地址。","en":"Enter the immutable image reference the server can pull."};
+  MESSAGES['extensions.guide_step2_image_after'] = {"zh-CN":"填写完成后，才能生成安全计划；不会自动部署。","en":"After entering it, you can generate a safety plan; nothing deploys automatically."};
+  MESSAGES['extensions.prepare_deploy_image'] = {"zh-CN":"填写部署镜像","en":"Enter deployment image"};
+  MESSAGES['extensions.plan_discovery_confirm'] = {"zh-CN":"生成安全计划前，GenBox 会对这台隔离开发机进行两次固定的只读复核，用来核对端口、目录和隔离范围。不会部署、拉取镜像或改动服务。现在继续吗？","en":"Before generating the safety plan, GenBox will run two fixed read-only checks on this isolated development server to verify ports, directories, and isolation. It will not deploy, pull an image, or change services. Continue?"};
+  MESSAGES['extensions.plan_confirm_kicker'] = {"zh-CN":"部署前复核","en":"Pre-deployment review"};
+  MESSAGES['extensions.plan_confirm_title'] = {"zh-CN":"允许只读复核并生成计划","en":"Allow read-only review and generate the plan"};
+  MESSAGES['extensions.plan_confirm_body'] = {"zh-CN":"GenBox 将再次读取隔离开发机的端口、目录和隔离状态，不会部署、拉取镜像或修改服务。","en":"GenBox will re-check ports, directories, and isolation on the development machine. It will not deploy, pull an image, or modify services."};
+  MESSAGES['extensions.plan_confirm_continue'] = {"zh-CN":"继续生成计划","en":"Continue to generate plan"};
+  MESSAGES['extensions.plan_discovery_cancelled'] = {"zh-CN":"已取消部署前只读复核；未连接服务器，也未生成计划。","en":"Deployment preflight was cancelled. The server was not contacted and no plan was created."};
+  MESSAGES['extensions.plan_discovery_timeout'] = {"zh-CN":"生成安全计划前的只读复核在限定时间内未完成，已停止本次复核。无需重新确认服务器身份；请检查 SSH 或 Docker 响应后再试。","en":"The read-only checks before generating the safety plan did not finish in time and have stopped. You do not need to reconfirm the server identity; check SSH or Docker responsiveness before trying again."};
+  MESSAGES['extensions.guide_step2_planning'] = {"zh-CN":"正在计算安装方式、端口和隔离范围。","en":"Calculating the installation method, ports, and isolation boundaries."};
+  MESSAGES['extensions.guide_step2_wait_plan'] = {"zh-CN":"请稍等，计划生成后不会自动部署。","en":"Wait briefly; generating a plan does not deploy automatically."};
+  MESSAGES['extensions.guide_step2_plan_after'] = {"zh-CN":"计划生成后，你还要亲自确认才会开始安装。","en":"You must still confirm before installation starts."};
+  MESSAGES['extensions.guide_step2_plan_ready'] = {"zh-CN":"安全计划已经生成，尚未改动 VPS。","en":"The safety plan is ready and the VPS has not been changed."};
+  MESSAGES['extensions.guide_step2_confirm'] = {"zh-CN":"核对计划后，明确确认开始部署。","en":"Review the plan, then explicitly confirm deployment."};
+  MESSAGES['extensions.guide_step2_confirm_after'] = {"zh-CN":"部署期间会显示进度；失败时只给出一个恢复动作。","en":"Progress will be shown, with one recovery action if it fails."};
+  MESSAGES['extensions.deploy_confirm_prompt'] = {"zh-CN":"即将按当前安全计划修改这台隔离开发机并开始部署。请确认镜像、实例名称和端口均无误。现在开始部署吗？","en":"This will modify the isolated development server according to the current safety plan and begin deployment. Confirm that the image, instance name, and port are correct. Start deployment now?"};
+  MESSAGES['extensions.deploy_confirm_kicker'] = {"zh-CN":"最后一步","en":"Final step"};
+  MESSAGES['extensions.deploy_confirm_title'] = {"zh-CN":"确认开始隔离部署","en":"Confirm isolated deployment"};
+  MESSAGES['extensions.deploy_confirm_body'] = {"zh-CN":"确认后才会在已保存的隔离开发机上创建新实例；现有服务和生产实例不会被修改。","en":"Only after confirmation will a new instance be created on the saved development machine; existing services and the production instance will not be modified."};
+  MESSAGES['extensions.deploy_confirm_continue'] = {"zh-CN":"确认并开始部署","en":"Confirm and start deployment"};
+  MESSAGES['extensions.deploy_confirm_cancelled'] = {"zh-CN":"已取消部署确认；安全计划仍保留，VPS 未被修改。","en":"Deployment confirmation was cancelled. The safety plan is still available and the VPS was not changed."};
+  MESSAGES['extensions.guide_step2_deploying'] = {"zh-CN":"应用正在部署，重复点击已被锁定。","en":"The service is deploying and duplicate clicks are locked."};
+  MESSAGES['extensions.guide_step2_wait_deploy'] = {"zh-CN":"请保持页面打开，等待任务完成。","en":"Keep this page open and wait for the task to finish."};
+  MESSAGES['extensions.guide_step2_deploy_after'] = {"zh-CN":"部署完成后先交付登录信息，再继续配置私网。","en":"After deployment, save the login details and continue to private networking."};
+  MESSAGES['extensions.guide_step2_deploy_failed'] = {"zh-CN":"这次部署没有完成，现有服务不会自动重放。","en":"This deployment did not finish and will not replay automatically."};
+  MESSAGES['extensions.guide_step2_recover'] = {"zh-CN":"按失败提示重新生成安全计划。","en":"Regenerate the safety plan using the failure guidance."};
+  MESSAGES['extensions.guide_step2_recover_credential'] = {"zh-CN":"远程任务已结束，临时 SSH 凭据已清除；请重新输入后再安全重试。","en":"The remote task ended and temporary SSH credentials were cleared; enter them again before a safe retry."};
+  MESSAGES['extensions.guide_step2_recover_after'] = {"zh-CN":"重新确认前不会再次修改 VPS。","en":"The VPS will not be changed again until you reconfirm."};
+  MESSAGES['extensions.guide_step2_confirmation_failed'] = {"zh-CN":"安全计划确认未通过。VPS 未被修改；无任务已创建。","en":"Safety-plan confirmation was blocked. The VPS was not changed and no task was created."};
+  MESSAGES['extensions.guide_step2_confirmation_recover'] = {"zh-CN":"根据上方安全原因重新生成计划。","en":"Regenerate the plan using the safe reason shown above."};
+  MESSAGES['extensions.guide_step2_confirmation_after'] = {"zh-CN":"重新确认前不会部署，也不会自动重试。","en":"Nothing will deploy or retry automatically before you reconfirm."};
+  MESSAGES['extensions.regenerate_safe_plan'] = {"zh-CN":"重新生成安全计划","en":"Regenerate safety plan"};
+  MESSAGES['extensions.deploy_plan_service_port_changed'] = {"zh-CN":"服务端口与已确认的安全计划不一致。","en":"The service port does not match the confirmed safety plan."};
+  MESSAGES['extensions.deploy_plan_image_changed'] = {"zh-CN":"容器镜像与已确认的安全计划不一致。","en":"The container image does not match the confirmed safety plan."};
+  MESSAGES['extensions.deploy_plan_identity_changed'] = {"zh-CN":"VPS 连接身份与已确认的安全计划不一致。","en":"The VPS connection identity does not match the confirmed safety plan."};
+  MESSAGES['extensions.deploy_confirmation_safe_notice'] = {"zh-CN":"VPS 未被修改；无任务已创建。","en":"The VPS was not changed and no task was created."};
+  MESSAGES['extensions.deploy_task_reconcile_pending'] = {"zh-CN":"部署响应未能确认。请勿再次部署；GenBox 正在核对已有任务状态。","en":"The deployment response could not be confirmed. Do not deploy again; GenBox is reconciling the existing task state."};
+  MESSAGES['extensions.deploy_attempt_unavailable'] = {"zh-CN":"浏览器无法生成安全的部署尝试标识，已停止提交。请更新浏览器后重试。","en":"The browser could not generate a secure deployment attempt ID, so submission was stopped. Update the browser and try again."};
+  MESSAGES['extensions.deploy_plan_unavailable'] = {"zh-CN":"已确认的部署计划不存在或已过期，请重新生成安全计划。","en":"The confirmed deployment plan is missing or expired. Generate a new safety plan."};
+  MESSAGES['extensions.deploy_snapshot_changed'] = {"zh-CN":"确认计划后 VPS 环境已变化，请重新检测环境后再生成计划。","en":"The VPS environment changed after plan confirmation. Run discovery again before creating a new plan."};
+  MESSAGES['extensions.deploy_resource_conflict'] = {"zh-CN":"另一个部署正在占用相同资源。请先查看任务状态，再重载页面后重新规划。","en":"Another deployment currently owns the same resources. Check task status, then reload before planning again."};
+  MESSAGES['extensions.deploy_task_reconcile_manual'] = {"zh-CN":"GenBox 多次检查后仍无法确认部署任务。请勿再次部署；请重载页面并人工查看任务状态。","en":"GenBox could not confirm the deployment task after several checks. Do not deploy again; reload and check task status manually."};
+  MESSAGES['extensions.guide_step2_manual_check'] = {"zh-CN":"部署任务状态仍未确认。","en":"The deployment task status is still unconfirmed."};
+  MESSAGES['extensions.guide_step2_manual_reload'] = {"zh-CN":"请重载页面并查看已有任务，不要再次提交部署。","en":"Reload and inspect existing tasks; do not submit deployment again."};
+  MESSAGES['extensions.guide_step2_manual_after'] = {"zh-CN":"确认任务状态后再决定后续恢复。","en":"Confirm task status before choosing the next recovery step."};
+  MESSAGES['extensions.deploy_attempt_conflict'] = {"zh-CN":"部署尝试标识与另一份已确认上下文冲突，已拒绝继续。请重新生成计划后再确认。","en":"The deployment attempt ID conflicts with another confirmed context. The request was rejected; create a new plan before confirming again."};
+  MESSAGES['extensions.deploy_identity_reconfirm_notice'] = {"zh-CN":"请返回 VPS 信息，核对已保存的目标与主机身份，重新输入凭据并再次验证 SSH，然后再创建新计划。","en":"Return to VPS information, review the saved target and host identity, re-enter credentials, and verify SSH again before creating a new plan."};
+  MESSAGES['extensions.prepare_local_network'] = {"zh-CN":"准备本机网络","en":"Prepare local network"};
+  MESSAGES['extensions.guide_step3_title'] = {"zh-CN":"准备这台电脑的 Tailscale","en":"Prepare Tailscale on this computer"};
+  MESSAGES['extensions.guide_step3_checking'] = {"zh-CN":"正在读取本机状态。","en":"Checking local status."};
+  MESSAGES['extensions.guide_step3_wait'] = {"zh-CN":"等待检测结果，必要时可重新检测。","en":"Wait for the result or check again."};
+  MESSAGES['extensions.guide_step3_missing'] = {"zh-CN":"这台电脑还没有安装 Tailscale。","en":"Tailscale is not installed on this computer."};
+  MESSAGES['extensions.guide_step3_install'] = {"zh-CN":"点击安装，按 Windows 提示完成。","en":"Install it and follow the Windows prompt."};
+  MESSAGES['extensions.guide_step3_installed'] = {"zh-CN":"Tailscale 已安装，但还没有登录。","en":"Tailscale is installed but not signed in."};
+  MESSAGES['extensions.guide_step3_login'] = {"zh-CN":"打开官方登录，并使用你的 Tailscale 账号登录。","en":"Open the official sign-in and use your Tailscale account."};
+  MESSAGES['extensions.guide_step3_online'] = {"zh-CN":"本机已经加入 Tailnet。","en":"This computer has joined the Tailnet."};
+  MESSAGES['extensions.guide_step3_serve'] = {"zh-CN":"启用 GenBox 私网入口。","en":"Enable the private GenBox entry."};
+  MESSAGES['extensions.guide_step3_ready'] = {"zh-CN":"本机 Tailscale 和 GenBox 私网入口都已准备好。","en":"Local Tailscale and the private GenBox entry are ready."};
+  MESSAGES['extensions.guide_step3_next'] = {"zh-CN":"让 VPS 自动连接并测试。","en":"Let the VPS connect and test automatically."};
+  MESSAGES['extensions.guide_step3_next_after'] = {"zh-CN":"自动检查 VPS、两端互通和 GenBox 访问。","en":"Check the VPS, peer reachability, and GenBox access."};
+  MESSAGES['extensions.guide_step3_after'] = {"zh-CN":"本机准备好后，再处理 VPS，不会混在一起。","en":"Finish the local side before handling the VPS."};
+  MESSAGES['extensions.connect_and_test'] = {"zh-CN":"连接并自动测试","en":"Connect and test"};
+  MESSAGES['extensions.guide_step4_title'] = {"zh-CN":"连接 VPS 并自动测试","en":"Connect the VPS and test automatically"};
+  MESSAGES['extensions.guide_step4_host_missing'] = {"zh-CN":"还没有确认这台 VPS 的公开身份。","en":"This VPS identity is not confirmed yet."};
+  MESSAGES['extensions.guide_step4_return_host'] = {"zh-CN":"返回步骤 1，独立核对主机密钥算法和完整指纹。","en":"Return to Step 1 and independently verify the host-key algorithm and full fingerprint."};
+  MESSAGES['extensions.guide_step4_return_after'] = {"zh-CN":"确认后仍会按顺序完成部署与本机网络准备，不会跳过步骤 2 或 3。","en":"After confirmation, deployment and local network setup still continue in order; Steps 2 and 3 are not skipped."};
+  MESSAGES['extensions.guide_step4_read_host'] = {"zh-CN":"读取主机指纹。此操作不验证密码。","en":"Read the host key without testing credentials."};
+  MESSAGES['extensions.guide_step4_confirm_host'] = {"zh-CN":"核对页面显示的主机指纹并确认。","en":"Review and confirm the displayed host key."};
+  MESSAGES['extensions.guide_step4_host_ready'] = {"zh-CN":"VPS 身份已确认。","en":"The VPS identity is confirmed."};
+  MESSAGES['extensions.guide_step4_credential'] = {"zh-CN":"输入本次 SSH 凭证，再回到这里继续。","en":"Enter a session SSH credential, then continue here."};
+  MESSAGES['extensions.guide_step4_ready'] = {"zh-CN":"本机、VPS 身份和本次 SSH 凭证都已准备好。","en":"The local side, VPS identity, and session credential are ready."};
+  MESSAGES['extensions.guide_step4_start'] = {"zh-CN":"点击一次，GenBox 会按顺序自动检查。","en":"Click once and GenBox will run the checks in order."};
+  MESSAGES['extensions.guide_step4_running'] = {"zh-CN":"自动检查正在进行。","en":"Automatic checks are running."};
+  MESSAGES['extensions.guide_step4_wait'] = {"zh-CN":"不用重复点击，等待当前检查完成。","en":"Do not click again; wait for the current check."};
+  MESSAGES['extensions.guide_step4_failed'] = {"zh-CN":"已经定位到没有完成的具体环节。","en":"GenBox identified the exact unfinished stage."};
+  MESSAGES['extensions.guide_step4_retry'] = {"zh-CN":"按黄色提示处理后，点击一次重新检测。","en":"Follow the recovery hint, then check once again."};
+  MESSAGES['extensions.guide_step4_complete'] = {"zh-CN":"VPS 到 GenBox 的私网访问已经通过。","en":"Private access from the VPS to GenBox passed."};
+  MESSAGES['extensions.guide_step4_done'] = {"zh-CN":"进入完成页查看最终地址。","en":"Open the finish page to view the final address."};
+  MESSAGES['extensions.guide_step4_complete_after'] = {"zh-CN":"保存可供后续 Push 使用的私网地址。","en":"Save the private URL for later Push use."};
+  MESSAGES['extensions.guide_step4_after'] = {"zh-CN":"依次验证 VPS Tailscale、设备互通和 GenBox 页面。","en":"Verify VPS Tailscale, peer reachability, and GenBox access in order."};
+  MESSAGES['extensions.guide_step5_title'] = {"zh-CN":"连接已经完成","en":"Connection complete"};
+  MESSAGES['extensions.guide_step5_found'] = {"zh-CN":"服务、VPS 和私网地址都已确认。","en":"The service, VPS, and private URL are confirmed."};
+  MESSAGES['extensions.guide_step5_action'] = {"zh-CN":"查看最终地址和后续操作。","en":"Review the final URL and next actions."};
+  MESSAGES['extensions.guide_step5_after'] = {"zh-CN":"可以进入下一阶段的图片 Push 联调。","en":"You can proceed to image Push integration."};
+  MESSAGES['extensions.guide_step5_delivery_title'] = {"zh-CN":"应用已装好，私网还没完成","en":"Service installed; private networking is still pending"};
+  MESSAGES['extensions.guide_step5_delivery_found'] = {"zh-CN":"登录地址和一次性管理密钥已经交付。","en":"The login URL and one-time admin key are ready."};
+  MESSAGES['extensions.guide_step5_delivery_action'] = {"zh-CN":"先复制或保存登录信息，再继续准备本机网络。","en":"Copy or save the login details, then prepare local networking."};
+  MESSAGES['extensions.guide_step5_delivery_after'] = {"zh-CN":"只有 VPS 能通过私网访问 GenBox 后，才会显示真正完成。","en":"Completion appears only after the VPS reaches GenBox over the private network."};
+  MESSAGES['extensions.deploy_complete_save_key_then_network'] = {"zh-CN":"应用部署完成。请先保存本页的一次性登录信息，然后点击上方按钮继续配置私网。","en":"Deployment complete. Save the one-time login details, then use the guide above to continue private networking."};
+  MESSAGES['extensions.guide_finish'] = {"zh-CN":"已完成","en":"Finished"};
+  MESSAGES['extensions.recovery_title'] = {"zh-CN":"这一步没有完成","en":"This step did not finish"};
+  MESSAGES['extensions.network_failed_plain'] = {"zh-CN":"自动检查没有全部通过，请按页面上的一条恢复提示处理。","en":"The automatic checks did not all pass. Follow the single recovery hint shown."};
+  MESSAGES['extensions.network_diag_command_failed'] = {"zh-CN":"检测命令没有正常返回；通常是 VPS 上 Tailscale 服务或命令不可用。","en":"The status command failed; Tailscale may not be available on the VPS."};
+  MESSAGES['extensions.network_diag_no_output'] = {"zh-CN":"VPS 没有返回 Tailscale 状态，建议先确认服务正在运行。","en":"The VPS returned no Tailscale status; confirm the service is running."};
+  MESSAGES['extensions.network_diag_json_shape'] = {"zh-CN":"VPS 返回了非标准状态格式，GenBox 没有读取原始内容。","en":"The VPS returned an unexpected status shape; raw content was not retained."};
+  MESSAGES['extensions.network_diag_needs_login'] = {"zh-CN":"VPS 的 Tailscale 已安装，但还没有登录或加入 Tailnet。","en":"Tailscale is installed on the VPS but has not joined the Tailnet."};
+  MESSAGES['extensions.network_diag_starting'] = {"zh-CN":"VPS 的 Tailscale 仍在启动，稍后可重新检测。","en":"Tailscale is still starting on the VPS; check again shortly."};
+  MESSAGES['extensions.network_diag_stopped'] = {"zh-CN":"VPS 的 Tailscale 当前已停止。","en":"Tailscale is stopped on the VPS."};
+  MESSAGES['extensions.network_diag_state_unknown'] = {"zh-CN":"VPS 的 Tailscale 没有进入可用状态。","en":"Tailscale on the VPS is not in a usable state."};
+  MESSAGES['extensions.network_diag_no_ipv4'] = {"zh-CN":"Tailscale 正在运行，但 VPS 尚未获得私网 IPv4 地址。","en":"Tailscale is running, but the VPS has no private IPv4 address yet."};
+  MESSAGES['extensions.network_diag_many_ipv4'] = {"zh-CN":"VPS 返回了多个候选私网地址，需要先整理 Tailscale 状态。","en":"The VPS returned multiple candidate private addresses."};
+  MESSAGES['extensions.network_diag_retryable'] = {"zh-CN":"状态看起来正常，可按恢复提示重新检测。","en":"The status looks usable; follow the recovery hint and check again."};
+  MESSAGES['extensions.network_diag_magicdns'] = {"zh-CN":"私网已连通，但 VPS 解析不了这台电脑的 Tailscale 名称。请确认 Tailnet 已开启 MagicDNS。","en":"The private network is connected, but the VPS cannot resolve this computer's Tailscale name. Confirm MagicDNS is enabled."};
+  MESSAGES['extensions.network_diag_entry_refused'] = {"zh-CN":"VPS 已到达这台电脑，但私网入口端口没有接受连接。请重新检查本机私网入口。","en":"The VPS reached this computer, but the private entry port refused the connection. Recheck the local private entry."};
+  MESSAGES['extensions.network_diag_http_error'] = {"zh-CN":"VPS 已连到私网入口，但入口返回了 HTTP 错误。通常是访问地址或 Tailscale Serve 映射不一致。","en":"The VPS reached the private entry, but it returned an HTTP error. The address or Tailscale Serve mapping may not match."};
+  MESSAGES['extensions.network_diag_probe_timeout'] = {"zh-CN":"VPS 访问 GenBox 私网入口超时。请检查 Tailnet 访问规则和两台设备在线状态。","en":"The VPS timed out while reaching the private GenBox entry. Check Tailnet access rules and both devices' status."};
+  MESSAGES['extensions.network_diag_invalid_genbox_response'] = {"zh-CN":"VPS 打开了目标地址，但返回的不是 GenBox 状态接口。请确认私网入口指向当前 GenBox 端口。","en":"The VPS opened the target, but the response was not the GenBox status endpoint. Confirm the private entry targets the current GenBox port."};
+
   function readStoredLanguage() {
     try {
       if (global.location && typeof global.location.search === 'string') {
@@ -1272,7 +1894,7 @@
     if (scope.nodeType === 1 && scope.hasAttribute('data-i18n')) nodes.push(scope);
     Array.prototype.push.apply(nodes, scope.querySelectorAll('[data-i18n]'));
     nodes.forEach(function (node) { node.textContent = t(node.getAttribute('data-i18n')); });
-    ['title', 'placeholder', 'aria-label'].forEach(function (attribute) {
+    ['title', 'placeholder', 'aria-label', 'alt'].forEach(function (attribute) {
       var marker = 'data-i18n-' + attribute;
       var marked = [];
       if (scope.nodeType === 1 && scope.hasAttribute(marker)) marked.push(scope);
@@ -1300,6 +1922,393 @@
     if (global.location && global.location.reload) global.location.reload();
   }
 
+  MESSAGES['extensions.plan_review_title'] = {"zh-CN":"请先核对以下部署计划","en":"Review this deployment plan first"};
+  MESSAGES['extensions.plan_review_instance'] = {"zh-CN":"实例名称：","en":"Instance:"};
+  MESSAGES['extensions.plan_review_port'] = {"zh-CN":"服务端口：","en":"Service port:"};
+  MESSAGES['extensions.plan_review_image'] = {"zh-CN":"容器镜像：","en":"Container image:"};
+  MESSAGES['extensions.plan_review_method'] = {"zh-CN":"部署方式：","en":"Deployment method:"};
+  MESSAGES['extensions.plan_review_scope'] = {"zh-CN":"部署范围：","en":"Deployment scope:"};
+  MESSAGES['extensions.plan_review_isolated'] = {"zh-CN":"创建新的隔离实例","en":"Create a new isolated instance"};
+  MESSAGES['extensions.plan_review_existing'] = {"zh-CN":"仅登记现有实例","en":"Register the existing instance only"};
+  MESSAGES['extensions.plan_review_confirm'] = {"zh-CN":"核对无误后，仍需点击“确认并部署”才会执行。","en":"Nothing runs until you select Confirm and deploy."};
+  MESSAGES['extensions.update_image'] = {"zh-CN":"更新镜像","en":"Update image"};
+  MESSAGES['extensions.update_image_title'] = {"zh-CN":"更新隔离实例镜像","en":"Update isolated instance image"};
+  MESSAGES['extensions.update_image_warning'] = {"zh-CN":"只会更新已登记的隔离开发实例。镜像必须使用不可变的 @sha256 摘要；生产实例不会出现在这里。","en":"Only the registered isolated development instance can be updated. Use an immutable @sha256 digest; production instances are excluded."};
+  MESSAGES['extensions.update_image_digest'] = {"zh-CN":"新镜像摘要地址","en":"New image digest"};
+  MESSAGES['extensions.image_source_placeholder'] = {"zh-CN":"registry.example/chatgpt2api@sha256:...","en":"registry.example/chatgpt2api@sha256:..."};
+  MESSAGES['extensions.review_update'] = {"zh-CN":"生成核对清单","en":"Review update"};
+  MESSAGES['extensions.confirm_update'] = {"zh-CN":"确认更新","en":"Confirm update"};
+  MESSAGES['extensions.update_image_plan_ready'] = {"zh-CN":"核对清单：拉取不可变镜像、备份配置、重建应用、检查健康；失败会回滚。","en":"Review: pull immutable image, back up configuration, recreate the app, and verify health; failures roll back."};
+  MESSAGES['extensions.update_image_started'] = {"zh-CN":"正在更新隔离实例镜像，请稍候…","en":"Updating the isolated instance image…"};
+  MESSAGES['extensions.update_image_success'] = {"zh-CN":"镜像更新完成，健康检查已通过。","en":"Image updated and health check passed."};
+  MESSAGES['extensions.update_image_failed'] = {"zh-CN":"镜像更新未完成，原实例配置已保留或回滚。","en":"Image update did not complete; the original configuration was preserved or rolled back."};
+  MESSAGES['extensions.update_image_unavailable'] = {"zh-CN":"请先解锁本机凭证库并保存该实例的 SSH 凭证。","en":"Unlock the local credential vault and save SSH credentials for this instance first."};
+  MESSAGES['extensions.push_save_to_vault'] = {"zh-CN":"保存到本机凭证库","en":"Save to local credential vault"};
+  MESSAGES['extensions.push_key_not_available'] = {"zh-CN":"当前没有可保存的新 Push 密钥。请先创建或轮换密钥；如需保留现有密钥，请从 chatgpt2api 重新配置。","en":"There is no new Push key available to save. Create or rotate a key first; to keep the existing key, retrieve it from chatgpt2api."};
+  MESSAGES['extensions.push_key_ready_to_save'] = {"zh-CN":"新 Push 密钥仅在本次创建或轮换后可见。请先复制配置，再勾选本地保存并确认。","en":"A new Push key is available from this create or rotation. Copy the configuration, then opt in and confirm local saving."};
+  MESSAGES['creator.precision_edit_overall_instruction'] = {"zh-CN":"整体要求（可选）","en":"Overall instructions (optional)"};
+  MESSAGES['creator.precision_edit_overall_instruction_placeholder'] = {"zh-CN":"例如：未标注区域保持不变。","en":"For example: Keep unmarked areas unchanged."};
+  MESSAGES['creator.precision_edit_model_picker'] = {"zh-CN":"选择模型","en":"Choose model"};
+  MESSAGES['creator.precision_edit_model_picker_hint'] = {"zh-CN":"先选服务端点，再选该端点提供的图片编辑模型。","en":"Choose the service endpoint first, then an image-editing model from that endpoint."};
+  MESSAGES['creator.precision_edit_header_hint'] = {"zh-CN":"在画布上标出位置，再为每处填写修改说明。","en":"Mark locations on the canvas, then describe each change."};
+  MESSAGES['creator.precision_help_label'] = {"zh-CN":"查看精准改图帮助","en":"View precise image edit help"};
+  MESSAGES['creator.precision_help_title'] = {"zh-CN":"精准改图操作说明","en":"Precise image edit guide"};
+  MESSAGES['creator.precision_help_steps'] = {"zh-CN":"选择图片，在画布上标注位置，为每处写明修改要求，再提交给编辑模型。","en":"Choose an image, mark locations on the canvas, describe every change, then submit it to the editing model."};
+  MESSAGES['creator.precision_help_send_result'] = {"zh-CN":"生成结果也可以通过“精准改图”操作直接发送到这里。","en":"You can also send a generated result here with its Precise image edit action."};
+  MESSAGES['creator.precision_docs_open'] = {"zh-CN":"文档说明","en":"Guide"};
+  MESSAGES['creator.precision_docs_close'] = {"zh-CN":"关闭精准改图文档","en":"Close precise image edit guide"};
+  MESSAGES['creator.precision_docs_kicker'] = {"zh-CN":"操作文档","en":"Workflow guide"};
+  MESSAGES['creator.precision_start_title'] = {"zh-CN":"快速上手","en":"Quick start"};
+  MESSAGES['creator.precision_start_nav_hint'] = {"zh-CN":"按顺序完成前四步；点击步骤可定位操作区，不会提交任务。以后可从“文档说明”再次打开。","en":"Follow the first four steps. Click a step to locate its controls without submitting a task. Reopen this guide from Documentation anytime."};
+  MESSAGES['creator.precision_start_model'] = {"zh-CN":"第一步：选模型端点 → 在“显示模型”中勾选并确定 → 选择编辑模型。显示“待确认”时，仅在确认支持改图后启用；没有端点请先到“模型设置”配置。","en":"Choose a model endpoint, pick models in Displayed models and confirm, then select an editing model. Enable an unconfirmed model only if you know it supports editing. Add missing endpoints in Model settings."};
+  MESSAGES['creator.precision_start_size'] = {"zh-CN":"改变尺寸：1. 选尺寸方式（模型尺寸严格匹配；裁切适配会本地裁切缩放）；2. 选预设，按提示授权试用；3. 选构图说明并按需修改。加载底图后即可点击“生成图片”。","en":"To resize: 1. Choose Model size for strict matching, or Crop to fit for local cropping/scaling. 2. Pick a preset and authorize a trial if prompted. 3. Choose and edit composition guidance. Load a base image, then click Generate."};
+  MESSAGES['creator.precision_start_local'] = {"zh-CN":"人物抠图、边缘精修在本地完成，可切换算法比较效果；AI 消除需涂选区域，再用所选在线模型生成。","en":"Person cutout and edge refinement run locally; switch algorithms to compare results. AI removal needs a painted selection and generation with your selected online model."};
+  MESSAGES['creator.precision_start_source'] = {"zh-CN":"本地上传或从图库选择一张图。局部改图时，用画笔或形状标出位置，并填写修改说明。","en":"Upload an image or choose one from the gallery. For local edits, mark an area with a brush or shape and describe the change."};
+  MESSAGES['creator.precision_start_generate'] = {"zh-CN":"检查底图和说明后，点击“生成图片”提交一次在线请求，可能计费；失败不会自动重试。完成后切换版本查看尺寸、时间及前后对比。","en":"Check the base image and instructions, then click Generate for one potentially billable online request. Failures are not automatically retried. Browse versions to see dimensions, timestamps and before/after comparisons."};
+  MESSAGES['creator.precision_start_nav_model'] = {"zh-CN":"选择模型","en":"Choose model"};
+  MESSAGES['creator.precision_start_nav_source'] = {"zh-CN":"加载底图","en":"Load base image"};
+  MESSAGES['creator.precision_start_nav_size'] = {"zh-CN":"尺寸与构图","en":"Size and composition"};
+  MESSAGES['creator.precision_start_nav_generate'] = {"zh-CN":"生成与查看","en":"Generate and review"};
+  MESSAGES['creator.precision_start_nav_local'] = {"zh-CN":"可选：本地处理","en":"Optional: local tools"};
+  MESSAGES['creator.precision_docs_title'] = {"zh-CN":"精准改图","en":"Precise image edit"};
+  MESSAGES['creator.precision_docs_intro'] = {"zh-CN":"在一个工作台中完成轻量批注、透明抠图、纯尺寸扩图和版本比较；这里不会提供图层栈或全局滤镜。","en":"Use one workbench for lightweight annotations, transparent cutout, pure size expansion, and version comparison; it does not provide layer stacks or global filters."};
+  MESSAGES['creator.precision_docs_shapes_title'] = {"zh-CN":"形状与二次编辑","en":"Shapes and second-pass edits"};
+  MESSAGES['creator.precision_docs_shapes_body'] = {"zh-CN":"用椭圆、矩形、箭头或画笔标出修改位置。切换到“选择/移动”后可拖动已有批注；形状使用控制点缩放，箭头直接拖动起点或终点。按住 Alt 再绘制可避免误选已有形状。","en":"Use ellipse, rectangle, arrow, or brush marks to indicate edit locations. Switch to Select/Move to drag existing annotations; shape handles resize regions, and arrow endpoints can be dragged directly. Hold Alt while drawing to avoid selecting an existing shape."};
+  MESSAGES['creator.precision_docs_eraser_title'] = {"zh-CN":"橡皮擦与历史","en":"Eraser and history"};
+  MESSAGES['creator.precision_docs_eraser_body'] = {"zh-CN":"橡皮擦可点击删除选中的对象，也可在画笔轨迹上拖动擦除；移动、缩放、擦除和清除都可撤销/重做。","en":"The eraser can click to delete the selected object, or drag over brush strokes to erase them. Move, resize, erase, and clear actions all support undo/redo."};
+  MESSAGES['creator.precision_docs_text_title'] = {"zh-CN":"文字批注","en":"Text annotations"};
+  MESSAGES['creator.precision_docs_text_body'] = {"zh-CN":"文字工具单击画布添加文字；切到“选择/移动”后可拖动移动，双击已有文字可再次编辑，选中后可调整字号和颜色。","en":"With the text tool, click once on the canvas to add text. Switch to Select/Move to drag it, double-click existing text to edit it again, and adjust font size or color while it is selected."};
+  MESSAGES['creator.precision_docs_shortcuts_title'] = {"zh-CN":"工具快捷键","en":"Tool shortcuts"};
+  MESSAGES['creator.precision_docs_shortcuts_body'] = {"zh-CN":"工作台激活时可直接按 V 选择/移动、O 椭圆、A 箭头、R 矩形、B 画笔、E 橡皮擦、T 文字。输入框、下拉框和文字编辑状态下不会触发快捷键。","en":"When the workbench is active, press V for Select/Move, O for ellipse, A for arrow, R for rectangle, B for brush, E for eraser, or T for text. Shortcuts are ignored while an input, select, or text editor is focused."};
+  MESSAGES['creator.precision_docs_cutout_title'] = {"zh-CN":"抠图、羽化与选区","en":"Cutout, feather, and selection"};
+  MESSAGES['creator.precision_docs_cutout_body'] = {"zh-CN":"一键抠图会追加真实透明 PNG 版本。选择透明版本后可用 0–64 px 羽化精修 alpha 边缘；勾选“仅精修画布选区”时，画笔、矩形或椭圆会作为局部选区。棋盘格只用于预览，不会改变文件透明度。","en":"One-click cutout appends a real transparent PNG version. After selecting a transparent version, use 0-64 px feathering to refine the alpha edge; when Refine canvas selection only is enabled, brush, rectangle, and ellipse marks become the local selection. The checkerboard is preview-only and does not change file transparency."};
+  MESSAGES['creator.cutout_algorithm_label'] = {"zh-CN":"抠图算法","en":"Cutout algorithm"};
+  MESSAGES['creator.cutout_algorithm_checking'] = {"zh-CN":"正在检查已验证算法…","en":"Checking verified algorithms..."};
+  MESSAGES['creator.cutout_capability_refresh'] = {"zh-CN":"重新检查","en":"Recheck"};
+  MESSAGES['creator.cutout_capability_refresh_tooltip'] = {"zh-CN":"重新检查本地模型和算法能力","en":"Recheck local model and algorithm capability"};
+  MESSAGES['creator.cutout_algorithm_details'] = {"zh-CN":"候选详情","en":"Candidate details"};
+  MESSAGES['creator.cutout_algorithm_ready'] = {"zh-CN":"已选择已验证算法：{algorithm}","en":"Verified algorithm selected: {algorithm}"};
+  MESSAGES['creator.cutout_algorithm_unavailable'] = {"zh-CN":"当前没有已验证且可执行的抠图算法。","en":"No verified executable cutout algorithm is available."};
+  MESSAGES['creator.cutout_algorithm_verified'] = {"zh-CN":"已验证且可执行","en":"Verified and executable"};
+  MESSAGES['creator.cutout_algorithm_unverified'] = {"zh-CN":"未验证，只读展示","en":"Unverified, read-only"};
+  MESSAGES['creator.cutout_algorithm_modnet_lab_notice'] = {"zh-CN":"本地实验室（实验性）：人像优化，复杂背景可能误抠","en":"Local lab (experimental): optimized for portraits; complex backgrounds may be cut incorrectly"};
+  MESSAGES['creator.cutout_algorithm_adapter_id'] = {"zh-CN":"规范 ID","en":"Canonical ID"};
+  MESSAGES['creator.cutout_algorithm_source'] = {"zh-CN":"来源","en":"Source"};
+  MESSAGES['creator.cutout_algorithm_license'] = {"zh-CN":"许可证","en":"License"};
+  MESSAGES['creator.cutout_algorithm_dependencies'] = {"zh-CN":"依赖","en":"Dependencies"};
+  MESSAGES['creator.cutout_algorithm_resources'] = {"zh-CN":"资源状态","en":"Resource status"};
+  MESSAGES['creator.cutout_algorithm_resources_model'] = {"zh-CN":"缺少已验证权重","en":"Verified weights missing"};
+  MESSAGES['creator.cutout_algorithm_resources_dependency'] = {"zh-CN":"缺少已验证运行依赖","en":"Verified runtime dependency missing"};
+  MESSAGES['creator.cutout_algorithm_resources_model_dependency'] = {"zh-CN":"缺少已验证权重和运行依赖","en":"Verified weights and runtime dependencies missing"};
+  MESSAGES['creator.cutout_algorithm_not_reported'] = {"zh-CN":"未报告","en":"Not reported"};
+  MESSAGES['creator.cutout_algorithm_details_empty'] = {"zh-CN":"后端尚未报告算法候选详情。","en":"The backend has not reported algorithm candidate details."};
+  MESSAGES['creator.precision_docs_cutout_model_title'] = {"zh-CN":"本地人物抠图模型","en":"Local person-cutout model"};
+  MESSAGES['creator.precision_docs_cutout_model_purpose'] = {"zh-CN":"该 ONNX 模型只在本机进行人物分割，为“一键抠出人物”生成透明背景；它不是精准改图 Provider，也不会把图片发送给模型下载站。","en":"This ONNX model performs person segmentation locally to create a transparent background for One-click person cutout. It is not a precise-edit provider and does not send your image to the model download site."};
+  MESSAGES['creator.precision_docs_cutout_model_links_label'] = {"zh-CN":"模型资料链接","en":"Model reference links"};
+  MESSAGES['creator.precision_docs_cutout_model_project_guide'] = {"zh-CN":"GenBox 手动安装与校验指南","en":"GenBox manual installation and verification guide"};
+  MESSAGES['creator.precision_docs_cutout_model_upstream'] = {"zh-CN":"rembg 上游模型发布页","en":"rembg upstream model release"};
+  MESSAGES['creator.precision_docs_cutout_model_official'] = {"zh-CN":"U²-Net 官方项目","en":"Official U²-Net project"};
+  MESSAGES['creator.precision_docs_cutout_model_step_download'] = {"zh-CN":"从上游发布页手动下载文件 u2net_human_seg.onnx。","en":"Manually download u2net_human_seg.onnx from the upstream release page."};
+  MESSAGES['creator.precision_docs_cutout_model_step_place'] = {"zh-CN":"在 GenBox 数据目录下创建对应文件夹，并把文件放到所有系统统一的相对位置：","en":"Create the folders under the GenBox data directory and place the file at the same relative location on every system:"};
+  MESSAGES['creator.precision_docs_cutout_model_step_verify'] = {"zh-CN":"返回工作台刷新状态；只有文件校验和本地运行能力探测都通过后，一键抠图才会启用。","en":"Return to the workbench and refresh the status. One-click cutout is enabled only after file verification and the local runtime capability probe both pass."};
+  MESSAGES['creator.precision_docs_cutout_model_boundary'] = {"zh-CN":"当前自动下载未启用。模型转换链、训练数据来源、授权与商业使用权利尚未由 GenBox 验证；下载或使用前请自行阅读上游资料并确认适用于你的场景。","en":"Automated download is currently disabled. GenBox has not verified the model conversion chain, training-data provenance, license, or commercial-use rights. Review the upstream materials and confirm suitability for your use before downloading or using it."};
+  MESSAGES['creator.precision_docs_resize_title'] = {"zh-CN":"纯尺寸扩图","en":"Pure size expansion"};
+  MESSAGES['creator.precision_docs_resize_body'] = {"zh-CN":"无需批注也可开启“改变尺寸”。“模型尺寸”优先使用当前模型已声明的原生尺寸；未声明候选需要逐项用户授权试用，实际输出仍须严格校验。“裁切适配”使用常用修图尺寸，模型完成一次改图后由 GenBox 在本地裁切缩放到目标尺寸。","en":"You can enable Change size without annotations. Model size prefers native dimensions declared for the current model; undeclared candidates need a scoped user trial authorization and actual output still passes strict validation. Crop to fit uses common editing sizes and GenBox locally crops/scales the single model result to the target."};
+  MESSAGES['creator.precision_docs_versions_title'] = {"zh-CN":"版本与对比","en":"Versions and comparison"};
+  MESSAGES['creator.precision_docs_versions_body'] = {"zh-CN":"版本栏用于浏览结果；“修改前”显示父版本，“修改后”显示所选版本，“对比”可拖动分隔线。左下角显示对应图片的实际尺寸及可用的版本时间（不是拍摄时间）。生成完成后会把新结果设为下一次底图；也可手动选择旧版本并点“设为下一次底图”。从工作流恢复可继续编辑。","en":"Browse results in the version rail. Before shows the parent, After shows the selection, and Compare has a draggable divider. The corner shows each image's actual dimensions and available version time, not capture time. New generation results become the next base; you can also select an older version and choose Use as next base. Restore a workflow to continue editing."};
+  MESSAGES['creator.precision_docs_fullscreen_title'] = {"zh-CN":"全屏与节点编辑","en":"Fullscreen and node editing"};
+  MESSAGES['creator.precision_docs_fullscreen_body'] = {"zh-CN":"“图片全屏”只打开当前选定图片，并按原图与每轮改图顺序显示提示词分片；“全屏”进入完整工作台。双击主画布可切换工作台全屏，按 Esc 可退出。选择已有标注后拖动控制节点可调整形状和箭头端点，双击文字可再次编辑。","en":"Image fullscreen opens only the selected image and shows prompt chunks in original-to-edit order; Fullscreen enters the complete workbench. Double-click the main canvas to toggle workbench fullscreen, and press Escape to exit. Select an annotation and drag control nodes to adjust shapes or arrow endpoints, and double-click text to edit it again."};
+  MESSAGES['creator.precision_docs_models_title'] = {"zh-CN":"模型筛选","en":"Model filtering"};
+  MESSAGES['creator.precision_docs_models_body'] = {"zh-CN":"先选模型端点，再用“显示模型”按系列勾选常用模型，点“确定”保存到本机；“取消”丢弃本次修改。分组不代表支持改图。选择编辑模型后，尺寸状态随当前端点和模型更新；授权试用仅对该端点、模型和尺寸有效，不会自动生成，也不保证上游成功。失败或 503 不等于尺寸不支持；检查原因后再决定是否手动重试。","en":"Choose an endpoint, then select model families in Displayed models and Confirm to save locally; Cancel discards changes. Grouping does not certify editing support. Size status follows the selected endpoint and model. A trial authorization applies only to that endpoint, model and exact size; it neither generates nor guarantees success. Failure or HTTP 503 does not prove a size unsupported. Review the cause before manually retrying."};
+  MESSAGES['creator.precision_replace_image'] = {"zh-CN":"更换图片","en":"Replace image"};
+  MESSAGES['creator.precision_replace_task_active'] = {"zh-CN":"请先停止当前精准改图任务，再更换图片。","en":"Stop the current precise edit task before replacing the image."};
+  MESSAGES['creator.precision_replace_confirm'] = {"zh-CN":"更换图片会清除当前提示词与修改说明、批注、版本、尺寸调整和任务记录。继续吗？","en":"Replacing the image clears the current prompt and instructions, annotations, versions, size changes, and task details. Continue?"};
+  MESSAGES['creator.precision_model_help_label'] = {"zh-CN":"查看模型选择说明","en":"View model selection help"};
+  MESSAGES['creator.precision_config_docs'] = {"zh-CN":"打开项目内配置说明","en":"Open project configuration guide"};
+  MESSAGES['creator.precision_config_docs_short'] = {"zh-CN":"配置说明","en":"Config guide"};
+  MESSAGES['creator.precision_display_mode'] = {"zh-CN":"显示模式","en":"Display mode"};
+  MESSAGES['creator.precision_manual_edit'] = {"zh-CN":"手动编辑","en":"Manual editing"};
+  MESSAGES['creator.precision_shapes'] = {"zh-CN":"形状","en":"Shapes"};
+  MESSAGES['creator.precision_history'] = {"zh-CN":"历史","en":"History"};
+  MESSAGES['creator.precision_edit_annotation_group'] = {"zh-CN":"批注类型","en":"Annotation type"};
+  MESSAGES['creator.precision_edit_style_group'] = {"zh-CN":"批注样式","en":"Annotation style"};
+  MESSAGES['creator.precision_edit_history_group'] = {"zh-CN":"批注历史","en":"Annotation history"};
+  MESSAGES['creator.precision_edit_changes'] = {"zh-CN":"修改列表","en":"Change list"};
+  MESSAGES['creator.precision_edit_changes_empty'] = {"zh-CN":"添加箭头、矩形、椭圆、画笔或文字后，在这里填写每个位置如何修改。","en":"Add an arrow, rectangle, ellipse, brush mark, or text, then describe each change here."};
+  MESSAGES['creator.precision_edit_object_instruction'] = {"zh-CN":"这个位置要怎么改","en":"How should this location change?"};
+  MESSAGES['creator.precision_edit_object_instruction_placeholder'] = {"zh-CN":"例如：换成透明玻璃杯","en":"For example: replace with a clear glass cup"};
+  MESSAGES['creator.precision_edit_delete'] = {"zh-CN":"删除","en":"Delete"};
+  MESSAGES['creator.precision_instruction_required'] = {"zh-CN":"请为每个标注填写“这个位置要怎么改”。","en":"Describe how every marked location should change."};
+  MESSAGES['creator.precision_edit_file_required'] = {"zh-CN":"请选择图片文件。","en":"Choose an image file."};
+  MESSAGES['creator.precision_original'] = {"zh-CN":"原","en":"Original"};
+  MESSAGES['creator.precision_versions'] = {"zh-CN":"版本","en":"Versions"};
+  MESSAGES['creator.precision_session_results'] = {"zh-CN":"当前会话结果","en":"Current session results"};
+  MESSAGES['creator.precision_session_gallery_show'] = {"zh-CN":"显示精准改图图库","en":"Show Precision Edit gallery"};
+  MESSAGES['creator.precision_session_gallery_title'] = {"zh-CN":"精准改图图库","en":"Precision Edit gallery"};
+  MESSAGES['creator.precision_session_gallery_poster_hint'] = {"zh-CN":"全部改图结果","en":"All edited results"};
+  MESSAGES['creator.precision_session_empty'] = {"zh-CN":"提交改图后，结果会显示在精准改图图库中。","en":"Submit an edit to see the result in the Precision Edit gallery."};
+  MESSAGES['creator.precision_workflow_history'] = {"zh-CN":"历史改图工作流","en":"Past edit workflows"};
+  MESSAGES['creator.precision_workflow_history_refresh'] = {"zh-CN":"刷新历史改图工作流","en":"Refresh edit history"};
+  MESSAGES['creator.precision_workflow_history_filters'] = {"zh-CN":"历史改图筛选","en":"Edit history filters"};
+  MESSAGES['creator.precision_workflow_history_filter_trigger'] = {"zh-CN":"工作流筛选","en":"Filter workflows"};
+  MESSAGES['creator.precision_workflow_history_filter_title'] = {"zh-CN":"选择历史改图工作流","en":"Choose a past edit workflow"};
+  MESSAGES['creator.precision_workflow_history_action_title'] = {"zh-CN":"选择操作","en":"Choose an action"};
+  MESSAGES['creator.precision_workflow_history_date_unknown'] = {"zh-CN":"日期未知","en":"Date unavailable"};
+  MESSAGES['creator.precision_workflow_history_id'] = {"zh-CN":"工作流 ID","en":"Workflow ID"};
+  MESSAGES['creator.precision_workflow_history_id_placeholder'] = {"zh-CN":"pw_…","en":"pw_…"};
+  MESSAGES['creator.precision_workflow_history_id_invalid'] = {"zh-CN":"请输入有效的工作流 ID。","en":"Enter a valid workflow ID."};
+  MESSAGES['creator.precision_workflow_history_loading'] = {"zh-CN":"正在加载历史改图工作流…","en":"Loading past edit workflows…"};
+  MESSAGES['creator.precision_workflow_history_loaded'] = {"zh-CN":"已加载 {count} 个历史工作流。","en":"Loaded {count} past workflows."};
+  MESSAGES['creator.precision_workflow_history_load_failed'] = {"zh-CN":"历史改图工作流暂时无法加载。","en":"Past edit workflows are unavailable right now."};
+  MESSAGES['creator.precision_workflow_history_empty'] = {"zh-CN":"没有符合筛选条件的历史改图工作流。","en":"No past edit workflows match these filters."};
+  MESSAGES['creator.precision_workflow_history_original'] = {"zh-CN":"原图","en":"Original"};
+  MESSAGES['creator.precision_workflow_history_step'] = {"zh-CN":"第 {count} 步","en":"Step {count}"};
+  MESSAGES['creator.precision_workflow_history_edits'] = {"zh-CN":"{count} 次改图","en":"{count} edits"};
+  MESSAGES['creator.precision_workflow_history_selected'] = {"zh-CN":"已选择历史改图","en":"Selected past edit"};
+  MESSAGES['creator.precision_workflow_history_view_image'] = {"zh-CN":"查看改图图片","en":"View edited image"};
+  MESSAGES['creator.precision_workflow_history_restore'] = {"zh-CN":"恢复历史改图工作台","en":"Restore this edit workspace"};
+  MESSAGES['creator.precision_workflow_history_restoring'] = {"zh-CN":"正在恢复历史改图工作台…","en":"Restoring this edit workspace…"};
+  MESSAGES['creator.precision_workflow_history_restored'] = {"zh-CN":"已恢复历史改图工作台。","en":"Past edit workspace restored."};
+  MESSAGES['creator.precision_session_date_from'] = {"zh-CN":"从","en":"From"};
+  MESSAGES['creator.precision_session_date_to'] = {"zh-CN":"至","en":"To"};
+  MESSAGES['creator.precision_session_date_clear'] = {"zh-CN":"清除","en":"Clear"};
+  MESSAGES['creator.precision_use_as_base'] = {"zh-CN":"设为下一次底图","en":"Use as next base"};
+  MESSAGES['creator.precision_base_updated'] = {"zh-CN":"已明确设为下一次修改底图。","en":"Set as the base for the next edit."};
+  MESSAGES['creator.precision_before'] = {"zh-CN":"修改前","en":"Before"};
+  MESSAGES['creator.precision_after'] = {"zh-CN":"修改后","en":"After"};
+  MESSAGES['creator.precision_compare'] = {"zh-CN":"对比","en":"Compare"};
+  MESSAGES['creator.precision_version_view'] = {"zh-CN":"版本视图","en":"Version view"};
+  MESSAGES['creator.precision_compare_slider'] = {"zh-CN":"对比滑块","en":"Comparison slider"};
+  MESSAGES['creator.precision_fullscreen'] = {"zh-CN":"全屏","en":"Fullscreen"};
+  MESSAGES['creator.precision_image_fullscreen'] = {"zh-CN":"图片全屏","en":"Image fullscreen"};
+  MESSAGES['creator.precision_image_fullscreen_label'] = {"zh-CN":"仅全屏当前选定图片","en":"Fullscreen the currently selected image only"};
+  MESSAGES['creator.precision_image_fullscreen_tooltip'] = {"zh-CN":"仅全屏当前选定图片","en":"Fullscreen the currently selected image only"};
+  MESSAGES['creator.precision_fullscreen_label'] = {"zh-CN":"全屏工作台","en":"Fullscreen workbench"};
+  MESSAGES['creator.precision_fullscreen_tooltip'] = {"zh-CN":"全屏工作台（也可双击画布）","en":"Fullscreen workbench (or double-click the canvas)"};
+  MESSAGES['creator.precision_exit_fullscreen_label'] = {"zh-CN":"退出全屏工作台","en":"Exit fullscreen workbench"};
+  MESSAGES['creator.precision_exit_fullscreen_tooltip'] = {"zh-CN":"退出全屏（也可双击画布或按 Esc）","en":"Exit fullscreen (or double-click the canvas or press Escape)"};
+  MESSAGES['creator.precision_fullscreen_double_click'] = {"zh-CN":"双击画布切换全屏","en":"Double-click the canvas to toggle fullscreen"};
+  MESSAGES['creator.precision_fullscreen_hint'] = {"zh-CN":"全屏会显示完整工作台；再次双击画布、按 Esc 或使用全屏按钮可退出。","en":"Fullscreen shows the complete workbench. Double-click the canvas again, press Escape, or use the Fullscreen button to exit."};
+  MESSAGES['creator.precision_canvas_interaction_hint'] = {"zh-CN":"选择标注后可拖动控制节点调整形状或箭头端点；双击文字重新编辑，双击画布切换全屏。","en":"After selecting an annotation, drag control nodes to adjust shapes or arrow endpoints. Double-click text to edit it again, or double-click the canvas to toggle fullscreen."};
+  MESSAGES['creator.precision_canvas_resize_label'] = {"zh-CN":"调整画布显示大小","en":"Resize the canvas display"};
+  MESSAGES['creator.precision_canvas_resize_tooltip'] = {"zh-CN":"拖动或使用左右方向键调整画布显示大小","en":"Drag or use the Left and Right arrow keys to resize the canvas display"};
+  MESSAGES['creator.precision_version_shortcuts'] = {"zh-CN":"版本快捷栏","en":"Version shortcuts"};
+  MESSAGES['creator.precision_subject_actions'] = {"zh-CN":"主体处理","en":"Subject processing"};
+  MESSAGES['creator.precision_size_title'] = {"zh-CN":"智能扩图与画布适配","en":"Smart outpainting and canvas fit"};
+  MESSAGES['creator.precision_size_preserve'] = {"zh-CN":"保持原图","en":"Keep original"};
+  MESSAGES['creator.precision_size_resize'] = {"zh-CN":"改变尺寸","en":"Change size"};
+  MESSAGES['creator.precision_size_preserve_hint'] = {"zh-CN":"默认保持原图尺寸和比例，不会套用文生图设置。","en":"Keeps the source dimensions and aspect ratio by default; text-to-image settings are not reused."};
+  MESSAGES['creator.precision_size_resize_active_hint'] = {"zh-CN":"选择目标尺寸和构图方向；生成前会检查当前模型是否可用。","en":"Choose a target size and composition direction. GenBox checks whether the current model can use it before generation."};
+  MESSAGES['creator.precision_size_mode'] = {"zh-CN":"尺寸方式","en":"Size mode"};
+  MESSAGES['creator.precision_size_mode_strict'] = {"zh-CN":"模型尺寸","en":"Model sizes"};
+  MESSAGES['creator.precision_size_mode_fit_crop'] = {"zh-CN":"裁切适配","en":"Crop to fit"};
+  MESSAGES['creator.precision_size_mode_strict_hint'] = {"zh-CN":"优先使用当前模型已声明的原生尺寸；未声明候选需逐项授权试用，不提供自定义，也不会裁切或拉伸。","en":"Prefers native sizes declared for the current model; undeclared candidates require a scoped trial authorization. No custom size, crop, or stretch."};
+  MESSAGES['creator.precision_size_mode_fit_crop_hint'] = {"zh-CN":"使用常见修图尺寸；上游返回后在本地裁切并缩放到目标尺寸，不会再次调用模型。","en":"Uses common editing sizes; the result is locally cropped and scaled to the target without another model request."};
+  MESSAGES['creator.precision_size_preset'] = {"zh-CN":"常用尺寸","en":"Common sizes"};
+  MESSAGES['creator.precision_size_model_preset'] = {"zh-CN":"模型尺寸预设","en":"Model size presets"};
+  MESSAGES['creator.precision_size_crop_preset'] = {"zh-CN":"裁切适配预设","en":"Crop-to-fit presets"};
+  MESSAGES['creator.precision_size_tier'] = {"zh-CN":"输出档位","en":"Output tier"};
+  MESSAGES['creator.precision_size_ratio'] = {"zh-CN":"构图比例","en":"Aspect ratio"};
+  MESSAGES['creator.precision_size_custom'] = {"zh-CN":"自定义","en":"Custom"};
+  MESSAGES['creator.precision_size_preset_name'] = {"zh-CN":"预设名称","en":"Preset name"};
+  MESSAGES['creator.precision_size_preset_name_placeholder'] = {"zh-CN":"例如：横版封面","en":"For example: Landscape cover"};
+  MESSAGES['creator.precision_size_saved_actions'] = {"zh-CN":"已保存尺寸预设","en":"Saved size presets"};
+  MESSAGES['creator.precision_size_save_preset'] = {"zh-CN":"保存当前尺寸","en":"Save current size"};
+  MESSAGES['creator.precision_size_delete_preset'] = {"zh-CN":"删除所选","en":"Delete selected"};
+  MESSAGES['creator.precision_size_reset_presets'] = {"zh-CN":"重置已保存","en":"Reset saved"};
+  MESSAGES['creator.precision_size_preset_name_invalid'] = {"zh-CN":"请输入 1 到 40 个字符的预设名称；控制字符会被移除。","en":"Enter a preset name from 1 to 40 characters; control characters are removed."};
+  MESSAGES['creator.precision_size_preset_crop_only'] = {"zh-CN":"自定义尺寸仅在“裁切适配”中可保存。","en":"Custom sizes can only be saved in Crop to fit mode."};
+  MESSAGES['creator.precision_size_preset_exists'] = {"zh-CN":"“{name}”已经保存，无需重复添加。","en":"“{name}” is already saved."};
+  MESSAGES['creator.precision_size_preset_name_duplicate'] = {"zh-CN":"名称“{name}”已用于另一个尺寸。","en":"The name “{name}” is already used for another size."};
+  MESSAGES['creator.precision_size_preset_size_duplicate'] = {"zh-CN":"该尺寸已存在：{name}","en":"That size already exists: {name}"};
+  MESSAGES['creator.precision_size_preset_limit'] = {"zh-CN":"最多保存 {count} 个尺寸预设。","en":"You can save up to {count} size presets."};
+  MESSAGES['creator.precision_size_preset_storage_error'] = {"zh-CN":"浏览器未能保存尺寸预设；当前尺寸仍可手动使用。","en":"The browser could not save size presets; you can still use the current dimensions manually."};
+  MESSAGES['creator.precision_size_preset_saved'] = {"zh-CN":"已保存“{name}”。","en":"Saved “{name}”."};
+  MESSAGES['creator.precision_size_preset_delete_saved_only'] = {"zh-CN":"只能删除已保存的自定义尺寸预设。","en":"Only saved custom size presets can be deleted."};
+  MESSAGES['creator.precision_size_preset_deleted'] = {"zh-CN":"已删除“{name}”。","en":"Deleted “{name}”."};
+  MESSAGES['creator.precision_size_preset_reset_empty'] = {"zh-CN":"当前没有已保存的尺寸预设。","en":"There are no saved size presets."};
+  MESSAGES['creator.precision_size_preset_reset_confirm'] = {"zh-CN":"清除全部已保存的尺寸预设？内置尺寸不会受影响。","en":"Clear all saved size presets? Built-in sizes will not be changed."};
+  MESSAGES['creator.precision_size_preset_reset_done'] = {"zh-CN":"已清除全部已保存的尺寸预设。","en":"All saved size presets were cleared."};
+  MESSAGES['creator.precision_size_preset_unconfirmed'] = {"zh-CN":"此本地尺寸可以选择；提交改变尺寸请求前，模型仍需明确声明支持。","en":"This local size remains selectable; submission still requires explicit model support."};
+  MESSAGES['creator.precision_size_preset_undeclared'] = {"zh-CN":"此本地尺寸可以选择；当前模型未声明支持，提交时会阻止。","en":"This local size remains selectable; the current model has not declared support, so submission will be blocked."};
+  MESSAGES['creator.precision_size_width'] = {"zh-CN":"宽度 (px)","en":"Width (px)"};
+  MESSAGES['creator.precision_size_height'] = {"zh-CN":"高度 (px)","en":"Height (px)"};
+  MESSAGES['creator.precision_aspect_ratio_hint_empty'] = {"zh-CN":"选择目标尺寸后，GenBox 会发送像素尺寸；后端会由尺寸推导构图比例约束。","en":"After you choose a target size, GenBox sends the pixel size; the backend derives the aspect-ratio composition constraint from it."};
+  MESSAGES['creator.precision_aspect_ratio_hint'] = {"zh-CN":"将发送像素尺寸 {size}；后端会由它推导“{ratio}”构图约束。“8K”等风格词不等于实际输出像素。","en":"Will send pixel size {size}; the backend derives “{ratio}” as the composition constraint. Style words like “8K” do not set the actual output pixels."};
+  MESSAGES['creator.precision_size_instruction'] = {"zh-CN":"构图调整说明","en":"Composition guidance"};
+  MESSAGES['creator.precision_size_instruction_placeholder'] = {"zh-CN":"例如：向左右扩展背景，人物大小和位置保持不变","en":"For example: extend the background sideways while keeping the subject size and position."};
+  MESSAGES['creator.precision_size_prompt_preset'] = {"zh-CN":"构图说明预设","en":"Composition presets"};
+  MESSAGES['creator.precision_size_prompt_preset_choose'] = {"zh-CN":"选择后填入构图说明","en":"Choose to fill the guidance"};
+  MESSAGES['creator.precision_size_prompt_preset_append_hint'] = {"zh-CN":"选择预设会替换当前构图说明；之后仍可自由编辑。","en":"A preset replaces the current guidance, and remains freely editable."};
+  MESSAGES['creator.precision_size_prompt_preset_keep_style_subject'] = {"zh-CN":"保持原有画面风格与主体元素，向四周自然扩展","en":"Preserve the original visual style and main elements, extending naturally in all directions."};
+  MESSAGES['creator.precision_size_prompt_preset_keep_person'] = {"zh-CN":"保持人物大小和位置，补全背景","en":"Keep the person's size and position, and complete the background."};
+  MESSAGES['creator.precision_size_prompt_preset_center_subject'] = {"zh-CN":"主体居中，扩展环境并保持光影一致","en":"Center the subject, extend the environment, and keep lighting consistent."};
+  MESSAGES['creator.precision_size_prompt_preset_extend_left'] = {"zh-CN":"向左延展场景并保持透视","en":"Extend the scene to the left while preserving perspective."};
+  MESSAGES['creator.precision_size_prompt_preset_extend_right'] = {"zh-CN":"向右延展场景并保持透视","en":"Extend the scene to the right while preserving perspective."};
+  MESSAGES['creator.precision_size_prompt_preset_banner'] = {"zh-CN":"扩展为横幅构图并保留关键元素","en":"Expand to a banner composition while retaining key elements."};
+  MESSAGES['creator.precision_size_prompt_preset_too_long'] = {"zh-CN":"追加此预设会超过 500 个字符，请先精简构图说明。","en":"Appending this preset would exceed 500 characters. Shorten the composition guidance first."};
+  MESSAGES['creator.precision_size_resize_hint'] = {"zh-CN":"只有开启改变尺寸时才会把目标尺寸交给模型；构图说明帮助模型理解画面，不会把“8K”等描述词当成实际像素。","en":"The target size is sent only in Change size mode. Composition guidance helps the model frame the scene, but words like “8K” are not treated as actual pixels."};
+  MESSAGES['creator.precision_output_size_policy'] = {"zh-CN":"输出尺寸策略","en":"Output size policy"};
+  MESSAGES['creator.precision_output_size_policy_strict'] = {"zh-CN":"严格匹配","en":"Strict"};
+  MESSAGES['creator.precision_output_size_policy_fit_crop'] = {"zh-CN":"裁切适配","en":"Crop to fit"};
+  MESSAGES['creator.precision_output_size_policy_strict_hint'] = {"zh-CN":"默认严格匹配；上游返回尺寸不一致时失败，并提示实际尺寸，不会自动重试付费请求。","en":"Strict is the default. If the upstream size differs, the task fails with the actual size and does not auto-retry a paid request."};
+  MESSAGES['creator.precision_output_size_policy_fit_crop_hint'] = {"zh-CN":"若上游输出接近目标，GenBox 会本地居中裁切并高质量缩放到目标尺寸，不再次调用模型，并记录原始尺寸。","en":"If the upstream output is near the target, GenBox locally center-crops and high-quality scales it to the target, records the original size, and does not call the model again."};
+  MESSAGES['creator.precision_output_size_adjusted'] = {"zh-CN":"上游实际 {actual}，已裁切适配为 {target}。","en":"Upstream returned {actual}; locally fit/cropped to {target}."};
+  MESSAGES['creator.precision_output_size_strict_mismatch'] = {"zh-CN":"上游实际 {actual}，目标 {target}；严格尺寸已失败。可改用裁切适配，不会自动重试付费请求。","en":"Upstream returned {actual}, target was {target}; strict size matching failed. You can switch to crop-to-fit; GenBox will not auto-retry a paid request."};
+  MESSAGES['creator.precision_connection_response_read_no_retry'] = {"zh-CN":"图片编辑请求已发往上游，但读取响应时连接被中断（ReadError）。为避免可能重复计费，GenBox 未自动重试。请检查端点服务端 /images/edits 的反向代理超时、上传体积限制和连接中断记录，再在 GenBox 手动重试一次；“测试连接”只验证 /models，不能证明图片编辑可用。","en":"The image-edit request reached the upstream but its response read was interrupted (ReadError). GenBox did not auto-retry because the edit may already have been billed. Check the endpoint's /images/edits reverse-proxy timeout, upload limits, and disconnect logs, then retry once manually in GenBox. The connection test only checks /models; it does not validate image editing."};
+  MESSAGES['creator.precision_size_capability_label'] = {"zh-CN":"当前尺寸模型支持状态","en":"Current size model support"};
+  MESSAGES['creator.precision_size_capability_model_required'] = {"zh-CN":"先选择并确认一个精准改图模型，再确认当前目标尺寸。","en":"Select and confirm a precision-edit model before confirming the current target size."};
+  MESSAGES['creator.precision_size_capability_invalid'] = {"zh-CN":"先输入有效的目标宽度和高度。","en":"Enter a valid target width and height first."};
+  MESSAGES['creator.precision_size_capability_unknown'] = {"zh-CN":"常用尺寸只是表单预设，不代表端点支持。当前模型尚未声明目标尺寸 {size}；核对端点说明后，可选择“授权试用当前尺寸”。授权不会继承其他模型尺寸，也不会自动发送或重试请求。","en":"Size presets only fill the form; they do not prove endpoint support. The current model has not declared {size}. After checking the endpoint documentation, you may authorize a trial for this exact size. Authorization never inherits sizes from another model and never sends or retries a request automatically."};
+  MESSAGES['creator.precision_size_capability_unsupported'] = {"zh-CN":"常用尺寸只是表单预设。目标尺寸 {size} 不在当前模型已声明的尺寸中；核对端点说明后，可选择“授权试用当前尺寸”。这只作用于当前供应商、模型和尺寸。","en":"Size presets only fill the form. Target size {size} is not declared for the current model. After checking the endpoint documentation, you may authorize a trial for this exact provider, model, and size."};
+  MESSAGES['creator.precision_size_capability_supported'] = {"zh-CN":"已保存当前供应商、模型和尺寸 {size} 的用户试用授权；实际输出仍由严格尺寸校验决定。","en":"A user trial authorization for the current provider, model, and size {size} is saved; strict output validation still decides the actual result."};
+  MESSAGES['creator.precision_size_capability_flexible'] = {"zh-CN":"已启用 GPT Image 2 合法尺寸范围：所有合规预设和自定义尺寸均可提交；越界、非 16 对齐或像素范围不合规的尺寸仍会拦截。","en":"The GPT Image 2 legal size envelope is enabled. All compliant presets and custom sizes can be submitted; out-of-range, non-16-aligned, or invalid pixel sizes remain blocked."};
+  MESSAGES['creator.precision_size_capability_fit_crop'] = {"zh-CN":"裁切适配使用本地常用修图尺寸。模型完成一次改图后，GenBox 会在本地裁切并缩放到目标尺寸；这不表示上游原生支持该尺寸。","en":"Crop to fit uses common local finishing sizes. After one model edit, GenBox crops and scales locally to the target; this does not claim native upstream support for that size."};
+  MESSAGES['creator.precision_size_preset_trial_required'] = {"zh-CN":"当前模型尚未声明此尺寸；选择后可授权试用。","en":"The current model has not declared this size; select it to authorize a trial."};
+  MESSAGES['creator.precision_size_confirm_action_empty'] = {"zh-CN":"授权试用当前尺寸","en":"Authorize current size trial"};
+  MESSAGES['creator.precision_size_revoke_action_empty'] = {"zh-CN":"撤销当前尺寸授权","en":"Revoke current size authorization"};
+  MESSAGES['creator.precision_size_confirm_action'] = {"zh-CN":"授权试用 {size}","en":"Authorize trial for {size}"};
+  MESSAGES['creator.precision_size_revoke_action'] = {"zh-CN":"撤销 {size} 授权","en":"Revoke authorization for {size}"};
+  MESSAGES['creator.precision_size_flexible_enable_action'] = {"zh-CN":"启用全部合法尺寸","en":"Enable all legal sizes"};
+  MESSAGES['creator.precision_size_flexible_disable_action'] = {"zh-CN":"恢复逐项尺寸确认","en":"Use per-size confirmation"};
+  MESSAGES['creator.precision_size_confirm_dialog'] = {"zh-CN":"当前端点和模型尚未声明精准改图尺寸 {size}。继续后，只会保存当前供应商、当前模型和该尺寸的用户试用授权；不会借用其他模型的尺寸、不会自动发送或重试。确认后仍需你手动点击“生成图片”，且严格尺寸校验仍会拒绝输出不匹配。继续吗？","en":"The current endpoint and model have not declared precision-edit size {size}. Continuing saves a user trial authorization only for this provider, model, and size. It never borrows another model's sizes or automatically sends/retries. You must still manually click Generate, and strict validation will reject a mismatched output. Continue?"};
+  MESSAGES['creator.precision_size_revoke_dialog'] = {"zh-CN":"撤销当前供应商和模型对尺寸 {size} 的试用授权？撤销后该尺寸将不能生成，直到再次授权。","en":"Revoke the trial authorization for {size} on the current provider and model? Generation at this size will be disabled until it is authorized again."};
+  MESSAGES['creator.precision_size_flexible_enable_dialog'] = {"zh-CN":"仅在你已确认当前端点使用 GPT Image 2 兼容尺寸协议时启用。启用后，GenBox 会允许所有合法的 16 对齐尺寸；每次实际输出仍由严格尺寸或裁切适配策略检查。是否继续？","en":"Enable only after confirming that the current endpoint uses the GPT Image 2-compatible size protocol. GenBox will allow every legal 16-aligned size; actual output is still checked by strict size or crop-to-fit policy. Continue?"};
+  MESSAGES['creator.precision_size_flexible_disable_dialog'] = {"zh-CN":"恢复为逐项尺寸确认？恢复后，只有已单独确认的尺寸可以提交。","en":"Return to per-size confirmation? Afterwards, only individually confirmed sizes can be submitted."};
+  MESSAGES['creator.precision_size_confirming'] = {"zh-CN":"正在保存当前模型对 {size} 的试用授权…","en":"Saving a trial authorization for {size} on the current model…"};
+  MESSAGES['creator.precision_size_revoking'] = {"zh-CN":"正在撤销当前模型对 {size} 的试用授权…","en":"Revoking the trial authorization for {size} on the current model…"};
+  MESSAGES['creator.precision_size_confirmed'] = {"zh-CN":"已保存当前供应商、模型和尺寸 {size} 的用户试用授权；实际输出仍需严格校验。","en":"Saved a user trial authorization for the current provider, model, and size {size}; strict validation still applies."};
+  MESSAGES['creator.precision_size_revoked'] = {"zh-CN":"已撤销当前供应商和模型对尺寸 {size} 的试用授权。","en":"Revoked the trial authorization for {size} on the current provider and model."};
+  MESSAGES['creator.precision_size_flexible_enabled'] = {"zh-CN":"已启用全部合法 GPT Image 2 尺寸。","en":"All legal GPT Image 2 sizes are now enabled."};
+  MESSAGES['creator.precision_size_flexible_disabled'] = {"zh-CN":"已恢复逐项尺寸确认。","en":"Per-size confirmation is restored."};
+  MESSAGES['creator.precision_size_capability_save_failed'] = {"zh-CN":"尺寸支持状态保存失败，请稍后重试。","en":"Could not save the size support state. Try again shortly."};
+  MESSAGES['creator.precision_size_invalid'] = {"zh-CN":"请输入 64 到 8192 之间的有效宽高，且总像素不要超过安全上限。","en":"Enter valid dimensions between 64 and 8192 within the pixel safety limit."};
+  MESSAGES['creator.precision_size_instruction_required'] = {"zh-CN":"请填写构图调整说明，告诉模型扩展哪里、哪些主体需要保持不变。","en":"Describe how to reframe or outpaint the image and what must stay unchanged."};
+  MESSAGES['creator.precision_processing_progress'] = {"zh-CN":"处理进度","en":"Processing progress"};
+  MESSAGES['creator.precision_processing_empty'] = {"zh-CN":"提交改图后，这里会显示当前阶段、结果和可恢复的错误信息。","en":"After you submit an edit, this area will show the current stage, result, and recoverable error details."};
+  MESSAGES['creator.precision_task'] = {"zh-CN":"精准任务","en":"Precision task"};
+  MESSAGES['creator.precision_edit_ellipse'] = {"zh-CN":"椭圆","en":"Ellipse"};
+  MESSAGES['creator.precision_edit_brush'] = {"zh-CN":"画笔","en":"Brush"};
+  MESSAGES['creator.precision_edit_eraser'] = {"zh-CN":"橡皮擦","en":"Eraser"};
+  MESSAGES['creator.precision_edit_eraser_hint'] = {"zh-CN":"橡皮擦：点击删除选中标注；拖过画笔轨迹擦除，可撤销。","en":"Eraser: click to delete the selected annotation, or drag over a brush stroke to erase it. Undo is available."};
+  MESSAGES['creator.precision_edit_eraser_deleted'] = {"zh-CN":"已删除选中的标注，可用撤销恢复。","en":"Selected annotation deleted. Use Undo to restore it."};
+  MESSAGES['creator.precision_edit_text_size'] = {"zh-CN":"文字大小","en":"Text size"};
+  MESSAGES['creator.precision_model_display'] = {"zh-CN":"显示模型","en":"Displayed models"};
+  MESSAGES['creator.precision_model_display_all'] = {"zh-CN":"全部 {count} 个模型","en":"All {count} models"};
+  MESSAGES['creator.precision_model_display_summary'] = {"zh-CN":"已显示 {selected}/{total} 个","en":"Showing {selected} of {total}"};
+  MESSAGES['creator.precision_model_menu_title'] = {"zh-CN":"显示模型","en":"Displayed models"};
+  MESSAGES['creator.precision_model_group_video'] = {"zh-CN":"视频系列","en":"Video families"};
+  MESSAGES['creator.precision_model_group_chat'] = {"zh-CN":"GPT / Grok / 其他系列","en":"GPT / Grok / Other families"};
+  MESSAGES['creator.precision_model_menu_hint'] = {"zh-CN":"只影响本机列表可见性；提交仍使用真实模型 ID。","en":"Controls local list visibility only; submissions still use the real model ID."};
+  MESSAGES['creator.precision_model_select_all'] = {"zh-CN":"全选","en":"Select all"};
+  MESSAGES['creator.precision_model_clear'] = {"zh-CN":"清空","en":"Clear"};
+  MESSAGES['creator.precision_model_apply'] = {"zh-CN":"确定","en":"OK"};
+  MESSAGES['creator.precision_model_keep_one'] = {"zh-CN":"至少保留一个可见模型。","en":"Keep at least one visible model."};
+  MESSAGES['creator.precision_model_none_available'] = {"zh-CN":"当前端点没有可显示的精准改图模型。","en":"No precise-edit models are available for this endpoint."};
+  MESSAGES['creator.precision_retry_model_required'] = {"zh-CN":"无法重试精准改图：上次请求没有保存当前服务端点的明确模型，请重新选择并提交。","en":"Cannot retry precision edit: the previous request did not preserve an explicit model for this provider. Select the model and submit again."};
+  MESSAGES['creator.precision_pure_resize_ready'] = {"zh-CN":"纯扩图已就绪：将只提交目标尺寸和构图说明，不发送批注。","en":"Size expansion is ready. Only the target size and composition guidance will be sent, without annotations."};
+  MESSAGES['creator.precision_zoom'] = {"zh-CN":"查看缩放","en":"View zoom"};
+  MESSAGES['creator.precision_zoom_fit'] = {"zh-CN":"适合窗口","en":"Fit"};
+  MESSAGES['creator.precision_zoom_hint'] = {"zh-CN":"只调整查看大小，不改变图片尺寸。按住 Shift 滚轮可缩放。","en":"Changes only the viewing scale, not image dimensions. Shift+wheel also zooms."};
+  MESSAGES['creator.precision_quick_tools'] = {"zh-CN":"智能处理","en":"Smart tools"};
+  MESSAGES['creator.precision_quick_hint'] = {"zh-CN":"先选功能，再在画布上圈出位置。","en":"Choose an action, then mark the area on the canvas."};
+  MESSAGES['creator.precision_ai_remove'] = {"zh-CN":"AI 消除","en":"AI removal"};
+  MESSAGES['creator.precision_remove_people'] = {"zh-CN":"消除路人","en":"Remove people"};
+  MESSAGES['creator.precision_remove_watermark'] = {"zh-CN":"消除水印","en":"Remove watermark"};
+  MESSAGES['creator.precision_manual_selection'] = {"zh-CN":"手动选区","en":"Manual selection"};
+  MESSAGES['creator.precision_ai_remove_ready'] = {"zh-CN":"请用画笔涂出要消除的区域；系统会为这处批注自动填写修改说明。","en":"Brush over the area to remove. Its edit instruction will be filled automatically."};
+  MESSAGES['creator.precision_remove_people_instruction'] = {"zh-CN":"移除标记区域内的路人，并根据周围环境自然补全背景，其他区域保持不变。","en":"Remove bystanders inside the marked area and reconstruct the background naturally; preserve all other areas."};
+  MESSAGES['creator.precision_remove_watermark_instruction'] = {"zh-CN":"移除标记区域内的水印或覆盖文字，并根据周围内容自然补全，其他区域保持不变。","en":"Remove the watermark or overlay text inside the marked area and reconstruct surrounding content naturally; preserve all other areas."};
+  MESSAGES['creator.cutout_person'] = {"zh-CN":"一键抠出人物","en":"Extract person"};
+  MESSAGES['creator.cutout_mode_label'] = {"zh-CN":"抠图模式","en":"Cutout mode"};
+  MESSAGES['creator.cutout_mode_simple'] = {"zh-CN":"简易模式","en":"Simple"};
+  MESSAGES['creator.cutout_mode_professional'] = {"zh-CN":"专业模式","en":"Professional"};
+  MESSAGES['creator.cutout_simple_ready_title'] = {"zh-CN":"本地人物抠图","en":"Local person cutout"};
+  MESSAGES['creator.cutout_professional_open'] = {"zh-CN":"打开专业设置","en":"Open professional settings"};
+  MESSAGES['creator.cutout_professional_title'] = {"zh-CN":"专业抠图设置","en":"Professional cutout settings"};
+  MESSAGES['creator.cutout_professional_hint'] = {"zh-CN":"仅显示本机已验证可运行的算法；不会下载或调用第三方在线服务。","en":"Only locally verified runnable algorithms are shown. No third-party download or online service is used."};
+  MESSAGES['creator.cutout_professional_close'] = {"zh-CN":"关闭专业抠图设置","en":"Close professional cutout settings"};
+  MESSAGES['creator.cutout_person_start'] = {"zh-CN":"抠出人物","en":"Extract person"};
+  MESSAGES['creator.cutout_person_hint'] = {"zh-CN":"需要安装本地透明背景抠图组件；未安装时按钮会保持不可用。","en":"Requires a local transparent-background cutout component; the button stays disabled until installed."};
+  MESSAGES['creator.cutout_help_label'] = {"zh-CN":"查看抠图说明","en":"View cutout help"};
+  MESSAGES['creator.cutout_unconfigured_clear'] = {"zh-CN":"当前未安装透明背景抠图组件，可先用画笔圈选后交给编辑模型处理。","en":"No transparent-background cutout component is installed. You can still brush-select an area for the editing model."};
+  MESSAGES['creator.cutout_checking'] = {"zh-CN":"正在检查本地抠图组件…","en":"Checking the local cutout component…"};
+  MESSAGES['creator.cutout_check_failed'] = {"zh-CN":"暂时无法检查本地抠图组件，请稍后重试。","en":"The local cutout component could not be checked. Try again shortly."};
+  MESSAGES['creator.cutout_source_required'] = {"zh-CN":"请先在主画布加载一张本地图片。","en":"Load a local image on the main canvas first."};
+  MESSAGES['creator.cutout_processing'] = {"zh-CN":"正在本地抠出人物，完成前请保持页面打开。","en":"Extracting the person locally. Keep this page open until it finishes."};
+  MESSAGES['creator.cutout_busy'] = {"zh-CN":"本地抠图正在处理另一个请求，请稍后重试。","en":"Local cutout is processing another request. Try again shortly."};
+  MESSAGES['creator.cutout_timeout'] = {"zh-CN":"本地抠图已超时；底层处理可能仍在收尾，请稍后再试。","en":"Local cutout timed out; the underlying work may still be finishing. Try again later."};
+  MESSAGES['creator.cutout_failed'] = {"zh-CN":"本地抠图失败，未添加新版本。","en":"Local cutout failed. No new version was added."};
+  MESSAGES['creator.cutout_result_invalid'] = {"zh-CN":"本地抠图结果未通过验证，未添加新版本。","en":"The cutout result did not pass validation. No new version was added."};
+  MESSAGES['creator.cutout_source_changed'] = {"zh-CN":"抠图期间底图已更换，结果未添加到当前会话。","en":"The base image changed during cutout, so the result was not added to the current session."};
+  MESSAGES['creator.cutout_completed'] = {"zh-CN":"抠图完成，已添加为可浏览的新版本。","en":"Cutout complete. A new browseable version was added."};
+  MESSAGES['creator.cutout_completed_fallback'] = {"zh-CN":"抠图完成，已使用 {adapter}；原请求算法 {requested} 失败后已按边界回退。","en":"Cutout complete using {adapter}; the requested algorithm {requested} failed and a bounded fallback was used."};
+  MESSAGES['creator.cutout'] = {"zh-CN":"一键抠图","en":"Background removal"};
+  MESSAGES['creator.cutout_hint'] = {"zh-CN":"仅在已配置抠图组件时可用。","en":"Available only when a cutout component is configured."};
+  MESSAGES['creator.cutout_start'] = {"zh-CN":"开始抠图","en":"Start cutout"};
+  MESSAGES['creator.cutout_unconfigured'] = {"zh-CN":"尚未配置抠图组件","en":"Cutout component is not configured"};
+  MESSAGES['creator.cutout_ready'] = {"zh-CN":"抠图组件已就绪","en":"Cutout component is ready"};
+  MESSAGES['creator.cutout_refine'] = {"zh-CN":"精修透明边缘","en":"Refine alpha edge"};
+  MESSAGES['creator.cutout_refine_feather'] = {"zh-CN":"羽化","en":"Feather"};
+  MESSAGES['creator.cutout_refine_use_selection'] = {"zh-CN":"仅精修画布选区","en":"Refine canvas selection only"};
+  MESSAGES['creator.cutout_refine_selection_empty'] = {"zh-CN":"用画笔、矩形或椭圆标出选区后可启用。","en":"Add a brush, rectangle, or ellipse selection to enable this option."};
+  MESSAGES['creator.cutout_refine_selection_ready'] = {"zh-CN":"检测到 {count} 个可用选区；勾选后只精修这些区域。","en":"Found {count} usable selections. Enable the option to refine only those areas."};
+  MESSAGES['creator.cutout_refine_flow_hint'] = {"zh-CN":"操作顺序：先抠出人物并选中透明版本，再调羽化；需要局部处理时勾选“仅精修画布选区”。","en":"Flow: run cutout and select the transparent version, then adjust feathering; enable ‘Refine canvas selection only’ for local areas."};
+  MESSAGES['creator.cutout_refine_source_required'] = {"zh-CN":"请先选择一个透明抠图版本，再精修边缘。","en":"Select a transparent cutout version before refining its edge."};
+  MESSAGES['creator.cutout_refine_feather_invalid'] = {"zh-CN":"羽化值必须在 0 到 64 像素之间。","en":"Feather must be between 0 and 64 pixels."};
+  MESSAGES['creator.cutout_refine_processing'] = {"zh-CN":"正在本地精修透明边缘；完成前可取消等待。","en":"Refining the alpha edge locally. You can cancel waiting before it finishes."};
+  MESSAGES['creator.cutout_refine_failed'] = {"zh-CN":"透明边缘精修失败，未添加新版本。","en":"Alpha-edge refinement failed. No new version was added."};
+  MESSAGES['creator.cutout_refine_completed'] = {"zh-CN":"透明边缘精修完成，已追加为当前版本的子版本。","en":"Alpha-edge refinement is complete and was appended as a child version."};
+  MESSAGES['creator.cutout_restore_foreground'] = {"zh-CN":"还原前景","en":"Restore foreground"};
+  MESSAGES['creator.cutout_restore_min_alpha'] = {"zh-CN":"最低不透明度","en":"Minimum alpha"};
+  MESSAGES['creator.cutout_restore_hint'] = {"zh-CN":"使用原始底图在所选区域内恢复前景；需要透明抠图版本和画布选区。","en":"Use the original base image to restore foreground inside the selected area. A transparent cutout version and a canvas selection are required."};
+  MESSAGES['creator.cutout_restore_selection_empty'] = {"zh-CN":"需要画笔、矩形或椭圆选区后，才能使用前景还原。","en":"Add a brush, rectangle, or ellipse selection before using foreground restore."};
+  MESSAGES['creator.cutout_restore_selection_required'] = {"zh-CN":"还原前景需要先在画布上画出选区。","en":"Draw a canvas selection before restoring foreground."};
+  MESSAGES['creator.cutout_restore_source_required'] = {"zh-CN":"请先选择一个透明抠图版本，再使用前景还原。","en":"Select a transparent cutout version before using foreground restore."};
+  MESSAGES['creator.cutout_restore_min_alpha_invalid'] = {"zh-CN":"最低不透明度必须在 0 到 255 之间。","en":"Minimum alpha must be between 0 and 255."};
+  MESSAGES['creator.cutout_restore_ready'] = {"zh-CN":"前景还原已就绪：会把 {count} 个所选区域恢复到至少 {alpha} 的不透明度，并追加新版本。","en":"Foreground restore is ready: it will raise {count} selected region(s) to at least alpha {alpha} and append a new version."};
+  MESSAGES['creator.cutout_restore_processing'] = {"zh-CN":"正在按所选区域还原前景；完成前可取消等待。","en":"Restoring foreground in the selected region(s). You can cancel waiting before it finishes."};
+  MESSAGES['creator.cutout_restore_failed'] = {"zh-CN":"前景还原失败，未添加新版本。","en":"Foreground restore failed. No new version was added."};
+  MESSAGES['creator.cutout_restore_completed'] = {"zh-CN":"前景还原完成，已按至少 {alpha} 的不透明度在所选区域内追加新版本。","en":"Foreground restore is complete. A new version was appended in the selected region(s) using minimum alpha {alpha}."};
+  MESSAGES['creator.cutout_cancel_wait'] = {"zh-CN":"取消等待","en":"Cancel waiting"};
+  MESSAGES['creator.cutout_cancelled'] = {"zh-CN":"已取消等待；本地处理可能仍在收尾，结果不会添加到当前会话。","en":"Waiting was cancelled. Local processing may still finish, but its result will not be added to this session."};
+  MESSAGES['creator.cutout_model_title'] = {"zh-CN":"本地抠图模型","en":"Local cutout model"};
+  MESSAGES['creator.cutout_model_details'] = {"zh-CN":"详情","en":"Details"};
+  MESSAGES['creator.cutout_model_checking'] = {"zh-CN":"正在检查模型状态…","en":"Checking model status…"};
+  MESSAGES['creator.cutout_model_source'] = {"zh-CN":"来源","en":"Source"};
+  MESSAGES['creator.cutout_model_size'] = {"zh-CN":"大小","en":"Size"};
+  MESSAGES['creator.cutout_model_verification'] = {"zh-CN":"校验","en":"Verification"};
+  MESSAGES['creator.cutout_model_verification_value'] = {"zh-CN":"文件大小、SHA-256 与 MD5 双指纹","en":"File size plus SHA-256 and MD5 dual fingerprints"};
+  MESSAGES['creator.cutout_model_runtime_probe'] = {"zh-CN":"启用条件","en":"Enablement"};
+  MESSAGES['creator.cutout_model_runtime_probe_value'] = {"zh-CN":"校验通过且本地运行能力探测可执行","en":"Verification passes and the local runtime capability probe is executable"};
+  MESSAGES['creator.cutout_model_path'] = {"zh-CN":"本地路径","en":"Local path"};
+  MESSAGES['creator.cutout_model_size_approx'] = {"zh-CN":"约 176 MB","en":"About 176 MB"};
+  MESSAGES['creator.cutout_model_size_value'] = {"zh-CN":"{size} MB","en":"{size} MB"};
+  MESSAGES['creator.cutout_model_size_kb'] = {"zh-CN":"{size} KB","en":"{size} KB"};
+  MESSAGES['creator.cutout_model_size_bytes'] = {"zh-CN":"{size} 字节","en":"{size} bytes"};
+  MESSAGES['creator.cutout_model_not_bundled'] = {"zh-CN":"模型不随 GenBox 安装包内嵌。当前版本保留固定来源与许可证信息页，但自动下载保持禁用。","en":"The model is not embedded in GenBox. This version keeps the fixed source and license information available, but automated download remains disabled."};
+  MESSAGES['creator.cutout_model_license_warning'] = {"zh-CN":"注意：模型转换链、训练数据来源及商业使用权利均为 UNVERIFIED，因此当前版本禁用自动下载。","en":"Caution: the model conversion chain, training-data provenance, and commercial-use rights are UNVERIFIED, so automated download is disabled in this version."};
+  MESSAGES['creator.cutout_model_progress_label'] = {"zh-CN":"模型下载进度","en":"Model download progress"};
+  MESSAGES['creator.cutout_model_install'] = {"zh-CN":"下载并安装","en":"Download and install"};
+  MESSAGES['creator.cutout_model_install_unavailable'] = {"zh-CN":"来源/授权尚未验证","en":"Source/authorization unverified"};
+  MESSAGES['creator.cutout_model_cancel'] = {"zh-CN":"取消下载","en":"Cancel download"};
+  MESSAGES['creator.cutout_model_retry'] = {"zh-CN":"重试","en":"Retry"};
+  MESSAGES['creator.cutout_model_remove_retry'] = {"zh-CN":"删除并重试","en":"Remove and retry"};
+  MESSAGES['creator.cutout_model_remove_corrupt'] = {"zh-CN":"删除损坏文件","en":"Remove damaged file"};
+  MESSAGES['creator.cutout_model_delete'] = {"zh-CN":"删除模型","en":"Delete model"};
+  MESSAGES['creator.cutout_model_missing'] = {"zh-CN":"模型尚未安装；抠图保持不可用。","en":"The model is not installed; cutout remains unavailable."};
+  MESSAGES['creator.cutout_model_download_unavailable'] = {"zh-CN":"模型尚未安装；来源/授权尚未验证，自动下载已禁用。","en":"The model is not installed. Automated download is disabled because the source/authorization is unverified."};
+  MESSAGES['creator.cutout_model_queued'] = {"zh-CN":"下载任务已排队。","en":"The download task is queued."};
+  MESSAGES['creator.cutout_model_downloading'] = {"zh-CN":"正在下载并校验模型（{progress}%）。","en":"Downloading and validating the model ({progress}%)."};
+  MESSAGES['creator.cutout_model_verifying'] = {"zh-CN":"下载完成，正在核验大小与指纹。","en":"Download complete; verifying size and fingerprints."};
+  MESSAGES['creator.cutout_model_installing'] = {"zh-CN":"校验通过，正在原子安装模型。","en":"Verification passed; installing the model atomically."};
+  MESSAGES['creator.cutout_model_hash_mismatch'] = {"zh-CN":"模型指纹不匹配，损坏文件不会启用。可删除后重新下载。","en":"The model fingerprint does not match. The damaged file will not be enabled; remove it before retrying."};
+  MESSAGES['creator.cutout_model_error'] = {"zh-CN":"模型安装未完成；抠图保持不可用。可刷新状态或重试。","en":"Model installation did not complete; cutout remains unavailable. Refresh the status or retry."};
+  MESSAGES['creator.cutout_model_ready'] = {"zh-CN":"本地模型已就绪","en":"Local model ready"};
+  MESSAGES['creator.cutout_model_install_confirm'] = {"zh-CN":"将从固定的 rembg 托管资产下载 {size} 到 {path}。\n\n模型转换链、训练数据来源及商业使用权利均为 UNVERIFIED。GenBox 会核验本地文件与固定远端资产的大小、SHA-256 和 MD5，但这不等于商业授权。\n\n确认继续下载吗？","en":"GenBox will download {size} from the fixed rembg-hosted asset to {path}.\n\nThe model conversion chain, training-data provenance, and commercial-use rights are UNVERIFIED. GenBox verifies the local file against the fixed remote asset using size, SHA-256, and MD5, but that is not a commercial license.\n\nContinue with the download?"};
+  MESSAGES['creator.cutout_model_remove_corrupt_confirm'] = {"zh-CN":"确认删除 {path} 中未通过指纹校验的损坏模型文件吗？","en":"Remove the damaged model file at {path} that failed fingerprint verification?"};
+  MESSAGES['creator.cutout_model_remove_retry_confirm'] = {"zh-CN":"将删除 {path} 中未通过校验的文件，然后从固定 rembg 托管资产重新下载 {size}。模型来源链和商业使用权利仍为 UNVERIFIED。确认继续吗？","en":"GenBox will remove the failed file at {path}, then download {size} again from the fixed rembg-hosted asset. The model provenance chain and commercial-use rights remain UNVERIFIED. Continue?"};
+  MESSAGES['creator.cutout_model_delete_confirm'] = {"zh-CN":"确认删除已校验的本地抠图模型 {path} 吗？删除后，一键抠图会立即恢复为不可用。","en":"Delete the verified local cutout model at {path}? One-click cutout will become unavailable immediately."};
   global.GenBoxI18n = { messages: MESSAGES, language: language, t: t, apply: apply, setLanguage: setLanguage };
   global.t = t;
   global.i18nText = t;

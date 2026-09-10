@@ -66,7 +66,13 @@ and create a fully isolated development clone.
 
 ## Phase 2: Extension Center Deployment Experience
 
-**Status:** In Progress
+**Status:** Complete
+
+**Acceptance evidence:** Local code, automated tests, and independent review
+passed on 2026-07-17. On 2026-07-19 the isolated managed `chatgpt2api-dev`
+instance was user-confirmed ready with usable delivery information during the
+successful private-network acceptance flow. Production remains outside the
+development mutation scope.
 
 **Topic contract:** `docs/extensions-deployment-contract.md`
 
@@ -94,7 +100,14 @@ isolated chatgpt2api deployment.
 
 ## Phase 3: Private Network Automation
 
-**Status:** In Progress
+**Status:** Complete
+
+**Acceptance evidence:** On 2026-07-19 the isolated managed development target
+completed local status, VPS enrollment/address detection, peer reachability,
+VPS-to-GenBox HTTP probing, and MagicDNS destination persistence. The user
+confirmed the final `PRIVATE LINK READY` state. Enrollment and SSH session
+secrets were absent from persisted target metadata. Full local verification
+passed with `247 passed`.
 
 **Topic contracts:** `docs/extensions-deployment-contract.md`,
 `docs/INTEGRATION.md`
@@ -109,6 +122,11 @@ Establish and verify a secure route from chatgpt2api to GenBox.
 - NetBird and Cloudflare adapters retained behind accurate readiness states.
 - Local and VPS enrollment, service exposure, and application-level probes.
 - Final stable GenBox Push URL stored as non-secret destination metadata.
+- Credential-gated, single-flight SSH and network checks with deployment state
+  kept separate from private-network completion and restart recovery.
+- An owned local Lab lifecycle with runtime/source identity plus browser
+  heartbeat, so cached pages and stale Python processes cannot masquerade as the
+  current Phase 3 build.
 
 ### Acceptance Criteria
 
@@ -116,10 +134,23 @@ Establish and verify a secure route from chatgpt2api to GenBox.
 - The final Push URL does not use `127.0.0.1` or an unintended public endpoint.
 - Enrollment tokens are absent from persisted target records and logs.
 - Failure identifies the exact failed network stage and recovery action.
+- A completed service deployment cannot mark the private network complete,
+  populate the GenBox private URL with a service console URL, or force the final
+  step after restart.
+- Missing or ambiguous SSH credentials fail closed before SSH or network-task
+  side effects, and stale or duplicate browser requests cannot unlock later
+  steps.
+- A stopped, old, or mismatched local backend is shown as offline; remote
+  controls remain locked until the browser verifies the current development
+  runtime. Local stop/restart cannot terminate an unowned port listener.
 
 ## Phase 4: Single-Image Push End To End
 
-**Status:** Planned
+**Status:** Complete
+
+**Current boundary:** 4A through 4D are accepted for the isolated single-image
+workflow. Batch, scheduling, source cleanup, and clean-deployment release
+evidence remain separate later phases and release gates.
 
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`
@@ -128,6 +159,42 @@ Establish and verify a secure route from chatgpt2api to GenBox.
 
 Push one newly generated image from an isolated chatgpt2api development clone to
 GenBox and import it with metadata.
+
+### 4A: Code contract
+
+The Deployment Safety Contract v3 is locally implemented and independently
+reviewed at commit `656e4c7`; manual host-identity confirmation binds a
+canonical algorithm plus `SHA256:` fingerprint. Local tests and review are
+necessary but not real E2E evidence.
+
+The personal-user trusted SSH-session pairing gate is implemented and reviewed
+locally in commits `997e78c`, `5394c42`, and `72edab0`, with the local source
+browser evidence recorded at `f965063`. It preserves mandatory host-key
+verification, re-probes the canonical identity pair before trust is saved,
+accepts no SSH credential, runs no GenBox remote command, and exposes neither
+pairing material nor raw host identities through persisted or public surfaces.
+Manual provider-console/known-host verification remains the advanced fallback.
+The next 4A step is still isolated VPS reproduction of the verified local
+Docker shape; local evidence does not count as VPS or cross-project E2E.
+
+### 4B: User workflow
+
+Provide the sender's per-generation Push action and truthful destination/status
+behavior for the isolated development workflow. It must not expose secrets or
+invent remote success.
+
+### 4C: Isolated single-image E2E
+
+Only after the personal-user pairing gate is implemented and independently
+reviewed, and with separate authorization, verify one newly generated image
+through the isolated clone and browser workflow, including authenticated receipt,
+matching SHA-256, available metadata, idempotent retry, source retention, and
+production non-mutation.
+
+### 4D: Evidence lock
+
+Freeze the accepted commit and sanitized evidence, perform independent review,
+and update status only when 4A-4C evidence supports the Phase 4 criteria.
 
 ### Deliverables
 
@@ -161,7 +228,7 @@ GenBox and import it with metadata.
 
 ## Phase 5: Batch And Scheduled Incremental Push
 
-**Status:** Planned
+**Status:** Complete
 
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`
@@ -187,7 +254,54 @@ Transfer existing and future images reliably without manual per-image work.
 
 ## Phase 6: Verified Source Cleanup
 
-**Status:** Planned
+**Status:** Complete (2026-08-20) as receiver-grant-verification scope.
+Sender-side destructive cleanup is deferred to a future explicit milestone
+(see "Line A" record in `docs/DECISIONS.md`). Details below.
+
+**CLOSE-OUT NOTE (2026-08-20):** Phase 6 is closed under Line A. Its
+acceptance criterion "only a matching authenticated receipt with
+`safe_to_delete_source=true` authorizes deletion" is satisfied *structurally*:
+the scoped release pins the field to `false` (`main.py:3621`), so the receiver
+never grants deletion permission. All local non-destructive evidence, the
+receiver loopback harness, and the sender's isolated-clone records documented
+below remain valid as attestation of the receiving-side grant behavior.
+Destructive execution, adversarial approval, isolated-VPS acceptance, host
+authority, and human authorization are expressly **not** claimed and are
+carried forward as an explicit future milestone before any sender release can
+enable deletion.
+
+**Final-gate note (2026-08-09):** A fresh clean worktree at baseline
+`1c2f870bb6ee616c333a717239349bceb2182a20` is being used for the final
+non-destructive evidence pass. This does not change the Phase 6 status or
+authorize cleanup.
+
+**Exact-SHA CI note (2026-08-09):** Local Docker, build, smoke, focused, and
+full evidence converged. Hosted GenBox CI reached pushed commit `79038f2` but
+failed honestly because Playwright was absent during collection; the local
+infrastructure fix `05c7f3b` could not be pushed after two TLS/HTTP2 EOF
+failures. Sender exact workflow dispatch was unavailable from the default
+branch. CI/macOS therefore remain `UNVERIFIED`, and Phase 6 remains In Progress.
+
+**Evidence note (2026-08-09):** Phase 6 remains **In Progress** and destructive
+execution remains **blocked**. The sender's 2026-08-08 local record reports
+synthetic coverage for A1, A2, A3, A5, A6, A10, and A11 (`116 passed, 18
+skipped` focused; `185 passed, 18 skipped` full), with platform skips excluded
+from pass counts. Its recorded hosted run `31256853882` passed Windows and
+Ubuntu service/cleanup/storage suites, an eight-case macOS core matrix, and the
+immutable-anchor image contract. macOS A6/A10, opt-in Docker integration,
+isolated-VPS acceptance, host authority, and human authorization are still
+external evidence, not passes.
+
+The GenBox receiver is separately verified in a disposable actual-HTTP
+loopback harness: it binds only `127.0.0.1` on an OS-assigned port and transfers
+a synthetic PNG using temporary directories and generated synthetic Push
+identity material. The receiver returns `safe_to_delete_source=false`, so this
+is retention/receiver-contract evidence only. The 2026-08-09 focused receiver
+suite passed `28` tests. This convergence run did not operate `33010` or
+`33018`, use real credentials or media, call cleanup, or authorize deployment,
+Phase 6 completion, Phase 7, or release work. Independent security review and
+explicit external authorization gates remain required before any destructive
+exercise.
 
 **Topic contracts:** `docs/INTEGRATION.md`,
 `docs/chatgpt2api-push-integration.md`
@@ -213,7 +327,13 @@ Allow users to reclaim VPS space without risking unconfirmed media loss.
 
 ## Phase 7: Sanitized GitHub Redeployment
 
-**Status:** Planned
+**Status:** Complete 2026-08-20 (see `docs/PHASE7-SCAN-REPORT-20260820.md` and
+the Phase 7 section in `docs/STATUS.md`)
+
+**Phase-7 note (2026-08-20):** Secret/personal-data scan of files and Git
+history clean; clean deployment from the published v2.6.0 Release asset +
+GHCR image verified; repeated single-plus-batch Push acceptance passed over the
+clean deployment; evidence pushed on `codex/phase7-campaign-20260820`.
 
 **Topic contract:** `docs/DEVELOPMENT-LIFECYCLE.md`
 
@@ -239,7 +359,8 @@ not depend on uncommitted container changes or sensitive data.
 
 ## Phase 8: Upstream Delivery
 
-**Status:** Planned
+**Status:** In Progress (proposal PRs OPEN 2026-08-20; awaiting maintainer
+response)
 
 **Topic contracts:** `docs/DEVELOPMENT-LIFECYCLE.md`,
 `docs/UPSTREAM-VIBE-CODING-GUIDE.md`
@@ -262,19 +383,200 @@ Offer the chatgpt2api changes to the original author in a reviewable form.
 - Each PR has a narrow purpose and independent tests.
 - Proposal examples contain no environment-specific or sensitive values.
 
-## Phase 9: Additional Service Adapters
+## Phase 9: Sender Push Source Cleanup (User-Selected)
 
-**Status:** Planned
+**Status:** In Progress (receiver v2.6.1 shipped; receiver clean deployment
+verified; PR #26 is OPEN/MERGEABLE/UNSTABLE with no maintainer review; Vercel
+authorization failure is external state and cannot be handled automatically)
 
-**Topic contract:** `docs/extensions-deployment-contract.md`
+**Topic contracts:** `docs/INTEGRATION.md`, `docs/DEVELOPMENT-LIFECYCLE.md`,
+`docs/chatgpt2api-push-integration.md`
 
 ### Goal
 
-Extend the guided deployment model to additional catalog services one adapter
-at a time.
+Let the chatgpt2api sender remove a source image only when a GenBox push
+receipt confirms the transfer, and let the **user decide per action** (manual
+one-shot and scheduled forwarding) whether to delete the source image. Deletion
+is not a hard-coded or forced choice: it is an explicit per-run user selection.
+
+### Background
+
+ADR-025 closed Phase 6 under Line A with the receiver returning
+`safe_to_delete_source=false` never granting deletion. That structural proof
+remains the boundary for v2.6.0. This phase is the explicitly deferred
+sender-cleanup milestone: it requires (a) a receiver-side grant path that is
+capable of returning `safe_to_delete_source=true` under controlled conditions,
+and (b) sender-side code in the chatgpt2api fork implementing per-action user
+selection.
+
+### Deliverables
+
+- Receiver grant path with matching-authenticated-receipt precondition,
+  SHA-256 identity check of source bytes, and deletion only after
+  `safe_to_delete_source=true`.
+- Sender-side implementation in the chatgpt2api fork:
+  - Manual one-shot forwarding with a per-action "delete source after push"
+    user checkbox (opt-in, default off).
+  - Scheduled incremental forwarding with the same per-run user selection;
+    no forced deletion policy.
+  - Durable per-item transfer state and confirmed-receipt-only deletion.
+- Tests: manual-selection variant, scheduled-selection variant, receipt
+  mismatch keeps source, `safe_to_delete_source=false` never deletes, deletion
+  disabled in development.
+- Sanitized sender code delivered as a narrow PR per Phase 8 practice; recovery
+  policy preserves the independent fork if the maintainer rejects the first PR.
+
+### Acceptance Criteria
+
+- Deletion occurs only when the user explicitly selected it for that manual
+  or scheduled run AND a matching authenticated receipt with
+  `safe_to_delete_source=true` was received AND the source bytes match the
+  receipt SHA-256.
+- Without a user selection, or with `safe_to_delete_source=false`, or on any
+  receipt/hash mismatch, the source image is always retained.
+- Source-image deletion is disabled in development and requires explicit,
+  per-run, per-source-user selection in production.
+- The receiver default and `main.py:3621` boundary are updated under the
+  scoped release process with regression tests; historical evidence documents
+  keep their `false` records as audit trail.
+- No real media, credentials, or VPS identities appear in tests, fixtures, or
+  PR descriptions.
+
+## Phase 10: GenBox Store Foundation
+
+**Status:** In Progress (local acceptance-2 closure PASS for Store projection,
+identity-bound facts, explicit unknown-facts public contract, and ownership
+gates on 2026-08-23; live/clean-deployment, restart, multi-target, and adapter
+lifecycle verification remain unverified)
+
+**Topic contract:** `docs/GENBOX-STORE-REPAIR-COPILOT.md`
+
+### Goal
+
+Turn the catalog into a trustworthy Store without making planned apps executable.
+
+### Deliverables
+
+- Installed, Recommended, and All views.
+- Separate versioned app manifests and executable adapters.
+- Environment compatibility recommendations with explanations and confidence.
+- Managed/external ownership boundaries plus license, provenance, security, and
+  operational-risk labels.
+
+### Acceptance Criteria
+
+- Every visible action is derived from backend adapter capability, not manifest
+  metadata or recommendation output.
+- Unknown environment facts and unavailable apps remain explicit and fail closed.
+- External instances remain advisory/read-only without a verified adoption flow.
+- Store metadata identifies source, license, permissions, exposure, and risk.
+
+## Phase 11: Advisory Repair Copilot
+
+**Status:** Planned
+
+**Topic contract:** `docs/GENBOX-STORE-REPAIR-COPILOT.md`
+
+### Goal
+
+Explain failures safely before any AI-assisted mutation is permitted.
+
+### Deliverables
+
+- Deterministic diagnostic fallback and minimum-evidence collection.
+- Redaction boundary and dedicated user-selected diagnostic model configuration.
+- Structured diagnoses with facts, confidence, risk, rollback, and verification.
+- Explicit authorization UI with advisory-only output.
+
+### Acceptance Criteria
+
+- Raw logs, secrets, personal data, host identities, and credentials never enter
+  model prompts or experience records.
+- Unknown or unavailable models fall back to deterministic guidance.
+- AI cannot submit shell, obtain root, or directly mutate a target.
+- Advice clearly distinguishes observed facts from inference.
+
+## Phase 12: Additional Service Adapters
+
+**Status:** Planned
+
+**Topic contracts:** `docs/extensions-deployment-contract.md`,
+`docs/GENBOX-STORE-REPAIR-COPILOT.md`
+
+### Goal
+
+Extend the guided deployment model one independently verified adapter at a time.
 
 ### Acceptance Criteria
 
 Each service must independently define source repository identity, license,
 configuration, secrets, ports, persistence, health check, delivery information,
 upgrade, backup, rollback, uninstall, and tests before becoming deployable.
+
+## Phase 13: Verified Repair Experience Flywheel And Allowlisted Assisted Repair
+
+**Status:** Planned
+
+**Topic contract:** `docs/GENBOX-STORE-REPAIR-COPILOT.md`
+
+### Goal
+
+Reuse reviewed operational knowledge and execute bounded repairs without turning
+AI advice into general remote administration.
+
+### Deliverables
+
+- Sanitized experience records with `draft`, `reviewed`, `verified`, and
+  `deprecated` lifecycle states.
+- Human review and reproducibility gates for experience promotion.
+- Adapter-owned repair allowlists, exact-target authorization, rollback, and
+  deterministic post-repair health verification.
+
+### Acceptance Criteria
+
+- Raw logs are never used for self-training or automatic experience promotion.
+- Only `verified` experience may influence reusable repair recommendations.
+- Every mutation is user-authorized, ownership-scoped, allowlisted, auditable,
+  rollback-aware, and followed by a deterministic health check.
+- Failed verification stops the workflow and presents a safe recovery state.
+
+## Phase 14: Multi-Channel Notifications And Bot Interaction
+
+**Status:** Planned
+
+**Topic contract:** `docs/message-channel-contract.md`
+
+### Goal
+
+Add optional message-channel entry points for observation and bounded task
+control without weakening GenBox's existing authorization, deployment, Push, or
+repair safety rules.
+
+### Deliverables
+
+- A versioned channel registry with capability, auth, media, and risk metadata.
+- An outbound event outbox for non-secret notifications such as generation
+  completion, import success, deployment readiness, and retryable failures.
+- An inbound gateway for authenticated webhook or bot callbacks with signature,
+  replay-window, and rate-limit checks.
+- A channel auth broker and explicit channel-binding model that keeps external
+  message identities separate from GenBox administrator identity.
+- Capability-scoped command handlers for selected existing workflows such as
+  saved image generation, video generation kickoff, task status lookup, and
+  bounded remote import requests.
+- One independently verified consumer-friendly channel first, likely Telegram,
+  before more administrator-mediated or region-specific channels such as Feishu
+  or QQ.
+
+### Acceptance Criteria
+
+- A message-channel identity cannot bypass GenBox administrator auth, Push auth,
+  deployment ownership, or repair approval boundaries.
+- No message path accepts arbitrary shell, unrestricted VPS commands, or other
+  unbounded remote mutation.
+- All inbound actions map to explicit backend-owned intents with the same safety
+  checks used by the browser UI.
+- Unsupported or partially integrated channels remain explicit planned states,
+  not implied capabilities.
+- Message-channel credentials, callback payloads, raw media, and user prompts
+  follow the same secret and privacy boundaries as existing GenBox APIs.

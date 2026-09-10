@@ -1,14 +1,10 @@
-"""
-GenBox 自动更新系统
-支持源码更新、桌面客户端更新、Docker 更新
-"""
+"""Read-only GenBox release checker with fail-closed update application."""
 import os
 import sys
-import subprocess
-import time
 import json
+import re
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 from dataclasses import dataclass
 from enum import Enum
 
@@ -24,17 +20,11 @@ REPO_OWNER = "liwei9745"
 REPO_NAME = "GenBox"
 REPO_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
 GITHUB_API = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}"
-DOCKER_IMAGE = os.getenv("GENBOX_IMAGE", f"ghcr.io/{REPO_OWNER}/{REPO_NAME}:latest".lower())
-
-# GitHub 代理线路（国内优化）
-GITHUB_MIRRORS = [
-    {"name": "ghfast.top", "url": "https://ghfast.top", "desc": "推荐主线 - 稳定快速"},
-    {"name": "gh-proxy.com", "url": "https://gh-proxy.com", "desc": "多CDN节点 - 备选"},
-    {"name": "v6.gh-proxy.org", "url": "https://v6.gh-proxy.org", "desc": "IPv6优化"},
-    {"name": "hub.gitmirror.com", "url": "https://hub.gitmirror.com", "desc": "稳定镜像"},
-    {"name": "bgithub.xyz", "url": "https://bgithub.xyz", "desc": "直连镜像"},
-    {"name": "github.com (直连)", "url": "", "desc": "GitHub直连"},
-]
+LATEST_RELEASE_API = f"{GITHUB_API}/releases/latest"
+RELEASES_URL = f"{REPO_URL}/releases"
+UPDATE_RELEASE_RESPONSE_MAX_BYTES = 1024 * 1024
+UPDATE_ERROR_RESPONSE_MAX_BYTES = 64 * 1024
+UPDATE_APPLY_UNAVAILABLE_CODE = "update_apply_unavailable"
 
 # 当前版本
 CURRENT_VERSION = __version__
@@ -48,22 +38,14 @@ class UpdateType(Enum):
 
 
 @dataclass
-class MirrorTestResult:
-    name: str
-    url: str
-    latency_ms: float
-    available: bool
-    error: Optional[str] = None
-
-
-@dataclass
 class UpdateInfo:
     available: bool
     current_version: str
     latest_version: str
     release_notes: str
-    download_url: Optional[str] = None
     update_type: str = "unknown"
+    automatic_apply_available: bool = False
+    manual_install_required: bool = True
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -103,69 +85,93 @@ def get_app_dir() -> Path:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 线路测试
-# ═══════════════════════════════════════════════════════════════════
-async def test_mirror(mirror: dict, timeout: float = 5.0) -> MirrorTestResult:
-    """测试单条线路的连通性和延迟"""
-    test_url = f"{mirror['url']}/{GITHUB_API}" if mirror['url'] else GITHUB_API
-    start = time.time()
-    try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            resp = await client.head(test_url, headers={"User-Agent": "GenBox-Updater"})
-            latency = (time.time() - start) * 1000
-            return MirrorTestResult(
-                name=mirror["name"],
-                url=mirror["url"],
-                latency_ms=round(latency, 1),
-                available=resp.status_code < 400,
-            )
-    except Exception as e:
-        return MirrorTestResult(
-            name=mirror["name"],
-            url=mirror["url"],
-            latency_ms=9999,
-            available=False,
-            error=str(e)[:100],
-        )
-
-
-async def test_all_mirrors() -> List[MirrorTestResult]:
-    """并发测试所有线路，返回排序结果"""
-    import asyncio
-    tasks = [test_mirror(m) for m in GITHUB_MIRRORS]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    # 过滤异常，按延迟排序
-    valid = [r for r in results if isinstance(r, MirrorTestResult)]
-    valid.sort(key=lambda x: (not x.available, x.latency_ms))
-    return valid
-
-
-def get_best_mirror_url(mirror_url: str) -> str:
-    """将 GitHub URL 转换为代理 URL"""
-    if not mirror_url:
-        return GITHUB_API
-    return f"{mirror_url}/{GITHUB_API}"
-
-
-# ═══════════════════════════════════════════════════════════════════
 # 版本检测
 # ═══════════════════════════════════════════════════════════════════
-async def check_latest_release(mirror_url: str = "") -> Optional[dict]:
-    """从 GitHub 获取最新 Release"""
-    api_url = get_best_mirror_url(mirror_url)
+async def _read_bounded_response(response, max_bytes: int) -> bytes:
+    """Read a streamed response without trusting its declared or actual size."""
+    content_length = (getattr(response, "headers", {}) or {}).get("content-length")
+    if content_length is not None:
+        declared_length = int(content_length)
+        if declared_length < 0 or declared_length > max_bytes:
+            raise ValueError("update_response_bytes_exceeded")
+
+    content = bytearray()
+    async for chunk in response.aiter_bytes():
+        if len(content) + len(chunk) > max_bytes:
+            raise ValueError("update_response_bytes_exceeded")
+        content.extend(chunk)
+    return bytes(content)
+
+
+def _redact_release_notes(value: object) -> str:
+    """Keep public release notes useful without reflecting credential-like text."""
+    text = str(value or "")
+    text = re.sub(
+        r"(?i)([?&](?:api[_-]?key|key|token|access[_-]?token|signature|sig)=)[^&\s]+",
+        r"\1[REDACTED]",
+        text,
+    )
+    text = re.sub(r"(?i)\b(Bearer\s+)[^\s,;]+", r"\1[REDACTED]", text)
+    text = re.sub(
+        r"(?i)(https://)[^/@\s:]+:[^/@\s]+@",
+        r"\1[REDACTED]@",
+        text,
+    )
+    text = re.sub(r"(?i)\b(?:sk|rk|pk)-[A-Za-z0-9._-]{8,}", "[REDACTED]", text)
+    text = re.sub(
+        r'''(?i)(["'](?:api[_-]?key|token|access[_-]?token|secret)["']\s*:\s*["'])[^"']+(["'])''',
+        r"\1[REDACTED]\2",
+        text,
+    )
+    return "".join(
+        char for char in text if char in "\n\r\t" or ord(char) >= 32
+    )[:2000]
+
+
+async def check_latest_release() -> Optional[dict]:
+    """Fetch only the canonical GitHub latest-release document."""
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            resp = await client.get(api_url, headers={"User-Agent": "GenBox-Updater"})
-            resp.raise_for_status()
-            return resp.json()
+        async with httpx.AsyncClient(
+            timeout=15,
+            follow_redirects=False,
+            trust_env=False,
+            verify=True,
+        ) as client:
+            async with client.stream(
+                "GET",
+                LATEST_RELEASE_API,
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "User-Agent": "GenBox-Updater",
+                },
+            ) as response:
+                max_bytes = (
+                    UPDATE_ERROR_RESPONSE_MAX_BYTES
+                    if int(response.status_code) >= 400
+                    else UPDATE_RELEASE_RESPONSE_MAX_BYTES
+                )
+                content = await _read_bounded_response(response, max_bytes)
+                if int(response.status_code) >= 400:
+                    return None
+        parsed = json.loads(content)
+        return parsed if isinstance(parsed, dict) else None
     except Exception:
         return None
 
 
 def parse_version(tag: str) -> tuple:
     """解析版本号 'v2.2.0' -> (2, 2, 0)"""
-    v = tag.lstrip("v").split(".")
-    return tuple(int(x) for x in v[:3])
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?", tag.strip())
+    if not match:
+        raise ValueError(f"unsupported_version: {tag}")
+    major, minor, patch, candidate = match.groups()
+    return (
+        int(major),
+        int(minor),
+        int(patch),
+        0 if candidate is not None else 1,
+        int(candidate or 0),
+    )
 
 
 def compare_versions(current: str, latest: str) -> bool:
@@ -259,155 +265,35 @@ rm -f "$0"
 '''
 
 
-# ═══════════════════════════════════════════════════════════════════
-# 更新执行
-# ═══════════════════════════════════════════════════════════════════
-async def apply_source_update(mirror_url: str = "") -> dict:
-    """源码更新：git fetch + reset"""
-    app_dir = get_app_dir()
-    git_dir = app_dir / ".git"
-    if not git_dir.exists():
-        return {"success": False, "error": "非 git 仓库，无法源码更新"}
-
-    # 配置 git 代理（如果使用镜像）
-    if mirror_url:
-        proxy_url = f"{mirror_url}/https://github.com/"
-        subprocess.run(
-            ["git", "config", f"url.{proxy_url}.insteadOf", "https://github.com/"],
-            cwd=app_dir, capture_output=True
-        )
-
-    try:
-        # 获取当前分支，计算对应的上游 ref（避免写死 origin/master 把 dev 等分支覆盖）
-        branch = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=app_dir, capture_output=True, text=True
-        ).stdout.strip()
-        target = f"origin/{branch}" if branch else "origin/master"
-        verify = subprocess.run(
-            ["git", "rev-parse", "--verify", target],
-            cwd=app_dir, capture_output=True, text=True
-        )
-        if verify.returncode != 0:
-            target = "origin/master"
-
-        # fetch
-        r = subprocess.run(
-            ["git", "fetch", "--all", "--tags"],
-            cwd=app_dir, capture_output=True, text=True, timeout=60
-        )
-        if r.returncode != 0:
-            return {"success": False, "error": f"fetch 失败: {r.stderr[:200]}"}
-
-        # 检查是否有更新（相对当前分支上游）
-        r = subprocess.run(
-            ["git", "status", "-sb"],
-            cwd=app_dir, capture_output=True, text=True
-        )
-        behind = "behind" in r.stdout
-
-        if not behind:
-            return {"success": True, "message": "已是最新版本"}
-
-        # reset 到当前分支上游
-        r = subprocess.run(
-            ["git", "reset", "--hard", target],
-            cwd=app_dir, capture_output=True, text=True, timeout=30
-        )
-        if r.returncode != 0:
-            return {"success": False, "error": f"reset 失败: {r.stderr[:200]}"}
-
-        # 安装依赖
-        req_file = app_dir / "requirements.txt"
-        if req_file.exists():
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-r", str(req_file), "-q"],
-                cwd=app_dir, capture_output=True, timeout=120
-            )
-
-        return {"success": True, "message": "源码更新完成，建议重启服务"}
-    except subprocess.TimeoutExpired:
-        return {"success": False, "error": "更新超时，请检查网络"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+def update_apply_unavailable_detail() -> dict:
+    """Public fail-closed reason shared by every disabled apply path."""
+    return {
+        "code": UPDATE_APPLY_UNAVAILABLE_CODE,
+        "message": "automatic update is unavailable; install manually from the canonical GitHub Release after verifying the release information",
+        "automatic_apply_available": False,
+        "manual_install_required": True,
+        "release_source": "canonical_github_release",
+    }
 
 
-async def apply_exe_update(download_url: str, mirror_url: str = "") -> dict:
-    """可执行文件更新：下载到旁路文件，退出后替换并重启。"""
-    exe_path = get_executable_path()
-    if not exe_path:
-        return {"success": False, "error": "无法获取可执行文件路径"}
+async def apply_source_update() -> dict:
+    return {"success": False, **update_apply_unavailable_detail()}
 
-    # 构造下载 URL
-    if mirror_url:
-        dl_url = f"{mirror_url}/{download_url}"
-    else:
-        dl_url = download_url
 
-    try:
-        # 下载
-        async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
-            resp = await client.get(dl_url, headers={"User-Agent": "GenBox-Updater"})
-            resp.raise_for_status()
-
-        payload = resp.content
-        if not payload or payload.startswith(b"PK\x03\x04"):
-            return {"success": False, "error": "下载到的不是可执行客户端，已取消更新"}
-
-        staged = exe_path.with_name(f".{exe_path.name}.update")
-        backup = exe_path.with_name(f"{exe_path.name}.bak")
-        staged.write_bytes(payload)
-
-        if sys.platform == "win32":
-            restart_script = exe_path.parent / "_genbox_update.cmd"
-            script = _windows_restart_script(exe_path, staged, backup, os.getpid())
-            restart_script.write_text(script, encoding="utf-8")
-            subprocess.Popen(
-                ["cmd", "/c", str(restart_script)],
-                cwd=exe_path.parent,
-                creationflags=0x00000008 | 0x00000200,
-            )
-        else:
-            restart_script = exe_path.parent / "_genbox_update.sh"
-            script = _posix_restart_script(exe_path, staged, backup, os.getpid())
-            restart_script.write_text(script, encoding="utf-8")
-            restart_script.chmod(0o700)
-            subprocess.Popen(
-                ["/bin/sh", str(restart_script)],
-                cwd=exe_path.parent,
-                start_new_session=True,
-            )
-
-        return {"success": True, "message": "更新已下载，正在替换并重启...", "restart": True}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+async def apply_exe_update() -> dict:
+    return {"success": False, **update_apply_unavailable_detail()}
 
 
 async def apply_docker_update() -> dict:
-    """Docker 更新：pull 新镜像"""
-    try:
-        # 拉取最新镜像
-        r = subprocess.run(
-            ["docker", "pull", DOCKER_IMAGE],
-            capture_output=True, text=True, timeout=300
-        )
-        if r.returncode != 0:
-            return {"success": False, "error": f"docker pull 失败: {r.stderr[:200]}"}
-
-        return {
-            "success": True,
-            "message": "镜像已更新，请运行 docker compose up -d 重启容器"
-        }
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    return {"success": False, **update_apply_unavailable_detail()}
 
 
 # ═══════════════════════════════════════════════════════════════════
 # 统一入口
 # ═══════════════════════════════════════════════════════════════════
-async def check_update(mirror_url: str = "") -> UpdateInfo:
+async def check_update() -> UpdateInfo:
     """检查是否有可用更新"""
-    release = await check_latest_release(mirror_url)
+    release = await check_latest_release()
     if not release:
         return UpdateInfo(
             available=False,
@@ -416,34 +302,27 @@ async def check_update(mirror_url: str = "") -> UpdateInfo:
             release_notes="无法获取版本信息",
         )
 
-    latest = release.get("tag_name", CURRENT_VERSION)
-    has_update = compare_versions(CURRENT_VERSION, latest)
+    latest = str(release.get("tag_name", "")).strip()
+    try:
+        has_update = compare_versions(CURRENT_VERSION, latest)
+    except (TypeError, ValueError):
+        return UpdateInfo(
+            available=False,
+            current_version=CURRENT_VERSION,
+            latest_version=CURRENT_VERSION,
+            release_notes="无法验证版本信息",
+        )
     update_type = detect_update_type()
-
-    # 找下载链接
-    download_url = None
-    if update_type == UpdateType.EXE:
-        download_url = get_asset_url(release, sys.platform)
 
     return UpdateInfo(
         available=has_update,
         current_version=CURRENT_VERSION,
         latest_version=latest,
-        release_notes=release.get("body", "")[:2000],
-        download_url=download_url,
+        release_notes=_redact_release_notes(release.get("body", "")),
         update_type=update_type.value,
     )
 
 
-async def apply_update(mirror_url: str = "", download_url: str = "") -> dict:
-    """执行更新"""
-    update_type = detect_update_type()
-
-    if update_type == UpdateType.DOCKER:
-        return await apply_docker_update()
-    elif update_type == UpdateType.EXE:
-        if not download_url:
-            return {"success": False, "error": "缺少下载链接"}
-        return await apply_exe_update(download_url, mirror_url)
-    else:
-        return await apply_source_update(mirror_url)
+async def apply_update() -> dict:
+    """Remain unavailable until signed manifests and an embedded key exist."""
+    return {"success": False, **update_apply_unavailable_detail()}

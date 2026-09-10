@@ -4,15 +4,367 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.8] - 2026-09-10
+
+### Added
+
+- Model-first precision editing with 27 GPT tier/aspect presets and scoped
+  endpoint/model/exact-size trial authorization. GPT target acceptance is
+  user-confirmed; other vendors await separate manual acceptance.
+- Grouped model visibility, retained selection scroll/focus, short workflow
+  instructions and a one-time clickable quick-start guide.
+- Local person-cutout workbench with edge refinement and algorithm selection;
+  compatible validated model weights remain operator-provided, not bundled.
+
+### Fixed
+
+- Pure resize readiness, per-version actual dimensions and timestamps after
+  workflow restore, and precision canvas/workbench interaction.
+- Undeclared sizes stay available for explicit trials without inheriting another
+  model's evidence. Strict output checks and no automatic image-edit POST replay
+  remain in force.
+
+## [2.6.7] - 2026-09-06
+
+### Added
+
+- Precision Edit now keeps a privacy-safe cross-session workflow history. Users
+  can browse visual edit chains, filter by date or workflow, view a result, or
+  restore a validated historical image to the workbench for another edit.
+- The current-session gallery is available below the annotation tools. It starts
+  as a compact "show Precision Edit gallery" control and expands without moving
+  the workbench controls out of reach.
+
+### Changed
+
+- The version, display-mode controls, base-image action, and image replacement
+  action share a compact workbench control row. Image replacement expands into
+  local-file and media-library choices while preserving keyboard and task-state
+  behavior.
+- Wide workbenches keep edit-strategy and selection-semantics controls on one
+  line; narrow windows wrap them safely.
+
+### Security
+
+- Workflow-history APIs expose only sanitized identifiers, dimensions, dates,
+  and local application media URLs. Prompts, filenames, filesystem paths,
+  hashes, logs, credentials, base64 payloads, and image metadata are excluded.
+
+### Verification And Boundaries
+
+- Local verification passed 1,440 Python tests, the Precision Edit UI and
+  i18n Node tests, JavaScript syntax validation, and whitespace validation.
+- **USER-CONFIRMED 2026-09-06:** two real Precision Edit results completed in
+  the local development lab. This does not claim that every third-party
+  provider alias, remote endpoint, or output size is universally supported.
+- ONNX cutout checkpoints remain external to the release artifacts. Their
+  provenance and commercial-use rights are not established by this release.
+
+## [2.6.6] - 2026-09-03
+
+### Added
+
+- Precision Edit V4 adds editable arrow, rectangle, ellipse, brush, eraser,
+  and text annotations; resize-only expansion; result comparison; local cutout
+  and refine controls; and responsive workbench behavior.
+
+### Changed
+
+- Desktop onefile packaging now uses one complete contract for runtime imports,
+  dynamic submodules, native/data collection, distribution metadata, exact
+  pinned versions, and critical API symbols in both generated spec and CLI
+  builds.
+- AsyncSSH passphrase-protected OpenSSH private-key support now includes pinned
+  `bcrypt==5.0.0`, its compiled backend, and a synthetic encrypted Ed25519 key
+  import smoke in desktop and Docker release paths.
+- Docker image HTTP smoke now waits within a bounded readiness loop, verifies
+  container liveness/health and production setup status, and emits bounded
+  redacted logs on terminal failure while preserving the exact-image publish
+  contract.
+- Current version is `2.6.6`; Docker Compose defaults are pinned to
+  `ghcr.io/liwei9745/genbox:2.6.6`.
+
+### Security
+
+- Empty-directory desktop smoke removes `PYTHONPATH` and `PYTHONHOME`, disables
+  user site packages, and verifies the frozen executable without external
+  Python package inheritance.
+- Desktop, Docker-image, Docker Compose, and source packages carry bcrypt's
+  complete Apache License 2.0 text alongside the dependency notice.
+- Automatic update application and restart remain disabled pending the signed
+  release-manifest and rollback contract; the in-app version check remains
+  informational and installation remains manual.
+- Production cutout-model network download and installation remain disabled
+  while checkpoint provenance and commercial-use rights are **UNVERIFIED**.
+
+### Verification And Boundaries
+
+- A local Windows Python 3.12.8/PyInstaller 6.21.0 onefile build produced a
+  67,631,005-byte v2.6.6 executable and passed all 18 pinned runtime versions,
+  API symbols, encrypted OpenSSH key, and packaged-client HTTP smokes.
+- A current-source local Docker image passed exact-image runtime, bcrypt
+  license, encrypted OpenSSH key, and bounded HTTP readiness smokes.
+- Final local verification passed `42` release-packaging tests and `1302` total
+  repository tests, plus the v2.6.6 tag contract, workflow YAML parsing, Python
+  compilation, and diff whitespace validation.
+- The earlier `v2.6.5` tag was pushed, but Desktop Clients run `33715658824`
+  and Docker Image run `33715658700` failed. No v2.6.5 GitHub Release, release
+  assets, or GHCR image were created.
+- Real Provider requests, VPS deployment, source cleanup, and cross-project
+  end-to-end operation were not part of this release verification.
+
+## [2.6.5] - 2026-09-03 (historical candidate; tag workflows failed)
+
+### Added
+
+- Precision Edit V4 adds editable object annotations with arrow, rectangle,
+  ellipse, brush, eraser, and text tools; result-version comparison; local
+  cutout and refine controls; and responsive workbench behavior.
+- The cutout panel now provides the UI/API state framework for model status,
+  progress, cancellation, integrity-failure recovery, and confirmed local
+  deletion. Production network download and installation remain disabled.
+
+### Changed
+
+- Resize-only precision edits can request supported output expansion without
+  annotation payload fields. The explicit `fit_crop` option handles eligible
+  near-ratio output mismatches; the default remains strict exact-size output.
+- Model visibility is user-selectable, while precision-edit capability and alias
+  resolution require explicit provider declarations and remain fail closed.
+- The release package includes Python 3.12, NumPy, and ONNX Runtime for local
+  cutout execution, while the ONNX checkpoint remains external and is never
+  embedded in the package.
+- The candidate version was `2.6.5`; Docker Compose defaults were pinned to
+  `ghcr.io/liwei9745/genbox:2.6.5`.
+
+### Security
+
+- Cancellation and failure states remain explicit. Source/image and provider
+  output MIME handling is validated. Provider outputs also enforce compressed-
+  byte and decoded-pixel limits and reject decompression-bomb warnings or
+  errors before persistence. Provider-facing errors redact sensitive values
+  before they reach user-visible error detail.
+- The browser cannot provide a model URL, path, size, or digest. Because the
+  checkpoint's provenance and commercial-use rights remain **UNVERIFIED**,
+  v2.6.5 fails closed before any production network download or installation.
+  A manually placed model is accepted only after fixed size, SHA-256, and MD5
+  verification; cutout remains disabled until the model is `ready` and the
+  runtime capability probe reports `executable=true`.
+
+### Verification And Boundaries
+
+- **USER-CONFIRMED 2026-09-02:** the current Precision Edit V4 workflow works
+  in the local browser. Automated local tests cover the implementation
+  contracts; a real cutout refine POST is not claimed.
+- The local cutout adapter runtime is packaged, but its ONNX model file is not.
+  Production reports model download and installation as unsupported. An
+  operator may manually place the expected model file; matching its fixed size
+  and fingerprints verifies byte identity, not its conversion history,
+  training-data provenance, or commercial-use rights. Those matters remain
+  **UNVERIFIED**.
+- Automated tests cover the disabled production boundary and test-only installer
+  fixtures without performing a public model download. No release artifact in
+  this evidence contains the checkpoint.
+- This evidence is local only. It does not establish VPS, production,
+  source-cleanup, remote-deployment, or cross-project delivery acceptance.
+- The annotated `v2.6.5` tag was pushed, but Desktop Clients run `33715658824`
+  and Docker Image run `33715658700` failed. No GitHub Release, release assets,
+  or GHCR image were created for v2.6.5.
+
+## [2.6.4] - 2026-08-25
+
+- Fixed: Packaged Windows first-run setup and startup summaries now show
+  bilingual Chinese/English guidance with UTF-8 output.
+- Fixed: Image generation uses the visible quantity control and ignores stale
+  cached values; invalid quantities fail safe to one image.
+
+## [2.6.3] - 2026-08-24
+
+- Fixed: Provider forms no longer send masked API-key placeholders as real
+  credentials after reload.
+- Fixed: Provider model discovery preserves multi-key and endpoint settings and
+  retries valid effective keys for OpenAI-compatible `/models` endpoints.
+- Fixed: Store installed projections remain scoped to the active Store target
+  in multi-target configurations.
+- Fixed: Windows launchers set UTF-8 console/Python output and show bilingual
+  startup and failure guidance.
+- Security: masked or unavailable credentials fail closed and require explicit
+  re-entry instead of being transmitted upstream.
+
+## [2.6.1] - 2026-08-21
+
+- Added: managed per-source deletion-grant capability in the Extension Center,
+  default off, so a Push receipt can carry `safe_to_delete_source=true` only for
+  an explicitly granted source that committed this exact path and content.
+- Added: bilingual (zh-CN/en) controls and messages for the deletion grant, with
+  a browser-contract test.
+- Changed: current version is 2.6.1; Docker Compose image default pinned to
+  `ghcr.io/liwei9745/genbox:2.6.1`.
+- Security: source-file cleanup remains disabled by default; a receipt never
+  grants deletion unless the managed source owner explicitly enabled the grant.
+
+## [2.6.0] - 2026-08-20
+
+### Added
+
+- Extension Center guided deployment for isolated `chatgpt2api` instances with
+  managed-instance delivery.
+- Authenticated image Push receiving into the GenBox media library: single-
+  image Push, manual batch Push, and scheduled incremental Push, with source
+  validation, content-hash deduplication, metadata import, and receipts.
+- Managed Push-source provisioning with show-once credentials and an explicit
+  encrypted local credential-vault opt-in.
+- Packaged-client pre-release version ordering support for the in-app updater.
+
+### Changed
+
+- Current version is `2.6.0`; Docker Compose defaults are pinned to
+  `ghcr.io/liwei9745/genbox:2.6.0`.
+
+### Security
+
+- Push Keys remain unsaved by default; encrypted local-vault saving requires
+  explicit opt-in after the vault is unlocked.
+- Source-file cleanup remains disabled; Push receipts grant no source-deletion
+  permission.
+
+### Verification
+
+- Recorded rc.8 local evidence (2026-08-10): focused regression `260 passed`;
+  exact-candidate full suite `617 passed`; Windows packaged client built and
+  passed a loopback smoke; JavaScript syntax, diff-whitespace, and credential
+  scans passed.
+- Stable packaging prep (2026-08-20): `tests/test_release_packaging.py` passes
+  `11` tests, `tests/test_sync_push_routes.py` passes `27`, and
+  `tests/test_push_sources.py` `tests/test_credential_vault.py`
+  `tests/test_extensions.py` pass `237`. JavaScript syntax checks, README Lab
+  regeneration, and Python compilation pass. See `docs/STATUS.md` for the
+  exact commands and results.
+
 ## [Unreleased]
+
+### In Progress / Experimental
+
+- Sender-side cleanup and upstream delivery for the chatgpt2api integration
+  remain separate work and are not claimed by the v2.6.0 stable release.
+- Cleanup stays disabled; sender-side and clean-redeployment evidence remain
+  pending as separate release gates.
+- Historical Phase 6 development detail for the isolated sender (candidate
+  commits, the A1-A12 adversarial review, isolated-port operations, and
+  preview dry-runs) is recorded in `docs/STATUS.md` and the phase roadmap.
 
 ### Planned
 
-- chatgpt2api sender-side per-generation Push.
-- Batch and scheduled incremental transfer with durable cursor, retry, and lease.
-- Receipt-gated source cleanup and reclaimed-space reporting.
-- Durable extension deployment-task recovery after process restart.
-- Clean GitHub redeployment acceptance and upstream delivery gates.
+- Receipt-gated source cleanup and reclaimed-space reporting (Phase 6).
+- Upstream delivery proposal and reviewable PR slices after the clean-release
+  gate.
+
+## [2.6.0-rc.8] - 2026-08-09
+
+- Unified manual-UAT candidate replacing rc.7; no stable release is implied.
+- Added persistent Dock modes for automatic hiding, locked visible, and locked
+  hidden. Only the bottom-center 40% reveal zone responds in automatic mode.
+- Fixed the Push Key local-save choice so it is a clear, standard checkbox next
+  to its explanatory text, remains off by default, and is unavailable without
+  a newly created or rotated key.
+- Fixed both Push configuration copy actions to use real line breaks.
+- Replaced the Push Key save path's native browser confirmation with a visible
+  GenBox confirmation dialog. Canceling requests no server confirmation token;
+  confirming retains the existing unlocked-vault and 120-second single-use
+  server confirmation requirements.
+- Split Push status into configured, source revocation state, local-copy state, and
+  remote authentication. The UI reports remote authentication as unverified
+  unless real evidence exists, and never equates a local source record with an
+  active remote sender.
+- Saved Push fields in the general credential window are view-and-copy only;
+  creating, rotating, or saving a Push Key remains restricted to the dedicated
+  confirmation flow.
+- Cleanup remains disabled unless separately enabled. Without that opt-in,
+  receipts grant no source-file deletion permission.
+
+## [2.6.0-rc.7] - 2026-08-07
+
+- Final testing candidate replacing rc.6; no stable release is implied.
+- Fixed independent show/hide controls for every sensitive field in the local
+  credential window. SSH private keys are safely masked by default.
+- Fixed the responsive, long-credential window so its content scrolls within
+  the viewport and Cancel, Delete, and Save remain reachable on small screens.
+- Push Keys remain unsaved by default. Local encrypted-vault saving still
+  requires explicit user confirmation after the vault is unlocked.
+- Cleanup remains disabled unless explicitly enabled. Without that opt-in,
+  receipts grant no source-file deletion permission.
+
+## [2.6.0-rc.6] - 2026-08-07
+
+- Final testing candidate replacing rc.5 after its manual acceptance click
+  path did not pass; no stable release is implied.
+- Fixed the deployed-service `Manage Push configuration` entry. It now opens a
+  visible GenBox Push configuration modal bound to the selected instance rather
+  than closing the service drawer and navigating to a hidden deployment step.
+- Push Keys remain unsaved by default. Local encrypted-vault saving requires
+  the user's explicit confirmation after the vault is unlocked.
+- Cleanup remains disabled unless explicitly enabled. Without that opt-in,
+  receipts grant no source-file deletion permission.
+
+## [2.6.0-rc.5] - 2026-08-07
+
+- Final testing candidate replacing rc.4; no stable release is implied.
+- Clarified the Chinese Push Key guidance and fixed stale browser cache/state
+  handling, so an older asynchronous response cannot erase a newly created or
+  rotated key state.
+- A new Push Key is available only immediately after creation or rotation.
+  Local encrypted-vault saving remains off by default and requires the user's
+  explicit confirmation before the current key is saved.
+- Cleanup remains disabled and Push receipts grant no source-deletion
+  permission.
+
+## [2.6.0-rc.4] - 2026-08-06
+
+- Final testing candidate replacing the blocked rc.3 candidate; no stable
+  release is implied.
+- Push Keys are not saved locally by default. Local encrypted-vault saving
+  requires explicit user confirmation and a short-lived, single-use server
+  confirmation credential bound to the managed instance, source, and current
+  Push Key hash; browser requests cannot bypass that server validation.
+- Push receipts now fail closed: while cleanup is not explicitly enabled, they
+  always return `safe_to_delete_source=false` and do not grant source deletion
+  permission.
+
+## [2.6.0-rc.3] - 2026-08-06
+
+- Final testing candidate replacing the unsuitable rc.1 and original rc.2
+  candidates; no stable release is implied.
+- Frozen the Push Key vault behavior: saving is opt-in after explicit user
+  confirmation, the default is no local save, locked vault contents cannot be
+  read, rotation requires fresh confirmation, and local deletion leaves the
+  remote Push source unchanged.
+
+## [2.6.0-rc.2] - 2026-08-06
+
+- Revised ADR-022 and aligned Push Key handling with the encrypted local vault.
+- Push Keys are shown once by default; only explicit user confirmation enables
+  local encrypted-vault saving. Rotation requires fresh consent and local
+  deletion leaves the remote source unchanged.
+
+## [2.6.0-rc.1] - 2026-08-05
+
+### Experimental Candidate
+
+- Prepared the client experimental candidate for the completed GenBox and
+  chatgpt2api integration: single-image Push, batch Push, and scheduled
+  incremental Push remain available with source retention by default.
+- Added management of Push configuration for deployed chatgpt2api instances:
+  users can copy the destination URL, source ID, and Push key, then explicitly
+  save or reopen that configuration from the encrypted local credential vault.
+- Added pre-release version ordering support for the packaged-client updater.
+
+### Release Boundary
+
+- `v2.6.0-rc.1` is an experimental candidate only. No stable tag or GitHub
+  Release is created by this change.
+- Source-file cleanup remains disabled and is not a usable candidate feature.
+- Phase 6 security gates remain outside this candidate; unresolved A1, A2, A3,
+  A10, and A11 findings continue to block any stable release or cleanup claim.
 
 ## [2.5.1] - 2026-07-16
 

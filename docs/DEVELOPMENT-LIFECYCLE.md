@@ -6,6 +6,11 @@ This lifecycle protects an existing chatgpt2api service while developing the
 GenBox integration and proves that completed work is reproducible before it is
 offered upstream.
 
+For deployment planning and execution, apply the normative
+[Deployment Safety Contract](deployment-invariants.md). This lifecycle defines
+environment and authority gates; it does not replace that contract's field or
+side-effect rules.
+
 ## Environment Classification
 
 ### Production Source Instance
@@ -64,7 +69,12 @@ small PRs or a feature proposal after all prior gates pass.
 
 ## Stage 1: Read-Only Discovery
 
-1. Confirm the intended VPS and SSH host key.
+1. Confirm the intended VPS and canonical SSH host-key algorithm/fingerprint
+   pair. Current behavior is manual advanced confirmation. The planned
+   personal-user default is trusted SSH-session pairing: the user runs a fixed
+   GenBox helper in an SSH terminal session they already trust and pastes its
+   one-line response back. It is a future local implementation gate, not
+   authority to connect, authenticate, or run remote commands.
 2. Record the exact source container, Compose project, image, mounts, ports,
    labels, health, and data size.
 3. Record destination capacity and port conflicts.
@@ -78,6 +88,23 @@ Required evidence:
 - Destination directory, port, Compose project, and instance ID.
 - Required space calculation.
 - Rollback and cleanup target limited to the new destination.
+
+Trusted SSH-session pairing must use a short-lived, single-use, in-memory
+challenge bound to the saved target identity version and candidate canonical
+host-key pair. Completion re-probes and rejects mismatch, expiry, replay,
+target edit, unsupported algorithm, malformed response, or conflict with saved
+trust before authentication or remote work. Its endpoints accept no SSH
+credential and initiate no GenBox remote command; the helper is backend-owned
+and fixed/versioned, never browser-provided shell. Transient challenge, helper,
+and response transport is allowed only through future dedicated authenticated,
+CSRF-protected pairing endpoints; no endpoint name or path is specified or
+implemented here. Do not place pairing material in public task, status,
+instance, or diagnostic projections; durable target, TaskStore, or runtime
+records; ordinary logs; browser storage; screenshots; URLs; or Git. The
+canonical trust pair is the only permitted saved outcome.
+Users without a readable OpenSSH-compatible trusted session or with a custom
+host-key path must use provider-console, known-host, or manual advanced
+verification. Cancellation saves nothing.
 
 ## Stage 2: Create The Development Clone
 
@@ -94,16 +121,26 @@ cleaned up only within its owned destination after evidence is captured.
 ## Stage 3: Implement And Verify
 
 Use the isolated clone for chatgpt2api sender changes and GenBox for receiver and
-deployment changes. Verification proceeds from focused tests to end-to-end use:
+deployment changes. Before touching a VPS, build and run the receiver in an
+isolated local Docker container and record its image, health, configuration
+shape, authenticated Push result, and idempotent retry. This local preflight
+reduces avoidable remote iterations but does not prove VPS reachability or
+cross-project completion. Phase acceptance is scoped by `docs/ROADMAP.md`; the
+steps below are ordered capabilities, not a requirement that Phase 4 complete
+later phases or release gates. Verification proceeds from focused tests to
+end-to-end use:
 
 1. Unit and route tests.
 2. Local GenBox UI behavior.
-3. Private-network reachability.
-4. Single-image Push.
-5. Idempotent retry.
-6. Batch progress, interruption, and resume.
-7. Scheduled incremental scan and worker lease.
-8. Cleanup dry run; real cleanup remains disabled until its phase.
+3. Local Docker build, startup, health, authenticated Push, and idempotent
+   retry.
+4. Isolated VPS reproduction of the same container shape.
+5. Private-network reachability.
+6. Single-image Push.
+7. Idempotent retry.
+8. Batch progress, interruption, and resume (**Phase 5**).
+9. Scheduled incremental scan and worker lease (**Phase 5**).
+10. Cleanup dry run; real cleanup remains disabled until **Phase 6**.
 
 Record commands and outcomes in `docs/STATUS.md`. A passing mock test does not
 replace live isolation or network evidence.
@@ -148,9 +185,15 @@ Preferred PR sequence:
 When direct code contribution is unsuitable, provide
 `docs/UPSTREAM-VIBE-CODING-GUIDE.md` as an implementation-ready proposal.
 
-## Completion Evidence
+## Phase Acceptance And Full Delivery Evidence
 
-A feature may be called complete only when the record includes:
+A roadmap phase may be called complete when its own acceptance criteria and
+required local/isolated evidence are satisfied. For Phase 4, this is the
+authorized isolated single-image E2E and its receiver/sender evidence; it does
+not include Phase 5 batch/scheduling, Phase 6 cleanup, or public release.
+
+Only a fully delivered cross-project feature, clean redeployment, or upstream
+proposal may be called complete when the record also includes:
 
 - Commit or diff identity.
 - Test commands and results.

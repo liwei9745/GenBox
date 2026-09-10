@@ -79,6 +79,104 @@ def test_setup_status_registers_exactly_one_get_route():
     assert len(_api_routes("/api/setup/status", "GET")) == 1
 
 
+def test_runtime_status_is_public_non_secret_and_identifies_the_loaded_process(monkeypatch):
+    monkeypatch.setenv("APP_MODE", "dev")
+    monkeypatch.setenv("GENBOX_RUNTIME_HEAD", "test-head-placeholder")
+    monkeypatch.setenv("GENBOX_RUNTIME_SOURCE", "test-source-placeholder")
+    response = TestClient(main.app).get("/api/runtime/status")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json()["service"] == "genbox"
+    assert response.json()["version"]
+    assert response.json()["mode"] == "dev"
+    assert response.json()["port"] == main.GENBOX_PORT
+    assert response.json()["runtime_id"] == main.app_runtime_id
+    assert response.json()["runtime_head"] == "test-head-placeholder"
+    assert response.json()["runtime_source"] == "test-source-placeholder"
+    assert "/api/runtime/status" in main.AUTH_EXEMPT_PATHS
+    assert all("key" not in name.lower() and "secret" not in name.lower() for name in response.json())
+
+
+def test_runtime_status_is_not_exposed_in_production(monkeypatch):
+    monkeypatch.setenv("APP_MODE", "prod")
+
+    response = TestClient(main.app).get("/api/runtime/status")
+
+    assert response.status_code == 404
+
+
+def test_frontend_marks_cached_local_pages_offline_and_locks_extension_controls():
+    app_source = (ROOT / "static" / "js" / "app-all.js").read_text(encoding="utf-8")
+    extension_source = (ROOT / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    index_source = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+
+    assert "fetch('/api/setup/status', {cache: 'no-store'})" in app_source
+    assert "fetch('/api/runtime/status', {cache: 'no-store'})" in app_source
+    assert "_setBackendState(false, null)" in app_source
+    assert "setExtensionsBackendOnline" in extension_source
+    assert "querySelectorAll('button,input,select,textarea')" in extension_source
+    assert 'id="backendOfflineBanner"' in index_source
+    assert "disabled=false" not in extension_source
+
+
+def test_extension_offline_control_snapshot_and_hard_lock_behavior():
+    source = (ROOT / "static" / "js" / "extensions.js").read_text(encoding="utf-8")
+    setter = _extract_js_function(source, "setExtensionsBackendOnline")
+    ssh_lock = _extract_js_function(source, "setSshInputsLocked")
+    tailscale_render = _extract_js_function(source, "renderLocalTailscale")
+    targets_render = _extract_js_function(source, "renderTargets")
+    harness = f"""
+const vm = require('vm');
+function assert(value, message) {{ if (!value) throw new Error(message); }}
+const enabled = {{disabled:false,isConnected:true,closest:function(){{return null;}}}};
+const alreadyDisabled = {{disabled:true,isConnected:true,closest:function(){{return null;}}}};
+const deleteTarget = {{disabled:false,isConnected:true,closest:function(){{return null;}}}};
+const authButton = {{disabled:false,isConnected:true,closest:function(){{return null;}}}};
+const installButton = {{disabled:false,isConnected:true,closest:function(){{return null;}}}};
+const loginButton = {{disabled:false,isConnected:true,closest:function(){{return null;}}}};
+const serveButton = {{disabled:false,isConnected:true,closest:function(){{return null;}}}};
+function node() {{ return {{disabled:false,isConnected:true,closest:function(){{return null;}},className:'',textContent:''}}; }}
+const page = {{querySelectorAll:function(){{return [enabled, alreadyDisabled];}}}};
+const elements = {{pageExtensions:page,extDeleteTarget:deleteTarget,extLocalInstallBtn:installButton,extLocalLoginBtn:loginButton,extLocalServeBtn:serveButton,extLocalActionStatus:node(),extLocalTailscaleState:node(),extLocalTailscaleDetail:node(),extLocalAppPort:node(),extLocalServePort:node()}};
+const context = {{
+  backendOnline:true, backendDisabledControls:[], currentTargetId:'target-1', savedTargets:[],
+  window:{{}}, document:{{querySelectorAll:function(){{return [authButton];}}}},
+  el:function(id){{return elements[id] || enabled;}},
+  message:function(){{}}, i18nText:function(key){{return key;}}, updateCredentialState:function(){{}}, renderNetworkHostKey:function(){{}}, setCheck:function(){{}}, localTailscale:null,
+  escHtml:function(value){{return value;}}, renderBatchTargets:function(){{}}
+}};
+vm.createContext(context);
+vm.runInContext({json.dumps(setter + ';' + ssh_lock + ';' + tailscale_render + ';' + targets_render)}, context);
+context.setExtensionsBackendOnline(false);
+assert(enabled.disabled && alreadyDisabled.disabled, 'offline did not disable controls');
+context.setSshInputsLocked(false);
+assert(enabled.disabled && deleteTarget.disabled && authButton.disabled, 'async finally bypassed offline hard lock');
+context.renderTargets();
+assert(deleteTarget.disabled, 'late target render bypassed offline lock');
+context.renderLocalTailscale({{installed:false,online:false,serve:false,app_port:8892,serve_port:8893}});
+assert(installButton.disabled && loginButton.disabled && serveButton.disabled, 'late local status bypassed offline lock');
+context.setExtensionsBackendOnline(true);
+assert(enabled.disabled === false, 'enabled control did not recover');
+assert(alreadyDisabled.disabled === true, 'previously disabled control was incorrectly enabled');
+context.renderLocalTailscale({{installed:false,online:false,serve:false,app_port:8892,serve_port:8893}});
+assert(installButton.disabled === false && loginButton.disabled && serveButton.disabled, 'online local controls did not recover by state');
+"""
+    result = subprocess.run(["node", "-e", harness], cwd=ROOT, capture_output=True, text=True, timeout=20)
+
+    assert result.returncode == 0, result.stderr
+    assert "function updateVaultControls()" in source
+    assert "window.extensionVaultToggle=function" in source
+    assert "if(!backendOnline){message(i18nText('runtime.offline_detail'),true);return}" in source
+
+
+@pytest.mark.parametrize("action", ["stop", "restart", "start"])
+def test_get_server_control_cannot_mutate_process(action):
+    response = TestClient(main.app).get(f"/api/server/control?action={action}")
+
+    assert response.status_code == 405
+
+
 @pytest.mark.parametrize(
     ("app_mode", "providers", "expected"),
     [
@@ -286,6 +384,41 @@ def test_runtime_environment_preserves_explicit_process_port(monkeypatch, tmp_pa
 
     assert main.os.environ["GENBOX_PORT"] == "8891"
     assert main.os.environ["APP_MODE"] == "dev"
+
+
+def test_runtime_environment_preserves_explicit_process_dev_mode(monkeypatch, tmp_path):
+    executable_data_dir = tmp_path / "executable-data"
+    bundle_dir = tmp_path / "bundle"
+    executable_data_dir.mkdir()
+    bundle_dir.mkdir()
+    (executable_data_dir / ".env").write_text(
+        "APP_MODE=prod\nGENBOX_PORT=19001\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("APP_MODE", "dev")
+    monkeypatch.setattr(config, "PROCESS_ENV_APP_MODE", "dev")
+    monkeypatch.setattr(config, "PROCESS_ENV_GENBOX_PORT", None)
+
+    main.prepare_runtime_environment(executable_data_dir, bundle_dir)
+
+    assert main.os.environ["APP_MODE"] == "dev"
+    assert main.os.environ["GENBOX_PORT"] == "19001"
+
+
+def test_runtime_environment_uses_env_mode_without_explicit_process_override(
+    monkeypatch, tmp_path
+):
+    executable_data_dir = tmp_path / "executable-data"
+    bundle_dir = tmp_path / "bundle"
+    executable_data_dir.mkdir()
+    bundle_dir.mkdir()
+    (executable_data_dir / ".env").write_text("APP_MODE=prod\n", encoding="utf-8")
+    monkeypatch.setenv("APP_MODE", "dev")
+    monkeypatch.setattr(config, "PROCESS_ENV_APP_MODE", None)
+    monkeypatch.setattr(config, "PROCESS_ENV_GENBOX_PORT", None)
+
+    main.prepare_runtime_environment(executable_data_dir, bundle_dir)
+
+    assert main.os.environ["APP_MODE"] == "prod"
 
 
 def test_explicit_process_dev_mode_skips_first_run_write_and_starts_local(
@@ -835,10 +968,14 @@ def test_frontend_provider_load_commits_only_current_generation():
         [
             "var _adminKey = ''; var _loginAttemptGeneration = 0;",
             "var allProviders = []; var selectedProviders = [];",
+            "var precisionEditModelPickerReady = false; var precisionEditAuthorizationPending = false;",
             _extract_js_function(source, "_showLogin"),
             _extract_js_function(source, "_authFetch"),
             _extract_js_function(source, "_captureLoginAttempt"),
             _extract_js_function(source, "_isCurrentLoginAttempt"),
+            _extract_js_function(source, "getPrecisionEditModelAuthorizationState"),
+            _extract_js_function(source, "updatePrecisionEditAuthorizationControl"),
+            _extract_js_function(source, "renderPrecisionEditModelPicker"),
             _extract_js_function(source, "loadProviders"),
         ]
     )
@@ -857,11 +994,16 @@ const context = {{
   Promise,
   Error,
   localStorage: {{getItem: function() {{ return null; }}, removeItem: function() {{}}}},
-  document: {{getElementById: function() {{ return {{style: {{}}, focus: function() {{}}}}; }}}},
+  document: {{getElementById: function(id) {{
+    if (id.indexOf('precisionEdit') === 0 || id === 'btnPrecisionAuthorizeModel') return null;
+    return {{style: {{}}, focus: function() {{}}}};
+  }}}},
   fetch: function() {{ return queue.shift(); }},
   loadProviderOrder: function() {{ commits.push('order'); }},
   renderProviderList: function() {{ commits.push('render-list'); }},
   renderCreatorProviderPickers: function() {{ commits.push('render-pickers'); }},
+  updatePrecisionResizeCapabilityUI: function() {{ commits.push('precision-resize'); }},
+  updateInpaintAvailability: function() {{ commits.push('inpaint'); }},
   loadModelDropdown: function() {{ commits.push('models'); }},
   setStatus: function(value) {{ commits.push('status:' + value); }},
   i18nText: function(key) {{ return key + ':'; }}
@@ -947,6 +1089,10 @@ def test_frontend_never_persists_admin_key_in_browser_storage():
             "'igs_video_workbench'",
             "'igs_workspace_custom'",
             "'igs_workspace_mode'",
+            # Non-sensitive UI preference for the Dock lock control.
+            "'igs_dock_pinned'",
+            # Non-sensitive, one-time onboarding dismissal state.
+            "'genbox_precision_quick_start_v1'",
         }
         allowed_session_keys = {"'igs_reopen_onboarding'"}
         allowed_dynamic_local_keys = {
@@ -965,6 +1111,59 @@ def test_frontend_never_persists_admin_key_in_browser_storage():
             if key_expression == "STORAGE_KEY":
                 assert script.name == "theme.js"
                 assert "const STORAGE_KEY = 'genbox-theme';" in source
+                continue
+            if key_expression == "PRECISION_RESIZE_PRESET_STORAGE_KEY":
+                assert script.name == "app-all.js"
+                assert (
+                    "var PRECISION_RESIZE_PRESET_STORAGE_KEY = "
+                    "'genbox_precision_resize_presets_v1';"
+                ) in source
+                continue
+            if key_expression == "PRECISION_MODEL_VISIBILITY_STORAGE_KEY":
+                assert script.name == "app-all.js"
+                assert (
+                    "var PRECISION_MODEL_VISIBILITY_STORAGE_KEY = "
+                    "'genbox_precision_model_visibility_v1';"
+                ) in source
+                visibility_writer = _extract_js_function(
+                    source, "writePrecisionModelVisibility"
+                )
+                visibility_sanitizer = _extract_js_function(
+                    source, "sanitizePrecisionModelVisibility"
+                )
+                assert "PRECISION_MODEL_VISIBILITY_KEY_PATTERN" in source
+                assert "PRECISION_MODEL_VISIBILITY_FORBIDDEN_PATTERN" in source
+                assert (
+                    "precisionEditModelVisibility = "
+                    "sanitizePrecisionModelVisibility(precisionEditModelVisibility);"
+                ) in visibility_writer
+                assert "raw[key] === false" in visibility_sanitizer
+                for forbidden in (
+                    "api_key",
+                    "apiKey",
+                    "base_url",
+                    "credential",
+                    "error_body",
+                    "provider_settings",
+                    "prompt",
+                ):
+                    assert forbidden not in visibility_writer
+                continue
+            if key_expression == "PRECISION_INSPECTOR_WIDTH_STORAGE_KEY":
+                assert script.name == "app-all.js"
+                assert (
+                    "var PRECISION_INSPECTOR_WIDTH_STORAGE_KEY = "
+                    "'genbox_precision_inspector_width_v1';"
+                ) in source
+                inspector_writer = _extract_js_function(
+                    source, "setPrecisionInspectorWidth"
+                )
+                inspector_reader = _extract_js_function(
+                    source, "bindPrecisionInspectorResizeHandle"
+                )
+                assert "String(Math.round(value))" in inspector_writer
+                assert "Number(localStorage.getItem(PRECISION_INSPECTOR_WIDTH_STORAGE_KEY))" in inspector_reader
+                assert "Number.isFinite(saved) && saved > 0" in inspector_reader
                 continue
             if store == "localStorage":
                 assert key_expression in allowed_local_keys | allowed_dynamic_local_keys, (

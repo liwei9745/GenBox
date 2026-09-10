@@ -106,7 +106,12 @@ unresolved acceptance criterion in the current phase.
 
 ## Completion And Release Gates
 
-A cross-project feature is not complete until:
+Roadmap phase acceptance criteria control whether that phase is complete. The
+following gates control full cross-project delivery, clean redeployment, and
+upstream/public release completion; they do not pull later roadmap features
+into an earlier phase.
+
+A cross-project feature is fully delivered only when:
 
 1. Relevant local tests pass.
 2. It passes on an isolated VPS development clone.

@@ -10,6 +10,8 @@
 """
 import json
 import hashlib
+import os
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -23,6 +25,42 @@ LOCAL_MD5_INDEX_FILE = GALLERY_DIR / ".md5_index.json"
 
 # 本地索引里记录但文件已丢失的条目，定期清理阈值（秒），默认 7 天不强制
 MANIFEST_VERSION = 1
+
+
+def _is_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdefABCDEF" for char in value)
+    )
+
+
+def _atomic_write_json(path: Path, data: Any) -> None:
+    """Write JSON through a same-directory temporary file and atomic replace."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+        temp_path = None
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 # ──────────────────────────────────────────────────────────────
@@ -45,13 +83,9 @@ class SyncManifest:
                 self.entries = {}
 
     def save(self):
-        MANIFEST_FILE.write_text(
-            json.dumps(
-                {"version": MANIFEST_VERSION, "entries": self.entries},
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
+        _atomic_write_json(
+            MANIFEST_FILE,
+            {"version": MANIFEST_VERSION, "entries": self.entries},
         )
 
     def get(self, key: str) -> Optional[Dict[str, Any]]:
@@ -68,14 +102,64 @@ class SyncManifest:
 
     def add(self, deployment_id: str, path: str, local_path: str, sha256: str,
             size: int, remote_created_at: str):
+        local_digest = ""
+        try:
+            candidate = Path(local_path)
+            if candidate.is_file():
+                local_digest = sha256_bytes(candidate.read_bytes())
+        except OSError:
+            pass
         self.entries[f"{deployment_id}::{path}"] = {
             "local_path": local_path,
             "sha256": sha256,
+            "local_sha256": local_digest,
             "size": size,
             "remote_created_at": remote_created_at,
             "synced_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
         self.save()
+
+    @staticmethod
+    def _safe_gallery_path(entry: Dict[str, Any], gallery_dir: Path) -> Optional[Path]:
+        gallery_root = gallery_dir.resolve()
+        try:
+            local_path = Path(str(entry.get("local_path") or "")).resolve()
+            local_path.relative_to(gallery_root)
+        except (OSError, ValueError):
+            return None
+        if not local_path.is_file() or local_path.suffix.lower() != ".png":
+            return None
+        return local_path
+
+    def local_file_is_current(self, entry: Dict[str, Any], gallery_dir: Path) -> bool:
+        """Check that a committed gallery file still matches its recorded bytes."""
+        local_path = self._safe_gallery_path(entry, gallery_dir)
+        if local_path is None:
+            return False
+        expected = entry.get("local_sha256")
+        source_digest = entry.get("sha256")
+        if not _is_sha256(expected) and not _is_sha256(source_digest):
+            return False
+        try:
+            actual = sha256_bytes(local_path.read_bytes())
+            # Legacy entries predate local_sha256, so their source digest is
+            # the only available byte-integrity evidence.
+            expected_digest = expected if _is_sha256(expected) else source_digest
+            return actual == str(expected_digest).lower()
+        except OSError:
+            return False
+
+    def local_sha256_index(self, gallery_dir: Path) -> Dict[str, str]:
+        """Return durable source hashes whose committed files still exist in the gallery."""
+        restored: Dict[str, str] = {}
+        for entry in self.entries.values():
+            digest = entry.get("sha256")
+            if not _is_sha256(digest) or not self.local_file_is_current(entry, gallery_dir):
+                continue
+            local_path = self._safe_gallery_path(entry, gallery_dir)
+            if local_path is not None:
+                restored[digest.lower()] = local_path.name
+        return restored
 
 
 # ──────────────────────────────────────────────────────────────
@@ -102,14 +186,8 @@ class LocalImageIndex:
                 self.md5_index = {}
 
     def save(self):
-        LOCAL_INDEX_FILE.write_text(
-            json.dumps(self.index, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        LOCAL_MD5_INDEX_FILE.write_text(
-            json.dumps(self.md5_index, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        _atomic_write_json(LOCAL_INDEX_FILE, self.index)
+        _atomic_write_json(LOCAL_MD5_INDEX_FILE, self.md5_index)
 
     def contains_hash(self, sha256: str) -> bool:
         return sha256 in self.index
@@ -137,12 +215,21 @@ class LocalImageIndex:
         self.save()
 
     def ensure_sha256_index(self):
-        """Incrementally hash gallery files that are not yet in the SHA-256 index."""
+        """Validate indexed bytes, then hash gallery files missing from the index."""
         current_files = {f.name for f in GALLERY_DIR.glob("*.png")}
-        self.index = {
-            digest: filename for digest, filename in self.index.items()
-            if filename in current_files
-        }
+        validated: Dict[str, str] = {}
+        for digest, filename in self.index.items():
+            if not _is_sha256(digest) or not isinstance(filename, str):
+                continue
+            if filename not in current_files:
+                continue
+            path = GALLERY_DIR / filename
+            try:
+                if sha256_bytes(path.read_bytes()) == digest.lower():
+                    validated[digest.lower()] = filename
+            except OSError:
+                continue
+        self.index = validated
         known_files = set(self.index.values())
         for path in GALLERY_DIR.glob("*.png"):
             if path.name not in known_files:

@@ -767,7 +767,7 @@ window.startVideoGenerate = function() {
   window.videoPreviewGroups = {};
   window.videoGroupNavIdx = {};
   window.videoLog('\u5F00\u59CB\u751F\u6210\u89C6\u9891 - ' + tasksToGenerate.length + ' \u4E2A Provider', 'info');
-  window.videoLog('\u63D0\u793A\u8BCD: ' + prompt.substring(0, 80) + (prompt.length > 80 ? '...' : ''), 'info');
+  window.videoLog('\u751F\u6210\u8BF7\u6C42\u5DF2\u51C6\u5907', 'info');
   window.videoLog('\u53C2\u6570: ' + dims.width + 'x' + dims.height + ', ' + frames + '\u5E27, ' + fps + 'fps', 'info');
 
   var submittedCount = 0;
