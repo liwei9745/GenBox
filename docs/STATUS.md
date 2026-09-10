@@ -4,19 +4,38 @@
 
 - **USER-CONFIRMED:** GPT target-model precision editing passed manual acceptance.
   The user authorized GitHub publication before testing other vendors.
-- **PREPARED:** v2.6.8 version/Compose metadata, bilingual README feature section
-  and release notes. All four public size tables are checked against the 27
-  code presets. No universal GPT endpoint or other-vendor support is claimed.
-- **VERIFIED:** Ten Node suites and 47 packaging/size/extension checks pass.
-  New commits contain no checkpoint or user-image additions; credential-pattern
-  review found no real key material. Only explicit release files are staged.
-- **PENDING:** Hosted clean-source tests, desktop runtime/HTTP smoke tests,
-  Docker smoke and formal release asset verification. Existing v2.6.7 tag is
-  immutable: its desktop workflow 34011635213 failed a browser test and never
-  created a Release; its Docker workflow succeeded. v2.6.6 is the latest public
-  Release as verified via GitHub CLI before this publication attempt.
-- **RESUME:** Finish v2.6.8 publication and verify assets before reporting success.
-  Other-vendor real requests still need explicit authorization and separate UAT.
+- **PUBLISHED / VERIFIED 2026-09-10:** Public latest Release `v2.6.8` was
+  published at `2026-09-10T03:14:28Z`, frozen at commit `4fcfb3a27887`.
+  Bilingual README and release notes include the major precision-edit section;
+  all four public size tables match the 27 code presets. No universal GPT
+  endpoint or other-vendor support is claimed.
+- **VERIFIED:** Candidate workflow `34431689496` and tag workflow `34432208562`
+  each passed all 1,485 Python tests, all three desktop builds, and packaged
+  runtime/import and HTTP smoke checks. A separate clean GitHub clone at the
+  frozen commit passed `python -m pytest -q` (1,485 tests) with the pinned
+  Playwright browser. All 11 Node suites and 47 focused packaging/size/extension
+  checks passed; JavaScript syntax and `git diff --check` passed.
+- **TEST NOTES:** Synthetic browser tests now wait for canvas layout to settle
+  before capturing wheel coordinates. The production wheel handler accepts
+  horizontal or vertical deltas while retaining Shift/center-hotspot guards.
+  An extra local system-Chrome run had one extension modal timing failure;
+  the full pinned-browser rerun and both hosted suites passed without changing
+  that extension behavior or skipping tests.
+- **VERIFIED:** Docker tag workflow `34432208532` passed image runtime/import
+  and HTTP smoke checks, then published the same verified image without a
+  rebuild. GitHub API checks confirmed `v2.6.8` is public/latest with all nine
+  uploaded assets; the eight payload checksums match GitHub SHA-256 digests.
+  Downloaded checksum and Compose files also match their published digests.
+- **SAFETY:** No paid upstream request, production VPS change, model-weight
+  addition, or user-image addition was made. Credential-pattern review found
+  no real key material in new commits; temporary files and private screenshots
+  were excluded. Existing `v2.6.7` remains unchanged (its desktop workflow
+  failed before creating a Release); no previous release tag was moved.
+- **RESUME:** Continue separate manual acceptance of other vendors' model/edit
+  and size linkage on the owned lab. Obtain explicit authorization before any
+  real upstream trial, record sanitized exact target/output sizes, and retain
+  strict output checks, scoped authorization and no automatic image-edit POST
+  retry. Do not infer other-vendor acceptance from this GPT-target release.
 
 ## 2026-09-10 Precision Quick Start
 
