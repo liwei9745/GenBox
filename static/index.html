@@ -360,7 +360,7 @@
             <div class="mb-10">
               <div class="param-label"><span data-i18n="creator.aspect_ratio">宽高比</span></div>
               <div class="grid gap-4" style="grid-template-columns:repeat(5,1fr);" id="ratioGrid">
-                <button class="ratio-btn active" data-ratio="1:1" onclick="setRatio(this,'1:1')">1:1</button>
+                <button class="ratio-btn" data-ratio="1:1" onclick="setRatio(this,'1:1')">1:1</button>
                 <button class="ratio-btn" data-ratio="2:3" onclick="setRatio(this,'2:3')">2:3</button>
                 <button class="ratio-btn" data-ratio="3:2" onclick="setRatio(this,'3:2')">3:2</button>
                 <button class="ratio-btn" data-ratio="3:4" onclick="setRatio(this,'3:4')">3:4</button>
@@ -374,9 +374,9 @@
                 <button class="ratio-btn" data-ratio="21:9-2k" onclick="setRatio(this,'21:9-2k')">21:9(2K)</button>
                 <button class="ratio-btn" data-ratio="16:9-4k" onclick="setRatio(this,'16:9-4k')">16:9(4K)</button>
                 <button class="ratio-btn" data-ratio="9:16-4k" onclick="setRatio(this,'9:16-4k')">9:16(4K)</button>
-                <button class="ratio-btn" data-ratio="auto" onclick="setRatio(this,'auto')" style="grid-column:span 2;">auto</button>
+                <button class="ratio-btn active" data-ratio="auto" onclick="setRatio(this,'auto')" style="grid-column:span 2;">自动</button>
               </div>
-              <input type="hidden" id="selRatio" value="1:1">
+              <input type="hidden" id="selRatio" value="auto">
               <label class="flex items-start gap-6 mt-6 text-xs text-muted">
                 <input type="checkbox" id="chkExactRatioCrop" disabled style="margin-top:2px;accent-color:var(--accent);">
                 <span data-i18n="creator.exact_ratio_crop">精确裁切到所选比例（可能裁掉画面边缘，默认关闭）</span>
@@ -683,7 +683,7 @@
                     </div>
                     <button type="button" id="precisionCanvasVerticalResizeHandle" class="precision-canvas-vertical-resize-handle" role="separator" aria-orientation="horizontal" aria-controls="precisionCanvasShell precisionSessionShowcase" aria-valuemin="300" aria-valuemax="900" aria-valuenow="620" aria-label="调整全屏画布与图库高度" title="拖动或使用上下方向键调整全屏画布与图库高度" hidden><span aria-hidden="true"></span></button>
                     <div id="precisionGalleryCommandBar" class="precision-gallery-command-bar" role="group" aria-label="精准改图生成操作">
-                      <button type="button" class="btn-primary precision-generate-action-button" id="btnGen" onclick="doGenerate()"><span data-i18n="creator.generate_image">🚀 生成图片</span></button>
+                      <button type="button" class="btn-primary precision-generate-action-button" id="btnGen" onclick="doGenerate()" title="Enter 或 Ctrl+Enter 生成"><span data-i18n="creator.generate_image">🚀 生成图片</span></button><small class="precision-generate-shortcut-hint">Enter / Ctrl+Enter</small>
                       <button type="button" class="btn-secondary hidden" id="btnStopGen" onclick="cancelCurrentGeneration()"><span data-i18n="creator.stop_generation">⏹ 停止生成</span></button>
                     </div>
                     <section id="precisionAnnotationSummary" class="precision-annotation-summary" aria-label="已确认的修改说明" hidden>
@@ -858,8 +858,8 @@
                           <div id="precisionResizeCapability" class="precision-size-capability" role="group" aria-label="当前尺寸模型支持状态" data-i18n-aria-label="creator.precision_size_capability_label">
                             <small id="precisionResizeCapabilityStatus" role="status" aria-live="polite" data-i18n="creator.precision_size_capability_model_required">先选择并确认一个精准改图模型，再确认当前目标尺寸。</small>
                             <div class="precision-size-capability-actions">
-                              <button type="button" id="btnPrecisionConfirmResizeSize" class="btn-secondary" hidden disabled data-i18n="creator.precision_size_confirm_action_empty">确认当前尺寸</button>
-                              <button type="button" id="btnPrecisionRevokeResizeSize" class="btn-ghost" hidden disabled data-i18n="creator.precision_size_revoke_action_empty">撤销当前尺寸确认</button>
+                              <button type="button" id="btnPrecisionConfirmResizeSize" class="btn-secondary precision-toggle-action" hidden disabled data-i18n="creator.precision_size_confirm_action_empty">确认当前尺寸</button>
+                              <button type="button" id="btnPrecisionRevokeResizeSize" class="btn-ghost precision-toggle-action" hidden disabled data-i18n="creator.precision_size_revoke_action_empty">撤销当前尺寸确认</button>
                             </div>
                           </div>
                           <div id="precisionResizePresetEditor" class="precision-size-preset-editor hidden">
@@ -964,7 +964,7 @@
                         <span class="precision-help-tip"><button type="button" class="precision-help-trigger" aria-describedby="precisionEditCompatibilityHelp" aria-label="查看兼容方式说明" data-i18n-aria-label="creator.precision_edit_compatibility_help_label">?</button><span id="precisionEditCompatibilityHelp" class="precision-help-content" role="tooltip" data-i18n="creator.precision_edit_compatibility_help">仅在你已验证当前模型是 GPT Image 2 的上游别名时选择；真实模型 ID 仍会原样提交。</span></span>
                       </div>
                       <div class="precision-model-authorization-actions">
-                        <button type="button" id="btnPrecisionAuthorizeModel" class="btn-secondary" onclick="authorizePrecisionEditModel()" data-i18n="creator.precision_edit_authorize" disabled>确认支持并启用</button>
+                        <button type="button" id="btnPrecisionAuthorizeModel" class="btn-secondary precision-toggle-action" onclick="authorizePrecisionEditModel()" data-i18n="creator.precision_edit_authorize" disabled>确认支持并启用</button>
                         <button type="button" id="btnPrecisionRevokeModel" class="btn-ghost hidden" onclick="revokePrecisionEditModel()" disabled>停用本模型改图</button>
                       </div>
                       <small id="precisionModelAuthorizationHint">启用 / 停用只管理改图许可；恢复自动接入只清除手动连接设置，二者互不替代。</small>

@@ -330,6 +330,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // ESC 关闭弹窗
   document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.isComposing && !e.shiftKey && !e.altKey) {
+      var target = e.target;
+      var tag = target && target.tagName ? target.tagName.toLowerCase() : '';
+      if (tag !== 'textarea' && tag !== 'select' && !target.isContentEditable) {
+        var generate = document.getElementById('btnGen');
+        if (generate && !generate.disabled && !genCurrentGenId) {
+          e.preventDefault();
+          doGenerate();
+        }
+      }
+    }
     if (e.key === 'Escape') {
       closeLightbox();
       closeCompare();

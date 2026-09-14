@@ -9234,6 +9234,26 @@ body.precision-docs-open {
 
 .precision-protocol-controls [hidden] { display: none !important; }
 
+.precision-generate-shortcut-hint {
+  display: block;
+  margin-top: 4px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+#pageGenerate.precision-workbench .precision-toggle-action {
+  border-radius: 999px;
+  min-height: 30px;
+  padding-inline: 14px;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+#pageGenerate.precision-workbench .precision-toggle-action:not(:disabled):hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface));
+}
+
 #pageGenerate.precision-workbench .precision-model-picker-body,
 #pageGenerate.precision-workbench .precision-model-picker-body > *,
 #pageGenerate.precision-workbench .precision-resize-fields > * {
