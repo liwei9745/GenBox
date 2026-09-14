@@ -3234,3 +3234,94 @@ def test_video_file_keeps_legal_extensions_and_range_response(
     assert response.headers["content-type"] == media_type
     assert response.headers["content-range"] == "bytes 2-5/10"
     assert response.content == b"2345"
+
+def test_precision_protocol_override_is_model_scoped_and_preserves_provider_defaults(monkeypatch):
+    provider = ProviderConfig(
+        id="aggregate",
+        name="Aggregate",
+        type="image",
+        api_key="test-key",
+        base_url="https://gateway.example.test/v1",
+        model="gpt-image-2.5-c",
+        models=["gpt-image-2.5-c", "nano-banana-2-2k"],
+        enabled=True,
+        endpoint_type="openai",
+        capabilities={"precision_edit": True},
+        extra={
+            "model_capabilities": {
+                "gpt-image-2.5-c": {"precision_edit": True, "supported_sizes": ["1024x1024"]},
+                "nano-banana-2-2k": {"precision_edit": True, "supported_sizes": ["2048x2048"]},
+            }
+        },
+    )
+    original_extra = copy.deepcopy(provider.extra)
+    config = SimpleNamespace(providers=[provider])
+    saved = []
+    monkeypatch.setattr(main, "cfg_mgr", SimpleNamespace(config=config, save=lambda value: saved.append(value)))
+
+    result = asyncio.run(main.set_precision_protocol(
+        "aggregate",
+        main.PrecisionProtocolReq(
+            model="nano-banana-2-2k",
+            protocol="gemini",
+            size_model="gemini-3.1-flash-image",
+            confirmed=True,
+        ),
+    ))
+
+    assert result["ok"] is True
+    assert provider.endpoint_type == "openai"
+    assert provider.extra["model_capabilities"] == original_extra["model_capabilities"]
+    override = provider.extra["precision_model_overrides"]["nano-banana-2-2k"]
+    assert override["protocol"] == "gemini"
+    assert override["capabilities"]["precision_edit"] is False
+    assert result["catalog"]["size_model"] == "gemini-3.1-flash-image"
+
+    grant = asyncio.run(main.set_precision_capability(
+        "aggregate",
+        main.PrecisionCapabilityReq(model="nano-banana-2-2k", enabled=True, confirmed=True, size="2048x2048"),
+    ))
+    assert grant["supported_sizes"] == ["2048x2048"]
+    assert provider.extra["model_capabilities"]["nano-banana-2-2k"]["supported_sizes"] == ["2048x2048"]
+    assert provider.extra["precision_model_overrides"]["nano-banana-2-2k"]["capabilities"]["supported_sizes"] == ["2048x2048"]
+
+    reset = asyncio.run(main.set_precision_protocol(
+        "aggregate",
+        main.PrecisionProtocolReq(model="nano-banana-2-2k", protocol="inherit", confirmed=True),
+    ))
+    assert reset["protocol_override"] is None
+    assert "precision_model_overrides" not in provider.extra
+    assert provider.endpoint_type == "openai"
+    assert saved
+
+
+def test_precision_preflight_is_local_only_and_reports_no_upstream_request(monkeypatch):
+    provider = ProviderConfig(
+        id="aggregate",
+        name="Aggregate",
+        type="image",
+        api_key="test-key",
+        base_url="https://gateway.example.test/v1",
+        model="nano-banana-2-2k",
+        models=["nano-banana-2-2k"],
+        enabled=True,
+        endpoint_type="openai",
+        capabilities={"precision_edit": True},
+        extra={
+            "model_capabilities": {
+                "nano-banana-2-2k": {"precision_edit": True, "supported_sizes": ["2048x2048"]},
+            }
+        },
+    )
+    monkeypatch.setattr(main, "cfg_mgr", SimpleNamespace(config=SimpleNamespace(providers=[provider]), save=lambda value: None))
+
+    result = asyncio.run(main.precision_preflight(
+        "aggregate",
+        main.PrecisionPreflightReq(model="nano-banana-2-2k", size="2048x2048"),
+    ))
+
+    assert result["ok"] is True
+    assert result["local_only"] is True
+    assert result["upstream_verified"] is False
+    assert result["upstream_requests"] == 0
+    assert result["checks"] == [{"code": "precision_local_config_valid", "ok": True}]

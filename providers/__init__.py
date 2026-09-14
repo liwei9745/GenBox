@@ -42,6 +42,10 @@ from config import (
     normalize_precision_capability_size,
     precision_capability_size_declaration,
     resolve_precision_model_capability,
+    resolve_precision_provider,
+    precision_size_model,
+    precision_documented_gateway_recipe,
+    resolve_image_protocol,
     verify_ssl_enabled,
 )
 
@@ -234,9 +238,15 @@ async def _stream_bounded_provider_response(
         )
         content = await _read_bounded_provider_response(response, max_bytes)
         request = getattr(response, "request", None) or httpx.Request(method, url)
+        # aiter_bytes already decoded compression; do not decode it a second
+        # time when constructing the buffered response.
+        headers = {
+            key: value for key, value in (getattr(response, "headers", {}) or {}).items()
+            if key.lower() not in {"content-encoding", "content-length", "transfer-encoding"}
+        }
         return httpx.Response(
             int(response.status_code),
-            headers=dict(getattr(response, "headers", {}) or {}),
+            headers=headers,
             content=content,
             request=request,
         )
@@ -457,6 +467,7 @@ class PrecisionEditTransportProfile:
     image_field: str
     image_payload: str = "source_and_annotation"
     preserve_size: str = "auto"
+    request_encoding: str = "multipart"
 
 
 @dataclass
@@ -494,6 +505,15 @@ PRECISION_EDIT_TRANSPORT_PROFILES = {
             preserve_size="source_dimensions",
         )
     ),
+    PrecisionEditProfile.OPENAI_IMAGES_EDITS_JSON_DATA_URL_SINGLE_SOURCE_IMAGE.value: (
+        PrecisionEditTransportProfile(
+            path="/images/edits",
+            image_field="image",
+            image_payload="source_only",
+            preserve_size="source_dimensions",
+            request_encoding="json_data_url",
+        )
+    ),
 }
 
 GEMINI_PRECISION_EDIT_PROFILE = "gemini_generate_content"
@@ -509,6 +529,10 @@ _SENSITIVE_QUERY_RE = re.compile(
     r"(?i)(^|[?&;\s])((?:key|api[_-]?key|access[_-]?token|refresh[_-]?token|token|auth(?:orization)?|"
     r"client[_-]?secret|password|secret|signature|sig|credential)=)"
     r"(\[REDACTED\]|[^&#\s\"',;]*)"
+)
+_DATA_URL_RE = re.compile(r"(?is)data:image/[\w.+-]+;base64,[A-Za-z0-9+/=\s]{24,}")
+_PROMPT_FIELD_RE = re.compile(
+    r"(?is)([\"']?(?:prompt|text|instruction|negative_prompt)[\"']?\s*[:=]\s*)(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^,;&}\n]{1,1200})"
 )
 _AUTH_SCHEME_RE = re.compile(
     r"(?i)\b(Bearer|Basic)\s+([^\s,;\"'}]+)"
@@ -657,6 +681,12 @@ def _provider_error_text(value: Any, cfg: ProviderConfig) -> str:
     secrets.extend(getattr(endpoint, "key", "") for endpoint in (getattr(cfg, "endpoints", None) or []))
     for secret in sorted({str(item) for item in secrets if item}, key=len, reverse=True):
         text = text.replace(secret, "[REDACTED]")
+    extra = getattr(cfg, "extra", None)
+    private_values = extra.get("_precision_diagnostic_redactions", []) if isinstance(extra, dict) else []
+    for private_value in sorted({item for item in private_values if isinstance(item, str) and item}, key=len, reverse=True):
+        text = text.replace(private_value, "[REQUEST_CONTENT_REDACTED]")
+    text = _DATA_URL_RE.sub("[IMAGE_DATA_REDACTED]", text)
+    text = _PROMPT_FIELD_RE.sub(r"\1[PROMPT_REDACTED]", text)
     return _redact_sensitive_text(text)
 
 
@@ -1034,39 +1064,7 @@ def _detect_protocol(cfg: ProviderConfig) -> str:
     优先级: URL > Provider ID > Model 名称
     （URL 最可靠：第三方代理 + /v1 → 必定 OpenAI 兼容）
     """
-    url_lower = cfg.base_url.lower()
-
-    # ── 1. URL 最优先 ──
-    # Google 原生 API → Gemini 协议
-    is_google_native = ("googleapis" in url_lower or "gemini.google.com" in url_lower)
-    if is_google_native:
-        return "gemini"
-    # 特定关键字优先于通用 /v1 检测
-    if "agnes" in url_lower:
-        return "agnes"
-    if "qwen" in url_lower or "wanx" in url_lower:
-        return "qwen"
-    # URL 包含 /v1 且不是 googleapis → 第三方 OpenAI 兼容代理
-    if url_lower.rstrip('/').endswith('/v1'):
-        return "openai"
-
-    # ── 2. Provider ID 次之 ──
-    pid = cfg.id.lower()
-    if "agnes" in pid:
-        return "agnes"
-    if "qwen" in pid or "wanx" in pid:
-        return "qwen"
-    # id == "gemini" 但 URL 不是 googleapis → 不走原生协议，走默认 OpenAI
-
-    # ── 3. Model 名称最后（仅限明确的非通用场景）──
-    model_lower = cfg.model.lower()
-    if "agnes" in model_lower:
-        return "agnes"
-    if "wanx" in model_lower or "qwen" in model_lower:
-        return "qwen"
-
-    # 默认走 OpenAI 兼容协议（覆盖绝大多数第三方服务）
-    return "openai"
+    return resolve_image_protocol(cfg)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -1085,6 +1083,25 @@ async def generate_for_provider(
     """
     from .key_pool import key_pool_manager
 
+    if str(kwargs.get("mode") or "").strip().lower() == "precision_edit":
+        try:
+            effective = resolve_precision_provider(cfg, str(kwargs.get("model") or cfg.model or "").strip())
+        except ValueError as exc:
+            return _precision_edit_failure(cfg, "precision_protocol_override_invalid", str(exc))
+        # Endpoint/key injection below must never touch the shared Provider.
+        cfg = effective.model_copy(deep=True)
+        private_values = [prompt, kwargs.get("precision_resize_prompt")]
+        for annotation in kwargs.get("annotations") or []:
+            if isinstance(annotation, dict):
+                private_values.extend(annotation.get(field) for field in ("instruction", "text"))
+        for field in ("image_data", "annotation_image_data"):
+            image_value = kwargs.get(field)
+            if isinstance(image_value, str):
+                private_values.extend((image_value, image_value.partition(",")[2]))
+        # Kept only in this private request copy, never persisted or projected.
+        cfg.extra["_precision_diagnostic_redactions"] = [
+            value for value in private_values if isinstance(value, str) and value
+        ]
     requested_protocol = kwargs.get("protocol")
     protocol = str(requested_protocol).strip().lower() if requested_protocol else _detect_protocol(cfg)
     dispatch_kwargs = dict(kwargs)
@@ -1553,6 +1570,7 @@ def _precision_model_is_authorized(cfg: ProviderConfig, model_id: str) -> bool:
 
 def resolve_provider_precision_model_capability(cfg: ProviderConfig, model_id: str):
     """Resolve only persisted model capability or alias metadata."""
+    cfg = resolve_precision_provider(cfg, model_id)
     extra = getattr(cfg, "extra", None)
     model_capabilities = extra.get("model_capabilities") if isinstance(extra, dict) else None
     return resolve_precision_model_capability(
@@ -1576,6 +1594,39 @@ def _precision_edit_transport_profile(
     if isinstance(configured, PrecisionEditProfile):
         configured = configured.value
     return PRECISION_EDIT_TRANSPORT_PROFILES.get(str(configured or "").strip())
+
+
+def _precision_public_image_url_preflight(
+    cfg: ProviderConfig,
+    model_id: str,
+    image_data: object,
+    transport_profile: PrecisionEditTransportProfile,
+) -> ImageResult | None:
+    """Keep an unverified automatic input profile behind explicit trial consent."""
+    if transport_profile.request_encoding != "json_data_url":
+        return None
+    recipe = precision_documented_gateway_recipe(cfg, model_id)
+    extra = getattr(cfg, "extra", None)
+    source = extra.get("_precision_connection_source") if isinstance(extra, dict) else None
+    if recipe.get("gateway") != "vel" or source != "gateway_documentation":
+        return None
+    if not isinstance(image_data, str):
+        return None
+    if not image_data.strip().lower().startswith("data:image/"):
+        return None
+    return _precision_edit_failure(
+        cfg,
+        "precision_edit_public_image_url_required",
+        "当前网关的自动 JSON 改图输入尚未验证通过；此前返回 Invalid data URL，不能据此断定只支持公网 URL。"
+        "请核对端点文档后，通过当前模型的高级接入设置显式选择图片上传方式再试；GenBox 不会自动上传本地图到第三方。"
+        "文生图成功不代表改图输入格式兼容。",
+        details={
+            "model": model_id or None,
+            "gateway": recipe.get("gateway"),
+            "request_encoding": transport_profile.request_encoding,
+            "upstream_request": False,
+        },
+    )
 
 
 def _precision_declared_sizes(model_capabilities: object) -> set[str]:
@@ -1730,10 +1781,7 @@ def precision_model_uses_gpt_image_2_size_contract(
     model_id: str,
 ) -> bool:
     """Identify the exact model or an explicit one-hop canonical alias."""
-    if model_id == "gpt-image-2":
-        return True
-    resolution = _precision_model_capability_resolution(cfg, model_id)
-    return resolution.structure_valid and resolution.canonical_model == "gpt-image-2"
+    return precision_size_model(cfg, model_id) == "gpt-image-2"
 
 
 def _precision_preserve_source_size_error(
@@ -1980,7 +2028,7 @@ def _gemini_precision_native_size(cfg: ProviderConfig, model_id: str, size: str)
     resolution = _precision_model_capability_resolution(cfg, model_id)
     if not resolution.structure_valid or not resolution.precision_edit_confirmed:
         return None
-    value = gemini_precision_preset_for_size(resolution.canonical_model, size)
+    value = gemini_precision_preset_for_size(precision_size_model(cfg, model_id), size)
     if value is None:
         return None
     return dict(value["image_config"])
@@ -2123,12 +2171,32 @@ async def _dispatch_gemini_precision_edit(cfg: ProviderConfig, prompt: str, **kw
         for part in parts:
             if not isinstance(part, dict) or part.get("thought") is True:
                 continue
-            inline_data = part.get("inlineData") if isinstance(part, dict) else None
+            inline_data = part.get("inlineData") or part.get("inline_data")
             if isinstance(inline_data, dict) and inline_data.get("data"):
                 try:
                     output_data = _decode_generated_image_base64(inline_data["data"])
                     _inspect_generated_image(
-                        output_data, declared_mime=inline_data.get("mimeType"),
+                        output_data, declared_mime=inline_data.get("mimeType") or inline_data.get("mime_type"),
+                        max_pixels=PRECISION_MAX_OUTPUT_PIXELS,
+                    )
+                except GeneratedImageValidationError as exc:
+                    return _precision_edit_failure(cfg, "precision_edit_invalid_response", str(exc))
+                break
+            file_data = part.get("fileData") or part.get("file_data")
+            if isinstance(file_data, dict):
+                file_uri = file_data.get("fileUri") or file_data.get("file_uri")
+                if not isinstance(file_uri, str) or not file_uri:
+                    continue
+                output_data, download_error = await _download_generated_image(
+                    None, file_uri, max_pixels=PRECISION_MAX_OUTPUT_PIXELS,
+                )
+                if download_error:
+                    return _precision_edit_failure(
+                        cfg, "precision_edit_result_download_rejected", download_error,
+                    )
+                try:
+                    _inspect_generated_image(
+                        output_data, declared_mime=file_data.get("mimeType") or file_data.get("mime_type"),
                         max_pixels=PRECISION_MAX_OUTPUT_PIXELS,
                     )
                 except GeneratedImageValidationError as exc:
@@ -2164,10 +2232,16 @@ async def _dispatch_precision_edit(
     protocol: str,
     **kwargs,
 ) -> ImageResult:
-    """Fail closed unless annotation editing has a verified OpenAI transport."""
+    """Fail closed unless annotation editing has an explicitly selected transport."""
+    model_id = str(kwargs.get("model") or cfg.model or "").strip()
+    try:
+        cfg = resolve_precision_provider(cfg, model_id)
+    except ValueError as exc:
+        return _precision_edit_failure(cfg, "precision_protocol_override_invalid", str(exc))
+    if cfg.extra.get("_precision_override_model") == model_id or cfg.extra.get("_precision_resolved_model") == model_id:
+        protocol = cfg.endpoint_type
     endpoint_type = str(getattr(cfg, "endpoint_type", "auto") or "auto").strip().lower()
     effective_protocol = str(protocol or "auto").strip().lower()
-    model_id = str(kwargs.get("model") or cfg.model or "").strip()
     native_gemini = (
         endpoint_type == "gemini"
         and effective_protocol == "gemini"
@@ -3257,6 +3331,7 @@ async def _gen_openai_precision_edit(
         "image/jpeg": "jpg",
         "image/webp": "webp",
     }[image_mime]
+    model_id = str(kwargs.get("model") or cfg.model or "").strip()
     if transport_profile is None:
         transport_profile = _precision_edit_transport_profile(cfg)
     if transport_profile is None:
@@ -3265,9 +3340,16 @@ async def _gen_openai_precision_edit(
             "precision_edit_profile_unsupported",
             "precision_edit requires an allowlisted transport profile",
         )
+    public_url_failure = _precision_public_image_url_preflight(
+        cfg,
+        model_id,
+        image_data,
+        transport_profile,
+    )
+    if public_url_failure is not None:
+        return public_url_failure
     size_mode = str(kwargs.get("precision_size_mode") or "preserve").strip().lower()
     resize_prompt = str(kwargs.get("precision_resize_prompt") or "").strip()
-    model_id = str(kwargs.get("model") or cfg.model or "").strip()
     target_size = str(kwargs.get("precision_target_size") or "")
     generic_size = str(kwargs.get("size") or "").strip().lower()
     output_size_policy = str(kwargs.get("precision_output_size_policy") or "strict")
@@ -3367,8 +3449,30 @@ async def _gen_openai_precision_edit(
         return _precision_edit_failure(cfg, "precision_size_mode_invalid", "unsupported precision size mode")
     quality = kwargs.get("quality") or cfg.quality
     data_dict = {"model": model_id, "prompt": edit_prompt, "n": 1, "size": request_size}
+    if precision_documented_gateway_recipe(cfg, model_id).get("gateway") == "klong":
+        data_dict["response_format"] = "b64_json"
+        # Klong accepts resolution tiers; its pixel-size inference can select
+        # a different tier. Keep exact geometry in the prompt/output contract.
+        preset = gemini_precision_preset_for_size(precision_size_model(cfg, model_id), request_size)
+        if preset and preset.get("tier") in {"1K", "2K", "4K"}:
+            data_dict["size"] = preset["tier"]
     if quality and quality != "default":
         data_dict["quality"] = quality
+    request_body = {"files": files, "data": data_dict}
+    if transport_profile.request_encoding == "json_data_url":
+        recipe = precision_documented_gateway_recipe(cfg, model_id)
+        preset = gemini_precision_preset_for_size(precision_size_model(cfg, model_id), request_size)
+        if recipe.get("gateway") == "vel":
+            tier = recipe.get("size_tier") or (preset or {}).get("tier")
+            if tier:
+                data_dict["quality"] = {"1K": "standard", "2K": "medium", "4K": "high"}.get(tier, "standard")
+        data_dict[transport_profile.image_field] = (
+            f"data:{image_mime};base64," + base64.b64encode(image_bytes).decode("ascii")
+        )
+        # Vel's documented JSON edit contract expects the image fields at the
+        # top level. Keep this scoped to JSON profiles; multipart GPT paths
+        # continue to use the existing files/data request shape.
+        request_body = {"payload": data_dict}
 
     headers = {"Authorization": f"Bearer {cfg.api_key}"}
     url = f"{_ensure_v1(cfg.base_url)}{transport_profile.path}"
@@ -3377,8 +3481,7 @@ async def _gen_openai_precision_edit(
         resp, client = await _http_post_with_retry(
             url,
             headers,
-            files=files,
-            data=data_dict,
+            **request_body,
             timeout=180.0,
             max_retries=1,
             retry_delay=0.25,
@@ -3447,9 +3550,10 @@ async def _gen_openai_precision_edit(
         image_info = result_data[0]
         image_b64 = image_info.get("b64_json")
         image_url = image_info.get("url")
-        if image_b64:
+        inline_url = isinstance(image_url, str) and image_url.lower().startswith("data:")
+        if image_b64 or inline_url:
             try:
-                output_data = _decode_generated_image_base64(image_b64)
+                output_data = _decode_generated_image_base64(image_b64 or image_url)
             except GeneratedImageValidationError as exc:
                 return _precision_edit_failure(
                     cfg,
