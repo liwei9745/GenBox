@@ -7,10 +7,12 @@ import json
 import os
 import re
 import sys
+from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
+from urllib.parse import urlsplit
 from pydantic import BaseModel
 
 from dotenv import load_dotenv
@@ -101,6 +103,10 @@ class PrecisionEditProfile(str, Enum):
     OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE = (
         "openai_images_edits_multipart_single_source_image"
     )
+    OPENAI_IMAGES_EDITS_JSON_DATA_URL_SINGLE_SOURCE_IMAGE = (
+        "openai_images_edits_json_data_url_single_source_image"
+    )
+    GEMINI_GENERATE_CONTENT = "gemini_generate_content"
 
 
 PRECISION_EDIT_CAPABILITY = "precision_edit"
@@ -188,6 +194,103 @@ GPT_IMAGE_DOCUMENTED_STANDARD_MODELS = frozenset(
     {"gpt-image-1", "gpt-image-1.5", "gpt-image-1-mini"}
 )
 
+# Gemini image models use the native GenerateContent imageConfig contract.
+# These are documentation presets only: a provider/model still needs an
+# explicit precision capability record before dispatch is authorized.
+GEMINI_NATIVE_IMAGE_MODELS = frozenset({
+    "gemini-2.5-flash-image",
+    "gemini-3-pro-image",
+    "gemini-3.1-flash-image",
+})
+GEMINI_25_FLASH_IMAGE = "gemini-2.5-flash-image"
+GEMINI_3_PRO_IMAGE = "gemini-3-pro-image"
+GEMINI_31_FLASH_IMAGE = "gemini-3.1-flash-image"
+
+def _gemini_preset(size: str, ratio: str, tier: str, *, image_size: Optional[str] = None) -> Dict[str, Any]:
+    item = {
+        "id": f"gemini-{tier.lower()}-{ratio.replace(':', 'x')}",
+        "size": size,
+        "tier": tier,
+        "ratio": ratio,
+        "evidence": "official_native_image_config",
+        "experimental": False,
+        "provider": "gemini",
+        "image_config": {"aspectRatio": ratio},
+    }
+    if image_size is not None:
+        item["image_config"]["imageSize"] = image_size
+    return item
+
+
+def gemini_precision_model_presets(canonical_model: object) -> Tuple[Dict[str, Any], ...]:
+    """Return native Gemini GenerateContent presets for one exact model.
+
+    The returned values describe request mapping only. They do not grant
+    precision editing or provider access, and unsupported arbitrary dimensions
+    must not be synthesized from these ratios.
+    """
+    model = str(canonical_model or "").strip()
+    if model == GEMINI_25_FLASH_IMAGE:
+        table = {
+            "1:1": "1024x1024", "2:3": "832x1248", "3:2": "1248x832",
+            "9:16": "768x1344", "16:9": "1344x768", "21:9": "1536x672",
+        }
+        return tuple(_gemini_preset(size, ratio, "1K") for ratio, size in table.items())
+    if model == GEMINI_3_PRO_IMAGE:
+        tables = {
+            "1K": {
+                "1:1": "1024x1024", "2:3": "848x1264", "3:2": "1264x848",
+                "4:5": "928x1152", "5:4": "1152x928", "9:16": "768x1376",
+                "16:9": "1376x768", "21:9": "1584x672",
+            },
+            "2K": {
+                "1:1": "2048x2048", "2:3": "1696x2528", "3:2": "2528x1696",
+                "4:5": "1856x2304", "5:4": "2304x1856", "9:16": "1536x2752",
+                "16:9": "2752x1536", "21:9": "3168x1344",
+            },
+            "4K": {
+                "1:1": "4096x4096", "2:3": "3392x5056", "3:2": "5056x3392",
+                "4:5": "3712x4608", "5:4": "4608x3712", "9:16": "3072x5504",
+                "16:9": "5504x3072", "21:9": "6336x2688",
+            },
+        }
+        return tuple(
+            _gemini_preset(size, ratio, tier, image_size=tier)
+            for tier, table in tables.items()
+            for ratio, size in table.items()
+        )
+    if model == GEMINI_31_FLASH_IMAGE:
+        table = {
+            "1:1": (1024, 1024), "1:4": (512, 2048), "1:8": (384, 3072),
+            "2:3": (848, 1264), "3:2": (1264, 848), "3:4": (896, 1200),
+            "4:1": (2048, 512), "4:3": (1200, 896), "4:5": (928, 1152),
+            "5:4": (1152, 928), "8:1": (3072, 384), "9:16": (768, 1376),
+            "16:9": (1376, 768), "21:9": (1584, 672),
+        }
+        presets = []
+        for tier, numerator, denominator in (("512", 1, 2), ("1K", 1, 1), ("2K", 2, 1), ("4K", 4, 1)):
+            for ratio, (width, height) in table.items():
+                # Google's published 512/21:9 row is internally inconsistent;
+                # do not invent dimensions pending clarification. Extreme 4K
+                # rows exceed the application's existing 8192-side limit.
+                if tier == "512" and ratio == "21:9":
+                    continue
+                size = f"{width * numerator // denominator}x{height * numerator // denominator}"
+                if normalize_precision_capability_size(size):
+                    presets.append(_gemini_preset(size, ratio, tier, image_size=tier))
+        return tuple(presets)
+    return ()
+
+
+def gemini_precision_preset_for_size(canonical_model: object, size: object) -> Optional[Dict[str, Any]]:
+    normalized = normalize_precision_capability_size(size)
+    if not normalized:
+        return None
+    for preset in gemini_precision_model_presets(canonical_model):
+        if preset["size"] == normalized:
+            return dict(preset)
+    return None
+
 
 def documented_precision_model_size_presets(canonical_model: object) -> Tuple[Dict[str, Any], ...]:
     """Return non-authorizing model-documentation presets for one canonical model.
@@ -199,7 +302,7 @@ def documented_precision_model_size_presets(canonical_model: object) -> Tuple[Di
     if canonical_model in GPT_IMAGE_DOCUMENTED_STANDARD_MODELS:
         return tuple(item for item in GPT_IMAGE_2_DOCUMENTED_SIZE_PRESETS if item["tier"] == "standard")
     if canonical_model != "gpt-image-2":
-        return ()
+        return gemini_precision_model_presets(canonical_model)
     return tuple(dict(item) for item in GPT_IMAGE_2_DOCUMENTED_SIZE_PRESETS)
 
 
@@ -496,6 +599,286 @@ class ProviderConfig(BaseModel):
             key = effective_keys[0] if effective_keys else self.api_key
             return [EndpointConfig(url=self.base_url, key=key)]
         return []
+
+
+def normalize_precision_model_override(value: object) -> Dict[str, Any]:
+    """Validate only supported per-model transports; never accept request templates."""
+    if not isinstance(value, dict):
+        raise ValueError("precision protocol override must be an object")
+    protocol = value.get("protocol")
+    if protocol not in {"openai", "gemini"}:
+        raise ValueError("precision protocol override requires openai or gemini")
+    default_profile = (
+        PrecisionEditProfile.GEMINI_GENERATE_CONTENT
+        if protocol == "gemini"
+        else PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE
+    )
+    try:
+        profile = PrecisionEditProfile(value.get("profile") or default_profile)
+    except (TypeError, ValueError):
+        raise ValueError("precision protocol profile is unsupported") from None
+    if (profile == PrecisionEditProfile.GEMINI_GENERATE_CONTENT) != (protocol == "gemini"):
+        raise ValueError("precision protocol and request profile do not match")
+    size_model = value.get("size_model", "")
+    if not isinstance(size_model, str) or (
+        size_model and not documented_precision_model_size_presets(size_model)
+    ):
+        raise ValueError("precision size model must be a documented model family")
+    capabilities = value.get("capabilities", {})
+    if not isinstance(capabilities, dict):
+        raise ValueError("precision override capabilities must be an object")
+    if set(capabilities) - {"precision_edit", "supported_sizes"}:
+        raise ValueError("precision override capabilities cannot inherit aliases or size policies")
+    confirmed = capabilities.get("precision_edit", False)
+    if not isinstance(confirmed, bool):
+        raise ValueError("precision override confirmation must be boolean")
+    normalized_capabilities = {"precision_edit": confirmed}
+    if "supported_sizes" in capabilities:
+        raw_sizes = capabilities.get("supported_sizes")
+        if not isinstance(raw_sizes, list):
+            raise ValueError("precision override supported sizes are invalid")
+        if raw_sizes:
+            present, valid, sizes, _ = precision_capability_size_declaration(capabilities)
+            if not present or not valid:
+                raise ValueError("precision override supported sizes are invalid")
+            normalized_capabilities["supported_sizes"] = list(sizes)
+        else:
+            normalized_capabilities["supported_sizes"] = []
+    return {
+        "protocol": protocol,
+        "profile": profile.value,
+        "size_model": size_model,
+        "capabilities": normalized_capabilities,
+    }
+
+
+def resolve_image_protocol(provider: ProviderConfig) -> str:
+    """Match established text-to-image detection without importing providers."""
+    url = str(getattr(provider, "base_url", "") or "").lower()
+    if "googleapis" in url or "gemini.google.com" in url:
+        return "gemini"
+    if "agnes" in url:
+        return "agnes"
+    if "qwen" in url or "wanx" in url:
+        return "qwen"
+    if url.rstrip("/").endswith("/v1"):
+        return "openai"
+    for value in (getattr(provider, "id", ""), getattr(provider, "model", "")):
+        value = str(value or "").lower()
+        if "agnes" in value:
+            return "agnes"
+        if "qwen" in value or "wanx" in value:
+            return "qwen"
+    return "openai"
+
+
+def precision_documented_gateway_recipe(provider: ProviderConfig, model: str) -> Dict[str, str]:
+    """Exact public gateway recipes, not grants or successful runtime evidence."""
+    get_endpoints = getattr(provider, "get_active_endpoints", None)
+    endpoints = get_endpoints() if callable(get_endpoints) else []
+    urls = [endpoint.url for endpoint in endpoints] or [getattr(provider, "base_url", "")]
+    origins = set()
+    for url in urls:
+        try:
+            parsed = urlsplit(str(url or ""))
+            if (
+                parsed.scheme != "https" or parsed.port not in (None, 443)
+                or parsed.username is not None or parsed.password is not None
+                or parsed.query or parsed.fragment
+                or parsed.path.rstrip("/") not in ("", "/v1")
+            ):
+                return {}
+            origins.add(parsed.hostname)
+        except ValueError:
+            return {}
+    if len(origins) != 1:
+        return {}
+    host = next(iter(origins))
+    recipe = None
+    if host == "api.velapi.cc":
+        recipe = {
+            "nano-banana-2-2k": (GEMINI_31_FLASH_IMAGE, "2K"),
+            "nano-banana-2-2k-sp": (GEMINI_31_FLASH_IMAGE, "2K"),
+            "nano-banana-2-4K": (GEMINI_31_FLASH_IMAGE, "4K"),
+            "nano-banana-pro-2k": (GEMINI_3_PRO_IMAGE, "2K"),
+            "nano-banana-pro-2k-sp": (GEMINI_3_PRO_IMAGE, "2K"),
+            "nano-banana-pro-4K": (GEMINI_3_PRO_IMAGE, "4K"),
+        }.get(model)
+    elif host == "api.klong.lat":
+        recipe = {
+            "nano-banana2": (GEMINI_31_FLASH_IMAGE, ""),
+            "nano-banana-pro": (GEMINI_3_PRO_IMAGE, ""),
+        }.get(model)
+    if recipe is None:
+        return {}
+    profile = (
+        PrecisionEditProfile.OPENAI_IMAGES_EDITS_JSON_DATA_URL_SINGLE_SOURCE_IMAGE.value
+        if host == "api.velapi.cc"
+        else PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE.value
+    )
+    return {
+        "protocol": "openai",
+        "profile": profile,
+        "size_model": recipe[0], "size_tier": recipe[1],
+        "source": "gateway_documentation",
+        "gateway": "vel" if host == "api.velapi.cc" else "klong",
+    }
+
+
+def precision_automatic_connection_info(provider: ProviderConfig, model: str) -> Dict[str, str]:
+    """Nonsecret automatic recipe, ignoring manual overrides."""
+    recipe = precision_documented_gateway_recipe(provider, model)
+    if recipe:
+        return recipe
+    protocol = str(getattr(provider, "endpoint_type", "auto") or "auto")
+    if protocol == "auto":
+        protocol = resolve_image_protocol(provider)
+    configured = getattr(provider, "precision_edit_profile", None)
+    profile = getattr(configured, "value", configured) or ""
+    if not profile:
+        if protocol == "gemini" and model in GEMINI_NATIVE_IMAGE_MODELS:
+            profile = PrecisionEditProfile.GEMINI_GENERATE_CONTENT.value
+        elif protocol == "openai":
+            # Keep the historical OpenAI edit body when no explicit profile
+            # exists; adapters may still replace it with a documented
+            # gateway recipe for an exact host/model pair.
+            profile = PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_REPEATED_IMAGE.value
+    extra = getattr(provider, "extra", None)
+    extra = extra if isinstance(extra, dict) else {}
+    resolution = resolve_precision_model_capability(extra.get("model_capabilities"), model)
+    size_model = resolution.canonical_model if resolution.structure_valid else model
+    return {
+        "protocol": protocol, "profile": profile, "size_model": size_model,
+        "size_tier": "", "source": "provider_default", "gateway": "",
+    }
+
+
+def resolve_precision_provider(provider: ProviderConfig, model: str) -> ProviderConfig:
+    """Create an isolated, idempotent precision configuration for an exact model."""
+    extra = getattr(provider, "extra", None)
+    extra = extra if isinstance(extra, dict) else {}
+    if extra.get("_precision_resolved_model") == model or extra.get("_precision_override_model") == model:
+        return provider
+    overrides = extra.get("precision_model_overrides")
+    if not isinstance(overrides, dict) or model not in overrides:
+        recipe = precision_documented_gateway_recipe(provider, model)
+        if not recipe:
+            if getattr(provider, "endpoint_type", "auto") != "auto":
+                return provider
+            if not getattr(provider, "base_url", "") and not (
+                callable(getattr(provider, "get_active_endpoints", None))
+                and provider.get_active_endpoints()
+            ):
+                return provider
+            recipe = precision_automatic_connection_info(provider, model)
+            if recipe["protocol"] not in {"openai", "gemini"} or not recipe["profile"]:
+                return provider
+        copy_model = getattr(provider, "model_copy", None)
+        effective = copy_model(deep=True) if callable(copy_model) else deepcopy(provider)
+        effective.endpoint_type = recipe["protocol"]
+        effective.precision_edit_profile = PrecisionEditProfile(recipe["profile"])
+        effective.extra["_precision_resolved_model"] = model
+        effective.extra["_precision_connection_source"] = recipe["source"]
+        effective.extra["_precision_size_model"] = recipe["size_model"]
+        return effective
+    raw_override = overrides[model]
+    recipe = precision_documented_gateway_recipe(provider, model)
+    if isinstance(raw_override, dict) and raw_override.get("protocol") == "openai" and not raw_override.get("profile") and recipe:
+        raw_override = {**raw_override, "profile": recipe["profile"]}
+    override = normalize_precision_model_override(raw_override)
+    copy_model = getattr(provider, "model_copy", None)
+    effective = copy_model(deep=True) if callable(copy_model) else deepcopy(provider)
+    effective.endpoint_type = override["protocol"]
+    effective.precision_edit_profile = PrecisionEditProfile(override["profile"])
+    effective.extra.pop("precision_model_overrides", None)
+    effective.extra["_precision_override_model"] = model
+    effective.extra["_precision_resolved_model"] = model
+    effective.extra["_precision_connection_source"] = "manual"
+    effective.extra["_precision_size_model"] = override["size_model"] or recipe.get("size_model", "")
+    capabilities = effective.extra.get("model_capabilities")
+    if not isinstance(capabilities, dict):
+        capabilities = {}
+        effective.extra["model_capabilities"] = capabilities
+    capabilities[model] = deepcopy(override["capabilities"])
+    effective.capabilities["precision_edit"] = override["capabilities"]["precision_edit"]
+    return effective
+
+
+def precision_connection_info(provider: ProviderConfig, model: str) -> Dict[str, Any]:
+    """Effective model connection without credentials or endpoint URLs."""
+    automatic = precision_automatic_connection_info(provider, model)
+    effective = resolve_precision_provider(provider, model)
+    extra = getattr(effective, "extra", None)
+    extra = extra if isinstance(extra, dict) else {}
+    profile = getattr(effective, "precision_edit_profile", None)
+    profile = getattr(profile, "value", profile) or ""
+    protocol = str(getattr(effective, "endpoint_type", "auto") or "auto")
+    if protocol == "auto":
+        protocol = resolve_image_protocol(effective)
+    if not profile and protocol == "openai":
+        profile = PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_REPEATED_IMAGE.value
+    return {
+        "protocol": protocol, "profile": profile,
+        "size_model": precision_size_model(effective, model),
+        "source": extra.get("_precision_connection_source", "provider_default"),
+        "size_tier": automatic.get("size_tier", ""),
+        "automatic": automatic,
+    }
+
+
+def precision_size_model(provider: ProviderConfig, model: str) -> str:
+    """Resolve a catalogue identity independently from the outbound model ID."""
+    effective = resolve_precision_provider(provider, model)
+    extra = effective.extra if isinstance(effective.extra, dict) else {}
+    if extra.get("_precision_override_model") == model or extra.get("_precision_resolved_model") == model:
+        return extra.get("_precision_size_model") or model
+    resolution = resolve_precision_model_capability(extra.get("model_capabilities"), model)
+    return resolution.canonical_model if resolution.structure_valid else model
+
+
+def documented_precision_provider_size_presets(provider: ProviderConfig, model: str) -> Tuple[Dict[str, Any], ...]:
+    """Return official candidates with separate gateway-documentation evidence.
+
+    A gateway's short ratio list is not the model's complete native catalog.
+    Keep all model-documentation candidates visible for planning, while marking
+    the subset explicitly named by a gateway. Neither collection grants a
+    strict request; persisted per-provider/model size evidence still does that.
+    """
+    presets = documented_precision_model_size_presets(precision_size_model(provider, model))
+    recipe = precision_documented_gateway_recipe(provider, model)
+    tier = recipe.get("size_tier")
+    if tier:
+        presets = tuple(item for item in presets if str(item.get("tier", "")).upper() == tier)
+    gateway_ratios = (
+        {"1:1", "16:9", "9:16", "4:3", "3:4"}
+        if recipe.get("gateway") == "vel"
+        else set()
+    )
+    output = []
+    for item in presets:
+        gateway_declared = bool(recipe and item.get("ratio") in gateway_ratios)
+        # Observed failures are scoped to this exact gateway/model, not a
+        # universal maximum-side interpretation of the model's 4K tier.
+        warning = ""
+        if recipe.get("gateway") == "klong" and model == "nano-banana2":
+            warning = {
+                "6144x768": "observed_geometry_mismatch",
+                "2048x8192": "observed_output_safety_limit",
+            }.get(item["size"], "")
+        output.append({
+            **dict(item),
+            "evidence": (
+                "gateway_documented_candidate"
+                if gateway_declared
+                else "official_model_candidate"
+            ),
+            "official_model_candidate": True,
+            "gateway_declared_candidate": gateway_declared,
+            "gateway": recipe.get("gateway", ""),
+            "experimental": True if recipe else bool(item.get("experimental")),
+            "reliability_warning": warning,
+        })
+    return tuple(output)
 
 
 class ProxyConfig(BaseModel):

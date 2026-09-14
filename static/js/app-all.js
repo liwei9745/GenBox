@@ -154,6 +154,10 @@ var precisionCanvasPanState = null;
 var precisionCanvasSpaceHeld = false;
 var precisionEditModelPickerReady = false;
 var precisionEditAuthorizationPending = false;
+var precisionProtocolSavePending = false;
+var precisionProtocolCheckSequence = 0;
+var precisionProtocolCheckPending = false;
+var imageProviderModelSelections = {};
 var precisionCutoutCapability = null;
 var precisionCutoutPending = false;
 var precisionCutoutProbeToken = 0;
@@ -326,6 +330,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // ESC 关闭弹窗
   document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.isComposing && !e.shiftKey && !e.altKey) {
+      var target = e.target;
+      var tag = target && target.tagName ? target.tagName.toLowerCase() : '';
+      if (tag !== 'textarea' && tag !== 'select' && !target.isContentEditable) {
+        var generate = document.getElementById('btnGen');
+        if (generate && !generate.disabled && !genCurrentGenId) {
+          e.preventDefault();
+          doGenerate();
+        }
+      }
+    }
     if (e.key === 'Escape') {
       closeLightbox();
       closeCompare();
@@ -1272,15 +1287,93 @@ function precisionResizeInputDimension(id) {
 }
 
 function precisionResizeTierRatioSize(tier, ratio) {
-  var table = PRECISION_GPT_IMAGE_2_TIER_RATIOS[String(tier || '').toLowerCase()];
+  var modelTable = getPrecisionOutputSizePolicy() === 'fit_crop' ? {} : precisionSelectedModelPresetTable();
+  var tableSet = Object.keys(modelTable).length ? modelTable : PRECISION_GPT_IMAGE_2_TIER_RATIOS;
+  var table = tableSet[String(tier || '').toLowerCase()];
   var value = table && table[String(ratio || '')];
-  return value && precisionGptImage2SizeError(value) === '' ? value : '';
+  if (!value) return '';
+  var entry = precisionSelectedModelCatalogEntry();
+  var isGemini = !!(entry && /^gemini-/.test(entry.size_model || entry.canonical_model || ''));
+  return isGemini || precisionGptImage2SizeError(value) === '' ? value : '';
+}
+
+function precisionSelectedModelCatalogEntry() {
+  var selected = precisionEditSelectedModel || {};
+  var provider = findProvider(selected.providerId);
+  var catalog = provider && Array.isArray(provider.precision_size_catalog) ? provider.precision_size_catalog : [];
+  return catalog.find(function(entry) {
+    return entry && entry.model === selected.model;
+  }) || null;
+}
+
+function precisionCatalogPresetList(entry) {
+  if (!entry || !Array.isArray(entry.documented_presets)) return [];
+  return entry.documented_presets.map(function(item) {
+    if (typeof item === 'string') return { size: item };
+    return item && typeof item === 'object' ? item : null;
+  }).filter(function(item) {
+    return item && /^[1-9]\d{1,4}x[1-9]\d{1,4}$/.test(String(item.size || ''));
+  });
+}
+
+function precisionSelectedModelPresetTable() {
+  var table = {};
+  precisionCatalogPresetList(precisionSelectedModelCatalogEntry()).forEach(function(item) {
+    var size = String(item.size);
+    var ratio = String(item.ratio || '').trim();
+    var tier = String(item.tier || '').trim().toLowerCase();
+    if (!tier) {
+      var pixels = Number(size.split('x')[0]) * Number(size.split('x')[1]);
+      tier = pixels >= 7000000 ? '4k' : pixels >= 1500000 ? '2k' : '1k';
+    }
+    if (!ratio) {
+      var parts = size.split('x');
+      var gcd = function(a, b) { while (b) { var t = a % b; a = b; b = t; } return a; };
+      var divisor = gcd(Number(parts[0]), Number(parts[1]));
+      ratio = (Number(parts[0]) / divisor) + ':' + (Number(parts[1]) / divisor);
+    }
+    if (!table[tier]) table[tier] = {};
+    table[tier][ratio] = size;
+  });
+  return table;
+}
+
+function ensurePrecisionModelCatalogOptions(select, documented) {
+  if (!select || typeof document === 'undefined') return;
+  var signature = JSON.stringify(documented.map(function(item) { return [item.size, item.tier || '', item.ratio || '']; }));
+  if (select.dataset && select.dataset.precisionCatalogSignature === signature) return;
+  var previousValue = select.value;
+  Array.prototype.forEach.call(select.querySelectorAll('optgroup[data-precision-model-catalog="true"]'), function(group) {
+    if (group.parentNode) group.parentNode.removeChild(group);
+  });
+  if (select.dataset) select.dataset.precisionCatalogSignature = signature;
+  if (!documented.length) return;
+  var group = document.createElement('optgroup');
+  group.label = '模型尺寸 · 当前模型';
+  group.dataset.precisionResizeMode = 'strict';
+  group.dataset.precisionModelCatalog = 'true';
+  documented.forEach(function(item) {
+    var option = document.createElement('option');
+    option.value = 'model:' + item.size;
+    option.dataset.size = item.size;
+    option.textContent = (item.tier ? String(item.tier).toUpperCase() + ' · ' : '')
+      + (item.ratio ? String(item.ratio) + ' · ' : '') + item.size.replace('x', ' × ');
+    option.dataset.precisionResizeMode = 'strict';
+    option.dataset.precisionModelCatalog = 'true';
+    group.appendChild(option);
+  });
+  select.appendChild(group);
+  if (Array.prototype.some.call(select.options || [], function(option) { return option.value === previousValue; })) {
+    select.value = previousValue;
+  }
 }
 
 function precisionResizeTierRatioForSize(size) {
   var result = { tier: 'custom', ratio: 'custom' };
-  Object.keys(PRECISION_GPT_IMAGE_2_TIER_RATIOS).some(function(tier) {
-    var table = PRECISION_GPT_IMAGE_2_TIER_RATIOS[tier];
+  var modelTable = getPrecisionOutputSizePolicy() === 'fit_crop' ? {} : precisionSelectedModelPresetTable();
+  var tables = Object.keys(modelTable).length ? modelTable : PRECISION_GPT_IMAGE_2_TIER_RATIOS;
+  Object.keys(tables).some(function(tier) {
+    var table = tables[tier];
     return Object.keys(table).some(function(ratio) {
       if (table[ratio] !== size) return false;
       result = { tier: tier, ratio: ratio };
@@ -1326,7 +1419,8 @@ function applyPrecisionResizeTierRatio() {
   if (height) height.value = parts[1];
   var preset = document.getElementById('precisionResizePreset');
   if (preset) {
-    var presetValue = getPrecisionOutputSizePolicy() === 'fit_crop' ? 'crop:' + size : size;
+    var presetValue = getPrecisionOutputSizePolicy() === 'fit_crop' ? 'crop:' + size
+      : precisionCatalogPresetList(precisionSelectedModelCatalogEntry()).length ? 'model:' + size : size;
     preset.value = presetValue;
   }
   syncPrecisionAspectRatioHint();
@@ -1398,6 +1492,25 @@ function resolvePrecisionModelCapability(provider, selectedModel) {
       sizeDeclarationPresent: false, sizeDeclarationValid: false, flexibleSizes: false, reason: reason
     };
   };
+  var effectiveEntry = provider && Array.isArray(provider.precision_size_catalog)
+    ? provider.precision_size_catalog.find(function(entry) { return entry && entry.model === model; }) : null;
+  // Only the exact-model backend projection can replace legacy capability
+  // resolution. Size-family aliases are never authorization aliases.
+  if (effectiveEntry && effectiveEntry.precision_connection && effectiveEntry.precision_capability &&
+      effectiveEntry.precision_connection.source !== 'provider_default') {
+    var effective = {
+      precision_edit: effectiveEntry.precision_capability.status === 'ready',
+      supported_sizes: effectiveEntry.declared_sizes || []
+    };
+    var effectiveSizes = precisionCapabilitySizeDeclaration(effective);
+    return {
+      selectedModel: model, canonicalModel: model, capability: effective, sizes: effectiveSizes.sizes,
+      aliasDepth: 0, structureValid: true, precisionEditConfirmed: effective.precision_edit === true,
+      sizeDeclarationPresent: effectiveSizes.present, sizeDeclarationValid: effectiveSizes.valid,
+      flexibleSizes: false,
+      reason: effective.precision_edit === true ? effectiveSizes.reason : 'precision_edit_unconfirmed'
+    };
+  }
   if (!model || model !== model.trim() || !capabilities || typeof capabilities !== 'object' || Array.isArray(capabilities)) {
     return invalid('precision_model_unknown');
   }
@@ -1459,7 +1572,7 @@ function getPrecisionResizeCapability() {
   var catalog = provider && Array.isArray(provider.precision_size_catalog)
     ? provider.precision_size_catalog : [];
   var catalogEntry = catalog.find(function(entry) {
-    return entry && (entry.model === model || entry.canonical_model === resolution.canonicalModel);
+    return entry && entry.model === model;
   });
   if (catalogEntry && Array.isArray(catalogEntry.strict_selectable_sizes)) {
     precisionResizeDimensions(catalogEntry.strict_selectable_sizes, catalogSizes);
@@ -1842,7 +1955,10 @@ function syncPrecisionResizeModePresetSelection(policy) {
   var value = String(select.value || 'custom');
   var size = precisionResizePresetSize(value, select.options[select.selectedIndex]);
   if (!size) return;
-  var desired = policy === 'fit_crop' ? 'crop:' + size : size;
+  var catalog = typeof precisionCatalogPresetList === 'function'
+    ? precisionCatalogPresetList(precisionSelectedModelCatalogEntry()) : [];
+  var desired = policy === 'fit_crop' ? 'crop:' + size
+    : catalog.length ? 'model:' + size : size;
   if (desired === value) return;
   var target = Array.prototype.find.call(select.options || [], function(option) { return option.value === desired; });
   if (target && !target.hidden) select.value = desired;
@@ -1852,6 +1968,15 @@ function updatePrecisionResizeCapabilityUI() {
   var select = document.getElementById('precisionResizePreset');
   ensurePrecisionResizeModePresetGroups();
   var capability = getPrecisionResizeCapability();
+  var catalogEntry = typeof precisionSelectedModelCatalogEntry === 'function'
+    ? precisionSelectedModelCatalogEntry() : null;
+  var documented = typeof precisionCatalogPresetList === 'function'
+    ? precisionCatalogPresetList(catalogEntry) : [];
+  var documentedSizes = {};
+  documented.forEach(function(item) { documentedSizes[item.size] = item; });
+  if (typeof ensurePrecisionModelCatalogOptions === 'function') {
+    ensurePrecisionModelCatalogOptions(select, documented);
+  }
   var options = select && select.options || [];
   var outputPolicy = getPrecisionOutputSizePolicy();
   syncPrecisionResizeModePresetSelection(outputPolicy);
@@ -1872,19 +1997,37 @@ function updatePrecisionResizeCapabilityUI() {
     var modeMismatch = outputPolicy === 'fit_crop'
       ? (optionMode === 'strict')
       : (optionMode === 'fit_crop');
+    var nativeCatalog = !!(catalogEntry && /^gemini-/.test(catalogEntry.size_model || catalogEntry.canonical_model || ''));
     var supported = (custom && outputPolicy === 'fit_crop') || outputPolicy === 'fit_crop' || (capability.flexibleSizes
-      ? !!size && precisionGptImage2SizeError(size) === ''
+      ? !!size && (nativeCatalog || precisionGptImage2SizeError(size) === '')
       : capability.known && !!size && capability.sizes[size] === true);
+    // A model catalogue is descriptive, but it is the only source for the
+    // visible strict preset family. It never grants submission capability.
+    var modelPreset = documentedSizes[size];
+    var modelMismatch = outputPolicy !== 'fit_crop' && documented.length > 0 && !!size &&
+      (!modelPreset || !option.dataset || option.dataset.precisionModelCatalog !== 'true');
     var capabilityState = custom || outputPolicy === 'fit_crop'
       ? 'local'
       : !capability.known
         ? 'unknown'
         : supported ? 'supported' : 'needs-authorization';
-    option.hidden = modeMismatch;
+    option.hidden = modeMismatch || modelMismatch;
     option.disabled = false;
     option.title = custom || supported ? '' : i18nText('creator.precision_size_preset_trial_required');
     option.dataset.precisionCapabilityState = capabilityState;
     option.dataset.precisionCapabilityModel = capability.canonicalModel || '';
+    if (modelPreset && outputPolicy !== 'fit_crop') {
+      option.dataset.precisionPresetTier = String(modelPreset.tier || '');
+      option.dataset.precisionPresetRatio = String(modelPreset.ratio || '');
+      option.textContent = (modelPreset.tier ? String(modelPreset.tier).toUpperCase() + ' · ' : '')
+        + (modelPreset.ratio ? String(modelPreset.ratio) + ' · ' : '') + size.replace('x', ' × ');
+      if (modelPreset.reliability_warning) {
+        var warningKey = modelPreset.reliability_warning === 'observed_output_safety_limit'
+          ? 'creator.precision_size_output_limit_warning' : 'creator.precision_size_geometry_warning';
+        option.textContent += ' · ' + i18nText(warningKey);
+        option.title = i18nText(warningKey);
+      }
+    }
     if (size && !optionMode) option.dataset.precisionResizeMode = 'strict';
   }
   // Switching between strict and crop-to-fit can hide the active option.
@@ -6761,6 +6904,10 @@ function applyPrecisionResizePreset(value) {
   }
   var size = precisionResizePresetSize(value, option);
   if (!size) return;
+  // Keep the native select and the numeric fields in one state transition.
+  // This matters for user-driven `change` events as well as model-catalog
+  // refreshes that call this function programmatically.
+  if (select && option) select.value = option.value;
   var parts = size.split('x');
   var width = document.getElementById('precisionResizeWidth');
   var height = document.getElementById('precisionResizeHeight');
@@ -8834,6 +8981,10 @@ function clearPrecisionEdit() {
 
 function getPrecisionEditReadiness() {
   if (typeof precisionBaseVersionSwitchPending !== 'undefined' && precisionBaseVersionSwitchPending) return { ready: false, message: i18nText('common.loading') };
+  var protocolControls = document.getElementById('precisionProtocolControls');
+  if (protocolControls && protocolControls.dataset && protocolControls.dataset.dirty === 'true') {
+    return { ready: false, message: '接入设置尚未保存，请先保存或取消修改。' };
+  }
   if (!precisionEditSourceImageData) return { ready: false, message: i18nText('creator.precision_source_required') };
   var selectionMode = typeof precisionEditSelectionMode === 'string' && precisionEditSelectionMode === 'local'
     ? 'local' : 'annotation';
@@ -8884,6 +9035,7 @@ function updatePrecisionEditControls(options) {
 }
 
 function getPrecisionEditModelAuthorizationState() {
+  var protocolBusy = typeof precisionProtocolSavePending !== 'undefined' && precisionProtocolSavePending;
   var endpointSelect = document.getElementById('precisionEditProviderEndpoint');
   var select = document.getElementById('precisionEditProviderModel');
   var providerId = endpointSelect ? String(endpointSelect.value || '') : '';
@@ -8894,6 +9046,7 @@ function getPrecisionEditModelAuthorizationState() {
   var provider = (allProviders || []).find(function(item) {
     return item && String(item.id) === providerId && item.type === 'image' && item.enabled !== false && item.has_key;
   }) || null;
+  var catalogEntry = provider && Array.isArray(provider.precision_size_catalog) ? provider.precision_size_catalog.find(function(item) { return item && item.model === model; }) : null;
   var models = provider ? precisionProviderModelRecords(provider).map(function(record) { return record.id; }) : [];
   var endpointOptionCurrent = !!(endpointSelect && Array.prototype.some.call(endpointSelect.options || [], function(option) {
     return !option.disabled && option.value === providerId;
@@ -8905,14 +9058,21 @@ function getPrecisionEditModelAuthorizationState() {
     provider && providerId && valueProviderId === providerId && model && endpointOptionCurrent && modelOptionCurrent &&
     models.some(function(candidate) { return String(candidate) === model; }));
   var resolution = valid ? resolvePrecisionModelCapability(provider, model) : null;
-  var authorized = !!(valid && provider.endpoint_type === 'openai' && provider.capabilities &&
-    provider.capabilities.precision_edit === true && resolution && resolution.structureValid && resolution.precisionEditConfirmed);
+  var override = catalogEntry && catalogEntry.protocol_override ? catalogEntry.protocol_override : null;
+  var connection = catalogEntry && catalogEntry.precision_connection || {};
+  var effectiveProtocol = connection.protocol || (override && override.protocol ? override.protocol : (provider ? provider.endpoint_type : ''));
+  var effectiveProfile = connection.profile || (override && override.profile ? override.profile : (provider ? provider.precision_edit_profile : ''));
+  var sizeModel = catalogEntry && catalogEntry.size_model ? catalogEntry.size_model : (resolution && resolution.canonicalModel ? resolution.canonicalModel : model);
+  var nativeGemini = !!(valid && effectiveProtocol === 'gemini' && /^gemini-/.test(sizeModel));
+  var providerAllowsEdit = !!(catalogEntry && catalogEntry.precision_connection && catalogEntry.precision_capability) ||
+    !!(provider && provider.capabilities && provider.capabilities.precision_edit === true);
+  var authorized = !!(valid && providerAllowsEdit && (effectiveProtocol === 'openai' || nativeGemini) && resolution && resolution.structureValid && resolution.precisionEditConfirmed);
   var compatibilityResolution = valid
     ? resolvePrecisionModelCapability(provider, PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE)
     : null;
   var compatibilityActive = !!(authorized && resolution.aliasDepth === 1 &&
     resolution.canonicalModel === PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE);
-  var canUseCompatibility = !!(valid && !authorized && model !== PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE &&
+  var canUseCompatibility = !!(valid && !authorized && !override && provider.endpoint_type === 'openai' && model !== PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE &&
     compatibilityResolution && compatibilityResolution.structureValid &&
     compatibilityResolution.precisionEditConfirmed && compatibilityResolution.sizeDeclarationValid);
   return {
@@ -8920,11 +9080,17 @@ function getPrecisionEditModelAuthorizationState() {
     provider: valid ? provider : null,
     providerId: valid ? providerId : '',
     model: valid ? model : '',
+    catalogEntry: catalogEntry,
+    protocolOverride: override,
+    connection: connection,
+    effectiveProtocol: effectiveProtocol,
+    effectiveProfile: effectiveProfile,
+    sizeModel: sizeModel,
     authorized: authorized,
     compatibilityActive: compatibilityActive,
     canUseCompatibility: canUseCompatibility,
-    canAuthorize: !!(valid && !authorized && provider.endpoint_type === 'openai' && !precisionEditAuthorizationPending),
-    canRevoke: !!(valid && authorized && !precisionEditAuthorizationPending)
+    canAuthorize: !!(valid && !authorized && (effectiveProtocol === 'openai' || nativeGemini) && !precisionEditAuthorizationPending && !protocolBusy),
+    canRevoke: !!(valid && authorized && !precisionEditAuthorizationPending && !protocolBusy)
   };
 }
 
@@ -8934,6 +9100,8 @@ function updatePrecisionEditAuthorizationControl() {
   var revoke = document.getElementById('btnPrecisionRevokeModel');
   var compatibilityRow = document.getElementById('precisionEditCompatibilityOption');
   var compatibility = document.getElementById('precisionEditGptImage2Compatibility');
+  if (typeof updatePrecisionProtocolControls === 'function') updatePrecisionProtocolControls(state);
+
   var selectionKey = state.valid ? state.providerId + '::' + state.model : '';
   if (compatibility) {
     var previousSelectionKey = compatibility.dataset ? compatibility.dataset.selectionKey : '';
@@ -8968,6 +9136,145 @@ function updatePrecisionEditAuthorizationControl() {
     }
   }
   return state;
+}
+
+
+function changePrecisionProtocolDraft() {
+  precisionProtocolCheckSequence += 1;
+  precisionProtocolCheckPending = false;
+  updatePrecisionProtocolControls(getPrecisionEditModelAuthorizationState());
+  updatePrecisionEditControls();
+}
+
+function precisionProtocolSavedDraft(state) {
+  var override = state.protocolOverride || {};
+  return { protocol: override.protocol || 'inherit', size_model: override.size_model || '', profile: override.profile || '' };
+}
+
+function precisionProtocolDraft() {
+  var value = function(id, fallback) { var node = document.getElementById(id); return node ? node.value : fallback; };
+  var protocol = value('precisionProtocolSelect', 'inherit');
+  return {
+    protocol: protocol,
+    size_model: protocol === 'inherit' ? '' : value('precisionProtocolSizeModel', ''),
+    profile: protocol === 'openai' ? value('precisionProtocolProfile', '') : ''
+  };
+}
+
+function updatePrecisionProtocolControls(state, force) {
+  var controls = document.getElementById('precisionProtocolControls');
+  if (!controls) return;
+  var key = state.valid ? state.providerId + '::' + state.model : '';
+  var saved = precisionProtocolSavedDraft(state);
+  if (saved.protocol !== 'openai') saved.profile = '';
+  var revision = JSON.stringify([saved, state.connection || {}, state.authorized]);
+  if (force || controls.dataset.selectionKey !== key || controls.dataset.savedRevision !== revision) {
+    controls.dataset.selectionKey = key;
+    controls.dataset.savedRevision = revision;
+    var values = { precisionProtocolSelect: saved.protocol, precisionProtocolSizeModel: saved.size_model, precisionProtocolProfile: saved.profile };
+    Object.keys(values).forEach(function(id) { var node = document.getElementById(id); if (node) node.value = values[id]; });
+    precisionProtocolCheckSequence += 1;
+    precisionProtocolCheckPending = false;
+    var status = document.getElementById('precisionProtocolStatus');
+    if (status) status.textContent = '';
+  }
+  var draft = precisionProtocolDraft();
+  var dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  controls.dataset.dirty = dirty ? 'true' : 'false';
+  var busy = (typeof precisionProtocolSavePending !== 'undefined' && precisionProtocolSavePending) || precisionEditAuthorizationPending;
+  // Keep the first-step connection choice visible before a model is selected,
+  // but make it explicitly dependent on the endpoint/model selection.
+  controls.classList.toggle('hidden', false);
+  ['precisionProtocolSelect', 'precisionProtocolSizeModel', 'precisionProtocolProfile'].forEach(function(id) {
+    var control = document.getElementById(id);
+    if (control) control.disabled = !state.valid || busy || (id !== 'precisionProtocolSelect' && draft.protocol === 'inherit') || (id === 'precisionProtocolProfile' && draft.protocol !== 'openai');
+  });
+  var apply = document.getElementById('btnPrecisionProtocolApply');
+  var cancel = document.getElementById('btnPrecisionProtocolCancel');
+  var reset = document.getElementById('btnPrecisionProtocolReset');
+  var check = document.getElementById('btnPrecisionProtocolCheck');
+  if (apply) { apply.disabled = !state.valid || busy || !dirty; apply.hidden = !dirty; }
+  if (cancel) { cancel.disabled = busy; cancel.hidden = !dirty; }
+  // Keep the recovery action discoverable. It is disabled when the selected
+  // model is already following the endpoint, but remains available after an
+  // override so the user can always return to automatic configuration.
+  if (reset) { reset.disabled = !state.valid || busy || !state.protocolOverride; reset.hidden = !state.valid; }
+  if (check) check.disabled = !state.valid || busy || dirty || (typeof precisionProtocolCheckPending !== 'undefined' && precisionProtocolCheckPending);
+  var summary = document.getElementById('precisionProtocolCurrent');
+  if (summary) {
+    if (!state.valid) {
+      summary.textContent = '先选择模型端点，再选择编辑模型；接入方式会应用到当前模型。';
+    } else {
+      var label = state.effectiveProtocol === 'gemini' ? 'Gemini 原生' : state.effectiveProtocol === 'openai' ? 'OpenAI 兼容' : state.effectiveProtocol || '待配置';
+      var format = /json_data_url/.test(state.effectiveProfile || '') ? 'JSON 内嵌图片' : /multipart/.test(state.effectiveProfile || '') ? '文件上传' : '原生图片请求';
+      summary.textContent = (state.protocolOverride ? '已保存的手动设置：' : '沿用端点配置：') + label + ' · ' + format + '。' +
+        (dirty ? '下方修改尚未保存。' : '配置不代表改图已验证成功。');
+    }
+  }
+}
+
+function cancelPrecisionProtocolDraft() {
+  updatePrecisionProtocolControls(getPrecisionEditModelAuthorizationState(), true);
+}
+
+function savePrecisionProtocolOverride(reset) {
+  var state = getPrecisionEditModelAuthorizationState();
+  if (!state.valid || precisionProtocolSavePending || precisionEditAuthorizationPending) return Promise.resolve(false);
+  var draft = reset ? { protocol: 'inherit', size_model: '', profile: '' } : precisionProtocolDraft();
+  var payload = { model: state.model, protocol: draft.protocol, size_model: draft.size_model, confirmed: true };
+  if (draft.profile) payload.profile = draft.profile;
+  precisionProtocolSavePending = true;
+  precisionProtocolCheckSequence += 1;
+  var selectionKey = state.providerId + '::' + state.model;
+  updatePrecisionEditAuthorizationControl();
+  return _authFetch('/api/providers/' + encodeURIComponent(state.providerId) + '/precision-protocol', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(r){if(!r.ok)return r.json().then(function(body){throw new Error((body.detail&&body.detail.message)||('HTTP '+r.status));});return r.json();})
+    .then(function(){return loadProviders();})
+    .then(function(){
+      precisionProtocolSavePending = false;
+      var current = getPrecisionEditModelAuthorizationState();
+      updatePrecisionProtocolControls(current, selectionKey === current.providerId + '::' + current.model);
+      updatePrecisionEditAuthorizationControl();
+      updatePrecisionEditControls();
+      if (selectionKey === current.providerId + '::' + current.model) {
+        setStatus(reset || draft.protocol === 'inherit' ? '已恢复自动接入；其他模型未改变' : '已保存当前模型的接入设置');
+      }
+      return true;
+    })
+    .catch(function(error){
+      precisionProtocolSavePending = false;
+      updatePrecisionEditAuthorizationControl();
+      updatePrecisionEditControls();
+      setStatus(i18nText('common.save_failed_colon') + error.message);
+      return false;
+    });
+}
+
+function checkPrecisionProtocolConfig() {
+  var state = getPrecisionEditModelAuthorizationState();
+  var controls = document.getElementById('precisionProtocolControls');
+  if (!state.valid || precisionProtocolSavePending || precisionEditAuthorizationPending || precisionProtocolCheckPending || (controls && controls.dataset.dirty === 'true')) return Promise.resolve(false);
+  var status = document.getElementById('precisionProtocolStatus');
+  var payload = {model: state.model};
+  var size = getPrecisionResizeTargetSize();
+  if (precisionEditSizeMode === 'resize' && size) payload.size = size;
+  var sequence = ++precisionProtocolCheckSequence;
+  var key = state.providerId + '::' + state.model;
+  var isCurrent = function() {
+    var current = getPrecisionEditModelAuthorizationState();
+    return sequence === precisionProtocolCheckSequence && key === current.providerId + '::' + current.model &&
+      (precisionEditSizeMode !== 'resize' || size === getPrecisionResizeTargetSize());
+  };
+  precisionProtocolCheckPending = true;
+  updatePrecisionProtocolControls(state);
+  if (status) status.textContent = '正在检查本地配置…';
+  return _authFetch('/api/providers/' + encodeURIComponent(state.providerId) + '/precision-preflight', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(r){return r.json().then(function(body){if(!r.ok)throw new Error((body.detail&&body.detail.message)||('HTTP '+r.status));return body;});})
+    .then(function(body){
+      if (isCurrent() && status) status.textContent = (body.ok ? '本地配置检查通过；' : '本地配置检查未通过；') + body.message;
+    })
+    .catch(function(error){ if (isCurrent() && status) status.textContent = '检查失败：' + error.message; })
+    .then(function(){ if (sequence === precisionProtocolCheckSequence) precisionProtocolCheckPending = false; updatePrecisionProtocolControls(getPrecisionEditModelAuthorizationState()); });
 }
 
 function isPrecisionModelVisibilityStorageKey(key) {
@@ -9018,12 +9325,16 @@ function precisionProviderModelRecords(provider) {
     if (!id) return null;
     var cap = record.capabilities && typeof record.capabilities === 'object' ? record.capabilities : caps[id];
     var resolution = resolvePrecisionModelCapability(provider, id);
-    var explicitlyUnavailable = resolution.capability && Object.prototype.hasOwnProperty.call(resolution.capability, 'precision_edit') && resolution.capability.precision_edit === false;
+    var entry = provider && Array.isArray(provider.precision_size_catalog) ? provider.precision_size_catalog.find(function(item) { return item && item.model === id; }) : null;
+    var recoverableConnection = !!(entry && entry.precision_connection);
+    var explicitlyUnavailable = !recoverableConnection && resolution.capability && Object.prototype.hasOwnProperty.call(resolution.capability, 'precision_edit') && resolution.capability.precision_edit === false;
     var hasCapabilityRecord = Object.prototype.hasOwnProperty.call(caps, id);
     var unavailable = (hasCapabilityRecord && !resolution.structureValid) || explicitlyUnavailable ||
-      (provider.capabilities && provider.capabilities.precision_edit === false);
+      (!recoverableConnection && provider.capabilities && provider.capabilities.precision_edit === false);
     var alias = String(record.alias || record.display_name || record.label || '').trim();
-    return { id: id, alias: alias, capability: cap || null, unavailable: unavailable, authorized: resolution.structureValid && resolution.precisionEditConfirmed && provider.endpoint_type === 'openai' && provider.capabilities && provider.capabilities.precision_edit === true };
+    var protocol = entry && entry.precision_connection ? entry.precision_connection.protocol : provider.endpoint_type;
+    var providerAllows = recoverableConnection || (provider.capabilities && provider.capabilities.precision_edit === true);
+    return { id: id, alias: alias, capability: cap || null, unavailable: unavailable, authorized: resolution.structureValid && resolution.precisionEditConfirmed && (protocol === 'openai' || protocol === 'gemini') && providerAllows };
   }).filter(Boolean);
 }
 
@@ -9391,13 +9702,13 @@ function renderPrecisionModelVisibility(records, providerId) {
       '<div class="precision-model-visibility-actions"><button type="button" data-precision-model-visibility-action="all">' + escHtml(i18nText('creator.precision_model_select_all')) + '</button><button type="button" data-precision-model-visibility-action="clear">' + escHtml(i18nText('creator.precision_model_clear')) + '</button></div>' +
       '<div class="precision-model-visibility-list" role="group" aria-label="' + escAttr(i18nText('creator.precision_model_display')) + '">' + precisionModelVisibilityGroups(visibleRecords).map(function(group) {
         return '<section class="precision-model-visibility-group" aria-labelledby="precisionModelGroup-' + group.id + '">' +
-          '<label class="precision-model-visibility-group-heading"><input type="checkbox" data-precision-model-visibility-group="' + group.id + '">' +
+          '<label class="precision-model-visibility-group-heading"><input class="precision-ui-checkbox" type="checkbox" data-precision-model-visibility-group="' + group.id + '">' +
           '<span id="precisionModelGroup-' + group.id + '">' + escHtml(group.label) + '</span><span class="precision-model-group-count" data-precision-model-group-count="' + group.id + '"></span></label>' +
           group.records.map(function(record) {
     var key = precisionModelVisibilityStorageKey(providerId, record.id);
     var checked = precisionModelVisibilityIsVisible(providerId, record, state);
     var label = precisionModelVisibilityLabel(record);
-    return '<label class="precision-model-visibility-option" title="' + escAttr(label) + '"><input type="checkbox" ' + (checked ? 'checked' : '') + (key ? ' data-precision-model-visibility="' + escAttr(key) + '"' : ' disabled') + '><span title="' + escAttr(label) + '">' + escHtml(label) + '</span></label>';
+    return '<label class="precision-model-visibility-option" title="' + escAttr(label) + '"><input class="precision-ui-checkbox" type="checkbox" ' + (checked ? 'checked' : '') + (key ? ' data-precision-model-visibility="' + escAttr(key) + '"' : ' disabled') + '><span title="' + escAttr(label) + '">' + escHtml(label) + '</span></label>';
           }).join('') + '</section>';
       }).join('') + '</div>' +
       '<div class="precision-model-visibility-footer"><span role="status">' + escHtml(selectedCount < 1 ? i18nText('creator.precision_model_keep_one') : precisionModelVisibilitySummary(visibleRecords, providerId, state)) + '</span><div><button type="button" data-precision-model-visibility-action="cancel">' + escHtml(i18nText('common.cancel')) + '</button><button type="button" class="btn-primary" data-precision-model-visibility-action="confirm" ' + (selectedCount < 1 ? 'disabled' : '') + '>' + escHtml(i18nText('creator.precision_model_apply')) + '</button></div></div>' +
@@ -9495,7 +9806,6 @@ function selectPrecisionEditModel(value, fromRender) {
   var state = getPrecisionEditModelAuthorizationState();
   selectedProviders = state.authorized ? [state.providerId] : [];
   precisionEditSelectedModel = { providerId: state.providerId, model: state.model };
-  if (state.provider) state.provider.model = state.model;
   updatePrecisionResizeCapabilityUI();
   updatePrecisionEditAuthorizationControl();
   if (!fromRender) {
@@ -9583,12 +9893,28 @@ function loadProviders(attempt) {
 }
 
 function onImageModelChange(pid, newModel) {
-  for (var i = 0; i < allProviders.length; i++) {
-    if (allProviders[i].id === pid) {
-      allProviders[i].model = newModel;
-      break;
-    }
-  }
+  var provider = findProvider(pid);
+  if (provider && generationProviderModelIds(provider).indexOf(newModel) >= 0) imageProviderModelSelections[pid] = newModel;
+}
+
+function generationProviderModelIds(provider) {
+  var models = provider && Array.isArray(provider.models) ? provider.models : [];
+  var ids = models.map(function(item) { return typeof item === 'string' ? item : item && (item.id || item.model || item.name); }).filter(Boolean);
+  if (provider && provider.model && ids.indexOf(provider.model) < 0) ids.push(provider.model);
+  return ids;
+}
+
+function generationProviderModelSettings(providerIds, selectedModel) {
+  var settings = {};
+  (providerIds || []).forEach(function(pid) {
+    var provider = findProvider(pid);
+    if (!provider) return;
+    var ids = generationProviderModelIds(provider);
+    var chosen = selectedModel && selectedModel !== '_global' && ids.indexOf(selectedModel) >= 0
+      ? selectedModel : imageProviderModelSelections[pid] || provider.model;
+    if (ids.indexOf(chosen) >= 0) settings[pid] = { model: chosen };
+  });
+  return settings;
 }
 
 function modelSupportsGenerationMode(provider, model, mode) {
@@ -9597,8 +9923,13 @@ function modelSupportsGenerationMode(provider, model, mode) {
   var modelCaps = provider && provider.model_capabilities && provider.model_capabilities[model];
   if (mode === 'precision_edit') {
     var precisionResolution = resolvePrecisionModelCapability(provider, model);
+    var entry = provider && Array.isArray(provider.precision_size_catalog) ? provider.precision_size_catalog.find(function(item) { return item && item.model === model; }) : null;
+    if (entry && entry.precision_connection) {
+      return precisionResolution.structureValid && ['openai', 'gemini'].indexOf(entry.precision_connection.protocol) >= 0;
+    }
     var explicitlyUnsupported = precisionResolution.capability && Object.prototype.hasOwnProperty.call(precisionResolution.capability, 'precision_edit') && precisionResolution.capability.precision_edit === false;
-    return !!(provider && provider.endpoint_type === 'openai' && caps.precision_edit !== false &&
+    return !!(provider && (provider.endpoint_type === 'openai' ||
+      (provider.endpoint_type === 'gemini' && /^gemini-(2\.5-flash-image|3-pro-image|3\.1-flash-image)$/.test(String(model || '')))) && caps.precision_edit !== false &&
       precisionResolution.structureValid && !explicitlyUnsupported);
   }
   if (modelCaps && typeof modelCaps === 'object') {
@@ -9672,9 +10003,10 @@ function renderProviderList() {
       // 过滤掉非生图模型（视频模型 + LLM模型）
       var filteredModels = modeModels(p);
       if (filteredModels.length === 0) filteredModels = allModels;
+      var selectedProviderModel = imageProviderModelSelections[p.id] || p.model || '';
       var modelOpts = filteredModels.length > 3
-        ? buildModelOptsGrouped(filteredModels, p.model || '', groupImageModels)
-        : filteredModels.map(function(m){ return '<option value="' + escAttr(m) + '"' + (p.model===m?' selected':'') + '>' + escHtml(m) + '</option>'; }).join('');
+        ? buildModelOptsGrouped(filteredModels, selectedProviderModel, groupImageModels)
+        : filteredModels.map(function(m){ return '<option value="' + escAttr(m) + '"' + (selectedProviderModel===m?' selected':'') + '>' + escHtml(m) + '</option>'; }).join('');
 
       html += '<div class="provider-card ' + (sel ? 'selected' : '') + ' ' + (disabled ? 'disabled' : '') + '" ' +
               'draggable="' + (!disabled) + '" ' +
@@ -11052,6 +11384,11 @@ function retryProvider(key, realPid) {
     continuous: false,
   };
   if (lastGenContext.system_prompt) payload.system_prompt = lastGenContext.system_prompt;
+  if ((lastGenContext.mode === 't2i' || lastGenContext.mode === 'i2i') &&
+      lastGenContext.provider_settings && lastGenContext.provider_settings[pid]) {
+    payload.provider_settings = {};
+    payload.provider_settings[pid] = JSON.parse(JSON.stringify(lastGenContext.provider_settings[pid]));
+  }
   if (lastGenContext.mode === 'i2i' && lastGenContext.image_data) {
     payload.image_data = lastGenContext.image_data;
     payload.image_data_list = lastGenContext.image_data_list || [lastGenContext.image_data];
@@ -11732,15 +12069,6 @@ function doGenerate() {
     qtyMap[selectedProviders[qi]] = genQty;
   }
 
-  // 如果选了特定模型，更新对应 provider 的 model
-  if (selectedModel !== '_global') {
-    for (var pi = 0; pi < allProviders.length; pi++) {
-      if (allProviders[pi].type === 'image' && selectedProviders.indexOf(allProviders[pi].id) >= 0) {
-        allProviders[pi].model = selectedModel;
-      }
-    }
-  }
-
   var payload = {
     prompt: prompt,
     providers: selectedProviders,
@@ -11754,6 +12082,9 @@ function doGenerate() {
     quantities: qtyMap,
     exact_ratio_crop: Boolean(document.getElementById('chkExactRatioCrop') && document.getElementById('chkExactRatioCrop').checked),
   };
+  if (currentMode === 't2i' || currentMode === 'i2i') {
+    payload.provider_settings = generationProviderModelSettings(selectedProviders, selectedModel);
+  }
   if (currentMode !== 'precision_edit') payload.size = genSize;
   if (currentMode === 'i2i' && uploadedImageData) {
     payload.image_data = uploadedImageData;
@@ -11813,8 +12144,7 @@ function doGenerate() {
     precision_strategy: currentMode === 'precision_edit' ? precisionEditStrategy : null,
     precision_selection_mode: currentMode === 'precision_edit' ? precisionEditSelectionMode : null,
     precision_selection_feather: currentMode === 'precision_edit' && precisionEditSelectionMode === 'local' ? precisionSelectionFeather : null,
-    provider_settings: currentMode === 'precision_edit' && precisionEditSelectedModel.providerId
-      ? (function() { var settings = {}; settings[precisionEditSelectedModel.providerId] = { model: precisionEditSelectedModel.model }; return settings; })() : {},
+    provider_settings: payload.provider_settings ? JSON.parse(JSON.stringify(payload.provider_settings)) : {},
     strength: parseFloat(document.getElementById('selStrength').value || '0.55'),
     enhance_prompt: document.getElementById('chkEnhance').checked,
     llm_provider_id: localStorage.getItem('igs_llm_provider') || undefined,

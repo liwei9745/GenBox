@@ -1,5 +1,183 @@
 # Current Project Status
 
+## Release Candidate v2.6.9
+
+- **CURRENT SCOPE:** Preserve user-accepted GPT workflows and consolidate
+  model-scoped connections, native Gemini editing, Klong multipart input,
+  compressed-response handling, explicit resolution tiers, and size warnings.
+- **CORRECTION:** Earlier Vel notes below inferred URL-only input from
+  `Invalid data URL`. That inference is not established; the research document
+  records Base64 support. Automatic Vel input remains conservatively blocked
+  pending verification, with explicit advanced overrides available. It is not
+  included in the successful Klong acceptance claim.
+- **RELEASE:** Bilingual v2.6.9 notes and README are prepared. Local full-suite
+  verification and GitHub publication are in progress; no release completion
+  is claimed yet.
+- **RESUME:** Finish local gates, push only reviewed source/test/docs, publish
+  the version-matched tag through existing CI, and verify release assets.
+  The dated sections below are historical evidence, not current runtime status.
+
+## 2026-09-14 Nano Banana Size Failure Classification
+
+- **USER-CONFIRMED:** Most Klong `nano-banana2` precision presets passed
+  manual acceptance. Remaining failures were reviewed from sanitized workflow
+  history before promoting any new size evidence.
+- **LIKELY SIZE/GEOMETRY LIMIT:** `6144x768` returned `5856x704`. The
+  response ratio also differed by about 3.98%, so strict validation correctly
+  rejected it. This is evidence that this extreme panorama request is not
+  reliable for the current model/endpoint, not proof that all wide ratios fail.
+- **LOCAL SAFETY LIMIT:** `2048x8192` returned `2048x8256`, exceeding GenBox's
+  configured 8192-side limit. The failure occurred during output validation;
+  it is not an upstream “unsupported size” response. The target is at the
+  boundary, not outside it; the returned 8256-pixel side exceeds the limit.
+  The preset now carries an output-safety warning; strict rejection remains.
+- **NOT SIZE FAILURES:** Historical `HTTP 503` responses (including a message
+  about no active Leonardo token) are provider availability/configuration
+  failures. They must not alter size declarations. Earlier connection/read
+  errors are likewise transport failures.
+- **CONFIRMED PASSES:** Recent exact-size successes include `2400x1792`,
+  `1856x2304`, `2304x1856`, `1536x2752`, `3168x1344`, `4096x4096`, and
+  `3392x5056`, all with matching decoded output dimensions.
+- **POLICY:** Keep strict output validation, do not silently crop or rewrite
+  requested sizes, and do not promote a failed or mismatched size to the
+  model's supported-size list. Resolution tiers do not impose a universal
+  4096-pixel side cap: `3392x5056` already has an exact-size success.
+  Warnings for the two observed failures are scoped to Klong `nano-banana2`;
+  user grants, GPT presets, and other gateways remain unchanged.
+
+## 2026-09-14 Klong Explicit Resolution Tier
+
+- **FIXED:** Klong Nano precision requests now map documented target pixels
+  to an explicit `size=1K/2K/4K`. Exact pixels/aspect guidance and strict
+  decoded-output checks remain unchanged. Other gateways/GPT paths are unchanged.
+- **VERIFIED / LIVE:** One synthetic `nano-banana2` edit on the selected Klong
+  provider returned HTTP 200 and actual `2752x1536` for target `2752x1536`,
+  after sending `size=2K`. Strict validation and saving passed without local
+  cropping/resizing; visual inspection showed the source object retained and
+  background expanded. Exactly one POST, no retry, no user image used.
+- **SCOPE:** This validates this provider/model/target only, not every ratio,
+  tier, or annotation behavior. The previous `5504x3072` result was a real
+  decoded 4K-size image, not a UI measurement error.
+- **RESUME:** Manual lab acceptance may now use automatic connection and
+  2K 16:9 (`2752x1536`). Preserve strict sizing and per-model isolation.
+
+## 2026-09-14 Compressed Provider Response Repair
+
+- **FIXED:** Bounded streaming had already decompressed response bytes, but
+  reconstructed an HTTPX response with the original Content-Encoding header.
+  Gzip/deflate responses were decoded twice, reproducing the observed
+  `incorrect header check`. Reconstructed responses now remove encoding and
+  transfer headers and recalculate Content-Length. Decoded byte caps remain.
+- **VERIFIED / LIVE:** Under user authorization, Klong `nano-banana2` T2I
+  returned HTTP 200 and an actual `1024x1024` image for target `1024x1024`.
+  A separate synthetic precision expansion returned HTTP 200 with an image,
+  but target `2752x1536` produced `5504x3072`. Strict validation correctly
+  rejected it. Each operation sent exactly one POST without retry.
+- **BOUNDARY:** T2I is live verified; precision transport returns images,
+  but exact-size editing was not yet accepted at this intermediate stage.
+  The later resolution-tier repair above supersedes that result. No user media or private prompts
+  were used. Synthetic output remains outside the repository.
+- **RESUME:** Investigate Klong resolution-tier mapping separately or verify
+  explicit crop-to-fit; never silently weaken strict sizing. The previous
+  claim that JSON itself explained ReadError was not established evidence.
+
+## 2026-09-11 Precision Model Hierarchy UX
+
+- **IMPLEMENTED / LOCAL ONLY:** Precision model controls now present an
+  explicit dependency order: `模型端点` → `显示模型` → `编辑模型` →
+  `接入方式`. The protocol control remains visible before a model is chosen,
+  but is disabled with a plain-language explanation until it can be applied to
+  the selected exact model.
+- **IMPLEMENTED:** Concise guidance makes the dependency chain
+  visible to first-time users. Model visibility remains draft-only and keeps
+  focus/list scroll; protocol and size state stay scoped to the selected
+  provider/model.
+- **VERIFIED 2026-09-11:** `node --check static/js/app-all.js`,
+  `node tests/test_precision_edit_ui.mjs`,
+  `node tests/test_precision_protocol_ui.mjs`,
+  `node tests/test_precision_gemini_presets.mjs`,
+  `python -m pytest tests/test_precision_protocol_browser.py -q -s`
+  (`1 passed`), the precision protocol/resolver/provider set (`75 passed`),
+  and the focused precision/provider/security set (`521 passed`) passed.
+  The owned lab was refreshed from the current worktree and reports
+  `ONLINE | PID 38128 | HEAD 3423620 | v2.6.8 | runtime 9a12a9a6a4dc`
+  on port `8895` with source fingerprint `33bbc9bc2c6b6bc8`.
+- **BOUNDARY:** This is interaction guidance only; it does not certify a
+  provider/model's upstream image-edit capability. No new paid request was
+  made in this UI pass.
+
+## 2026-09-11 Precision Protocol UX And Gateway Adapter
+
+- **IMPLEMENTED / LOCAL ONLY:** Precision editing now resolves an exact
+  provider/model connection independently from shared Provider defaults. The
+  default follows the existing endpoint protocol; documented Nano aliases
+  use OpenAI Images `/images/edits` (Klong multipart, Vel JSON) without
+  changing the outbound model ID. Manual OpenAI/Gemini overrides remain scoped
+  to the selected model and can be restored to automatic.
+- **IMPLEMENTED:** Text-to-image and image-to-image submissions now send the
+  selected model explicitly instead of mutating the Provider default in the
+  browser. Queued tasks freeze provider configuration before background work.
+  Sanitized task evidence records exact model, protocol, profile, relative
+  route, requested/default size, and decoded output dimensions when available.
+- **IMPLEMENTED:** Precision protocol save/restore and size authorization roll
+  back in-memory state when persistence fails. Provider error diagnostics redact
+  image Data URLs and prompt/instruction fields. Existing GPT model capability
+  and size grants remain isolated from Nano model catalog entries.
+- **VERIFIED 2026-09-11:** `node --check static/js/app-all.js`; precision UI,
+  protocol UI, and Gemini preset Node suites; 3 Playwright browser suites
+  (desktop/mobile synthetic acceptance); 636 focused Python tests; Python
+  compile and `git diff --check` all pass. No paid upstream request, real
+  gateway trial, or production Provider mutation was made.
+- **BOUNDARY:** The prior successful text-to-image history entry did not store
+  the selected outbound model or protocol, so it cannot prove which protocol
+  generated that image. The current lab is ready for manual acceptance. A
+  real Nano Banana precision-edit trial still requires an explicit user
+  confirmation at the moment of submission and must remain a single
+  no-automatic-retry request.
+
+## 2026-09-10 Aggregate Provider Protocol Implementation
+
+- **IMPLEMENTED / LOCAL ONLY:** Per-model precision protocol override is now
+  available. Each model in an aggregate Provider can independently select
+  `inherit` / `openai` / `gemini` transport and a documented size family
+  (GPT Image 2, Nano Banana 1K/Pro/2). The override is stored under
+  `provider.extra.precision_model_overrides[model]` and never mutates the
+  shared Provider endpoint, key, or default profile.
+- **IMPLEMENTED:** `POST /api/providers/{id}/precision-protocol` saves or
+  resets the override. `POST /api/providers/{id}/precision-preflight` runs
+  local-only validation (no upload, no upstream POST) and reports
+  `upstream_requests: 0`. UI adds "生图协议" and "尺寸预设" selects plus
+  "应用到当前模型" / "恢复端点默认" / "检查配置" buttons.
+- **VERIFIED:** 520 focused tests passed (precision contract, workflow,
+  provider, alias, error safety, setup security). Node syntax and Gemini
+  preset contract passed. `py_compile` and `git diff --check` passed.
+- **BOUNDARY:** No real upstream request was made. The aggregate gateway's
+  actual schema for `nano-banana-2-2k` remains unverified. Manual browser
+  acceptance and one explicitly authorized real trial remain pending.
+
+## 2026-09-10 Aggregate Provider Protocol Strategy
+
+- **CORRECTION:** The user-selected `nano-banana-2-2k` was inside an aggregate
+  OpenAI-compatible Provider. Its HTTP 400 / `Invalid data URL` does not prove
+  a native-Gemini requirement or size incompatibility. The current adapter
+  sends multipart files; the upstream parsing/translation cause is unverified.
+- **VERIFIED (READ-ONLY AUDIT):** Current precision transport configuration is
+  Provider-wide. Native Gemini development does not yet implement independent
+  model-specific protocol overrides within one aggregate Provider. Earlier
+  claims of complete gateway size switching were too broad; the added Node
+  catalog suite is source-structure coverage, not browser round-trip evidence.
+- **PROPOSED:** See `PRECISION-AGGREGATE-PROTOCOL-STRATEGY-20260910.md` for
+  independent transport/size-family selection, non-generating preflight,
+  single-request trial policy, model-scoped evidence and GPT isolation tests.
+- **AUTHORIZATION / NOT EXECUTED:** The user authorized a target-model test.
+  No generation request was sent in this strategy task: the gateway's exact
+  schema remains unverified after public documentation lookup failed. Do not
+  consume that authorization on an unbounded sequence of protocol probes.
+- **RESUME:** Implement and review per-model overrides first, then inspect
+  the gateway's documented request format and perform at most one justified,
+  synthetic-image trial under the existing authorization. No Provider settings,
+  model grants or production code changed during this strategy task.
+
 ## 2026-09-10 GPT Acceptance And v2.6.8 Publication
 
 - **USER-CONFIRMED:** GPT target-model precision editing passed manual acceptance.
@@ -36,6 +214,39 @@
   real upstream trial, record sanitized exact target/output sizes, and retain
   strict output checks, scoped authorization and no automatic image-edit POST
   retry. Do not infer other-vendor acceptance from this GPT-target release.
+
+## 2026-09-10 Gemini Nano Banana Precision-Edit Development
+
+- **RESEARCH VERIFIED:** Google AI for Developers documents native image editing
+  through Gemini `generateContent` for `gemini-2.5-flash-image` (Nano Banana),
+  `gemini-3-pro-image` (Nano Banana Pro), and `gemini-3.1-flash-image` (Nano
+  Banana 2). The same documentation defines model-specific aspect-ratio and
+  resolution controls; Gemini 2.5 uses its native 1K table without `imageSize`,
+  while Gemini 3 families expose 1K/2K/4K (3.1 Flash also 512). These are
+  provider documentation facts, not evidence of any configured gateway's
+  availability.
+- **IMPLEMENTED / LOCAL ONLY:** Native Gemini precision editing now has an
+  allowlisted `gemini_generate_content` transport, source/annotation image
+  parts, bounded composition guidance, model-specific native preset catalogs,
+  strict output validation, explicit crop-to-fit, and one-POST/no-retry
+  behavior. GPT-compatible Nano Banana gateway names remain separate and do
+  not inherit native Gemini capability or GPT size records.
+- **IMPLEMENTED:** Model-specific documented presets drive the precision UI
+  candidate list and tier/ratio mapping. Strict selectable sizes still come
+  only from explicit provider/model/size capability records; switching models
+  does not inherit authorization. Unknown or unmappable Gemini sizes fail
+  closed before a request.
+- **VERIFIED:** `python -m py_compile config.py main.py providers/__init__.py`;
+  `git diff --check`; Gemini catalog `10 passed`; native Gemini provider
+  contract `30 passed`; combined precision/provider regression `511 passed`;
+  `node --check static/js/app-all.js`; precision UI and Gemini preset Node
+  suites passed. The owned lab was restarted and reports
+  `ONLINE | PID 40040 | HEAD ec24eb1 | v2.6.8` on port `8895`.
+- **BOUNDARY:** No real Gemini request, upload, paid call, or gateway capability
+  claim was made. Gemini 3.1 Flash extreme 4K dimensions above GenBox's current
+  8192-side safety envelope are withheld. Manual browser acceptance and one
+  explicitly authorized real trial remain pending; record sanitized target and
+  actual output dimensions separately.
 
 ## 2026-09-10 Precision Quick Start
 
@@ -4165,3 +4376,97 @@ full sanitization review, and public release remain later gates.
   supported annotation, verify the highlight, edit text in the draggable
   popover, drag it inside the canvas, close/reopen by selecting the annotation,
   and verify the full-row gallery texture at desktop and narrow widths.
+
+## Precision model/protocol usability pass (2026-09-11)
+
+- **VERIFIED / MODEL ISOLATION:** exact model selection resolves an isolated
+  precision connection and size family. GPT Image 2 records and grants are not
+  inherited by Nano Banana or another model in the same aggregate Provider.
+- **VERIFIED / SIZE CATALOG:** Nano Banana official size candidates and gateway
+  declared candidates are shown separately; candidates remain experimental
+  until the current Provider, exact model, and exact size are explicitly
+  authorized.
+- **VERIFIED / UI:** protocol controls retain a model-first hierarchy, expose
+  automatic connection as the default, keep advanced request-format settings
+  collapsed, and remove numeric step badges in favor of short natural-language
+  guidance. Grouped model checkboxes use local accessible styling; no external
+  runtime dependency was added.
+- **VERIFIED / TEST:** JavaScript syntax/UI/preset checks passed; focused
+  precision/workflow tests passed `226`; provider precision/error-safety tests
+  passed `254`; setup, protocol, resolver, JSON gateway, and browser tests
+  passed `119`; `git diff --check` passed.
+- **VERIFIED / LAB:** `python scripts/genbox_lab.py status --port 8895`
+  reported `ONLINE`, PID `42680`, HEAD `3423620`, version `v2.6.8` on
+  2026-09-11.
+- **BOUNDARY:** no real Nano Banana upstream edit POST was issued in this pass.
+  The prior `HTTP 400 Invalid data URL` remains an upstream input-encoding
+  failure classification, not proof of unsupported size or model capability.
+  A real trial still requires explicit user authorization and is limited to one
+  non-retried POST with sanitized evidence.
+- **RESUME:** manually verify model grouping, protocol auto/manual hierarchy,
+  Nano Banana size-family switching, and Generate readiness in the 8895 lab.
+  Only after that acceptance should a separately authorized single real trial
+  be considered.
+
+## Nano Banana gateway input adjustment (2026-09-11)
+
+- **VERIFIED / CHANGE:** for the documented Vel host and Nano Banana aliases,
+  automatic precision editing uses the documented JSON edit profile. Because
+  that contract requires a server-downloadable image URL, GenBox now blocks a
+  local Data URL before the paid POST and explains the required gateway
+  capability. Explicit per-model overrides remain available for gateways that
+  document Base64/Data URL or multipart support.
+- **RATIONALE:** the authorized trial returned upstream HTTP 400
+  `Invalid data URL`; this is treated as an input-encoding incompatibility
+  signal, not as evidence that the model or target size is unsupported.
+- **TEST:** JSON override, resolver, model-connection, and gateway contracts
+  passed `78` tests after the change. No second real upstream request was made.
+- **RESUME:** use a gateway with a documented local-image input contract for a
+  future single authorized trial; record only sanitized protocol, model,
+  target, status, and actual output dimensions. Do not enumerate profiles or
+  retry automatically.
+# 2026-09-11 Nano Banana Vel Data-URL Preflight
+
+- **FIXED / LOCAL:** Automatic Vel Nano Banana JSON edit recipes now reject
+  GenBox-local `data:image/...` input before any upstream POST. The error tells
+  users that this gateway requires a server-downloadable image URL, that GenBox
+  does not upload local images implicitly, and that text-to-image success does
+  not prove edit-input compatibility.
+- **PRESERVED:** Explicit per-model OpenAI-compatible overrides remain available
+  for gateways that document Base64/Data URL support. GPT model capability and
+  size records remain isolated; edit requests still use one POST with no
+  automatic retry.
+- **VERIFIED 2026-09-11:** The focused JSON/resolver/model-connection suite
+  passed `78` tests; provider precision/alias/error-safety/setup-security
+  passed `295` tests; JavaScript syntax, precision UI suites, Python compile,
+  and `git diff --check` passed. No second paid upstream request was made.
+- **BOUNDARY:** The configured `api.velapi.cc` Nano Banana edit path has one
+  recorded authorized trial failure (`HTTP 400 Invalid data URL`). It is not
+  certified as precision-edit compatible until the gateway accepts a
+  server-downloadable URL or an explicitly documented Base64/Data URL body.
+
+## 2026-09-11 Klong Nano Banana Multipart Alignment
+
+- **FIXED / LOCAL:** Klong's documented `nano-banana2` and
+  `nano-banana-pro` OpenAI-compatible edit route now resolves automatically to
+  the multipart single-source profile. Klong documents multipart uploads and
+  accepts local image input; its optional JSON aliases remain available
+  through an explicit per-model override.
+- **BOUNDARY:** This corrects adapter selection for the observed `ReadError`
+  path but is not live proof that the endpoint, account, model, or size will
+  succeed. A new real trial requires explicit authorization and remains one
+  non-retried POST.
+
+## 2026-09-14 Klong Nano Banana Authorized Trial
+
+- **USER-AUTHORIZED / VERIFIED:** One real trial used a synthetic PNG only:
+  exact model `nano-banana2`, automatic Klong recipe, OpenAI Images multipart
+  single-source upload, target `2752x1536`. Exactly one upstream POST was sent;
+  no endpoint rotation or retry occurred.
+- **RESULT:** The request reached the provider but failed with the sanitized
+  `precision_edit_connection_error` during response handling. This is not a
+  local size-capability rejection or an input-format rejection. Nano Banana
+  precision editing on this Klong account remains unverified.
+- **BOUNDARY:** Do not claim successful model support from this run. Further
+  diagnosis needs provider-side response/connection evidence or a separately
+  authorized trial; no automatic retry is allowed.

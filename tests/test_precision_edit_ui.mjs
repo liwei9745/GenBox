@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const html = fs.readFileSync(path.join(root, 'static/index.html'), 'utf8');
-const js = fs.readFileSync(path.join(root, 'static/js/app-all.js'), 'utf8');
-const css = fs.readFileSync(path.join(root, 'static/css/app.css'), 'utf8');
+const js = fs.readFileSync(path.join(root, 'static/js/app-all.js'), 'utf8').replace(/\r\n/g, '\n');
+const css = fs.readFileSync(path.join(root, 'static/css/app.css'), 'utf8').replace(/\r\n/g, '\n');
 const i18n = fs.readFileSync(path.join(root, 'static/js/i18n.js'), 'utf8');
 
 function expect(condition, message) {

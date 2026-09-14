@@ -4,6 +4,24 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.9] - 2026-09-14
+
+### Fixed
+
+- Avoid double-decompressing bounded HTTP responses from image gateways.
+- Map Klong Nano Banana target dimensions to explicit resolution tiers;
+  accept validated inline image Data URLs in compatible responses.
+- Preserve selected models and freeze queued request configuration.
+- Keep precision protocol overrides and size authorization isolated per model.
+- Label observed Klong Nano Banana extreme-size failures as experimental,
+  without imposing an incorrect universal 4096-pixel side limit.
+
+### Added
+
+- Native Gemini precision editing and model-specific size catalogues.
+- Automatic documented gateway recipes, reversible advanced connection
+  settings, grouped model selection, and sanitized routing diagnostics.
+
 ## [2.6.8] - 2026-09-10
 
 ### Added

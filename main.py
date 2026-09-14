@@ -8,6 +8,7 @@ import platform
 import re
 import base64
 import binascii
+import copy
 import math
 import hmac
 import hashlib
@@ -72,10 +73,16 @@ from config import (
     cfg_mgr, BASE_DIR, GALLERY_DIR, STORAGE_DIR, PrecisionEditProfile, ProviderConfig, ProvidersConfig,
     PRECISION_GPT_IMAGE_2_FLEXIBLE_SIZE_POLICY,
     documented_precision_model_size_presets,
+    gemini_precision_model_presets,
+    gemini_precision_preset_for_size,
+    GEMINI_NATIVE_IMAGE_MODELS,
     gpt_image_2_size_error,
     is_prod_mode, get_admin_key, verify_admin_key, generate_admin_key, reset_admin_key,
     normalize_precision_capability_size, precision_capability_size_declaration,
     resolve_precision_model_capability, verify_ssl_enabled,
+    resolve_precision_provider, precision_size_model,
+    precision_connection_info, precision_automatic_connection_info,
+    documented_precision_provider_size_presets, resolve_image_protocol,
 )
 from providers import (
     DEFAULT_PRECISION_RESIZE_GUIDANCE,
@@ -1523,6 +1530,19 @@ def _provider_precision_model_resolution(provider, selected_model: str):
     )
 
 
+def _precision_native_gemini_ready(provider, selected_model: str) -> bool:
+    profile = getattr(provider, "precision_edit_profile", None)
+    if isinstance(profile, PrecisionEditProfile):
+        profile = profile.value
+    resolution = _provider_precision_model_resolution(provider, selected_model)
+    return bool(
+        str(getattr(provider, "endpoint_type", "") or "").strip().lower() == "gemini"
+        and profile == PrecisionEditProfile.GEMINI_GENERATE_CONTENT.value
+        and resolution.structure_valid
+        and precision_size_model(provider, selected_model) in GEMINI_NATIVE_IMAGE_MODELS
+    )
+
+
 def _normalize_precision_size(value: object) -> Optional[str]:
     return normalize_precision_capability_size(
         value,
@@ -1584,11 +1604,23 @@ def _validate_precision_edit_size_authorization(
         provider = all_providers.get(provider_id)
         setting = settings.get(provider_id) if isinstance(settings.get(provider_id), dict) else {}
         model = str(setting.get("model") or "").strip()
+        if provider:
+            provider = resolve_precision_provider(provider, model)
         flexible_sizes = _precision_model_allows_flexible_sizes(provider, model) if provider else False
         protocol_model = bool(
             provider
             and precision_model_uses_gpt_image_2_size_contract(provider, model)
         ) or flexible_sizes
+        native_gemini = provider and _precision_native_gemini_ready(provider, model)
+        canonical_model = precision_size_model(provider, model) if provider else ""
+        if native_gemini and not gemini_precision_preset_for_size(canonical_model, target):
+            unsupported.append({
+                "id": provider_id,
+                "model": model,
+                "reason": "gemini_precision_target_not_mappable",
+                "target_size": target,
+            })
+            continue
         if protocol_model:
             protocol_error = gpt_image_2_size_error(target)
             if protocol_error:
@@ -1644,14 +1676,18 @@ def _validate_precision_edit_provider_authorization(
         if getattr(provider, "type", "") != "image" or not getattr(provider, "enabled", False):
             unsupported.append({"id": provider_id, "reason": "provider_not_enabled"})
             continue
-        endpoint_type = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
-        if endpoint_type != "openai":
-            unsupported.append({"id": provider_id, "reason": "explicit_openai_required"})
-            continue
         provider_setting = settings.get(provider_id, {})
         if not isinstance(provider_setting, dict):
             provider_setting = {}
         selected_model = str(provider_setting.get("model") or "").strip()
+        provider = resolve_precision_provider(provider, selected_model)
+        endpoint_type = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
+        if endpoint_type != "openai" and not _precision_native_gemini_ready(provider, selected_model):
+            unsupported.append({"id": provider_id, "reason": "explicit_openai_required"})
+            continue
+        if endpoint_type == "openai" and getattr(provider, "precision_edit_profile", None) == PrecisionEditProfile.GEMINI_GENERATE_CONTENT:
+            unsupported.append({"id": provider_id, "reason": "precision_edit_profile_protocol_mismatch"})
+            continue
         if not selected_model:
             unsupported.append({
                 "id": provider_id,
@@ -1668,7 +1704,7 @@ def _validate_precision_edit_provider_authorization(
     if unsupported:
         raise _generation_contract_error(
             "precision_edit_provider_unsupported",
-            "precision_edit requires an explicitly verified OpenAI image-edit model",
+            "precision_edit requires an explicitly verified image-edit model and matching transport",
             providers=unsupported,
         )
 
@@ -1740,6 +1776,23 @@ class PrecisionCapabilityReq(BaseModel):
     compatibility_profile: Optional[str] = None
 
 
+class PrecisionProtocolReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model: str
+    protocol: str
+    profile: Optional[PrecisionEditProfile] = None
+    size_model: str = ""
+    confirmed: StrictBool = False
+
+
+class PrecisionPreflightReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model: str
+    size: Optional[str] = None
+
+
 def _is_masked_secret(value: str) -> bool:
     """识别 API 响应中的脱敏占位符，避免把它当成真实凭证保存。"""
     return "****" in str(value or "")
@@ -1776,6 +1829,12 @@ def _merge_provider_secrets(existing: ProviderConfig, req: ProviderCreateReq) ->
         if isinstance(existing_model_capabilities, dict):
             incoming_extra = dict(incoming_extra)
             incoming_extra["model_capabilities"] = existing_model_capabilities
+            payload["extra"] = incoming_extra
+    if isinstance(incoming_extra, dict) and "precision_model_overrides" not in incoming_extra:
+        existing_overrides = existing_extra.get("precision_model_overrides")
+        if isinstance(existing_overrides, dict):
+            incoming_extra = dict(incoming_extra)
+            incoming_extra["precision_model_overrides"] = copy.deepcopy(existing_overrides)
             payload["extra"] = incoming_extra
     return payload
 
@@ -2657,12 +2716,29 @@ def _public_precision_size_catalog(provider: ProviderConfig) -> List[dict]:
 
     catalog = []
     for model_id in model_ids:
+        configured_provider = provider
+        provider = resolve_precision_provider(configured_provider, model_id)
         resolution = _provider_precision_model_resolution(provider, model_id)
         canonical_model = resolution.canonical_model if resolution.structure_valid else ""
+        size_model = precision_size_model(provider, model_id)
+        overrides = extra.get("precision_model_overrides", {})
+        override = overrides.get(model_id) if isinstance(overrides, dict) else None
+        endpoint_type = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
+        connection = precision_connection_info(configured_provider, model_id)
+        profile = connection["profile"]
+        if isinstance(profile, PrecisionEditProfile):
+            profile = profile.value
+        native_gemini = _precision_native_gemini_ready(provider, model_id)
         provider_ready = bool(
             getattr(provider, "type", "") == "image"
             and getattr(provider, "enabled", False)
-            and str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower() == "openai"
+            and (
+                (endpoint_type == "openai" and profile != PrecisionEditProfile.GEMINI_GENERATE_CONTENT.value)
+                or (
+                    native_gemini
+                    and profile == PrecisionEditProfile.GEMINI_GENERATE_CONTENT.value
+                )
+            )
             and isinstance(getattr(provider, "capabilities", None), dict)
             and provider.capabilities.get("precision_edit") is True
         )
@@ -2675,7 +2751,7 @@ def _public_precision_size_catalog(provider: ProviderConfig) -> List[dict]:
             else []
         )
         capability_record = resolution.capability if isinstance(resolution.capability, dict) else {}
-        protocol = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
+        protocol = endpoint_type
         if protocol not in {"openai", "gemini", "qwen", "volc_ark", "volc_ark_plan"}:
             protocol = "unknown"
         if provider_ready and resolution.structure_valid and resolution.precision_edit_confirmed:
@@ -2701,10 +2777,22 @@ def _public_precision_size_catalog(provider: ProviderConfig) -> List[dict]:
             evidence = "unverified"
             status = "unknown"
         native_size = "exact_list" if declared_sizes else "unknown"
+        documented_presets = list(documented_precision_provider_size_presets(provider, model_id))
+        documented_sizes = {item["size"] for item in documented_presets}
         catalog.append({
             "model": model_id,
             "canonical_model": canonical_model,
-            "documented_presets": list(documented_precision_model_size_presets(canonical_model)),
+            "size_model": size_model,
+            "precision_connection": connection,
+            "protocol_override": (
+                {key: override.get(key, "") for key in ("protocol", "profile", "size_model")}
+                if isinstance(override, dict) else None
+            ),
+            "documented_presets": documented_presets,
+            "native_presets": [
+                preset for preset in gemini_precision_model_presets(size_model)
+                if preset["size"] in documented_sizes
+            ],
             "declared_sizes": declared_sizes,
             "strict_selectable_sizes": list(declared_sizes),
             "precision_capability": {
@@ -2713,6 +2801,7 @@ def _public_precision_size_catalog(provider: ProviderConfig) -> List[dict]:
                 "model": model_id,
                 "canonical_model": canonical_model,
                 "protocol": protocol,
+                "request_profile": profile,
                 "operations": operations,
                 "input_contract": input_contract,
                 "output_contract": "image_result" if status == "ready" else "unknown",
@@ -2724,8 +2813,14 @@ def _public_precision_size_catalog(provider: ProviderConfig) -> List[dict]:
                 ),
                 "evidence": evidence,
                 "dispatch_authorized": bool(status == "ready" and declared_sizes),
+                "native_request_profile": (
+                    PrecisionEditProfile.GEMINI_GENERATE_CONTENT.value
+                    if native_gemini and profile == PrecisionEditProfile.GEMINI_GENERATE_CONTENT.value
+                    else None
+                ),
             },
         })
+        provider = configured_provider
     return catalog
 
 
@@ -2813,6 +2908,176 @@ async def create_provider(req: ProviderCreateReq):
     return {"ok": True, "message": f"Provider '{req.id}' 已保存", "id": req.id}
 
 
+def _precision_configured_model(provider_id: str, model: str):
+    provider = next((p for p in cfg_mgr.config.providers if p.id == provider_id), None)
+    if provider is None:
+        raise HTTPException(status_code=404, detail={"code": "provider_not_found", "message": "Provider not found"})
+    known_models = {str(item).strip() for item in list(provider.models or []) + [provider.model] if str(item).strip()}
+    if not model or model not in known_models:
+        raise HTTPException(status_code=400, detail={"code": "precision_model_invalid", "message": "Model must belong to the selected provider"})
+    return provider
+
+
+def _precision_protocol_record(provider, model: str):
+    extra = provider.extra if isinstance(provider.extra, dict) else {}
+    overrides = extra.get("precision_model_overrides")
+    return overrides.get(model) if isinstance(overrides, dict) else None
+
+
+@app.post("/api/providers/{provider_id}/precision-protocol")
+async def set_precision_protocol(provider_id: str, req: PrecisionProtocolReq):
+    """Change one model's precision transport without touching provider defaults."""
+    model = req.model.strip()
+    provider = _precision_configured_model(provider_id, model)
+    if not req.confirmed:
+        raise HTTPException(status_code=400, detail={"code": "precision_confirmation_required", "message": "Explicit confirmation is required"})
+    protocol = req.protocol.strip().lower()
+    if protocol not in {"inherit", "openai", "gemini"}:
+        raise HTTPException(status_code=400, detail={"code": "precision_protocol_invalid", "message": "This precision protocol is not implemented"})
+    size_model = req.size_model.strip()
+    if size_model and not documented_precision_model_size_presets(size_model):
+        raise HTTPException(status_code=400, detail={"code": "precision_size_model_invalid", "message": "Choose a documented model size family"})
+    extra = dict(provider.extra or {})
+    overrides = dict(extra.get("precision_model_overrides") or {})
+    if protocol == "inherit":
+        overrides.pop(model, None)
+    else:
+        default_profile = (
+            PrecisionEditProfile.GEMINI_GENERATE_CONTENT
+            if protocol == "gemini"
+            else PrecisionEditProfile(
+                precision_automatic_connection_info(provider, model).get("profile")
+                or PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE
+            )
+        )
+        if protocol == "openai" and default_profile == PrecisionEditProfile.GEMINI_GENERATE_CONTENT:
+            default_profile = PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_SINGLE_SOURCE_IMAGE
+        profile = req.profile or default_profile
+        is_gemini_profile = profile == PrecisionEditProfile.GEMINI_GENERATE_CONTENT
+        if (protocol == "gemini") != is_gemini_profile:
+            raise HTTPException(status_code=400, detail={"code": "precision_profile_protocol_mismatch", "message": "Request profile must match the selected protocol"})
+        if protocol == "gemini" and (size_model or model) not in GEMINI_NATIVE_IMAGE_MODELS:
+            raise HTTPException(status_code=400, detail={"code": "gemini_precision_model_unknown", "message": "Choose a documented Gemini size family for this alias"})
+        record = {"protocol": protocol, "profile": profile.value, "size_model": size_model}
+        previous = overrides.get(model)
+        if isinstance(previous, dict) and all(previous.get(key, "") == value for key, value in record.items()):
+            record["capabilities"] = dict(previous.get("capabilities") or {})
+        else:
+            # Configuration consent is not model or exact-size trial consent.
+            record["capabilities"] = {"precision_edit": False, "supported_sizes": []}
+        overrides[model] = record
+    if overrides:
+        extra["precision_model_overrides"] = overrides
+    else:
+        extra.pop("precision_model_overrides", None)
+    candidate = provider.model_copy(deep=True)
+    candidate.extra = extra
+    catalog = next(item for item in _public_precision_size_catalog(candidate) if item["model"] == model)
+    previous_extra = provider.extra
+    provider.extra = extra
+    try:
+        cfg_mgr.save(cfg_mgr.config)
+    except Exception:
+        provider.extra = previous_extra
+        raise
+    return {"ok": True, "provider_id": provider_id, "model": model, "protocol_override": catalog["protocol_override"], "catalog": catalog}
+
+
+@app.post("/api/providers/{provider_id}/precision-preflight")
+async def precision_preflight(provider_id: str, req: PrecisionPreflightReq):
+    """Local configuration inspection only: no source upload or upstream request."""
+    model = req.model.strip()
+    configured = _precision_configured_model(provider_id, model)
+    provider = resolve_precision_provider(configured, model)
+    checks = []
+    settings = {provider_id: {"model": model}}
+    if not (provider.get_effective_keys() or provider.get_active_endpoints()):
+        checks.append({"code": "precision_provider_key_required", "ok": False})
+    if not provider.base_url and not provider.get_active_endpoints():
+        checks.append({"code": "precision_provider_endpoint_required", "ok": False})
+    for check in (
+        lambda: _validate_precision_edit_provider_authorization([provider_id], {provider_id: provider}, settings),
+        lambda: _validate_precision_edit_size_authorization(
+            [provider_id], {provider_id: provider}, settings,
+            {"precision_size_mode": "resize", "precision_target_size": _normalize_precision_size(req.size), "precision_output_size_policy": "strict"},
+        ) if req.size is not None else None,
+    ):
+        try:
+            check()
+        except HTTPException as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            checks.append({"code": detail.get("code", "precision_local_check_failed"), "ok": False})
+    if req.size is not None and not _normalize_precision_size(req.size):
+        checks.append({"code": "precision_size_invalid", "ok": False})
+    if not checks:
+        checks.append({"code": "precision_local_config_valid", "ok": True})
+    connection = precision_connection_info(configured, model)
+    profile = connection["profile"]
+    return {
+        "ok": all(check["ok"] for check in checks),
+        "local_only": True,
+        "upstream_verified": False,
+        "upstream_requests": 0,
+        "provider_id": provider_id,
+        "model": model,
+        "protocol": provider.endpoint_type,
+        "profile": profile.value if isinstance(profile, PrecisionEditProfile) else profile,
+        "size_model": precision_size_model(provider, model),
+        "precision_connection": connection,
+        "target_size": _normalize_precision_size(req.size) if req.size is not None else None,
+        "checks": checks,
+        "message": "仅检查本地配置；未检查图片内容、未请求上游，不能保证该端点支持此协议或尺寸。",
+    }
+
+
+def _set_precision_override_capability(provider, model: str, req: PrecisionCapabilityReq, normalized_size):
+    previous_extra = copy.deepcopy(provider.extra)
+    effective = resolve_precision_provider(provider, model)
+    if req.compatibility_profile is not None or "flexible_sizes" in req.model_fields_set:
+        raise HTTPException(status_code=400, detail={"code": "precision_override_policy_invalid", "message": "Experimental overrides require exact-size authorization"})
+    record = dict(_precision_protocol_record(provider, model))
+    capability = dict(record.get("capabilities") or {})
+    size_requested = "size" in req.model_fields_set
+    if size_requested:
+        if req.enabled:
+            capability["precision_edit"] = True
+            record["capabilities"] = capability
+            effective.extra["model_capabilities"][model] = dict(capability)
+            effective.capabilities["precision_edit"] = True
+        _validate_precision_edit_provider_authorization([provider.id], {provider.id: effective}, {provider.id: {"model": model}})
+        if not (effective.get_effective_keys() or effective.get_active_endpoints()):
+            raise HTTPException(status_code=400, detail={"code": "precision_provider_key_required", "message": "Provider must have a configured key"})
+        size_model = precision_size_model(effective, model)
+        if req.enabled and effective.endpoint_type == "gemini" and not gemini_precision_preset_for_size(size_model, normalized_size):
+            raise HTTPException(status_code=400, detail={"code": "gemini_precision_target_not_mappable", "message": "Size cannot be mapped to native imageConfig"})
+        if req.enabled and size_model == PRECISION_GPT_IMAGE_2_COMPATIBILITY_PROFILE and gpt_image_2_size_error(normalized_size):
+            raise HTTPException(status_code=400, detail={"code": "precision_size_invalid", "message": "Size is outside the selected GPT size family"})
+        sizes = _precision_declared_size_list(capability)
+        if req.enabled and normalized_size not in sizes:
+            if len(sizes) >= MAX_PRECISION_SUPPORTED_SIZES:
+                raise HTTPException(status_code=400, detail={"code": "precision_size_limit_exceeded", "message": "Model supported size list is full"})
+            sizes.append(normalized_size)
+        elif not req.enabled:
+            sizes = [size for size in sizes if size != normalized_size]
+        capability["supported_sizes"] = sizes
+    else:
+        capability["precision_edit"] = bool(req.enabled)
+        if not req.enabled:
+            capability["supported_sizes"] = []
+    record["capabilities"] = capability
+    extra = dict(provider.extra or {})
+    overrides = dict(extra.get("precision_model_overrides") or {})
+    overrides[model] = record
+    extra["precision_model_overrides"] = overrides
+    provider.extra = extra
+    try:
+        cfg_mgr.save(cfg_mgr.config)
+    except Exception:
+        provider.extra = previous_extra
+        raise
+    return {"ok": True, "provider_id": provider.id, "model": model, "enabled": req.enabled, "size": normalized_size, "supported_sizes": capability.get("supported_sizes", [])}
+
+
 @app.post("/api/providers/{provider_id}/precision-capability")
 async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq):
     """Persist an explicit, per-model user confirmation for precision editing."""
@@ -2863,6 +3128,9 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
         raise HTTPException(status_code=400, detail={"code": "precision_model_invalid", "message": "Model must belong to the selected provider"})
     if (req.enabled or size_requested or flexible_sizes_requested or compatibility_profile is not None) and not req.confirmed:
         raise HTTPException(status_code=400, detail={"code": "precision_confirmation_required", "message": "Explicit user confirmation is required"})
+    if isinstance(_precision_protocol_record(provider, model), dict):
+        return _set_precision_override_capability(provider, model, req, normalized_size)
+    previous_provider = copy.deepcopy(provider)
     capabilities = dict(provider.capabilities or {})
     extra = dict(provider.extra or {})
     model_capabilities = dict(extra.get("model_capabilities") or {})
@@ -2883,6 +3151,14 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
         )
     capability_model = resolution.canonical_model if resolution.structure_valid else model
     capability_record = dict(resolution.capability or selected)
+    effective_provider = resolve_precision_provider(provider, model)
+    endpoint_type = str(getattr(effective_provider, "endpoint_type", "auto") or "auto").strip().lower()
+    native_gemini = endpoint_type == "gemini"
+    if native_gemini and (req.enabled or size_requested or flexible_sizes_requested):
+        if capability_model not in GEMINI_NATIVE_IMAGE_MODELS:
+            raise HTTPException(status_code=400, detail={"code": "gemini_precision_model_unknown", "message": "Native Gemini editing requires a documented model or explicit canonical mapping"})
+        if compatibility_profile is not None or flexible_sizes_requested:
+            raise HTTPException(status_code=400, detail={"code": "gemini_precision_policy_invalid", "message": "Native Gemini uses model-specific imageConfig presets, not GPT flexible sizes"})
 
     if size_requested or flexible_sizes_requested:
         if getattr(provider, "type", "") != "image":
@@ -2891,11 +3167,12 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
             raise HTTPException(status_code=400, detail={"code": "precision_provider_not_enabled", "message": "Provider must be enabled"})
         if not (provider.get_effective_keys() or provider.get_active_endpoints()):
             raise HTTPException(status_code=400, detail={"code": "precision_provider_key_required", "message": "Provider must have a configured key"})
-        endpoint_type = str(getattr(provider, "endpoint_type", "auto") or "auto").strip().lower()
-        if endpoint_type != "openai":
+        if endpoint_type != "openai" and not _precision_native_gemini_ready(effective_provider, model):
             raise HTTPException(status_code=400, detail={"code": "precision_provider_openai_required", "message": "Provider must use the OpenAI-compatible image transport"})
         if not _provider_precision_model_capability(provider, model):
             raise HTTPException(status_code=400, detail={"code": "precision_model_precision_edit_required", "message": "Model must already have explicit precision_edit capability"})
+        if native_gemini and size_requested and req.enabled and not gemini_precision_preset_for_size(capability_model, normalized_size):
+            raise HTTPException(status_code=400, detail={"code": "gemini_precision_target_not_mappable", "message": "Size cannot be mapped to this Gemini model's native imageConfig"})
 
         # gpt-image-2 has a stricter upstream size envelope than the generic
         # WIDTHxHEIGHT capability contract.  Apply it to both the canonical
@@ -2986,12 +3263,16 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
         capability_model = model
         capability_record = selected_record
     elif req.enabled:
-        for alias_field in ("alias_of", "canonical_model"):
-            capability_record.pop(alias_field, None)
+        if not native_gemini:
+            for alias_field in ("alias_of", "canonical_model"):
+                capability_record.pop(alias_field, None)
         capabilities[PRECISION_EDIT_CAPABILITY] = True
         capability_record[PRECISION_EDIT_CAPABILITY] = True
-        provider.endpoint_type = "openai"
-        if provider.precision_edit_profile is None:
+        if native_gemini and provider.endpoint_type == "gemini":
+            provider.precision_edit_profile = PrecisionEditProfile.GEMINI_GENERATE_CONTENT
+        elif not native_gemini:
+            provider.endpoint_type = "openai"
+        if not native_gemini and provider.precision_edit_profile is None:
             provider.precision_edit_profile = (
                 PrecisionEditProfile.OPENAI_IMAGES_EDITS_MULTIPART_REPEATED_IMAGE
             )
@@ -3005,7 +3286,14 @@ async def set_precision_capability(provider_id: str, req: PrecisionCapabilityReq
     extra["model_capabilities"] = model_capabilities
     provider.capabilities = capabilities
     provider.extra = extra
-    cfg_mgr.save(cfg_mgr.config)
+    try:
+        cfg_mgr.save(cfg_mgr.config)
+    except Exception:
+        provider.extra = previous_provider.extra
+        provider.capabilities = previous_provider.capabilities
+        provider.endpoint_type = previous_provider.endpoint_type
+        provider.precision_edit_profile = previous_provider.precision_edit_profile
+        raise
     _write_log("provider", "精准改图模型能力已更新", {"provider_id": provider_id, "model": model, "enabled": req.enabled})
     if size_requested or flexible_sizes_requested:
         result = {
@@ -3962,7 +4250,25 @@ async def generate(req: GenerateRequest, request: Request):
     if not provider_ids:
         raise HTTPException(status_code=400, detail="无可用的生图模型，请先在设置中配置")
 
-    all_providers = {p.id: p for p in cfg_mgr.config.providers}
+    # Freeze this request before any await or background work can observe a
+    # later model/protocol edit in the shared configuration.
+    all_providers = {p.id: copy.deepcopy(p) for p in cfg_mgr.config.providers}
+    selected_models = {}
+    if mode in {"t2i", "i2i"}:
+        for pid in provider_ids:
+            setting = req.provider_settings.get(pid, {}) if isinstance(req.provider_settings, dict) else {}
+            if not isinstance(setting, dict) or "model" not in setting:
+                continue
+            selected_model = setting["model"]
+            provider = all_providers.get(pid)
+            known_models = set(getattr(provider, "models", None) or [])
+            known_models.add(getattr(provider, "model", ""))
+            if not isinstance(selected_model, str) or not selected_model.strip() or selected_model.strip() not in known_models:
+                raise _generation_contract_error(
+                    "generation_model_invalid",
+                    "Selected model must belong to the selected provider",
+                )
+            selected_models[pid] = selected_model.strip()
     if mode == "inpaint":
         _validate_inpaint_provider_authorization(provider_ids, all_providers)
     elif mode == "precision_edit":
@@ -3977,6 +4283,10 @@ async def generate(req: GenerateRequest, request: Request):
             req.provider_settings,
             generation_input,
         )
+        for pid in provider_ids:
+            all_providers[pid] = resolve_precision_provider(
+                all_providers[pid], str(req.provider_settings[pid]["model"]).strip()
+            )
 
     generation_counter += 1
     gen_id = f"gen_{generation_counter:04d}_{uuid.uuid4().hex[:6]}"
@@ -4057,6 +4367,8 @@ async def generate(req: GenerateRequest, request: Request):
             p_kwargs["quality"] = p_setting["quality"]
         if mode == "precision_edit":
             p_kwargs["model"] = str(p_setting["model"]).strip()
+        elif pid in selected_models:
+            p_kwargs["model"] = selected_models[pid]
         provider_kwargs_map[pid] = p_kwargs
         for seq in range(qty):
             if pid in all_providers:
@@ -4134,6 +4446,48 @@ async def _process_image_gen(gen_id: str):
         _cleanup_image_task_handle(gen_id, asyncio.current_task())
 
 
+def _generation_request_contract(provider, mode: str, kwargs: dict) -> dict:
+    """Persist only bounded routing facts, never request bodies or endpoints."""
+    model = str(kwargs.get("model") or provider.model or "").strip()
+    protocol = (
+        resolve_image_protocol(provider)
+        if isinstance(provider, ProviderConfig)
+        else getattr(provider, "endpoint_type", "unknown")
+    )
+    profile = ""
+    if mode == "precision_edit":
+        if isinstance(provider, ProviderConfig):
+            provider = resolve_precision_provider(provider, model)
+        protocol = getattr(provider, "endpoint_type", "unknown")
+        profile = (
+            precision_connection_info(provider, model)["profile"]
+            if isinstance(provider, ProviderConfig)
+            else getattr(provider, "precision_edit_profile", "")
+        )
+        if isinstance(profile, PrecisionEditProfile):
+            profile = profile.value
+    route = ""
+    if protocol == "openai":
+        route = "/images/generations" if mode == "t2i" else "/images/edits"
+    elif protocol == "gemini":
+        route = "/models/{model}:generateContent"
+    return {
+        "model": _provider_error_text(model, provider)[:160],
+        "mode": mode,
+        "protocol": protocol,
+        "profile": str(profile or ""),
+        "route": route,
+        "target_size": _normalize_precision_size(
+            kwargs.get("precision_target_size") or kwargs.get("size")
+        ),
+        "request_size": (
+            _normalize_precision_size(kwargs.get("size") or getattr(provider, "size", "") or "1024x1024")
+            if mode == "t2i" and protocol == "openai" else None
+        ),
+        "evidence": "resolved_configuration",
+    }
+
+
 async def _process_image_gen_impl(gen_id: str):
     """后台逐个处理生图任务（带并发控制）"""
     global image_gen_semaphore
@@ -4156,7 +4510,15 @@ async def _process_image_gen_impl(gen_id: str):
         state = task["provider_states"][key]
         state["status"] = "generating"
         state["progress"] = 10
-        state["log"].append(f"[{time.strftime('%H:%M:%S')}] ▸ 开始生成 - 模型: {p_cfg.name or pid}")
+        request_contract = _generation_request_contract(p_cfg, task.get("mode", "t2i"), kwargs)
+        state["request_contract"] = request_contract
+        state["log"].append(
+            f"[{time.strftime('%H:%M:%S')}] ▸ 开始生成 - 模型: {request_contract['model']}"
+            f" · {request_contract['protocol']} {request_contract['route']}"
+        )
+        _write_log("generation_dispatch", "Image request configuration", {
+            "gen_id": gen_id, "provider_id": pid, **request_contract,
+        })
 
         # 后台递增进度（10% → 90%）
         async def _tick_progress():
@@ -4178,6 +4540,17 @@ async def _process_image_gen_impl(gen_id: str):
             res.elapsed_seconds = round(t1 - t0, 1)
             res.started_at = t0
             res.finished_at = t1
+            if res.success and getattr(res, "image_data", None):
+                try:
+                    with Image.open(io.BytesIO(res.image_data)) as output:
+                        final_size = f"{output.width}x{output.height}"
+                        metadata = getattr(res, "metadata", None) or {}
+                        request_contract["actual_size"] = (
+                            _normalize_precision_size(metadata.get("provider_actual_size")) or final_size
+                        )
+                        request_contract["final_size"] = final_size
+                except (OSError, TypeError, ValueError):
+                    pass
 
             # ── 尺寸自适应：生成后本地放大 ──
             if res.success and res.local_path and task.get("upscale_to"):
@@ -4215,7 +4588,8 @@ async def _process_image_gen_impl(gen_id: str):
                 # 写入详细错误日志到 logs.jsonl
                 _write_log("generation_error", f"{pid} 失败: {error_text[:200]}", {
                     "provider_id": pid,
-                    "model": (p_cfg.model if p_cfg else pid),
+                    "model": _provider_error_text(str(kwargs.get("model") or p_cfg.model or pid), p_cfg)[:160],
+                    "request_contract": request_contract,
                     "error": error_text[:500],
                     "mode": task.get("mode", "t2i"),
                     "elapsed_seconds": res.elapsed_seconds,
@@ -4229,6 +4603,7 @@ async def _process_image_gen_impl(gen_id: str):
                 "error_code": getattr(res, "error_code", "") or None,
                 "error_details": getattr(res, "error_details", None),
                 "metadata": getattr(res, "metadata", None),
+                "request_contract": request_contract,
                 "warnings": getattr(res, "warnings", None) or [],
                 "model": pid,
                 "prompt": prompt,
@@ -4247,7 +4622,8 @@ async def _process_image_gen_impl(gen_id: str):
             state["log"].append(f"[{time.strftime('%H:%M:%S')}] ✗ 异常: {error_text[:120]}")
             _write_log("generation_error", f"{pid} 异常: {error_text[:200]}", {
                 "provider_id": pid,
-                "model": (p_cfg.model if p_cfg else pid),
+                "model": _provider_error_text(str(kwargs.get("model") or p_cfg.model or pid), p_cfg)[:160],
+                "request_contract": request_contract,
                 "error": error_text[:500],
                 "mode": task.get("mode", "t2i"),
                 "elapsed_seconds": round(t1 - t0, 1),
@@ -4257,6 +4633,7 @@ async def _process_image_gen_impl(gen_id: str):
                 "error": error_text, "model": pid, "prompt": prompt,
                 "error_code": None, "error_details": None,
                 "metadata": None, "warnings": [],
+                "request_contract": request_contract,
                 "original_prompt": task["original_prompt"], "seq": seq,
                 "elapsed_seconds": round(t1 - t0, 1), "started_at": t0, "finished_at": t1,
             }
@@ -4371,6 +4748,7 @@ async def get_generate_status(gen_id: str):
             "seq": v["seq"],
             "qty": v["qty"],
             "log": v["log"],
+            "request_contract": v.get("request_contract"),
             "result": v["result"],
         }
 

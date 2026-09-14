@@ -360,7 +360,7 @@
             <div class="mb-10">
               <div class="param-label"><span data-i18n="creator.aspect_ratio">宽高比</span></div>
               <div class="grid gap-4" style="grid-template-columns:repeat(5,1fr);" id="ratioGrid">
-                <button class="ratio-btn active" data-ratio="1:1" onclick="setRatio(this,'1:1')">1:1</button>
+                <button class="ratio-btn" data-ratio="1:1" onclick="setRatio(this,'1:1')">1:1</button>
                 <button class="ratio-btn" data-ratio="2:3" onclick="setRatio(this,'2:3')">2:3</button>
                 <button class="ratio-btn" data-ratio="3:2" onclick="setRatio(this,'3:2')">3:2</button>
                 <button class="ratio-btn" data-ratio="3:4" onclick="setRatio(this,'3:4')">3:4</button>
@@ -374,9 +374,9 @@
                 <button class="ratio-btn" data-ratio="21:9-2k" onclick="setRatio(this,'21:9-2k')">21:9(2K)</button>
                 <button class="ratio-btn" data-ratio="16:9-4k" onclick="setRatio(this,'16:9-4k')">16:9(4K)</button>
                 <button class="ratio-btn" data-ratio="9:16-4k" onclick="setRatio(this,'9:16-4k')">9:16(4K)</button>
-                <button class="ratio-btn" data-ratio="auto" onclick="setRatio(this,'auto')" style="grid-column:span 2;">auto</button>
+                <button class="ratio-btn active" data-ratio="auto" onclick="setRatio(this,'auto')" style="grid-column:span 2;">自动</button>
               </div>
-              <input type="hidden" id="selRatio" value="1:1">
+              <input type="hidden" id="selRatio" value="auto">
               <label class="flex items-start gap-6 mt-6 text-xs text-muted">
                 <input type="checkbox" id="chkExactRatioCrop" disabled style="margin-top:2px;accent-color:var(--accent);">
                 <span data-i18n="creator.exact_ratio_crop">精确裁切到所选比例（可能裁掉画面边缘，默认关闭）</span>
@@ -683,7 +683,7 @@
                     </div>
                     <button type="button" id="precisionCanvasVerticalResizeHandle" class="precision-canvas-vertical-resize-handle" role="separator" aria-orientation="horizontal" aria-controls="precisionCanvasShell precisionSessionShowcase" aria-valuemin="300" aria-valuemax="900" aria-valuenow="620" aria-label="调整全屏画布与图库高度" title="拖动或使用上下方向键调整全屏画布与图库高度" hidden><span aria-hidden="true"></span></button>
                     <div id="precisionGalleryCommandBar" class="precision-gallery-command-bar" role="group" aria-label="精准改图生成操作">
-                      <button type="button" class="btn-primary precision-generate-action-button" id="btnGen" onclick="doGenerate()"><span data-i18n="creator.generate_image">🚀 生成图片</span></button>
+                      <button type="button" class="btn-primary precision-generate-action-button" id="btnGen" onclick="doGenerate()" title="Enter 或 Ctrl+Enter 生成"><span data-i18n="creator.generate_image">🚀 生成图片</span></button><small class="precision-generate-shortcut-hint">Enter / Ctrl+Enter</small>
                       <button type="button" class="btn-secondary hidden" id="btnStopGen" onclick="cancelCurrentGeneration()"><span data-i18n="creator.stop_generation">⏹ 停止生成</span></button>
                     </div>
                     <section id="precisionAnnotationSummary" class="precision-annotation-summary" aria-label="已确认的修改说明" hidden>
@@ -843,7 +843,7 @@
                       <section class="precision-size-tool" aria-labelledby="precisionSizeTitle">
                         <div class="precision-size-heading">
                           <div class="precision-size-heading-copy"><span class="param-label" id="precisionSizeTitle" data-i18n="creator.precision_size_title">智能扩图与画布适配</span><small id="precisionSizeHint" class="sr-only" data-i18n="creator.precision_size_preserve_hint">默认保持原图尺寸和比例，不会套用文生图设置。</small></div>
-                          <p class="precision-start-hint" data-i18n="creator.precision_start_size">改变尺寸：1. 选尺寸方式（模型尺寸严格匹配；裁切适配会本地裁切缩放）；2. 选预设，按提示授权试用；3. 选构图说明并按需修改。加载底图后即可点击“生成图片”。</p>
+                          <p class="precision-start-hint" data-i18n="creator.precision_start_size">改变尺寸时，先选尺寸方式，再选预设；模型尺寸会严格校验，裁切适配会在本地裁切或缩放。按提示授权试用后，选择构图说明并按需修改，加载底图即可生成。</p>
                           <div class="precision-size-modes" role="group" aria-label="画布尺寸模式" data-i18n-aria-label="creator.precision_size_title">
                             <button type="button" id="btnPrecisionSizePreserve" class="btn-secondary" aria-pressed="true" onclick="setPrecisionSizeMode('preserve')" data-i18n="creator.precision_size_preserve">保持原图</button>
                             <button type="button" id="btnPrecisionSizeResize" class="btn-ghost" aria-pressed="false" onclick="setPrecisionSizeMode('resize')" data-i18n="creator.precision_size_resize">改变尺寸</button>
@@ -858,8 +858,8 @@
                           <div id="precisionResizeCapability" class="precision-size-capability" role="group" aria-label="当前尺寸模型支持状态" data-i18n-aria-label="creator.precision_size_capability_label">
                             <small id="precisionResizeCapabilityStatus" role="status" aria-live="polite" data-i18n="creator.precision_size_capability_model_required">先选择并确认一个精准改图模型，再确认当前目标尺寸。</small>
                             <div class="precision-size-capability-actions">
-                              <button type="button" id="btnPrecisionConfirmResizeSize" class="btn-secondary" hidden disabled data-i18n="creator.precision_size_confirm_action_empty">确认当前尺寸</button>
-                              <button type="button" id="btnPrecisionRevokeResizeSize" class="btn-ghost" hidden disabled data-i18n="creator.precision_size_revoke_action_empty">撤销当前尺寸确认</button>
+                              <button type="button" id="btnPrecisionConfirmResizeSize" class="btn-secondary precision-toggle-action" hidden disabled data-i18n="creator.precision_size_confirm_action_empty">确认当前尺寸</button>
+                              <button type="button" id="btnPrecisionRevokeResizeSize" class="btn-ghost precision-toggle-action" hidden disabled data-i18n="creator.precision_size_revoke_action_empty">撤销当前尺寸确认</button>
                             </div>
                           </div>
                           <div id="precisionResizePresetEditor" class="precision-size-preset-editor hidden">
@@ -906,28 +906,68 @@
                       <summary class="precision-model-summary" id="btnPrecisionModelPickerToggle"><span class="param-label" id="precisionModelPickerTitle" data-i18n="creator.precision_edit_model_picker">选择模型</span><span class="precision-model-summary-caret" aria-hidden="true">⌄</span></summary>
                       <div class="precision-model-picker-body">
                       <p class="precision-start-hint" data-i18n="creator.precision_start_model">第一步：选模型端点 → 在“显示模型”中勾选并确定 → 选择编辑模型。显示“待确认”时，仅在确认支持改图后启用；没有端点请先到“模型设置”配置。</p>
-                      <label for="precisionEditProviderEndpoint">
-                        <span class="precision-picker-label" data-i18n="creator.precision_edit_endpoint_select">模型端点</span>
+                      <label class="precision-hierarchy-field" for="precisionEditProviderEndpoint">
+                        <span class="precision-picker-label"><span data-i18n="creator.precision_edit_endpoint_select">模型端点</span></span>
                         <select id="precisionEditProviderEndpoint" onchange="selectPrecisionEditEndpoint()" disabled><option value="" data-i18n="creator.precision_edit_no_endpoint">暂无可用端点</option></select>
                       </label>
-                      <label for="precisionEditProviderModel">
-                        <span class="precision-picker-label" data-i18n="creator.precision_edit_model_select">图片编辑模型</span>
+                      <label class="precision-hierarchy-field" for="precisionEditProviderModel">
+                        <span class="precision-picker-label"><span data-i18n="creator.precision_edit_model_select">图片编辑模型</span></span>
                       <select id="precisionEditProviderModel" onchange="selectPrecisionEditModel(this.value)" disabled>
                         <option value="" data-i18n="creator.precision_edit_no_model">暂无已验证的精准改图模型</option>
                       </select>
                       </label>
                       <div id="precisionEditModelVisibility" class="precision-model-visibility" aria-live="polite"></div>
                       <small id="precisionProviderStatus" role="status" aria-live="polite" data-i18n="creator.precision_edit_model_hint">这里只显示已确认支持图片编辑的模型；自定义模型需要手动确认一次。</small>
+                      <div id="precisionProtocolControls" class="precision-protocol-controls">
+                        <div class="precision-hierarchy-heading"><strong>确认接入方式</strong><small>默认自动沿用当前模型的文生图端点；只有协议不匹配时才打开高级设置。</small></div>
+                        <label for="precisionProtocolSelect"><span class="precision-picker-label">接入方式</span>
+                          <select id="precisionProtocolSelect" onchange="changePrecisionProtocolDraft()">
+                            <option value="inherit">自动 · 沿用模型端点（推荐）</option>
+                            <option value="openai">中转兼容 · OpenAI 图片接口</option>
+                            <option value="gemini">厂商原生 · Gemini 图片接口</option>
+                          </select>
+                        </label>
+                        <small id="precisionProtocolCurrent" role="status" aria-live="polite"></small>
+                        <small>先用自动接入。同一中转里的 Nano Banana 也可用 OpenAI 兼容；文生图成功不代表改图已验证。</small>
+                        <details id="precisionProtocolAdvanced"><summary>高级接入设置 · 通常无需修改</summary>
+                          <label for="precisionProtocolSizeModel"><span class="precision-picker-label">模型尺寸目录</span>
+                            <select id="precisionProtocolSizeModel" onchange="changePrecisionProtocolDraft()">
+                              <option value="">自动识别当前模型</option>
+                              <option value="gpt-image-2">GPT Image 2</option>
+                              <option value="gemini-2.5-flash-image">Nano Banana · 1K</option>
+                              <option value="gemini-3-pro-image">Nano Banana Pro</option>
+                              <option value="gemini-3.1-flash-image">Nano Banana 2</option>
+                            </select>
+                          </label>
+                          <label for="precisionProtocolProfile"><span class="precision-picker-label">图片上传方式</span>
+                            <select id="precisionProtocolProfile" onchange="changePrecisionProtocolDraft()">
+                              <option value="">自动 · 按端点文档适配</option>
+                              <option value="openai_images_edits_json_data_url_single_source_image">JSON 内嵌原图 · 部分中转</option>
+                              <option value="openai_images_edits_multipart_single_source_image">文件上传 · 单张原图（image）</option>
+                              <option value="openai_images_edits_multipart_repeated_image">文件上传 · 原图和批注图（image）</option>
+                              <option value="openai_images_edits_multipart_image_array">文件上传 · 原图和批注图（image[]）</option>
+                            </select>
+                          </label>
+                          <small>只有端点文档要求时才修改。尺寸目录只提供候选尺寸，不改变模型或授权。</small>
+                        </details>
+                        <div class="precision-model-authorization-actions">
+                          <button type="button" id="btnPrecisionProtocolApply" class="btn-primary" onclick="savePrecisionProtocolOverride(false)" hidden>保存接入设置</button>
+                          <button type="button" id="btnPrecisionProtocolCancel" class="btn-ghost" onclick="cancelPrecisionProtocolDraft()" hidden>取消修改</button>
+                          <button type="button" id="btnPrecisionProtocolReset" class="btn-ghost" onclick="savePrecisionProtocolOverride(true)" hidden>恢复自动接入</button>
+                          <button type="button" id="btnPrecisionProtocolCheck" class="btn-ghost" onclick="checkPrecisionProtocolConfig()">检查接入（不生图）</button>
+                        </div>
+                        <small id="precisionProtocolStatus" role="status" aria-live="polite"></small>
+                      </div>
                       <div id="precisionEditCompatibilityOption" class="precision-model-compatibility hidden">
                         <input type="checkbox" id="precisionEditGptImage2Compatibility">
                         <label for="precisionEditGptImage2Compatibility" data-i18n="creator.precision_edit_compatibility_label">按 GPT Image 2 精准改图方式调用</label>
                         <span class="precision-help-tip"><button type="button" class="precision-help-trigger" aria-describedby="precisionEditCompatibilityHelp" aria-label="查看兼容方式说明" data-i18n-aria-label="creator.precision_edit_compatibility_help_label">?</button><span id="precisionEditCompatibilityHelp" class="precision-help-content" role="tooltip" data-i18n="creator.precision_edit_compatibility_help">仅在你已验证当前模型是 GPT Image 2 的上游别名时选择；真实模型 ID 仍会原样提交。</span></span>
                       </div>
                       <div class="precision-model-authorization-actions">
-                        <button type="button" id="btnPrecisionAuthorizeModel" class="btn-secondary" onclick="authorizePrecisionEditModel()" data-i18n="creator.precision_edit_authorize" disabled>确认支持并启用</button>
-                        <button type="button" id="btnPrecisionRevokeModel" class="btn-ghost hidden" onclick="revokePrecisionEditModel()" data-i18n="creator.precision_edit_revoke" disabled>撤销确认</button>
+                        <button type="button" id="btnPrecisionAuthorizeModel" class="btn-secondary precision-toggle-action" onclick="authorizePrecisionEditModel()" data-i18n="creator.precision_edit_authorize" disabled>确认支持并启用</button>
+                        <button type="button" id="btnPrecisionRevokeModel" class="btn-ghost hidden" onclick="revokePrecisionEditModel()" disabled>停用本模型改图</button>
                       </div>
-                      <small id="precisionModelAuthorizationHint" data-i18n="creator.precision_edit_authorize_hint">仅在你确认该端点和模型支持 OpenAI 兼容图片编辑时启用。</small>
+                      <small id="precisionModelAuthorizationHint">启用 / 停用只管理改图许可；恢复自动接入只清除手动连接设置，二者互不替代。</small>
                       </div>
                     </details>
                   </aside>
@@ -1711,11 +1751,11 @@
       <p id="precisionDocsIntro" class="precision-docs-intro" data-i18n="creator.precision_docs_intro">在一个工作台中完成轻量批注、透明抠图、纯尺寸扩图和版本比较；这里不会提供图层栈或全局滤镜。</p>
       <section class="precision-quick-navigation" aria-labelledby="precisionQuickNavigationTitle">
         <h3 id="precisionQuickNavigationTitle" data-i18n="creator.precision_start_title">快速上手</h3>
-        <p data-i18n="creator.precision_start_nav_hint">按顺序完成前四步；点击步骤可定位操作区，不会提交任务。以后可从“文档说明”再次打开。</p>
+        <p data-i18n="creator.precision_start_nav_hint">按引导完成模型、尺寸和构图设置；点击任一项可定位操作区，不会提交任务。以后可从“文档说明”再次打开。</p>
         <ol class="precision-docs-steps">
           <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('model')" data-i18n="creator.precision_start_nav_model">选择模型</button><p data-i18n="creator.precision_start_model">第一步：选模型端点 → 在“显示模型”中勾选并确定 → 选择编辑模型。显示“待确认”时，仅在确认支持改图后启用；没有端点请先到“模型设置”配置。</p></li>
           <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('source')" data-i18n="creator.precision_start_nav_source">加载底图</button><p data-i18n="creator.precision_start_source">本地上传或从图库选择一张图。局部改图时，用画笔或形状标出位置，并填写修改说明。</p></li>
-          <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('size')" data-i18n="creator.precision_start_nav_size">尺寸与构图</button><p data-i18n="creator.precision_start_size">改变尺寸：1. 选尺寸方式（模型尺寸严格匹配；裁切适配会本地裁切缩放）；2. 选预设，按提示授权试用；3. 选构图说明并按需修改。加载底图后即可点击“生成图片”。</p></li>
+          <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('size')" data-i18n="creator.precision_start_nav_size">尺寸与构图</button><p data-i18n="creator.precision_start_size">改变尺寸时，先选尺寸方式，再选预设；模型尺寸会严格校验，裁切适配会在本地裁切或缩放。按提示授权试用后，选择构图说明并按需修改，加载底图即可生成。</p></li>
           <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('generate')" data-i18n="creator.precision_start_nav_generate">生成与查看</button><p data-i18n="creator.precision_start_generate">检查底图和说明后，点击“生成图片”提交一次在线请求，可能计费；失败不会自动重试。完成后切换版本查看尺寸、时间及前后对比。</p></li>
           <li><button type="button" class="btn-ghost" onclick="navigatePrecisionQuickStart('local')" data-i18n="creator.precision_start_nav_local">可选：本地处理</button><p data-i18n="creator.precision_start_local">人物抠图、边缘精修在本地完成，可切换算法比较效果；AI 消除需涂选区域，再用所选在线模型生成。</p></li>
         </ol>
