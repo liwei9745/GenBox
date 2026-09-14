@@ -105,10 +105,34 @@
   selectProjection('precisionProtocolSelect', '接入方式', 'segments');
   selectProjection('precisionProtocolSizeModel', '模型尺寸目录', 'composition');
   selectProjection('precisionProtocolProfile', '图片上传方式', 'composition');
+  selectProjection('precisionResizeMode', '尺寸方式', 'segments');
   selectProjection('precisionResizePreset', '模型尺寸预设', 'size');
   selectProjection('precisionResizePromptPreset', '构图说明预设', 'composition');
   switchProjection('btnPrecisionAuthorizeModel', 'btnPrecisionRevokeModel', '当前模型改图许可');
   switchProjection('btnPrecisionConfirmResizeSize', 'btnPrecisionRevokeResizeSize', '当前尺寸试用授权');
+  ['btnPrecisionProtocolReset', 'btnPrecisionProtocolCheck'].forEach(function (id) {
+    var source = document.getElementById(id);
+    if (!source) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'precision-trial-command';
+    button.textContent = source.textContent;
+    source.before(button);
+    source.classList.add('precision-trial-source');
+    button.onclick = function () { if (enabled && !source.disabled) source.click(); refresh(); };
+    projections.push(function () { button.disabled = source.disabled; button.hidden = source.hidden; button.textContent = source.textContent; });
+  });
+  var monitor = document.getElementById('precisionTaskMonitor');
+  if (monitor) {
+    var icon = monitor.querySelector('.precision-task-heading-icon');
+    if (icon) icon.innerHTML = '<svg class="precision-trial-progress-svg" viewBox="0 0 24 24" aria-hidden="true"><circle class="track" cx="12" cy="12" r="9"></circle><path class="pulse" d="M12 3a9 9 0 0 1 9 9"></path></svg>';
+    projections.push(function () {
+      var state = monitor.className || '';
+      monitor.classList.toggle('precision-trial-progress-active', /running|pending|generating|queued/.test(state));
+      monitor.classList.toggle('precision-trial-progress-success', /completed|success/.test(state));
+      monitor.classList.toggle('precision-trial-progress-failed', /failed|error/.test(state));
+    });
+  }
   var composition = document.querySelector('.precision-trial-options.composition');
   if (composition) {
     var label = document.querySelector('label[for="precisionResizePromptPreset"]');

@@ -19,6 +19,16 @@
 .precision-ui-trial .precision-trial-action-button { min-height:36px; border-radius:7px; border:1px solid var(--border); background:var(--bg-surface); }
 .precision-ui-trial .precision-trial-local-card { border-radius:8px; border:1px solid var(--border); box-shadow:none; }
 .precision-ui-trial .precision-guidance-pill { border-radius:8px; }
+.precision-ui-trial .precision-trial-command { flex:1; min-height:34px; border:1px solid var(--border); border-radius:7px; background:var(--bg-surface); color:var(--text-primary); cursor:pointer; }
+.precision-ui-trial .precision-trial-command:disabled { opacity:.5; cursor:not-allowed; }
+.precision-trial-progress-svg { width:18px; height:18px; vertical-align:middle; }
+.precision-trial-progress-svg .track { fill:none; stroke:currentColor; stroke-width:2; opacity:.25; }
+.precision-trial-progress-svg .pulse { fill:none; stroke:currentColor; stroke-width:2.5; stroke-linecap:round; }
+.precision-trial-progress-active .precision-trial-progress-svg .pulse { transform-origin:12px 12px; animation:precision-trial-spin 1s linear infinite; }
+.precision-trial-progress-success .precision-trial-progress-svg { color:#258553; }
+.precision-trial-progress-failed .precision-trial-progress-svg { color:#c2413b; }
+@keyframes precision-trial-spin { to { transform:rotate(360deg); } }
+@media(prefers-reduced-motion:reduce) { .precision-trial-progress-active .precision-trial-progress-svg .pulse { animation:none; } }
 .precision-ui-trial .precision-trial-aspect { display:inline-block; flex-shrink:0; border:2px solid currentColor; border-radius:2px; color:var(--accent); }
 .precision-ui-trial .precision-trial-switch { display:flex!important; align-items:center; gap:10px; width:100%; padding:8px 0; border:0; background:transparent; color:var(--text-primary); cursor:pointer; font-size:12px; text-align:left; }
 .precision-trial-track { display:block; position:relative; flex:0 0 44px; height:24px; border-radius:20px; background:#929ba4; box-shadow:inset 0 1px 3px #0002; }
