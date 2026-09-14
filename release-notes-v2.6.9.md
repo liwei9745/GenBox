@@ -30,6 +30,8 @@ A resolution tier is not a universal 4096-pixel side cap: matching `3392x5056`
 output has already been recorded. These warnings do not revoke saved grants,
 modify GPT presets, or certify other gateways. HTTP 503, credentials and
 transport errors are not size-support evidence.
+This release does not claim universal support across third-party endpoints,
+aliases or vendors.
 
 | Aspect | 1K tier | 2K tier | 4K tier |
 |---|---|---|---|
