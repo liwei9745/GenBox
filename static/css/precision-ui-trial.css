@@ -1,0 +1,30 @@
+.precision-trial-toolbar { display:flex; justify-content:flex-end; padding:4px 0; }
+.precision-trial-toolbar button { font-size:11px; color:var(--text-secondary); background:transparent; border:1px solid var(--border); border-radius:6px; padding:5px 9px; cursor:pointer; }
+.precision-trial-options,.precision-trial-switch { display:none!important; }
+.precision-ui-trial .precision-trial-source { display:none!important; }
+.precision-ui-trial .precision-trial-options { display:grid!important; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin:6px 0; }
+.precision-ui-trial .precision-trial-options.size { max-height:260px; overflow:auto; padding:3px; }
+.precision-ui-trial .precision-trial-options button { min-width:0; min-height:42px; padding:8px; display:flex; align-items:center; gap:9px; border:1px solid var(--border); border-radius:7px; color:var(--text-primary); background:var(--bg-surface); cursor:pointer; font-size:11px; text-align:left; overflow-wrap:anywhere; }
+.precision-ui-trial .precision-trial-options button[aria-pressed=true] { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 10%,var(--bg-surface)); box-shadow:0 0 0 1px var(--accent); }
+.precision-ui-trial .precision-trial-options.segments { grid-template-columns:1fr; }
+.precision-ui-trial .precision-trial-composition-field { display:flex; flex-direction:column; gap:6px; padding:8px; border:1px solid var(--border); border-radius:8px; background:color-mix(in srgb,var(--accent) 4%,var(--bg-surface)); }
+.precision-ui-trial .precision-trial-composition-field > select { display:none!important; }
+.precision-ui-trial .precision-trial-composition-field > .precision-trial-options { order:2; margin-top:0; }
+.precision-ui-trial .precision-trial-composition-field::before { content:"构图说明"; font-size:12px; font-weight:600; color:var(--text-primary); }
+.precision-ui-trial .precision-trial-composition-field::after { content:"选择卡片后会填入下方说明，可继续编辑"; order:1; font-size:11px; color:var(--text-muted); }
+.precision-ui-trial .precision-trial-smart-tools { display:flex; flex-direction:column; gap:8px; }
+.precision-ui-trial .precision-trial-action-card { padding:8px; border:1px solid var(--border); border-radius:8px; background:color-mix(in srgb,var(--accent) 3%,var(--bg-surface)); }
+.precision-ui-trial .precision-trial-action-card > span { display:block; margin-bottom:6px; font-size:11px; font-weight:600; color:var(--text-secondary); }
+.precision-ui-trial .precision-trial-action-card > div { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.precision-ui-trial .precision-trial-action-button { min-height:36px; border-radius:7px; border:1px solid var(--border); background:var(--bg-surface); }
+.precision-ui-trial .precision-trial-local-card { border-radius:8px; border:1px solid var(--border); box-shadow:none; }
+.precision-ui-trial .precision-guidance-pill { border-radius:8px; }
+.precision-ui-trial .precision-trial-aspect { display:inline-block; flex-shrink:0; border:2px solid currentColor; border-radius:2px; color:var(--accent); }
+.precision-ui-trial .precision-trial-switch { display:flex!important; align-items:center; gap:10px; width:100%; padding:8px 0; border:0; background:transparent; color:var(--text-primary); cursor:pointer; font-size:12px; text-align:left; }
+.precision-trial-track { display:block; position:relative; flex:0 0 44px; height:24px; border-radius:20px; background:#929ba4; box-shadow:inset 0 1px 3px #0002; }
+.precision-trial-track::after { content:""; position:absolute; left:3px; top:3px; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 1px 3px #0004; transition:transform .16s ease; }
+.precision-trial-switch[aria-checked=true] .precision-trial-track { background:#258553; }
+.precision-trial-switch[aria-checked=true] .precision-trial-track::after { transform:translateX(20px); }
+.precision-ui-trial button:disabled { opacity:.5; cursor:not-allowed; }
+.precision-ui-trial .precision-trial-options button:focus-visible,.precision-trial-switch:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+@media(prefers-reduced-motion:reduce) { .precision-trial-track::after { transition:none; } }

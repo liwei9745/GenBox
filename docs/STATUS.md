@@ -1,5 +1,19 @@
 # Current Project Status
 
+## 2026-09-14 Reversible UI Trial
+
+- LOCAL ONLY: opt-in "trial UI" control above the precision model picker.
+  Size cards include aspect outlines; composition and connection choices
+  project existing selects; switches delegate to existing consent handlers.
+- Restore original UI with the same toggle. No grants or request contracts
+  change on toggling; no paid calls, release changes or push in this pass.
+- VERIFIED: two Playwright tests pass (original protocol workflow plus trial
+  selection/delegation/restore at desktop and mobile widths); trial JS syntax
+  passes. Full visual acceptance remains user-owned.
+- RESUME: refresh the 8895 lab and select the trial control above model
+  selection. Keep this local until accepted; remove only the trial includes
+  and trial files if rejected, not existing precision development.
+
 ## Release Candidate v2.6.9
 
 - **CURRENT SCOPE:** Preserve user-accepted GPT workflows and consolidate
