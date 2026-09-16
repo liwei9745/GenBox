@@ -14842,7 +14842,7 @@ function renderProviderEdit() {
       var modelOpts = '';
       var modelCategory = providerModelCategoryFilters[idx] || 'all';
       if (p.models && p.models.length) {
-        var filteredModels = filterModelsByType(p.models, p.type);
+        var filteredModels = filterModelsByType(p.models, p.type, p);
         if (modelCategory !== 'all') {
           filteredModels = filteredModels.filter(function(model) {
             return providerModelCategory(model, p.type) === modelCategory;
@@ -14977,7 +14977,7 @@ function renderProviderEdit() {
               '<div style="display:flex;gap:6px;align-items:center;margin-bottom:3px;">' +
                 '<span style="font-size:10px;color:var(--text-muted);">' + i18nText('provider.default_model') + '</span>' +
                 '<span style="font-size:9px;color:var(--accent);">' + i18nText('provider.fetch_from_upstream') + '</span>' +
-                (p.models && p.models.length ? '<span style="font-size:9px;color:var(--text-muted);">(' + filterModelsByType(p.models, p.type).length + '/' + p.models.length + ' ' + i18nText('provider.match_count_suffix') + ' ' + p.type + ')</span>' : '') +
+                (p.models && p.models.length ? '<span style="font-size:9px;color:var(--text-muted);">(' + filterModelsByType(p.models, p.type, p).length + '/' + p.models.length + ' ' + i18nText('provider.match_count_suffix') + ' ' + p.type + ')</span>' : '') +
               '</div>' +
               '<div class="provider-model-filter" role="group" aria-label="模型能力筛选">' +
                 '<button type="button" class="' + (modelCategory === 'all' ? 'active' : '') + '" onclick="setProviderModelCategory(' + idx + ',\'all\')">全部</button>' +
@@ -16468,11 +16468,28 @@ function getVideoProviderCapabilities(p) {
   return capSet;
 }
 
-function filterModelsByType(models, providerType) {
+function getProviderModelCapabilityRecord(provider, model) {
+  var records = provider && provider.model_capabilities;
+  var record = records && typeof records === 'object' ? records[model] : null;
+  return record && typeof record === 'object' ? record : {};
+}
+
+function modelHasCapability(provider, model, keys) {
+  var record = getProviderModelCapabilityRecord(provider, model);
+  for (var i = 0; i < keys.length; i++) {
+    if (record[keys[i]] === true) return true;
+  }
+  return false;
+}
+
+function filterModelsByType(models, providerType, provider) {
   if (!models || !models.length) return models;
   return models.filter(function(m) {
     var ml = m.toLowerCase();
+    var record = provider ? getProviderModelCapabilityRecord(provider, m) : {};
     if (providerType === 'image') {
+      if (record.image_generation === false || record.t2i === false) return false;
+      if (record.image_generation === true || record.t2i === true) return true;
       // 排除视频模型
       if (ml.indexOf('t2v') !== -1 || ml.indexOf('i2v') !== -1 || ml.indexOf('r2v') !== -1) return false;
       if (ml.indexOf('veo_') !== -1) return false;
@@ -16480,6 +16497,8 @@ function filterModelsByType(models, providerType) {
       if (ml.indexOf('video') !== -1 && ml.indexOf('image') === -1) return false;
       // 排除 LLM/文本模型（非生图模型）
       if ((ml.indexOf('gpt-4') !== -1 || ml.indexOf('gpt-5') !== -1 || ml.indexOf('grok-4') !== -1) && ml.indexOf('image') === -1) return false;
+      if (ml.indexOf('gemini') === 0 && ml.indexOf('image') === -1 && ml.indexOf('imagen') === -1 &&
+          ml.indexOf('nano-banana') === -1 && ml.indexOf('banana') === -1) return false;
       if (ml.indexOf('reasoning') !== -1 || ml.indexOf('chat') !== -1 || ml.indexOf('text-') === 0) return false;
       if (ml === 'auto') return false;
       if (ml.indexOf('codex') !== -1 && ml.indexOf('image') === -1) return false;
@@ -16487,6 +16506,8 @@ function filterModelsByType(models, providerType) {
       return true;
     }
     if (providerType === 'video') {
+      if (record.video_generation === false || record.t2v === false) return false;
+      if (record.video_generation === true || record.t2v === true || record.i2v === true) return true;
       // 生视频模型：包含 t2v, i2v, r2v, veo_, interpolation, video
       if (ml.indexOf('t2v') !== -1 || ml.indexOf('i2v') !== -1 || ml.indexOf('r2v') !== -1) return true;
       if (ml.indexOf('veo_') !== -1 || ml.indexOf('veo-') !== -1) return true;
