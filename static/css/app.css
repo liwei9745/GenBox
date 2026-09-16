@@ -1717,6 +1717,27 @@ textarea {
 .provider-auto-protocol-hint[data-protocol="gemini"] .provider-auto-protocol-dot { background: #4285f4; }
 .provider-auto-protocol-hint[data-protocol="openai"] .provider-auto-protocol-dot { background: #10a37f; }
 .provider-auto-protocol-hint[data-protocol="unknown"] .provider-auto-protocol-dot { background: #f59e0b; }
+.provider-model-filter {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin: 0 0 6px;
+}
+.provider-model-filter button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+}
+.provider-model-filter button:hover,
+.provider-model-filter button.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
 }
 
 /* Add Provider Type Modal */

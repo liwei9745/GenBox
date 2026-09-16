@@ -14740,6 +14740,7 @@ function addProviderWithType(type) {
 }
 
 var providerEditOpenIdx = -1;
+var providerModelCategoryFilters = {};
 
 function toggleProviderEdit(idx) {
   providerEditOpenIdx = providerEditOpenIdx === idx ? -1 : idx;
@@ -14839,8 +14840,15 @@ function renderProviderEdit() {
       var et = p.endpoint_type || 'auto';
       var inferredProtocol = et === 'auto' ? inferProviderProtocol(p.base_url, p.model) : et;
       var modelOpts = '';
+      var modelCategory = providerModelCategoryFilters[idx] || 'all';
       if (p.models && p.models.length) {
         var filteredModels = filterModelsByType(p.models, p.type);
+        if (modelCategory !== 'all') {
+          filteredModels = filteredModels.filter(function(model) {
+            return providerModelCategory(model, p.type) === modelCategory;
+          });
+          if (p.model && filteredModels.indexOf(p.model) === -1) filteredModels.unshift(p.model);
+        }
         var groupFn = p.type === 'video' ? groupVideoModels : (p.type === 'image' ? groupImageModels : null);
         modelOpts = (groupFn && filteredModels.length > 3)
           ? buildModelOptsGrouped(filteredModels, p.model || '', groupFn)
@@ -14970,6 +14978,13 @@ function renderProviderEdit() {
                 '<span style="font-size:10px;color:var(--text-muted);">' + i18nText('provider.default_model') + '</span>' +
                 '<span style="font-size:9px;color:var(--accent);">' + i18nText('provider.fetch_from_upstream') + '</span>' +
                 (p.models && p.models.length ? '<span style="font-size:9px;color:var(--text-muted);">(' + filterModelsByType(p.models, p.type).length + '/' + p.models.length + ' ' + i18nText('provider.match_count_suffix') + ' ' + p.type + ')</span>' : '') +
+              '</div>' +
+              '<div class="provider-model-filter" role="group" aria-label="模型能力筛选">' +
+                '<button type="button" class="' + (modelCategory === 'all' ? 'active' : '') + '" onclick="setProviderModelCategory(' + idx + ',\'all\')">全部</button>' +
+                '<button type="button" class="' + (modelCategory === 'image' ? 'active' : '') + '" onclick="setProviderModelCategory(' + idx + ',\'image\')">图像</button>' +
+                '<button type="button" class="' + (modelCategory === 'video' ? 'active' : '') + '" onclick="setProviderModelCategory(' + idx + ',\'video\')">视频</button>' +
+                '<button type="button" class="' + (modelCategory === 'text' ? 'active' : '') + '" onclick="setProviderModelCategory(' + idx + ',\'text\')">文本</button>' +
+                '<button type="button" class="' + (modelCategory === 'multimodal' ? 'active' : '') + '" onclick="setProviderModelCategory(' + idx + ',\'multimodal\')">多模态</button>' +
               '</div>' +
               '<div style="display:flex;gap:6px;">' +
                 '<select class="modal-input" style="flex:1;padding:6px 8px;font-size:11px;" id="model_' + idx + '">' + modelOpts + '</select>' +
@@ -15122,6 +15137,28 @@ function saveProvider(idx) {
       renderProviderEdit();
     });
   }).catch(function(e){ if (e.message !== 'AUTH_REQUIRED') setStatus(i18nText('common.save_failed_colon') + e.message); });
+}
+
+function providerModelCategory(model, providerType) {
+  var name = String(model || '').toLowerCase();
+  if (providerType === 'video') return 'video';
+  if (providerType === 'llm') return 'text';
+  if (name.indexOf('video') !== -1 || name.indexOf('t2v') !== -1 ||
+      name.indexOf('i2v') !== -1 || name.indexOf('veo') !== -1 ||
+      name.indexOf('sora') !== -1 || name.indexOf('kling') !== -1) return 'video';
+  if (name.indexOf('gemini') !== -1 || name.indexOf('gpt') !== -1 ||
+      name.indexOf('qwen') !== -1 || name.indexOf('claude') !== -1 ||
+      name.indexOf('chat') !== -1 || name.indexOf('text') !== -1) {
+    return name.indexOf('image') !== -1 || name.indexOf('vision') !== -1 ? 'multimodal' : 'text';
+  }
+  if (name.indexOf('image') !== -1 || name.indexOf('imagen') !== -1 ||
+      name.indexOf('diffusion') !== -1 || name.indexOf('flux') !== -1) return 'image';
+  return 'multimodal';
+}
+
+function setProviderModelCategory(idx, category) {
+  providerModelCategoryFilters[idx] = category || 'all';
+  renderProviderEdit();
 }
 
 function toggleProviderEnabledControl(idx) {

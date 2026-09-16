@@ -12,6 +12,7 @@ def test_provider_enabled_action_keeps_save_controls_and_default_state(tmp_path)
     source = (ROOT / "static/js/app-all.js").read_text(encoding="utf-8")
     renderer = source[source.index("function renderProviderEdit()"):source.index("function saveProvider(idx)")]
     protocol_helper = source[source.index("function inferProviderProtocol"):source.index("function groupVideoModels")]
+    category_state = "var providerModelCategoryFilters = {};"
     toggle = source[source.index("function toggleProviderEnabledControl(idx)"):source.index("function updateCapsSection(idx)")]
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -32,7 +33,7 @@ def test_provider_enabled_action_keeps_save_controls_and_default_state(tmp_path)
         }""")
         # about:blank has no storage origin; the production renderer expects one.
         page.evaluate("Object.defineProperty(window, 'localStorage', {value: {getItem: () => null}})")
-        page.add_script_tag(content=protocol_helper + "\n" + renderer + "\n" + toggle)
+        page.add_script_tag(content=protocol_helper + "\n" + category_state + "\n" + renderer + "\n" + toggle)
         page.evaluate("renderProviderEdit()")
         action = page.locator("#enToggle_0")
         expect(action).to_have_text("停止使用")
