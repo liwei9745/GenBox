@@ -91,6 +91,7 @@ from providers import (
     ProviderResponseValidationError,
     _decode_generated_image_base64,
     _endpoint_failure_summary,
+    _get_proxy_url,
     _parse_provider_json_response,
     _provider_error_text,
     _save_image,
@@ -3401,14 +3402,30 @@ async def test_provider(provider_id: str):
             for ep in endpoints:
                 ep_start = _time.time()
                 try:
-                    # 轻量连通性检查：GET /models 或简单请求
                     _verify_ssl = verify_ssl_enabled()
-                    async with _httpx.AsyncClient(timeout=15.0, verify=_verify_ssl) as client:
-                        headers = {"Authorization": f"Bearer {ep.key}"}
-                        # 尝试 models 端点
-                        r = await client.get(f"{ep.url.rstrip('/')}/models", headers=headers)
+                    async with _httpx.AsyncClient(
+                        timeout=15.0, verify=_verify_ssl, proxy=_get_proxy_url(p)
+                    ) as client:
+                        endpoint_type = str(getattr(p, "endpoint_type", "auto") or "auto").strip().lower()
+                        base_url = ep.url.rstrip("/")
+                        effective = p.model_copy(update={"base_url": ep.url})
+                        is_gemini = (resolve_image_protocol(effective) if endpoint_type == "auto" else endpoint_type) == "gemini"
+                        if is_gemini:
+                            if base_url.endswith("/v1beta") or base_url.endswith("/v1"):
+                                base_url = base_url.rsplit("/", 1)[0]
+                            r = await _stream_bounded_provider_response(
+                                client, "GET",
+                                f"{base_url}/v1beta/models",
+                                headers={"x-goog-api-key": ep.key},
+                            )
+                        else:
+                            r = await _stream_bounded_provider_response(
+                                client, "GET",
+                                f"{base_url}/models",
+                                headers={"Authorization": f"Bearer {ep.key}"},
+                            )
                         latency = round((_time.time() - ep_start) * 1000)
-                        if r.status_code in (200, 401):
+                        if r.status_code == 200:
                             ep_results.append({
                                 "url": ep.url,
                                 "name": ep.name or ep.display_name,
@@ -3434,7 +3451,7 @@ async def test_provider(provider_id: str):
                         "success": False,
                         "latency_ms": latency,
                         "status_code": 0,
-                        "error": str(e)[:100]
+                        "error": (_provider_error_text(e, p) or type(e).__name__)[:200]
                     })
 
             any_ok = any(ep["success"] for ep in ep_results)
@@ -3489,7 +3506,7 @@ async def fetch_models(provider_id: str):
             except Exception as e:
                 return {
                     "success": False,
-                    "detail": f"拉取失败: {_provider_error_text(e, p)}。请确认 URL 支持 GET /v1/models 接口，或手动输入模型名称。",
+                    "detail": f"拉取失败: {_provider_error_text(e, p)}。Gemini 原生端点需使用 GET /v1beta/models；OpenAI 兼容端点需使用 GET /v1/models，亦可手动输入模型名称。",
                     "provider_type": p.type,
                 }
     raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' 不存在")

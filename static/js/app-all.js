@@ -113,7 +113,8 @@ var precisionResizeSavedPresets = [];
 var precisionResizePresetIdCounter = 0;
 var precisionResizeCapabilityPending = null;
 var precisionEditSession = { source: null, versions: [], selectedVersionId: 'original', baseVersionId: 'original', taskBaseVersionId: null, view: 'after', taskId: null };
-var precisionWorkflowHistoryState = { items: [], calendarItems: [], selectedWorkflow: null, selectedWorkflowId: '', listRequest: 0, detailRequest: 0, loaded: false, loading: false, filterOpener: null, actionOpener: null };
+var precisionWorkflowHistoryState = { items: [], calendarItems: [], selectedWorkflow: null, selectedWorkflowId: '', listRequest: 0, detailRequest: 0, loaded: false, loading: false, loadedAt: 0, filterOpener: null, actionOpener: null };
+var precisionWorkflowHistoryHistoryPromise = null;
 var precisionComparePointerId = null;
 var precisionComparePointerTarget = null;
 if (typeof window !== 'undefined' && typeof window.__genboxPrecisionCompareResizeCleanup === 'function') {
@@ -333,7 +334,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (e.key === 'Enter' && !e.isComposing && !e.shiftKey && !e.altKey) {
       var target = e.target;
       var tag = target && target.tagName ? target.tagName.toLowerCase() : '';
-      if (tag !== 'textarea' && tag !== 'select' && !target.isContentEditable) {
+      if (!e.defaultPrevented && !e.repeat && target && !target.isContentEditable &&
+          !target.closest('input, textarea, select, button, a, summary, [role="dialog"], [role="switch"]') &&
+          currentMode === 'precision_edit' && document.getElementById('pageGenerate').classList.contains('active')) {
         var generate = document.getElementById('btnGen');
         if (generate && !generate.disabled && !genCurrentGenId) {
           e.preventDefault();
@@ -5732,7 +5735,18 @@ function renderPrecisionSessionShowcase(entries) {
   entries = (entries || []).filter(function(entry) { return entry && entry.data; });
   var source = entries[0] || null;
   var results = entries.slice(1);
-  var historyPosters = precisionWorkflowHistoryPosterMarkup(precisionWorkflowHistoryState.items || []);
+  var showcase = document.getElementById('precisionSessionShowcase');
+  var historyItems = precisionWorkflowHistoryState.items || [];
+  var historyPosters = { markup: '', count: 0 };
+  historyItems.forEach(function(workflow) {
+    (workflow && workflow.versions || []).forEach(function(version) {
+      if (version && version.kind === 'result' && version.available && version.thumbnail) historyPosters.count += 1;
+    });
+  });
+  // Defer building dozens of poster DOM nodes until the drawer is visible.
+  if (showcase && showcase.classList.contains('is-expanded')) {
+    historyPosters = precisionWorkflowHistoryPosterMarkup(historyItems);
+  }
   if (count) count.textContent = String(results.length + historyPosters.count);
   if (gallery) gallery.innerHTML = results.length || historyPosters.markup ? results.map(function(entry, index) {
     var selected = entry.id === precisionEditSession.selectedVersionId;
@@ -5750,6 +5764,7 @@ function setPrecisionSessionShowcaseOpen(open, restoreFocus) {
   var wasOpen = showcase.classList.contains('is-expanded');
   var nextOpen = !!open;
   showcase.classList.toggle('is-expanded', nextOpen);
+  renderPrecisionSessionShowcase(precisionEditSession.source ? [precisionEditSession.source].concat(precisionEditSession.versions) : []);
   trigger.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
   content.setAttribute('aria-hidden', nextOpen ? 'false' : 'true');
   if (nextOpen) content.removeAttribute('inert');
@@ -6032,6 +6047,17 @@ function renderPrecisionWorkflowHistory() {
 }
 
 function loadPrecisionWorkflowHistory(force) {
+  var now = Date.now();
+  if (!force && precisionWorkflowHistoryState.loaded &&
+      precisionWorkflowHistoryState.loadedAt && now - precisionWorkflowHistoryState.loadedAt < 30000) {
+    renderPrecisionWorkflowHistory();
+    renderPrecisionWorkflowHistoryCalendar();
+    renderPrecisionSessionShowcase(precisionEditSession.source ? [precisionEditSession.source].concat(precisionEditSession.versions) : []);
+    return Promise.resolve(true);
+  }
+  if (!force && precisionWorkflowHistoryState.loading && precisionWorkflowHistoryHistoryPromise) {
+    return precisionWorkflowHistoryHistoryPromise;
+  }
   var filters = precisionWorkflowHistoryFilters();
   if (!force && precisionWorkflowHistoryState.loading) return false;
   var request = ++precisionWorkflowHistoryState.listRequest;
@@ -6040,7 +6066,7 @@ function loadPrecisionWorkflowHistory(force) {
   var query = new URLSearchParams({ limit: '100' });
   if (filters.dateFrom) query.set('date_from', filters.dateFrom);
   if (filters.dateTo) query.set('date_to', filters.dateTo);
-  return _authFetch('/api/precision/workflows?' + query.toString()).then(function(response) {
+  precisionWorkflowHistoryHistoryPromise = _authFetch('/api/precision/workflows?' + query.toString()).then(function(response) {
     if (!response.ok) throw new Error('precision_workflow_history_load_failed');
     return response.json();
   }).then(function(data) {
@@ -6055,6 +6081,7 @@ function loadPrecisionWorkflowHistory(force) {
       if (latest) calendarState.anchor = new Date(latest.getFullYear(), latest.getMonth(), 1);
     }
     precisionWorkflowHistoryState.loaded = true;
+    precisionWorkflowHistoryState.loadedAt = Date.now();
     precisionWorkflowHistoryState.loading = false;
     if (!precisionWorkflowHistoryState.items.some(function(item) { return item && item.workflow_id === precisionWorkflowHistoryState.selectedWorkflowId; })) {
       precisionWorkflowHistoryState.selectedWorkflow = null;
@@ -6074,6 +6101,8 @@ function loadPrecisionWorkflowHistory(force) {
     renderPrecisionWorkflowHistoryCalendar();
     renderPrecisionSessionShowcase(precisionEditSession.source ? [precisionEditSession.source].concat(precisionEditSession.versions) : []);
     return false;
+  }).finally(function() {
+    precisionWorkflowHistoryHistoryPromise = null;
   });
 }
 
@@ -9858,6 +9887,8 @@ function revokePrecisionEditModel() {
 // Provider 加载
 // ═══════════════════════════════════════════════════════════════════
 function loadProviders(attempt) {
+  var promiseState = typeof window !== 'undefined' ? window : {};
+  if (promiseState.providersLoadPromise && !attempt) return promiseState.providersLoadPromise;
   var effectiveAttempt = _captureLoginAttempt(attempt);
   precisionEditModelPickerReady = false;
   var precisionEndpoint = document.getElementById('precisionEditProviderEndpoint');
@@ -9865,7 +9896,7 @@ function loadProviders(attempt) {
   if (precisionEndpoint) precisionEndpoint.disabled = true;
   if (precisionModel) precisionModel.disabled = true;
   updatePrecisionEditAuthorizationControl();
-  return _authFetch('/api/providers').then(function(r){
+  promiseState.providersLoadPromise = _authFetch('/api/providers').then(function(r){
     if (!_isCurrentLoginAttempt(effectiveAttempt)) return null;
     return r.json();
   }).then(function(data){
@@ -9889,7 +9920,8 @@ function loadProviders(attempt) {
     if (_isCurrentLoginAttempt(effectiveAttempt) && e.message !== 'AUTH_REQUIRED') {
       setStatus(i18nText('provider.load_failed'));
     }
-  });
+  }).finally(function(){ promiseState.providersLoadPromise = null; });
+  return promiseState.providersLoadPromise;
 }
 
 function onImageModelChange(pid, newModel) {
@@ -14821,8 +14853,9 @@ function renderProviderEdit() {
       }
       var keyVal = '';
       var keyPlaceholder = p.has_key ? i18nText('provider.masked_configured') : i18nText('provider.api_key_placeholder');
-      var statusColor = p.enabled ? '#22c55e' : '#6b7280';
-      var statusTitle = p.enabled ? i18nText('dashboard.enabled') : i18nText('dashboard.disabled');
+      var providerEnabled = p.enabled !== false;
+      var statusColor = providerEnabled ? '#22c55e' : '#6b7280';
+      var statusTitle = providerEnabled ? i18nText('dashboard.enabled') : i18nText('dashboard.disabled');
 
       // 单个 Provider 卡片
       html += '<div style="margin-bottom:8px;border:1px solid ' + (isOpen ? group.accent : 'var(--border)') + ';border-radius:8px;background:var(--bg-card);overflow:hidden;transition:border-color 0.2s;">' +
@@ -14977,10 +15010,9 @@ function renderProviderEdit() {
               '<div style="font-size:9px;color:var(--text-muted);margin-top:2px;">适用于可直连的 API（如国内服务商），不受全局代理影响</div>' +
             '</div>' +
             // 启用 + 按钮
-            '<div style="display:flex;align-items:center;justify-content:space-between;">' +
-              '<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-secondary);cursor:pointer;">' +
-                '<input type="checkbox" id="en_' + idx + '" ' + (p.enabled?'checked':'') + ' style="accent-color:var(--accent);width:14px;height:14px;"> 启用' +
-              '</label>' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
+              '<input type="checkbox" id="en_' + idx + '" ' + (p.enabled !== false?'checked':'') + ' hidden>' +
+              '<button type="button" class="btn-primary" id="enToggle_' + idx + '" onclick="toggleProviderEnabledControl(' + idx + ')" style="padding:7px 12px;font-size:11px;font-weight:700;border-radius:7px;white-space:nowrap;">' + (providerEnabled ? '停止使用' : '启用模型') + '</button>' +
               '<div style="display:flex;gap:6px;">' +
                 '<button class="btn-primary" onclick="saveProvider(' + idx + ')" style="padding:5px 14px;font-size:11px;">保存</button>' +
                 '<button class="btn-secondary" onclick="testProvider(\'' + p.id + '\')" style="padding:5px 10px;font-size:11px;">测试</button>' +
@@ -15024,12 +15056,6 @@ function renderProviderEdit() {
       var updateContent = updateSection.querySelector('#updateContent');
       if (updateContent) updateContent.textContent = i18nText('update.checking_progress');
     }
-    body.querySelectorAll('input[id^="en_"]').forEach(function(input){
-      var label = input.parentNode;
-      if (!label) return;
-      label.textContent = ' ' + i18nText('dashboard.enabled');
-      label.prepend(input);
-    });
     body.querySelectorAll('button[onclick^="saveProvider("]').forEach(function(btn){ btn.textContent = i18nText('common.save'); });
     body.querySelectorAll('button[onclick^="testProvider("]').forEach(function(btn){ btn.textContent = i18nText('common.test'); });
     body.querySelectorAll('button[onclick^="deleteProvider("]').forEach(function(btn){ btn.textContent = i18nText('common.delete'); });
@@ -15091,6 +15117,15 @@ function saveProvider(idx) {
       renderProviderEdit();
     });
   }).catch(function(e){ if (e.message !== 'AUTH_REQUIRED') setStatus(i18nText('common.save_failed_colon') + e.message); });
+}
+
+function toggleProviderEnabledControl(idx) {
+  var input = document.getElementById('en_' + idx);
+  var button = document.getElementById('enToggle_' + idx);
+  if (!input || !button) return;
+  input.checked = !input.checked;
+  var enabled = input.checked;
+  button.textContent = enabled ? '停止使用' : '启用模型';
 }
 
 function updateCapsSection(idx) {
@@ -16012,6 +16047,9 @@ function setUiLanguage(language){
     // Render the session gallery's empty state before an image is loaded so the
     // reserved lower area communicates its purpose instead of appearing blank.
     renderPrecisionSessionShowcase([]);
+    // Preload persisted precision workflows so the gallery count and history
+    // filter are immediately useful, even before the gallery drawer is opened.
+    if (typeof loadPrecisionWorkflowHistory === 'function') loadPrecisionWorkflowHistory();
     initializeDockAutoHide();
     initializeAppRouting();
     try {

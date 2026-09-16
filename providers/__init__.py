@@ -2762,6 +2762,73 @@ async def _gen_openai(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult
     )
 
 
+def _gemini_http_failure(
+    response: httpx.Response, cfg: ProviderConfig, payload: dict | None = None,
+) -> ImageResult:
+    """Retain bounded Google error evidence without persisting request content."""
+    private = []
+    for content in (payload or {}).get("contents", []):
+        for part in content.get("parts", []):
+            private.extend([part.get("text"), part.get("inlineData", {}).get("data")])
+    safe_cfg = cfg.model_copy(update={"extra": {
+        **cfg.extra,
+        "_precision_diagnostic_redactions": [
+            *cfg.extra.get("_precision_diagnostic_redactions", []),
+            *(value for value in private if isinstance(value, str) and value),
+        ],
+    }})
+
+    def clean(value):
+        return _provider_error_text(value, safe_cfg)[:1200] if isinstance(value, str) else ""
+
+    try:
+        body = response.json()
+        error = body.get("error", {}) if isinstance(body, dict) else {}
+        if not isinstance(error, dict):
+            error = {}
+    except ValueError:
+        error = {}
+    details = {"http_status": response.status_code}
+    status = clean(error.get("status"))
+    message = clean(error.get("message"))
+    if status:
+        details["upstream_status"] = status
+    if message:
+        details["upstream_message"] = message
+    error_items = error.get("details", [])
+    for item in (error_items[:10] if isinstance(error_items, list) else []):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("@type", "")).endswith("/google.rpc.RetryInfo"):
+            delay = clean(item.get("retryDelay"))
+            if re.fullmatch(r"\d+(?:\.\d+)?s", delay):
+                details["retry_delay"] = delay
+        if str(item.get("@type", "")).endswith("/google.rpc.QuotaFailure"):
+            violations = item.get("violations", [])
+            if isinstance(violations, list):
+                details["quota_ids"] = [
+                    clean(v.get("quotaId")) for v in violations[:10]
+                    if isinstance(v, dict) and isinstance(v.get("quotaId"), str)
+                ]
+    hint = {
+        429: "Google 返回限流或配额错误；请核对该模型的项目配额和重试等待时间。",
+        401: "Google 身份验证失败，请检查 API Key。",
+        403: "Google 拒绝访问，请检查密钥权限、项目设置或服务地区。",
+        404: "Google 未找到此模型，请拉取模型并核对完整模型名称。",
+    }.get(response.status_code, "Google 请求失败，请查看上游错误详情。")
+    evidence = f"HTTP {response.status_code} {status}: {message}".strip()
+    if details.get("quota_ids"):
+        evidence += " | quota: " + ", ".join(details["quota_ids"])
+    if details.get("retry_delay"):
+        evidence += " | retry_after: " + details["retry_delay"]
+    return ImageResult(
+        success=False, model=cfg.id,
+        error=f"[{cfg.name}] {hint} {evidence}"[:PROVIDER_ERROR_MAX_LENGTH],
+        error_code="gemini_rate_limit_or_quota" if response.status_code == 429 else "gemini_upstream_http_error",
+        error_details=details,
+    )
+
+
 async def _gen_gemini(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult:
     """Google Gemini 原生协议"""
     model_id = kwargs.get("model") or cfg.model
@@ -2779,7 +2846,8 @@ async def _gen_gemini(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult
         url = f"{base}/v1beta/models/{model_id}:generateContent"
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"responseModalities": ["image", "text"]},
+            # Gemini 原生 API 的枚举值为大写；保留 TEXT 以兼容带文字说明的响应。
+            "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
         }
 
         resp = await _stream_bounded_provider_response(
@@ -2790,6 +2858,8 @@ async def _gen_gemini(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult
             json=payload,
             timeout=120.0,
         )
+        if resp.is_error:
+            return _gemini_http_failure(resp, cfg, payload)
         resp.raise_for_status()
         data = _parse_provider_json_response(resp)
 
@@ -3863,7 +3933,7 @@ async def _gen_gemini_edit(cfg: ProviderConfig, prompt: str, image_data: str, st
                 "parts": parts
             }],
             "generationConfig": {
-                "responseModalities": ["image", "text"],
+                "responseModalities": ["TEXT", "IMAGE"],
             },
         }
 
@@ -3875,6 +3945,8 @@ async def _gen_gemini_edit(cfg: ProviderConfig, prompt: str, image_data: str, st
             json=payload,
             timeout=180.0,
         )
+        if resp.is_error:
+            return _gemini_http_failure(resp, cfg, payload)
         resp.raise_for_status()
         data = _parse_provider_json_response(resp)
 
@@ -4182,6 +4254,8 @@ async def _fetch_gemini_models(cfg: ProviderConfig) -> List[str]:
     1. Google 官方 API: /v1beta/models，使用 x-goog-api-key 请求头
     2. OpenAI 兼容代理: /v1/models
     """
+    # Official errors must not be hidden by an unrelated OpenAI fallback.
+    official = urlsplit(cfg.base_url).hostname == "generativelanguage.googleapis.com"
     # 处理 base_url：移除末尾的 /v1 或 /v1beta
     base = cfg.base_url.rstrip('/')
     if base.endswith('/v1') or base.endswith('/v1beta'):
@@ -4201,6 +4275,7 @@ async def _fetch_gemini_models(cfg: ProviderConfig) -> List[str]:
                 url,
                 success_max_bytes=PROVIDER_MODEL_LIST_RESPONSE_MAX_BYTES,
                 headers={"x-goog-api-key": cfg.api_key},
+                params={"pageSize": 1000},
             )
             if resp.status_code == 200:
                 data = _parse_provider_json_response(resp)
@@ -4215,7 +4290,14 @@ async def _fetch_gemini_models(cfg: ProviderConfig) -> List[str]:
                     else:
                         other_models.append(mid)
                 return image_models + other_models
+            if official:
+                failure = _gemini_http_failure(resp, cfg)
+                raise httpx.HTTPStatusError(
+                    failure.error, request=resp.request, response=resp,
+                )
     except Exception:
+        if official:
+            raise
         pass  # fallback 到 OpenAI 兼容格式
 
     # Fallback: 尝试 OpenAI 兼容格式

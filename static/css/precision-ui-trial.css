@@ -1,24 +1,163 @@
 .precision-trial-toolbar { display:flex; justify-content:flex-end; padding:4px 0; }
 .precision-trial-toolbar button { font-size:11px; color:var(--text-secondary); background:transparent; border:1px solid var(--border); border-radius:6px; padding:5px 9px; cursor:pointer; }
-.precision-trial-options,.precision-trial-switch { display:none!important; }
+.precision-trial-options,.precision-trial-switch,.precision-trial-command,.precision-trial-heading { display:none!important; }
+.precision-ui-trial .precision-trial-command:not([hidden]) { display:inline-flex!important; align-items:center; justify-content:center; }
 .precision-ui-trial .precision-trial-source { display:none!important; }
+.precision-ui-trial .precision-edit-inspector {
+  max-height: none!important;
+  height: auto!important;
+  min-height: 0!important;
+  overflow-y: visible!important;
+  align-self: start;
+}
+.precision-ui-trial .precision-edit-actions,
+.precision-ui-trial .precision-quick-tools,
+.precision-ui-trial .precision-size-tool,
+.precision-ui-trial .precision-model-picker,
+.precision-ui-trial .precision-cutout-tool {
+  flex: 0 0 auto!important;
+  height: auto!important;
+  max-height: none!important;
+}
 .precision-ui-trial .precision-trial-options { display:grid!important; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin:6px 0; }
 .precision-ui-trial .precision-trial-options.size { max-height:260px; overflow:auto; padding:3px; }
 .precision-ui-trial .precision-trial-options button { min-width:0; min-height:42px; padding:8px; display:flex; align-items:center; gap:9px; border:1px solid var(--border); border-radius:7px; color:var(--text-primary); background:var(--bg-surface); cursor:pointer; font-size:11px; text-align:left; overflow-wrap:anywhere; }
 .precision-ui-trial .precision-trial-options button[aria-pressed=true] { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 10%,var(--bg-surface)); box-shadow:0 0 0 1px var(--accent); }
 .precision-ui-trial .precision-trial-options.segments { grid-template-columns:1fr; }
-.precision-ui-trial .precision-trial-composition-field { display:flex; flex-direction:column; gap:6px; padding:8px; border:1px solid var(--border); border-radius:8px; background:color-mix(in srgb,var(--accent) 4%,var(--bg-surface)); }
+.precision-ui-trial .precision-trial-composition-field { display:flex; flex-direction:column; gap:6px; }
+.precision-ui-trial .precision-trial-composition-field > .precision-trial-heading:first-child,
+.precision-ui-trial .precision-trial-composition-field > .precision-trial-heading:nth-child(2) {
+  padding:6px 9px; margin:0 -2px; border-left:3px solid #3b82f6;
+  background:linear-gradient(90deg,#dbeafe,#eff6ff 65%,transparent);
+}
+.precision-ui-trial .precision-trial-composition-field > .precision-trial-heading:nth-child(2) {
+  margin-top:-6px; border-left-color:#93c5fd; background:#f8fbff; font-size:11px;
+}
+.precision-ui-trial .precision-trial-composition-field > span[data-i18n] { display:none; }
+.precision-ui-trial .precision-trial-heading { display:block!important; color:var(--text-primary); font-size:12px; }
+.precision-ui-trial strong.precision-trial-heading { font-size:14px; }
 .precision-ui-trial .precision-trial-composition-field > select { display:none!important; }
 .precision-ui-trial .precision-trial-composition-field > .precision-trial-options { order:2; margin-top:0; }
-.precision-ui-trial .precision-trial-composition-field::before { content:"构图说明"; font-size:12px; font-weight:600; color:var(--text-primary); }
-.precision-ui-trial .precision-trial-composition-field::after { content:"选择卡片后会填入下方说明，可继续编辑"; order:1; font-size:11px; color:var(--text-muted); }
 .precision-ui-trial .precision-trial-smart-tools { display:flex; flex-direction:column; gap:8px; }
+.precision-ui-trial .precision-trial-smart-tools > .precision-quick-heading {
+  padding:8px 10px; border-left:4px solid #b7791f; border-radius:6px;
+  background:linear-gradient(90deg,#fff7ed,#fffbeb 70%,transparent);
+  color:#78350f; text-shadow:0 1px #fff;
+}
 .precision-ui-trial .precision-trial-action-card { padding:8px; border:1px solid var(--border); border-radius:8px; background:color-mix(in srgb,var(--accent) 3%,var(--bg-surface)); }
 .precision-ui-trial .precision-trial-action-card > span { display:block; margin-bottom:6px; font-size:11px; font-weight:600; color:var(--text-secondary); }
 .precision-ui-trial .precision-trial-action-card > div { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
 .precision-ui-trial .precision-trial-action-button { min-height:36px; border-radius:7px; border:1px solid var(--border); background:var(--bg-surface); }
+.precision-ui-trial .precision-trial-square-tools > div {
+  grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px;
+}
+.precision-ui-trial .precision-trial-square-tools > div > button {
+  aspect-ratio:auto; min-height:44px; display:flex; flex-direction:row;
+  align-items:center; justify-content:flex-start; gap:8px; font-size:11px;
+  border-radius:7px; background:#eef2f7; border:1px solid #cbd5e1;
+}
+.precision-ui-trial .precision-trial-square-tools > div > button:hover {
+  border-color:#3b82f6; box-shadow:0 5px 14px #3b82f633; transform:translateY(-2px);
+}
+.precision-trial-tool-icon { display:grid; place-items:center; width:38px; height:38px; }
+.precision-trial-tool-icon svg { width:32px; height:32px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
 .precision-ui-trial .precision-trial-local-card { border-radius:8px; border:1px solid var(--border); box-shadow:none; }
+.precision-ui-trial .precision-cutout-tool { max-height:none; overflow:visible; min-height:0; }
+.precision-ui-trial .precision-cutout-tool .precision-cutout-heading {
+  min-height:48px; padding:8px 10px; border:1px solid #c4b5fd; border-left:4px solid #7c3aed;
+  border-radius:6px; background:linear-gradient(90deg,#f3e8ff,#faf5ff 70%,transparent);
+  box-shadow:none;
+  cursor:pointer; transition:box-shadow .16s,transform .16s;
+}
+.precision-ui-trial .precision-cutout-tool .precision-cutout-heading:hover {
+  box-shadow:0 3px 10px #7c3aed24; transform:translateY(-1px);
+}
+.precision-ui-trial .precision-cutout-tool .precision-cutout-heading::after {
+  content:'⌄'; margin-left:auto; color:#334155; font-size:17px; text-shadow:0 1px #fff;
+}
+.precision-ui-trial .precision-cutout-tool.precision-trial-cutout-collapsed .precision-cutout-heading::after { content:'›'; }
+.precision-ui-trial .precision-cutout-tool.precision-trial-cutout-collapsed > :not(.precision-cutout-heading) {
+  display:none!important;
+}
+.precision-ui-trial #btnPrecisionCutoutProfessionalOpen,
+.precision-ui-trial #btnPrecisionCutoutSimple,
+.precision-ui-trial #precisionCutoutSimplePanel { display:none!important; }
+.precision-ui-trial .precision-cutout-tool .precision-cutout-actions {
+  display:grid!important; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0;
+  width:100%!important; border:1px solid #94a3b8; border-radius:10px; overflow:hidden;
+  background:linear-gradient(135deg,#eef2f7,#cbd5e1);
+}
+.precision-ui-trial .precision-cutout-tool .precision-cutout-actions button {
+  width:100%!important; min-height:52px; border:0!important; border-radius:0!important;
+  background:var(--bg-surface); color:var(--text-primary); font-size:13px; font-weight:700;
+  text-shadow:none; box-shadow:none; transition:background .15s,color .15s,transform .15s;
+}
+.precision-ui-trial .precision-cutout-tool .precision-cutout-actions button + button {
+  border-left:1px solid var(--border)!important;
+}
+.precision-ui-trial .precision-cutout-tool .precision-cutout-actions button:hover {
+  color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,var(--bg-surface)); transform:none;
+}
+.precision-ui-trial .precision-cutout-tool .precision-cutout-actions button:active {
+  transform:translateY(2px); box-shadow:inset 0 3px 8px #64748b66;
+}
+.precision-ui-trial .precision-guidance-controls {
+  overflow:hidden; border:1px solid #7c3aed; border-radius:9px;
+  background:linear-gradient(180deg,#faf5ff,#fff);
+  box-shadow:0 4px 12px #7c3aed1c;
+}
+.precision-ui-trial .precision-guidance-controls .precision-guidance-pill-toggle {
+  width:100%; min-height:48px; padding:9px 12px; border:0; border-left:4px solid #7c3aed;
+  background:linear-gradient(90deg,#ede9fe,#faf5ff 70%,transparent); color:#4c1d95;
+}
+.precision-ui-trial .precision-guidance-controls .precision-guidance-pill-body {
+  margin:0; padding:10px; border-top:1px solid #ddd6fe; background:#fff;
+}
+.precision-ui-trial .precision-guidance-controls .precision-guidance-pill-body[hidden] { display:none!important; }
+.precision-ui-trial .precision-cutout-glass-panel > #precisionCutoutAdapterPicker,
+.precision-ui-trial .precision-cutout-glass-panel > #precisionCutoutModelInstall,
+.precision-ui-trial .precision-cutout-glass-panel > .precision-cutout-actions,
+.precision-ui-trial .precision-cutout-glass-panel > .precision-cutout-refine-controls,
+.precision-ui-trial .precision-cutout-glass-panel > #precisionCutoutStatus {
+  display: block!important;
+}
+.precision-ui-trial .precision-cutout-glass-panel {
+  pointer-events: auto!important;
+}
+.precision-ui-trial .precision-cutout-tool .precision-cutout-simple-panel,
+.precision-ui-trial .precision-cutout-tool .precision-cutout-actions,
+.precision-ui-trial .precision-cutout-tool .precision-cutout-refine-controls { min-height:0; }
+.precision-ui-trial .precision-cutout-tool .precision-cutout-model-install,
+.precision-ui-trial .precision-cutout-tool .precision-cutout-adapter-picker { margin-top:6px; }
 .precision-ui-trial .precision-guidance-pill { border-radius:8px; }
+.precision-ui-trial .precision-guidance-pill,
+.precision-ui-trial .precision-guidance-pill span,
+.precision-ui-trial .precision-trial-action-card > span,
+.precision-ui-trial summary { color:var(--text-primary); font-weight:600; }
+.precision-ui-trial #btnPrecisionGuidanceToggle,
+.precision-ui-trial .precision-size-heading {
+  padding:8px 10px; border-radius:6px; border-left:4px solid #7c3aed;
+  background:linear-gradient(90deg,#f3e8ff,#faf5ff 70%,transparent);
+}
+.precision-ui-trial #btnPrecisionTaskMonitorToggle { border:1px solid currentColor; border-radius:5px; background:#eef2f7; }
+.precision-ui-trial .precision-task-monitor-toggle-icon { display:inline-block; font-size:0; }
+.precision-ui-trial .precision-task-monitor-toggle-icon::before { content:'▾'; font-size:14px; }
+.precision-ui-trial .precision-task-monitor:not(.precision-task-collapsed) .precision-task-monitor-toggle-icon::before { content:'▴'; }
+.precision-ui-trial .precision-size-capability { border-left:3px solid #94a3b8; padding-left:8px; }
+.precision-ui-trial .precision-size-capability[data-state="supported"] { border-left-color:#16a34a; }
+.precision-ui-trial .precision-size-capability[data-state="blocked"] { border-left-color:#dc2626; }
+.precision-ui-trial .precision-trial-primary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; padding:4px; border:1px solid var(--border); border-radius:8px; background:var(--bg-surface); }
+.precision-ui-trial .precision-trial-primary button { min-height:54px; min-width:0; font-size:13px; font-weight:600; border-radius:6px; transition:background .15s,transform .15s; }
+.precision-ui-trial .precision-trial-primary button:active { transform:scale(.97); }
+.precision-trial-mode-symbol { display:none; }
+.precision-ui-trial .precision-trial-mode-symbol { display:inline-flex; width:28px; height:24px; vertical-align:middle; margin-right:6px; }
+.precision-trial-mode-symbol svg { width:100%; fill:none; stroke:currentColor; stroke-width:1.7; }
+.precision-ui-trial .precision-trial-primary button:active svg { animation:precision-trial-click .25s ease; }
+@keyframes precision-trial-click { 50% { transform:scale(.8); } }
+.precision-ui-trial .precision-trial-primary button[aria-pressed=true],
+.precision-ui-trial .precision-trial-action-button[aria-pressed=true] { background:#1768b5; color:#fff; border-color:#1768b5; box-shadow:inset 0 1px 0 #ffffff40; }
+.precision-ui-trial .precision-trial-action-button[aria-pressed=false] { background:#e4e7eb; color:#34404d; }
+@media(prefers-reduced-motion:reduce) { .precision-ui-trial .precision-trial-primary button { transition:none; transform:none; } .precision-ui-trial .precision-trial-primary button:active svg { animation:none; } }
 .precision-ui-trial .precision-trial-command { flex:1; min-height:34px; border:1px solid var(--border); border-radius:7px; background:var(--bg-surface); color:var(--text-primary); cursor:pointer; }
 .precision-ui-trial .precision-trial-command:disabled { opacity:.5; cursor:not-allowed; }
 .precision-trial-progress-svg { width:18px; height:18px; vertical-align:middle; }

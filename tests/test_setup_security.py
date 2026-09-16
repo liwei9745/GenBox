@@ -1093,6 +1093,8 @@ def test_frontend_never_persists_admin_key_in_browser_storage():
             "'igs_dock_pinned'",
             # Non-sensitive, one-time onboarding dismissal state.
             "'genbox_precision_quick_start_v1'",
+            # Non-sensitive, reversible precision UI trial preference.
+            "'genbox_precision_ui_trial'",
         }
         allowed_session_keys = {"'igs_reopen_onboarding'"}
         allowed_dynamic_local_keys = {

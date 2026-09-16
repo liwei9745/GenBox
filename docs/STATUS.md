@@ -1,6 +1,60 @@
 # Current Project Status
 
+## 2026-09-16 Gemini Official API Compatibility Repair
+
+- **VERIFIED / DIAGNOSIS:** The local September 16 14:29 t2i failure reached
+  Google's native GenerateContent route and returned HTTP 429. Its requested
+  model was `gemini-3.1-flash-image`; the currently saved default is
+  `gemini-3-pro-image-preview`. The original response body was not retained,
+  so the specific quota/rate limit is UNKNOWN. This is not evidence of an
+  invalid key, unsupported resolution, or an invalid model identifier.
+- **VERIFIED / READ-ONLY LIVE:** Both the configured direct path and configured
+  global proxy returned HTTP 200 to Google's model-list API. The actual GenBox
+  adapter returned 58 models, including both identifiers above; the repaired
+  connectivity handler returned HTTP 200. No generation POST, config save,
+  model rewrite, or paid generation was performed.
+- **FIXED:** Connectivity probes share generation's proxy selection and native
+  Gemini header/path; HTTP 401 is no longer success. Official model-list
+  failures retain their original cause instead of falling back to OpenAI.
+  Gemini t2i/i2i now preserve bounded/redacted error status, quota IDs and retry
+  delay, without automatic retries. Modalities use `TEXT`/`IMAGE`; this
+  normalization is not claimed to explain the historical HTTP 429.
+- **UI:** The enabled flag defaults to true for new providers and retains
+  existing opt-outs. Its primary `停止使用`/`启用模型` control keeps the existing
+  explicit Save workflow. Browser tests cover default, toggle, persisted
+  disabled rendering and preservation of Save/Test/Delete controls.
+- **VERIFIED:** `python -m pytest tests/test_provider_enabled_browser.py
+  tests/test_gemini_official_diagnostics.py tests/test_provider_transport_security.py
+  tests/test_precision_protocol_resolver.py tests/test_gemini_precision_catalog.py
+  tests/test_generation_model_connection.py tests/test_provider_error_safety.py -q`
+  passed (160 tests); `node --check static/js/app-all.js` passed.
+- **RESEARCH:** Google models, image-generation, troubleshooting and rate-limits
+  documentation were read through Agent Reach/Jina using the configured proxy.
+  Official model-list visibility does not prove generation quota availability.
+- **RESUME:** Use the exact model from the successful Cherry Studio request,
+  select only Gemini and one image for manual acceptance. Inspect the new
+  structured 429 evidence if it fails. Real image-generation acceptance and
+  Cherry Studio's exact model/request remain UNVERIFIED. Do not publish this
+  local repair or alter precision capability declarations on this evidence.
+
 ## 2026-09-14 Reversible UI Trial
+
+- Follow-up: composition placeholder is now a heading, not an option;
+  selection follows actual prompt text. Primary size modes and AI removal
+  choices have distinct selected states. Trial progress follows native task
+  classes and restores its original icon when disabled.
+- Observed live page reported backend offline with connection controls
+  disabled. Restarted the owned 8895 lab in background mode; status verified
+  ONLINE. Do not bypass disabled consent controls. Current selection in the
+  stale page was an unconfirmed model; size grants require model permission.
+- Verification: `python -m pytest tests/test_precision_ui_trial.py
+  tests/test_precision_protocol_browser.py -q` passed (2 tests), covering
+  projection, consent-state updates, composition edits, progress and rollback.
+  Browser refresh verification was blocked by browser-control timeouts;
+  live permission round-trip and visual acceptance remain unverified.
+- Resume: refresh the page against the online lab and verify permission
+  enable/cancel/revoke with a supported selected model before claiming full
+  live acceptance. No paid generation or publication in this UI pass.
 
 - LOCAL ONLY: opt-in "trial UI" control above the precision model picker.
   Size cards include aspect outlines; composition and connection choices

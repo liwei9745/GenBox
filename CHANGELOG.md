@@ -4,6 +4,23 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.10] - 2026-09-16
+
+### Fixed
+
+- Correct native Gemini connectivity checks to use `/v1beta/models` and
+  `x-goog-api-key`, while preserving OpenAI-compatible endpoint behavior.
+- Preserve bounded, redacted Gemini quota and rate-limit diagnostics.
+- Send Gemini image response modalities using the documented `TEXT` / `IMAGE`
+  enum values.
+
+### Changed
+
+- Provider model controls now default to enabled and expose a clear
+  `停止使用` / `启用模型` primary action.
+- Precision workflow history and provider loading reuse in-flight requests and
+  defer collapsed gallery rendering for faster startup.
+
 ## [2.6.9] - 2026-09-14
 
 ### Fixed
