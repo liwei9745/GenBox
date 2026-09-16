@@ -1691,6 +1691,32 @@ textarea {
 .provider-col-resize:active {
   background: var(--accent);
 }
+
+.provider-auto-protocol-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 7px 9px;
+  border: 1px solid rgba(0,122,255,0.18);
+  border-radius: 7px;
+  background: linear-gradient(135deg, rgba(0,122,255,0.08), rgba(255,255,255,0.02));
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+.provider-auto-protocol-hint strong { color: var(--accent); }
+.provider-auto-protocol-hint small { flex-basis: 100%; color: var(--text-muted); line-height: 1.45; }
+.provider-auto-protocol-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0,122,255,0.12);
+}
+.provider-auto-protocol-hint[data-protocol="gemini"] .provider-auto-protocol-dot { background: #4285f4; }
+.provider-auto-protocol-hint[data-protocol="openai"] .provider-auto-protocol-dot { background: #10a37f; }
+.provider-auto-protocol-hint[data-protocol="unknown"] .provider-auto-protocol-dot { background: #f59e0b; }
 }
 
 /* Add Provider Type Modal */

@@ -14837,6 +14837,7 @@ function renderProviderEdit() {
       var idx = allProviders.indexOf(p);
       var isOpen = providerEditOpenIdx === idx;
       var et = p.endpoint_type || 'auto';
+      var inferredProtocol = et === 'auto' ? inferProviderProtocol(p.base_url, p.model) : et;
       var modelOpts = '';
       if (p.models && p.models.length) {
         var filteredModels = filterModelsByType(p.models, p.type);
@@ -14904,6 +14905,10 @@ function renderProviderEdit() {
                 '<option value="volc_ark_plan" ' + (et==='volc_ark_plan'?'selected':'') + '>' + i18nText('provider.endpoint_volc_plan') + '</option>' +
                 '<option value="volc_ark" ' + (et==='volc_ark'?'selected':'') + '>' + i18nText('provider.endpoint_volc_ark') + '</option>' +
               '</select>' +
+              (et === 'auto' ? '<div class="provider-auto-protocol-hint" data-protocol="' + inferredProtocol + '">' +
+                '<span class="provider-auto-protocol-dot"></span> 自动识别结果：<strong>' + providerProtocolDisplay(inferredProtocol) + '</strong>' +
+                '<small>仅作提示，保存的端点类型仍保持 auto；中转端点建议先测试模型列表。</small>' +
+              '</div>' : '') +
               (et==='volc_ark_plan' && p.type==='video' ?
                 '<div style="font-size:9px;color:#f59e0b;margin-top:3px;">' + i18nText('provider.video_plan_warning') + '</div>' : '') +
             '</div>' +
@@ -16471,6 +16476,24 @@ function filterModelsByType(models, providerType) {
     }
     return true;
   });
+}
+
+// Advisory only: keep the saved endpoint_type unchanged while showing users
+// what an auto configuration most likely resolves to.
+function inferProviderProtocol(baseUrl, model) {
+  var url = String(baseUrl || '').toLowerCase();
+  var name = String(model || '').toLowerCase();
+  if (url.indexOf('generativelanguage.googleapis.com') !== -1 ||
+      url.indexOf('googleapis.com') !== -1 ||
+      name.indexOf('gemini') === 0) return 'gemini';
+  if (url.indexOf('/v1') !== -1 || url.indexOf('openai') !== -1 ||
+      url.indexOf('chat/completions') !== -1 || url.indexOf('responses') !== -1) return 'openai';
+  return 'unknown';
+}
+
+function providerProtocolDisplay(protocol) {
+  var labels = { auto: '自动识别', openai: 'OpenAI 兼容', gemini: 'Gemini 原生', unknown: '待检查' };
+  return labels[String(protocol || 'unknown').toLowerCase()] || String(protocol || '待检查');
 }
 
 function groupVideoModels(models) {
