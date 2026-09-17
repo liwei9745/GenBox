@@ -17,6 +17,15 @@
   whitespace checks pass. Staged Git-archive sanitizer reports 313 text files
   and 29 existing public images; no forbidden runtime/credential payloads.
   `package_release.py --validate-release-tag v2.6.11` passes.
+- **VERIFIED / CLEAN CLONE:** GitHub clone of `4ede382` packaged source/Compose
+  archives and checksums without local runtime files. Packaged-source scan:
+  318 text files (including license sidecars), 29 images. Clean runtime imports,
+  version identity and HTTP startup passed on an isolated local port; stopped
+  afterward. This is local clean-clone evidence, not a VPS deployment.
+- **CI FOLLOW-UP:** PR run `35236125875` failed eight browser cases because
+  fixture injection raced initial Provider discovery. The fixture now awaits
+  `providersLoadPromise` before installing synthetic data; production behavior
+  and acceptance scope are unchanged. Re-run hosted quality before release.
 - **RESUME:** Commit and push this branch, synchronize through existing PR #11
   after hosted quality checks, then publish the matching v2.6.11 tag once. Tag workflows
   create client/source/Compose assets and the smoke-tested GHCR image. Do not

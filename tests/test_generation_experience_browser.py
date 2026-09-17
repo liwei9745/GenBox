@@ -27,7 +27,9 @@ def page():
             page.route("**/api/**", lambda route: route.fulfill(status=404, json={"detail": "synthetic"}))
             page.goto(f"http://127.0.0.1:{server.server_port}/static/index.html",
                       wait_until="domcontentloaded")
-            page.evaluate("""() => {
+            page.evaluate("""async () => {
+                // Startup discovery must settle before installing the synthetic catalog.
+                await window.providersLoadPromise;
                 window._loadProxyConfig = window._loadUpdateInfo = () => {};
                 window.allProviders = [{
                     id:'synthetic', name:'Demo Image', type:'image', enabled:true,
