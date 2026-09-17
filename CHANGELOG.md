@@ -4,6 +4,31 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.11] - 2026-09-17
+
+### Added
+
+- Native Google Veo and Gemini Omni video generation, independent of gateway
+  adapters, with bounded output handling and local video publication.
+- Searchable generation model selection with provider groups and capability
+  filters, plus generation progress placeholders and bottom-right notifications.
+
+### Fixed
+
+- Provider model discovery uses unsaved form values without requiring a save
+  round trip or resetting the configuration step; Gemini discovery paginates
+  and uses the effective endpoint credential.
+- Veo image requests match the official SDK wire format. Omni uses inline
+  video delivery while preserving the interaction storage opt-out.
+- Image-to-video upload controls, single-model composer overflow, native
+  video parameter selection, log placement and terminal failure feedback.
+
+### Security
+
+- Native video submissions never automatically retry or fall back to a gateway.
+  Errors retain only safe diagnostic labels; media is validated and bounded.
+- No credentials, user media or local test history are included in this release.
+
 ## [2.6.10] - 2026-09-16
 
 ### Fixed

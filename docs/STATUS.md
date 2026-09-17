@@ -1,5 +1,245 @@
 # Current Project Status
 
+## 2026-09-17 v2.6.11 Release
+
+- **USER-CONFIRMED:** All current manual acceptance passed, including real Veo
+  and Omni video generation. This supersedes the prior live-Omni open item.
+- **IN PROGRESS:** Preparing v2.6.11 on the existing release branch. Version,
+  Compose image default, bilingual release notes and README previews are aligned.
+  Only reviewed code/tests/public documentation are selected; runtime history,
+  screenshots, local reports and temporary test outputs are excluded.
+- **RELEASE SCOPE:** Provider protocol/capability grouping and model search,
+  draft model discovery and guided steps, image progress/notifications, video
+  composer/upload/feedback repairs and native Google video transport.
+- **VERIFIED / LOCAL:** `python -m pytest -q
+  --basetemp .pytest-tmp-release-2611-final` -> `1798 passed`.
+  Three focused Node suites, four changed JavaScript syntax checks and staged
+  whitespace checks pass. Staged Git-archive sanitizer reports 313 text files
+  and 29 existing public images; no forbidden runtime/credential payloads.
+  `package_release.py --validate-release-tag v2.6.11` passes.
+- **RESUME:** Commit and push this branch, synchronize through existing PR #11
+  after hosted quality checks, then publish the matching v2.6.11 tag once. Tag workflows
+  create client/source/Compose assets and the smoke-tested GHCR image. Do not
+  pre-create a Release: the existing build workflow creates it after clients
+  pass. Record actual workflow run IDs and outcomes separately from acceptance.
+
+## 2026-09-17 Omni Delivery / Storage Compatibility Repair
+
+- **IMPLEMENTED / LOCAL ONLY:** Official Google effective endpoints now dispatch
+  to `providers/google_video.py`, separate from Flow2API and OpenAI gateways.
+  Veo uses `predictLongRunning`, bounded operation polling and authenticated
+  download. Omni uses synchronous Interactions with inline delivery, REST `steps`
+  Base64 output parsing and atomic local saving. The previous blanket
+  official-host 501 guard is superseded, not a live generation acceptance claim.
+- **VERIFIED / RESEARCH:** Read Google Veo, Omni and Omni model documentation
+  through Agent Reach/Jina; checked the pinned official Python SDK through
+  `gh api`. See `docs/GOOGLE-VIDEO-CONTRACT.md` for the guide/SDK discrepancy.
+- **FIXED / LOCAL:** Veo first-frame, last-frame and reference images now use
+  `bytesBase64Encoded` + `mimeType`, matching the SDK, instead of `inlineData`.
+  Actual image format is verified locally before submission. Native seed is
+  hidden/rejected because the pinned Developer API SDK rejects it, despite
+  the guide saying it is supported. Custom gateways are unchanged.
+- **USER-CONFIRMED:** Veo now generates successfully; Omni still returned
+  HTTP 400 identifying `delivery` and `store`. Historical raw errors are absent.
+- **FIXED / LOCAL:** Omni now sends `delivery=inline` with `store=false`;
+  the SDK supports inline delivery and official REST examples show Base64 MP4.
+  The former URI/stateless pairing is the suspected incompatibility, not a
+  proven historical upstream message. Storage consent is unchanged. Inline
+  responses allow bounded Base64 expansion beyond the old 8 MiB JSON limit;
+  decoding, cancellation, MP4 validation and atomic publication are tested.
+  Veo request fields are unchanged in this follow-up.
+- **FIXED / LOCAL UI:** Logs sit between preview and prompt, outside the input
+  card. Official parameter fetches are authenticated and Provider-scoped.
+  Official models do not inherit Agnes 480p, steps or `8n+1`. Veo exposes exact
+  duration/resolution/aspect controls; Omni leaves duration to the model because
+  no explicit duration parameter was verified. Fixed output FPS is 24.
+  Model switching now passes the change event and ignores stale spec responses.
+- **SECURITY:** One generation POST only, no retry/fallback/endpoint rotation.
+  Keys remain in headers and worker memory; remote file/operation identifiers
+  are not exposed as local task IDs. Downloads are size-bounded, atomic and
+  MP4-checked. Redirects are restricted to Google API/Storage hosts; credentials
+  are removed for Storage. Upstream error bodies are never shown or logged.
+  Errors now retain only fixed status/category/parameter-name labels from a
+  bounded body, with submission/polling/download stage distinctions.
+- **VERIFIED:** `python -m pytest tests/test_google_native_video.py
+  tests/test_gemini_official_diagnostics.py -q
+  --basetemp .pytest-tmp-omni-inline` -> `115 passed`.
+  `python -m pytest tests/test_google_video_browser.py -q
+  --basetemp .pytest-tmp-omni-inline-browser` -> `6 passed`.
+  Python compilation and diff checks passed. Tests cover both Omni aliases,
+  all resolutions, preserved store opt-out, inline responses above 8 MiB,
+  corrupt media, limits/cancellation/cleanup and single-POST-only behavior.
+- **VERIFIED / RUNTIME:** Owned lab restart followed by `status --port 8895` on
+  2026-09-17 reports `ONLINE | PID 45196 | HEAD 6109211 | v2.6.10 |
+  runtime 1c5a80d9e7ed`.
+- **USER-CONFIRMED / RESUME:** Live Omni inline and Veo generation subsequently
+  passed manual acceptance. This is not an agent-run paid acceptance test.
+  Refresh the lab; inspect safe diagnostics if a user-authorized attempt fails.
+  For any upstream inline payload limit, do not silently enable store or retry;
+  a future URI mode needs explicit retention disclosure and user choice.
+  A real acceptance run must use
+  one user-selected model and explicit paid-call consent; never auto-retry.
+  Omni editing/extension and arbitrary media URLs are outside this first native
+  adapter. Mixed-model native comparisons require separate submissions.
+
+## 2026-09-17 Video Submission Feedback Repair
+
+- **FIXED / LOCAL:** Video logs, progress, provider status and preview containers
+  remove the global `hidden` class when shown. Advanced options open on the
+  first click; models declaring no advanced parameters show an explicit empty
+  state. Failure placeholders stop spinning and show the backend error as text.
+- **FIXED / LOCAL:** A rejected submission no longer decrements the queue cursor
+  and strands later providers. Remaining selected providers are submitted once;
+  accepted tasks enter polling. All-rejected submissions stop the elapsed timer
+  and restore the Generate button. Narrow-screen composer controls and feedback
+  no longer overlap; desktop and mobile synthetic screenshots were inspected.
+- **VERIFIED:** `python -m pytest tests/test_video_composer_browser.py -q
+  --basetemp .pytest-tmp-video-feedback-accepted` -> `29 passed`;
+  generation-experience browser and Gemini diagnostics tests -> `41 passed`.
+  Node video logging/model-discovery tests, both JS syntax checks and
+  `git diff --check` passed.
+- **VERIFIED / RUNTIME:** On 2026-09-17, owned lab restart and
+  `python scripts/genbox_lab.py status --port 8895` reported
+  `ONLINE | PID 7584 | HEAD 6109211 | v2.6.10 | runtime 6b14161c5207`.
+- **OPEN / RESUME:** Refresh the video page to accept feedback and advanced
+  options. Google's native video generation is still unimplemented: the
+  existing official-host 501 guard remains, before any upstream generation
+  request. This repair does not enable official Veo/Omni generation. Native
+  submission, polling and authenticated download need separate implementation
+  and verification. No real keys, paid calls, production changes or release
+  publication were used here.
+
+## 2026-09-17 Provider Group Icon De-duplication
+
+- **FIXED / LOCAL ONLY:** Provider management group headers no longer render the
+  same emoji twice. They now use one semantic inline SVG per group (image,
+  video, assistant) and remove only the leading legacy emoji from the localized
+  title at this presentation point.
+- **DESIGN DECISION:** Ant Design's icon documentation recommends
+  `@ant-design/icons` as a separate React package and SVG-based rendering.
+  GenBox's current surface is a vanilla static UI with an existing inline-SVG
+  icon language, so adding the full Ant dependency would increase bundle and
+  integration cost without improving this header. The same SVG approach can be
+  reused for future provider actions; a broad icon-library migration is not
+  included in this small fix.
+- **VERIFIED:** `test_provider_model_categories.py`, JavaScript syntax checks,
+  and `git diff --check` cover the change. Static bundle cache version is `v=54`.
+
+## 2026-09-17 Provider Wizard Discovery Draft Fix
+
+- **FIXED / LOCAL ONLY:** Step 2 model discovery now sends the current form
+  values to a non-persisting `POST /api/providers/fetch-models-preview` route.
+  It no longer saves a new Provider as `tmp` before discovery, so a first-time
+  API Key can be used immediately after Step 1 without visiting Step 3 first.
+- **FIXED / LOCAL ONLY:** Preview model IDs remain attached to the current form
+  only. Step 3 is the single persistence point. Existing saved credentials may
+  be reused only when the same base URL/endpoint is retained; changing the
+  connection after discovery requires a fresh fetch. Preview failures preserve
+  the draft and allow retry.
+- **SECURITY:** The preview route never calls `cfg_mgr.save`, does not return
+  credentials, has `Cache-Control: no-store`, and keeps admin/CSRF middleware
+  boundaries. Tests cover new unsaved Providers, saved-secret reuse, changed
+  URLs, failure retry, no-secret echo, and one-save behavior.
+- **VERIFIED:** `25 passed` for the provider preview, wizard browser, and
+  credential-contract tests; `node --check static/js/app-all.js` and
+  `git diff --check` passed. Static bundle cache version is now `v=53`.
+- **RESUME:** Refresh the 8895 lab, enter a new Provider in Step 1, click
+  `下一步`, use `拉取` in Step 2, choose a model, then save in Step 3. No real
+  provider key was used by automated tests.
+
+## 2026-09-17 Official Video Model Discovery Repair
+
+- **FIXED / LOCAL ONLY:** Gemini model discovery uses the configured effective
+  endpoint/key (including `api_keys`), follows bounded model-list pagination,
+  deduplicates returned IDs, and prioritizes Veo/Omni for video Providers without
+  inventing models or dropping the rest of the upstream list. Official errors
+  remain errors, including failures on later pages.
+- **FIXED / LOCAL ONLY:** Video mode filtering recognizes official Veo and
+  Gemini Omni IDs. Omni is classified as video in the model browser. Object and
+  legacy array capability records are supported without mutation; an empty mode
+  no longer falls back to text/image models. Valid selection survives rendering.
+  Video-card refresh now calls the authenticated backend discovery route rather
+  than silently returning when `models_url` is absent.
+- **VERIFIED:** 52 focused Python/browser tests and 126 image/provider regression
+  tests passed. `node tests/test_video_model_discovery.mjs` (bundle/standalone)
+  and `node tests/test_video_logging_ui.mjs` passed, as did JS syntax checks,
+  Python compilation and `git diff --check`.
+- **VERIFIED / RUNTIME:** On 2026-09-17, `python scripts/genbox_lab.py restart
+  --port 8895 --background` followed by `status --port 8895` reported
+  `ONLINE | PID 37972 | HEAD 6109211 | v2.6.10 | runtime 27bb582fcc77`.
+  The lab serves the local uncommitted repair; this supersedes prior runtime
+  identities below. Static asset versions were bumped for refresh.
+- **VERIFIED / RESEARCH:** Google Omni and Veo documentation was re-read through
+  Agent Reach/Jina on 2026-09-17. Omni documents stable
+  `gemini-omni-1.1-flash` and preview `gemini-omni-flash-preview`, with video
+  output and an Interactions API workflow. Veo documents native
+  `predictLongRunning`. These are not the Flow2API chat-completions protocol.
+- **OPEN / GENERATION:** GenBox's existing Gemini video generator is a Flow2API
+  adapter, not a native Google video adapter. Official-host generation now
+  returns an explicit 501 before any upstream request instead of sending the
+  wrong protocol. Native generation, polling and authenticated video download
+  still require implementation and acceptance; model discovery is not E2E.
+- **BOUNDARY / RESUME:** No real key, paid generation, production VPS mutation,
+  Git commit or release publication in this repair. Refresh the 8895 lab and
+  re-fetch the selected video Provider to manually accept model visibility.
+  Actual account visibility/quota remain UNVERIFIED. Next implement native
+  Google video separately, preserving Flow2API and explicit OpenAI gateways.
+
+## 2026-09-17 Model Browser And Provider Fetch Follow-up
+
+- **FIXED / LOCAL ONLY:** Provider model fetching no longer re-renders the
+  entire form through `loadProviders()`; it updates the model control in place,
+  keeps draft values and preserves the three-step wizard position by stable
+  Provider ID. Failed fetches keep the same step and draft as well.
+- **FIXED / LOCAL ONLY:** Image-generation and image-edit model choices now
+  reject text, TTS, audio, embedding, video, and non-image Gemini models even
+  when a Provider-wide capability flag is broad. A hidden/stale model is not
+  silently submitted; selected values remain isolated per Provider.
+- **UI:** The generation model picker now opens an Ant Design-inspired modal
+  browser with search, horizontal capability filters, vertical family groups,
+  counts, collapse/expand, responsive layout, and selected-state highlighting.
+  Google display labels map Nano Banana names to the documented IDs while raw
+  IDs remain option values and request payloads. Verified official image
+  model mapping from Google documentation read on 2026-09-17:
+  `gemini-3.1-flash-lite-image` (Nano Banana 2 Lite),
+  `gemini-3.1-flash-image` (Nano Banana 2),
+  `gemini-3-pro-image` (Nano Banana Pro), and
+  `gemini-2.5-flash-image` (Nano Banana). `gemini-3-pro-image-preview` is
+  display-mapped only when an endpoint actually returns that ID.
+- **VERIFIED:** Focused browser/provider/security regression set passed
+  `88 passed`; `node --check` passed for `app-all.js`,
+  `generation-experience.js`, and `model-browser.js`; `git diff --check`
+  passed. The owned local lab reports `ONLINE | PID 36276 | HEAD 6109211 |
+  v2.6.10 | runtime 568bbee1aa95` on port `8895`.
+- **BOUNDARY:** This is local UI and contract evidence. No provider key was
+  entered, no paid generation was sent, and no GitHub/Release publication was
+  performed. Live upstream model availability remains Provider-specific.
+- **RESUME:** Refresh the newly opened 8895 tab, open a configured image
+  Provider's model picker, verify search/category/family behavior, then use
+  one explicitly user-selected model for any manual generation acceptance.
+
+## 2026-09-17 Generation Feedback And Provider Steps Trial
+
+- LOCAL ONLY: Ant Design-inspired image placeholders, bottom-right terminal
+  notifications, and three-step Provider forms with connection preset dropdowns.
+  Uses existing vanilla JS; no React dependency, provider config migration,
+  automatic save/test, paid generation, or release publication.
+- Progress uses task states, not the server's elapsed-time percentage estimate.
+  Terminal notifications deduplicate task IDs and omit prompts, credentials and
+  raw upstream errors. Success, partial success, failure and cancellation differ.
+- Provider step navigation moves existing controls without recreating inputs;
+  advanced connection fields collapse. Preset changes require confirmation and
+  still require explicit Save. Presets cover Google, OpenAI and a custom gateway.
+- VERIFIED: 82 tests passed across generation controls, model connections,
+  generation-experience browser tests, provider-enabled controls and setup
+  security. Node stop-generation and generation-error regression scripts passed;
+  JS syntax and diff checks passed. Synthetic screenshots inspected at desktop
+  and mobile widths. Real generation and user visual acceptance are UNVERIFIED.
+- RESUME: Refresh the 8895 lab, inspect Provider steps and use an explicitly
+  user-initiated generation to accept feedback visuals. No paid call is needed
+  for automated testing. Revert only generation-experience files, their script
+  includes and guarded integration hooks if rejected.
+
 ## 2026-09-16 Gemini Official API Compatibility Repair
 
 - **VERIFIED / DIAGNOSIS:** The local September 16 14:29 t2i failure reached
@@ -4538,3 +4778,17 @@ full sanitization review, and public release remain later gates.
 - **BOUNDARY:** Do not claim successful model support from this run. Further
   diagnosis needs provider-side response/connection evidence or a separately
   authorized trial; no automatic retry is allowed.
+
+## 2026-09-17 Provider Group Icon Deduplication
+
+- **FIXED / LOCAL:** Provider management group headers now render one semantic
+  inline SVG icon for image, video, and LLM groups. Legacy leading emoji are
+  removed from the localized title at this presentation point, preventing
+  duplicate icons such as `🎨 🎨 生图模型`.
+- **DESIGN:** The implementation follows the existing inline SVG language and
+  does not add the React/Ant Design runtime dependency. Ant Design's SVG icon
+  approach was used as a visual reference for consistent outline, sizing, and
+  accessible decorative markup.
+- **VERIFIED 2026-09-17:** `node --check static/js/app-all.js`, focused provider
+  tests (`3 passed`), and `git diff --check` passed. The GenBox lab on port
+  `8895` reported `ONLINE` before this verification pass.

@@ -6,6 +6,7 @@
   <title>GenBox</title>
   <link rel="stylesheet" href="/static/css/app.css?v=38">
   <link rel="stylesheet" href="/static/css/pages.css?v=17">
+  <link rel="stylesheet" href="/static/css/video-workbench.css?v=3">
 </head>
 <body>
 
@@ -1118,7 +1119,7 @@
         <div class="generate-left glass-card">
           <div class="text-sm font-bold mb-12"><span data-i18n="video.settings">🎬 视频参数</span></div>
           <div id="videoProviderCards"></div>
-          <label class="text-xs font-semibold text-secondary mb-4 block"><span data-i18n="video.size">视频尺寸</span></label>
+          <label id="videoSizeLabel" class="text-xs font-semibold text-secondary mb-4 block"><span data-i18n="video.size">视频尺寸</span></label>
           <select id="videoSize" class="text-sm p-8 mb-10" onchange="onVideoSizeChange()">
             <option value="1152x768"><span data-i18n="video.size_32_landscape">1152×768 (横版 3:2)</span></option>
             <option value="768x1152"><span data-i18n="video.size_23_portrait">768×1152 (竖版 2:3)</span></option>
@@ -1131,24 +1132,37 @@
             <input type="number" id="videoCustomW" placeholder="宽" class="text-sm p-8" style="width:48%;" min="256" max="2048" data-i18n-placeholder="common.width">
             <input type="number" id="videoCustomH" placeholder="高" class="text-sm p-8" style="width:48%;" min="256" max="2048" data-i18n-placeholder="common.high">
           </div>
-          <label class="text-xs font-semibold text-secondary mb-4 block"><span data-i18n="video.duration_preset">时长预设</span></label>
-          <div class="flex gap-4 mb-6">
+          <div id="videoNativeOptions" class="hidden">
+            <label class="text-xs font-semibold text-secondary block mb-4" for="videoNativeResolution">分辨率</label>
+            <select id="videoNativeResolution" class="text-sm p-8 mb-10" onchange="googleVideoUI.sync()"></select>
+            <label class="text-xs font-semibold text-secondary block mb-4" for="videoNativeAspect">画幅比例</label>
+            <select id="videoNativeAspect" class="text-sm p-8 mb-10" onchange="googleVideoUI.sync()"><option value="16:9">16:9 横屏</option><option value="9:16">9:16 竖屏</option></select>
+            <div id="videoNativeDurationField">
+              <label class="text-xs font-semibold text-secondary block mb-4" for="videoNativeDuration">时长（秒）</label>
+              <select id="videoNativeDuration" class="text-sm p-8 mb-10" onchange="googleVideoUI.sync()"></select>
+            </div>
+            <div id="videoNativeAutoDuration" class="text-xs text-muted mb-10">时长：模型决定（3–10 秒）</div>
+            <div class="text-xs text-muted mb-10">输出帧率：24 FPS</div>
+          </div>
+          <label id="videoDurationLabel" class="text-xs font-semibold text-secondary mb-4 block"><span data-i18n="video.duration_preset">时长预设</span></label>
+          <div id="videoDurationPresets" class="flex gap-4 mb-6">
             <button class="sub-tab active" onclick="setVideoDuration(121,24,this)"><span data-i18n="video.seconds_5">5秒</span></button>
             <button class="sub-tab" onclick="setVideoDuration(241,24,this)"><span data-i18n="video.seconds_10">10秒</span></button>
             <button class="sub-tab" onclick="setVideoDuration(361,24,this)"><span data-i18n="video.seconds_15">15秒</span></button>
           </div>
-          <div class="flex gap-6 items-center mb-10">
+          <div id="videoFramesRow" class="flex gap-6 items-center mb-10">
             <span class="text-xs text-muted"><span data-i18n="video.frames">帧数</span></span>
             <input type="number" id="videoFrames" value="121" class="text-sm p-8" style="width:60px;" min="9" max="441" step="8">
-            <span class="text-xs text-muted">8n+1</span>
+            <span id="videoFrameRule" class="text-xs text-muted">8n+1</span>
           </div>
-          <label class="text-xs font-semibold text-secondary mb-4 block">FPS</label>
+          <label id="videoFPSLabel" class="text-xs font-semibold text-secondary mb-4 block">FPS</label>
           <select id="videoFPS" class="text-sm p-8 mb-10"><option value="8">8 fps</option><option value="16">16 fps</option><option value="24" selected>24 fps</option><option value="30">30 fps</option></select>
           <div class="cursor-pointer flex items-center gap-4 mb-8" onclick="toggleVideoAdvanced()">
             <span class="text-xs font-semibold text-secondary"><span data-i18n="video.advanced">高级选项</span></span>
             <span id="videoAdvChevron" class="text-xs text-muted">▶</span>
           </div>
           <div id="videoAdvanced" class="hidden">
+            <div id="videoAdvancedEmpty" class="hidden text-xs text-muted">当前模型未提供可配置的高级参数。</div>
             <div class="form-group" data-field="steps">
               <label class="text-xs font-semibold text-secondary mb-4 block"><span data-i18n="video.steps">推理步数</span></label>
               <input type="number" id="videoSteps" placeholder="默认" class="text-sm p-8 mb-10" min="1" max="100" data-i18n-placeholder="common.default">
@@ -1163,13 +1177,6 @@
             <div class="form-group" data-field="negPrompt">
               <label class="text-xs font-semibold text-secondary mb-4 block"><span data-i18n="video.negative_prompt">负面提示词</span></label>
               <input type="text" id="videoNegPrompt" placeholder="不希望出现的内容..." class="text-sm p-8 mb-10" data-i18n-placeholder="video.negative_placeholder">
-            </div>
-          </div>
-          <div class="mt-8">
-            <div class="sub-tabs w-full">
-              <button class="sub-tab active" id="vSubTabTi2vid" onclick="switchVideoSubTab('ti2vid')" style="flex:1;text-align:center;"><span data-i18n="video.t2v">文生视频</span></button>
-              <button class="sub-tab" id="vSubTabI2vid" onclick="switchVideoSubTab('i2vid')" style="flex:1;text-align:center;"><span data-i18n="video.i2v">图生视频</span></button>
-              <button class="sub-tab" id="vSubTabKeyframes" onclick="switchVideoSubTab('keyframes')" style="flex:1;text-align:center;"><span data-i18n="video.keyframes">关键帧</span></button>
             </div>
           </div>
         </div>
@@ -1201,11 +1208,20 @@
           <!-- Bottom: Video Input -->
           <div class="generate-bottom-row">
             <div class="generate-input-col" style="flex:1;">
-              <div class="generate-center glass-card" style="padding:16px;">
-                <div class="text-sm font-bold mb-10"><span data-i18n="video.prompt">📝 视频提示词</span></div>
-                <textarea id="videoPrompt" rows="6" placeholder="描述你想生成的视频内容..." class="text-sm" style="min-height:120px;" data-i18n-placeholder="video.prompt_placeholder"></textarea>
+              <div id="videoFeedbackSlot"></div>
+              <div class="video-composer glass-card">
+                <div class="video-composer-toolbar">
+                  <label for="videoPrompt" class="text-sm font-bold"><span data-i18n="video.prompt">📝 视频提示词</span></label>
+                  <div class="sub-tabs" role="group" aria-label="视频生成模式">
+                    <button type="button" class="sub-tab active" id="vSubTabTi2vid" onclick="switchVideoSubTab('ti2vid')"><span data-i18n="video.t2v">文生视频</span></button>
+                    <button type="button" class="sub-tab" id="vSubTabI2vid" onclick="switchVideoSubTab('i2vid')"><span data-i18n="video.i2v">图生视频</span></button>
+                    <button type="button" class="sub-tab" id="vSubTabKeyframes" onclick="switchVideoSubTab('keyframes')"><span data-i18n="video.keyframes">关键帧</span></button>
+                  </div>
+                </div>
+                <div class="video-composer-body">
+                <textarea id="videoPrompt" rows="6" placeholder="描述你想生成的视频内容..." class="text-sm" data-i18n-placeholder="video.prompt_placeholder"></textarea>
 
-                <div id="videoI2VPanel" class="hidden mt-12">
+                <div id="videoI2VPanel" class="video-assets-panel hidden">
                   <div class="text-sm font-semibold text-secondary mb-8"><span data-i18n="video.reference">📷 参考图片</span></div>
                   <div class="mb-8">
                     <div class="sub-tabs">
@@ -1215,28 +1231,34 @@
                       <button class="sub-tab" onclick="setVideoImageRole('last_frame',this)"><span data-i18n="video.last_frame">➡️ 尾帧</span></button>
                     </div>
                   </div>
-                  <div id="videoUploadZone" class="upload-zone p-16 mb-8" onclick="document.getElementById('videoFileInput').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleVideoDrop(event)">
-                    <div class="text-base mb-4">📁</div>
-                    <div class="text-sm text-muted"><span data-i18n="video.upload">拖拽图片或点击上传</span></div>
-                    <input type="file" id="videoFileInput" accept="image/*" class="hidden" onchange="handleVideoFileSelect(event)" multiple>
+                  <div class="video-upload-list" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleVideoDrop(event)">
+                    <div id="videoImagePreview" class="video-image-preview"></div>
+                    <button type="button" id="videoUploadZone" class="video-upload-card" onclick="document.getElementById('videoFileInput').click()" title="拖拽图片或点击上传" aria-label="上传参考图片">
+                      <span class="video-upload-plus" aria-hidden="true">+</span>
+                      <span data-i18n="video.add_image">添加图片</span>
+                    </button>
                   </div>
-                  <button class="btn-secondary w-full text-sm p-8 mb-8" onclick="openVideoPreviewPicker()"><span data-i18n="video.pick_gallery">🎯 从图库取图</span></button>
-                  <div id="videoImagePreview" class="flex gap-6 flex-wrap" style="min-height:40px;"></div>
+                  <input type="file" id="videoFileInput" accept="image/*" class="hidden" onchange="handleVideoFileSelect(event)" multiple>
+                  <button type="button" class="btn-ghost video-gallery-action" onclick="openVideoPreviewPicker()"><span data-i18n="video.pick_gallery">🎯 从图库取图</span></button>
                 </div>
 
-                <div id="videoKeyframesPanel" class="hidden mt-12">
+                <div id="videoKeyframesPanel" class="video-assets-panel hidden">
                   <div class="text-sm font-semibold text-secondary mb-8"><span data-i18n="video.keyframe_images">🖼 关键帧图片</span></div>
-                  <div class="upload-zone p-16 mb-8" onclick="document.getElementById('kfFileInput').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleKfDrop(event)">
-                    <div class="text-base mb-4">🎬</div>
-                    <div class="text-sm text-muted"><span data-i18n="video.keyframe_upload">拖拽多张关键帧图片或点击上传</span></div>
-                    <input type="file" id="kfFileInput" accept="image/*" class="hidden" onchange="handleKfFileSelect(event)" multiple>
+                  <div class="video-upload-list" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleKfDrop(event)">
+                    <div id="kfImagePreview" class="video-image-preview"></div>
+                    <button type="button" id="kfUploadZone" class="video-upload-card" onclick="document.getElementById('kfFileInput').click()" title="拖拽多张关键帧图片或点击上传" aria-label="上传关键帧图片">
+                      <span class="video-upload-plus" aria-hidden="true">+</span>
+                      <span data-i18n="video.add_image">添加图片</span>
+                    </button>
                   </div>
-                  <button class="btn-secondary w-full text-sm p-8 mb-8" onclick="openVideoPreviewPicker()"><span data-i18n="video.pick_gallery">🎯 从图库取图</span></button>
-                  <div id="kfImagePreview" class="flex gap-6 flex-wrap" style="min-height:40px;"></div>
+                  <input type="file" id="kfFileInput" accept="image/*" class="hidden" onchange="handleKfFileSelect(event)" multiple>
+                  <button type="button" class="btn-ghost video-gallery-action" onclick="openVideoPreviewPicker()"><span data-i18n="video.pick_gallery">🎯 从图库取图</span></button>
+                </div>
                 </div>
 
                 <button id="videoGenBtn" class="btn-primary w-full p-12 text-base font-bold mb-10" onclick="startVideoGenerate()" disabled><span data-i18n="video.choose_provider">🚀 选择 Provider 后生成</span></button>
 
+                <div class="video-composer-status">
                 <div id="videoProgressBar" class="hidden mb-10">
                   <div class="rounded overflow-hidden mb-4" style="background:var(--bg-surface);height:6px;">
                     <div id="videoProgressFill" class="rounded" style="height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width 0.3s;width:0%;"></div>
@@ -1256,6 +1278,7 @@
                 </div>
 
                 <div id="videoPerProviderSection" class="hidden mb-10"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -1918,8 +1941,13 @@
       };
     })();
   </script>
-  <script src="/static/js/i18n.js?v=34"></script>
-<script src="/static/js/app-all.js?v=49"></script>
+  <script src="/static/js/i18n.js?v=35"></script>
+<script src="/static/js/app-all.js?v=57"></script>
+<script src="/static/js/google-video-ui.js?v=1"></script>
+<link rel="stylesheet" href="/static/css/generation-experience.css?v=1">
+<script src="/static/js/generation-experience.js?v=2"></script>
+<link rel="stylesheet" href="/static/css/model-browser.css?v=1">
+<script src="/static/js/model-browser.js?v=2"></script>
 <link rel="stylesheet" href="/static/css/precision-ui-trial.css">
 <script src="/static/js/precision-ui-trial.js"></script>
 <script src="/static/js/sync.js?v=7"></script>

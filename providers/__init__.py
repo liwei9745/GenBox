@@ -4254,10 +4254,14 @@ async def _fetch_gemini_models(cfg: ProviderConfig) -> List[str]:
     1. Google 官方 API: /v1beta/models，使用 x-goog-api-key 请求头
     2. OpenAI 兼容代理: /v1/models
     """
-    # Official errors must not be hidden by an unrelated OpenAI fallback.
-    official = urlsplit(cfg.base_url).hostname == "generativelanguage.googleapis.com"
+    endpoints = cfg.get_active_endpoints()
+    if not endpoints:
+        raise ValueError("API Key 或 Base URL 未配置")
+    endpoint = endpoints[0]
+    # Use the same effective credential source as generation, including api_keys.
+    official = urlsplit(endpoint.url).hostname == "generativelanguage.googleapis.com"
     # 处理 base_url：移除末尾的 /v1 或 /v1beta
-    base = cfg.base_url.rstrip('/')
+    base = endpoint.url.rstrip('/')
     if base.endswith('/v1') or base.endswith('/v1beta'):
         base = base.rsplit('/', 1)[0]
     
@@ -4269,32 +4273,42 @@ async def _fetch_gemini_models(cfg: ProviderConfig) -> List[str]:
             verify=verify_ssl_enabled(),
         ) as client:
             url = f"{base}/v1beta/models"
-            resp = await _stream_bounded_provider_response(
-                client,
-                "GET",
-                url,
-                success_max_bytes=PROVIDER_MODEL_LIST_RESPONSE_MAX_BYTES,
-                headers={"x-goog-api-key": cfg.api_key},
-                params={"pageSize": 1000},
-            )
-            if resp.status_code == 200:
-                data = _parse_provider_json_response(resp)
-                models = data.get("models", [])
-                image_models = []
-                other_models = []
-                for m in models:
-                    mid = m.get("name", "").replace("models/", "")
-                    methods = m.get("supportedGenerationMethods", [])
-                    if "generateContent" in methods or "imageGeneration" in methods:
-                        image_models.append(mid)
-                    else:
-                        other_models.append(mid)
-                return image_models + other_models
-            if official:
-                failure = _gemini_http_failure(resp, cfg)
-                raise httpx.HTTPStatusError(
-                    failure.error, request=resp.request, response=resp,
+            recommended, others = [], []
+            seen_models, seen_tokens = set(), set()
+            page_token = None
+            for _ in range(20):
+                params = {"pageSize": 1000}
+                if page_token:
+                    params["pageToken"] = page_token
+                resp = await _stream_bounded_provider_response(
+                    client, "GET", url,
+                    success_max_bytes=PROVIDER_MODEL_LIST_RESPONSE_MAX_BYTES,
+                    headers={"x-goog-api-key": endpoint.key}, params=params,
                 )
+                if resp.status_code != 200:
+                    failure = _gemini_http_failure(resp, cfg)
+                    raise httpx.HTTPStatusError(
+                        failure.error, request=resp.request, response=resp,
+                    )
+                data = _parse_provider_json_response(resp)
+                for model in data.get("models", []):
+                    mid = str(model.get("name") or "").removeprefix("models/")
+                    if not mid or mid in seen_models:
+                        continue
+                    seen_models.add(mid)
+                    methods = model.get("supportedGenerationMethods") or []
+                    if cfg.type == "video":
+                        preferred = mid.startswith(("veo-", "veo_", "gemini-omni-"))
+                    else:
+                        preferred = "generateContent" in methods or "imageGeneration" in methods
+                    (recommended if preferred else others).append(mid)
+                page_token = data.get("nextPageToken")
+                if not page_token:
+                    return recommended + others
+                if not isinstance(page_token, str) or page_token in seen_tokens:
+                    raise ValueError("Gemini model-list pagination did not advance")
+                seen_tokens.add(page_token)
+            raise ValueError("Gemini model-list pagination limit exceeded")
     except Exception:
         if official:
             raise

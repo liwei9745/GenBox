@@ -155,3 +155,86 @@ def test_connectivity_transport_error_redacts_key(monkeypatch):
     result = asyncio.run(main.test_provider(cfg.id))
     assert result["success"] is False
     assert cfg.api_key not in json.dumps(result)
+
+
+@pytest.mark.parametrize("kind", ["image", "video"])
+def test_model_list_follows_pages_and_preserves_video_ids(monkeypatch, kind):
+    cfg = _provider(type=kind, api_key="", api_keys=["synthetic-pool-key"])
+    videos = ["veo-3.1-generate-preview", "veo-3.1-fast-generate-preview",
+              "veo-3.1-lite-generate-preview", "gemini-omni-flash-preview",
+              "gemini-omni-1.1-flash"]
+
+    def handler(request):
+        assert request.headers["x-goog-api-key"] == "synthetic-pool-key"
+        assert request.url.path == "/v1beta/models"
+        if request.url.params.get("pageToken") == "synthetic-page-two":
+            return httpx.Response(200, json={"models": [
+                {"name": f"models/{mid}", "supportedGenerationMethods": ["predictLongRunning"]}
+                for mid in videos
+            ]})
+        return httpx.Response(200, json={
+            "models": [{"name": f"models/{cfg.model}", "supportedGenerationMethods": ["generateContent"]}],
+            "nextPageToken": "synthetic-page-two",
+        })
+
+    requests, _ = _mock_client(monkeypatch, handler)
+    expected = videos + [cfg.model] if kind == "video" else [cfg.model] + videos
+    assert asyncio.run(providers.fetch_models_from_upstream(cfg)) == expected
+    assert len(requests) == 2
+    assert all("synthetic-pool-key" not in str(r.url) for r in requests)
+
+
+def test_gemini_fetch_uses_configured_endpoint_pair(monkeypatch):
+    cfg = _provider(api_key="", base_url="", endpoint_type="gemini", endpoints=[{
+        "url": "https://generativelanguage.googleapis.com/v1beta/",
+        "key": "synthetic-endpoint-key", "enabled": True,
+    }])
+    requests, _ = _mock_client(monkeypatch, lambda _: httpx.Response(200, json={"models": []}))
+    assert asyncio.run(providers.fetch_models_from_upstream(cfg)) == []
+    assert requests[0].url.path == "/v1beta/models"
+    assert requests[0].headers["x-goog-api-key"] == "synthetic-endpoint-key"
+
+
+def test_gemini_fetch_rejects_repeated_page_token(monkeypatch):
+    cfg = _provider(type="video")
+    requests, _ = _mock_client(monkeypatch, lambda _: httpx.Response(200, json={
+        "models": [], "nextPageToken": "repeated",
+    }))
+    with pytest.raises(ValueError, match="pagination did not advance"):
+        asyncio.run(providers.fetch_models_from_upstream(cfg))
+    assert len(requests) == 2
+
+
+def test_gemini_video_list_second_page_error_is_not_silently_partial(monkeypatch):
+    cfg = _provider(type="video")
+
+    def handler(request):
+        if request.url.params.get("pageToken"):
+            return httpx.Response(403, json={"error": {"message": cfg.api_key}})
+        return httpx.Response(200, json={
+            "models": [{"name": f"models/{cfg.model}"}], "nextPageToken": "page-two",
+        })
+
+    requests, _ = _mock_client(monkeypatch, handler)
+    with pytest.raises(httpx.HTTPStatusError) as error:
+        asyncio.run(providers.fetch_models_from_upstream(cfg))
+    assert len(requests) == 2
+    assert cfg.api_key not in str(error.value)
+
+
+def test_official_video_generation_does_not_use_flow2api(monkeypatch):
+    cfg = _provider(type="video", model="veo-3.1-generate-preview")
+    monkeypatch.setattr(main.cfg_mgr, "get_video_providers", lambda: [cfg])
+
+    def unexpected_http(**kwargs):
+        pytest.fail("Official video must not be sent to the Flow2API adapter")
+
+    monkeypatch.setattr(httpx, "AsyncClient", unexpected_http)
+    calls = []
+    monkeypatch.setattr(main, "_start_google_video", lambda req, provider, endpoint:
+                        calls.append(endpoint.url) or {"status": "queued"})
+    result = asyncio.run(main.video_generate(main.VideoGenerateRequest(
+        provider_id=cfg.id, model=cfg.model, prompt="synthetic scene",
+    )))
+    assert result["status"] == "queued"
+    assert len(calls) == 1

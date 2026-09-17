@@ -52,7 +52,7 @@ function runGenerationHarness(js) {
     videoSeed: { value: '' },
     videoNegPrompt: { value: '' },
     videoGenBtn: { disabled: false, textContent: '' },
-    videoProgressBar: { style: {} },
+    videoProgressBar: { style: {}, classList: { remove: () => {} } },
     videoProgressFill: { style: {}, className: '' },
     videoProgressText: { textContent: '' },
     videoElapsed: { textContent: '' },

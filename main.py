@@ -3462,6 +3462,54 @@ async def test_provider(provider_id: str):
     raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' 不存在")
 
 
+def _provider_discovery_draft(req: ProviderCreateReq) -> ProviderConfig:
+    """Resolve an in-memory draft, retaining saved secrets only for the same URL."""
+    payload = req.model_dump()
+    payload["id"] = req.id or "__provider_discovery_draft__"
+    existing = next((p for p in cfg_mgr.config.providers if req.id and p.id == req.id), None)
+    supplied_key = bool(req.api_key and not _is_masked_secret(req.api_key))
+    payload["api_key"] = req.api_key if supplied_key else ""
+    payload["api_keys"] = [key for key in req.api_keys if key and not _is_masked_secret(key)]
+    same_url = existing and req.base_url.rstrip("/") == existing.base_url.rstrip("/")
+    if same_url:
+        if not supplied_key:
+            payload["api_key"] = existing.api_key
+        if not payload["api_keys"] and not supplied_key:
+            payload["api_keys"] = list(existing.get_effective_keys())
+    for endpoint in payload["endpoints"]:
+        if endpoint["key"] and not _is_masked_secret(endpoint["key"]):
+            continue
+        endpoint["key"] = ""
+        matching = [
+            ep for ep in (existing.endpoints if existing else [])
+            if ep.url.rstrip("/") == endpoint["url"].rstrip("/")
+            and ep.key and not _is_masked_secret(ep.key)
+        ]
+        if len(matching) == 1:
+            endpoint["key"] = matching[0].key
+    return ProviderConfig(**payload)
+
+
+@app.post("/api/providers/fetch-models-preview")
+async def preview_provider_models(req: ProviderCreateReq, response: Response):
+    """Discover using form values without saving a Provider or its credentials."""
+    response.headers["Cache-Control"] = "no-store"
+    draft = _provider_discovery_draft(req)
+    try:
+        models = await fetch_models_from_upstream(draft)
+        is_candidate = (draft.endpoint_type or "").strip().lower() == "volc_ark_plan"
+        return {
+            "success": True, "models": models, "count": len(models),
+            "provider_type": draft.type, "is_fallback": is_candidate,
+            "message": "Agent Plan 返回官方候选模型，实际可用性需验证。" if is_candidate else "",
+        }
+    except Exception as exc:
+        return {
+            "success": False, "provider_type": draft.type,
+            "detail": f"拉取失败: {_provider_error_text(exc, draft)[:500]}",
+        }
+
+
 @app.get("/api/providers/fetch-models/{provider_id}")
 async def fetch_models(provider_id: str):
     """从上游 API 拉取 Provider 的可用模型列表"""
@@ -5598,6 +5646,9 @@ class VideoGenerateRequest(BaseModel):
     num_inference_steps: Optional[int] = None
     seed: Optional[int] = None
     negative_prompt: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    resolution: Optional[str] = None
+    aspect_ratio: Optional[str] = None
 
 
 def _detect_video_provider_type(provider):
@@ -5833,6 +5884,12 @@ async def video_generate(req: VideoGenerateRequest):
             raise HTTPException(status_code=404, detail=f"视频 Provider '{req.provider_id}' 不存在")
     else:
         provider = video_providers[0]
+
+    from providers.google_video import is_official
+    endpoints = provider.get_active_endpoints()
+    endpoint = endpoints[0] if endpoints else None
+    if is_official(endpoint.url if endpoint else provider.base_url):
+        return _start_google_video(req, provider, endpoint)
 
     if not provider.api_key:
         raise HTTPException(status_code=400, detail=f"视频 Provider '{provider.name}' API Key 未配置")
@@ -6262,6 +6319,60 @@ async def video_generate(req: VideoGenerateRequest):
     }
 
 
+def _start_google_video(req, provider, endpoint):
+    import threading
+    from providers import _get_proxy_url
+    from providers.google_video import build_request, run_generation, GoogleVideoError
+
+    if not endpoint or not endpoint.key:
+        raise HTTPException(status_code=400, detail="Google 视频 API Key 未配置。")
+    model = req.model.strip() if req.model else provider.model
+    try:
+        url, payload = build_request(req, model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    task_id = str(uuid.uuid4())
+    info = {
+        "task_id": task_id, "video_id": "", "provider_id": provider.id,
+        "provider_name": provider.name, "model": model, "prompt": req.prompt,
+        "mode": req.mode, "status": "queued", "progress": 0,
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"), "start_time": time.time(),
+        "width": req.width, "height": req.height, "frame_rate": 24,
+        "duration_seconds": req.duration_seconds, "video_url": None,
+        "local_path": None, "error": None, "provider_type": "google_native",
+    }
+    video_tasks[task_id] = info
+    destination = VIDEO_DIR / f"google_{task_id}.mp4"
+    proxy = _get_proxy_url(provider)
+
+    def worker():
+        def cancelled():
+            return info["status"] == "cancelled"
+
+        def stage(value):
+            if not cancelled():
+                info["status"] = value
+
+        try:
+            done = run_generation(url, payload, endpoint.key, destination, proxy=proxy,
+                                  cancelled=cancelled, on_stage=stage)
+            if done and not cancelled():
+                info.update(status="completed", progress=100, local_path=str(destination))
+                _generate_video_thumbnail_async(destination)
+        except GoogleVideoError as exc:
+            if not cancelled():
+                info.update(status="failed", error=str(exc))
+        except Exception:
+            if not cancelled():
+                info.update(status="failed", error="Google 视频连接或响应处理失败；未自动重试生成。")
+        finally:
+            _save_video_history_entry(info)
+
+    response = {**info}
+    threading.Thread(target=worker, daemon=True, name="google-video-" + task_id).start()
+    return response
+
+
 @app.get("/api/video/status/{task_id}")
 async def video_status(task_id: str):
     """查询视频任务状态"""
@@ -6293,7 +6404,7 @@ async def video_list(limit: int = 50):
 
 
 @app.get("/api/video/model-spec/{model_name}")
-async def video_model_spec(model_name: str):
+async def video_model_spec(model_name: str, provider_id: str = ""):
     """获取视频模型参数约束
     
     根据模型名称返回该模型支持的参数范围：
@@ -6306,6 +6417,17 @@ async def video_model_spec(model_name: str):
     - supports_seed: 是否支持种子
     """
     from providers import get_video_model_spec_dict
+    if provider_id:
+        from providers.google_video import is_official, model_spec
+        provider = next((p for p in cfg_mgr.get_video_providers() if p.id == provider_id), None)
+        if not provider:
+            raise HTTPException(status_code=404, detail="视频 Provider 不存在。")
+        endpoints = provider.get_active_endpoints()
+        if is_official(endpoints[0].url if endpoints else provider.base_url):
+            try:
+                return {"model": model_name, "spec": model_spec(model_name)}
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from None
     spec = get_video_model_spec_dict(model_name)
     return {"model": model_name, "spec": spec}
 

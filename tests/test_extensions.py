@@ -2205,7 +2205,9 @@ def test_plan_confirmation_and_ambiguous_deploy_failures_use_distinct_recovery_s
     assert "Do not deploy again; reload and check task status manually." in translations
     assert "The browser could not generate a secure deployment attempt ID" in translations
     assert "verify SSH again before creating a new plan." in translations
-    assert '<script src="/static/js/i18n.js?v=34"></script>' in html
+    import re
+    language_script = re.search(r'<script src="/static/js/i18n\.js\?v=(\d+)"></script>', html)
+    assert language_script and int(language_script.group(1)) >= 34
     assert '<script src="/static/js/extensions.js?v=38"></script>' in html
 
 

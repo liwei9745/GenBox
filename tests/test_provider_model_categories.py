@@ -18,3 +18,12 @@ def test_provider_model_category_filter_is_rendered():
     for label in ("全部", "图像", "视频", "文本", "多模态"):
         assert ">" + label + "</button>" in source
     assert "if (p.model && filteredModels.indexOf(p.model) === -1) filteredModels.unshift(p.model);" in source
+
+
+def test_provider_group_headers_do_not_duplicate_emoji_icons():
+    source = (ROOT / "static/js/app-all.js").read_text(encoding="utf-8")
+    assert "function providerGroupIcon(type)" in source
+    assert "function providerGroupTitle(type)" in source
+    assert "replace(/^[🎨🎬🤖]\\s*/u, '')" in source
+    assert "class=\"provider-group-icon\"" in source
+    assert "group.icon + '</span>'" not in source

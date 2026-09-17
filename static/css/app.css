@@ -1679,6 +1679,23 @@ textarea {
 .provider-type-card:hover {
   border-color: rgba(0,122,255,0.2);
 }
+.provider-group-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 18px;
+  color: var(--text-primary);
+}
+.provider-group-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 .provider-col-resize {
   background: transparent;

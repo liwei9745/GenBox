@@ -619,7 +619,9 @@ function loadModelDropdown() {
     var p = allProviders[i];
     if (p.type === 'image' && p.enabled !== false) {
       var pModels = (p.models && p.models.length) ? p.models : [p.model || 'default'];
-      var filtered = filterModelsByType(pModels, 'image');
+      var filtered = pModels.map(generationModelId).filter(function(model) {
+        return modelSupportsGenerationMode(p, model, currentMode);
+      });
       for (var j = 0; j < filtered.length; j++) {
         var m = filtered[j];
         if (models.indexOf(m) < 0) models.push(m);
@@ -629,11 +631,11 @@ function loadModelDropdown() {
   for (var k = 0; k < models.length; k++) {
     var opt = document.createElement('option');
     opt.value = models[k];
-    opt.textContent = models[k];
+    opt.textContent = generationModelDisplayName(models[k]);
     sel.appendChild(opt);
   }
   // 恢复选中值
-  sel.value = currentVal;
+  sel.value = models.indexOf(currentVal) >= 0 ? currentVal : '_global';
 }
 
 // 切换模型时加载对应设置
@@ -9926,7 +9928,8 @@ function loadProviders(attempt) {
 
 function onImageModelChange(pid, newModel) {
   var provider = findProvider(pid);
-  if (provider && generationProviderModelIds(provider).indexOf(newModel) >= 0) imageProviderModelSelections[pid] = newModel;
+  if (provider && generationProviderModelIds(provider).indexOf(newModel) >= 0 &&
+      modelSupportsGenerationMode(provider, newModel, currentMode)) imageProviderModelSelections[pid] = newModel;
 }
 
 function generationProviderModelIds(provider) {
@@ -9941,9 +9944,13 @@ function generationProviderModelSettings(providerIds, selectedModel) {
   (providerIds || []).forEach(function(pid) {
     var provider = findProvider(pid);
     if (!provider) return;
-    var ids = generationProviderModelIds(provider);
-    var chosen = selectedModel && selectedModel !== '_global' && ids.indexOf(selectedModel) >= 0
-      ? selectedModel : imageProviderModelSelections[pid] || provider.model;
+    var ids = generationProviderModelIds(provider).filter(function(model) {
+      return modelSupportsGenerationMode(provider, model, currentMode);
+    });
+    // A visible per-provider choice takes precedence over the settings preset.
+    var chosen = imageProviderModelSelections[pid] ||
+      (selectedModel && selectedModel !== '_global' && ids.indexOf(selectedModel) >= 0 ? selectedModel : provider.model);
+    if (ids.indexOf(chosen) < 0) chosen = ids[0];
     if (ids.indexOf(chosen) >= 0) settings[pid] = { model: chosen };
   });
   return settings;
@@ -9964,7 +9971,10 @@ function modelSupportsGenerationMode(provider, model, mode) {
       (provider.endpoint_type === 'gemini' && /^gemini-(2\.5-flash-image|3-pro-image|3\.1-flash-image)$/.test(String(model || '')))) && caps.precision_edit !== false &&
       precisionResolution.structureValid && !explicitlyUnsupported);
   }
+  if ((mode === 't2i' || mode === 'i2i') && !generationModelIsImage(provider, model)) return false;
   if (modelCaps && typeof modelCaps === 'object') {
+    if (mode === 'i2i' && modelCaps.i2i === false) return false;
+    if (mode === 't2i' && modelCaps.t2i === false) return false;
     if (mode === 'inpaint' && (modelCaps.inpaint_mask === true || modelCaps.inpaint === true)) return true;
     if (mode === 'i2i' && (modelCaps.precision_edit === true || modelCaps.i2i === true)) return true;
     if (mode === 't2i' && modelCaps.t2i === true) return true;
@@ -9979,6 +9989,7 @@ function modelSupportsGenerationMode(provider, model, mode) {
   if (mode === 'i2i') {
     if (caps.i2i !== undefined) return caps.i2i === true;
     var imageModel = String(model || '').toLowerCase();
+    if (/^gemini-.*image/.test(imageModel)) return true;
     return imageModel.indexOf('edit') !== -1 || imageModel.indexOf('i2i') !== -1 || imageModel.indexOf('image-to-image') !== -1;
   }
   if (caps.t2i !== undefined) return caps.t2i === true;
@@ -10004,18 +10015,59 @@ function updateGenerationModelHelp() {
   help.classList.toggle('is-empty', !names.length);
 }
 
+function generationModelId(model) {
+  if (typeof model === 'string') return model;
+  if (model && typeof model === 'object') return model.id || model.model || model.name || '';
+  return '';
+}
+
+function generationModelDisplayName(model) {
+  var id = generationModelId(model);
+  var labels = {
+    'gemini-3.1-flash-lite-image': 'Nano Banana 2 Lite',
+    'gemini-3.1-flash-image': 'Nano Banana 2',
+    'gemini-3-pro-image': 'Nano Banana Pro · Gemini 3 Pro Image',
+    'gemini-3-pro-image-preview': 'Nano Banana Pro · Gemini 3 Pro Image Preview',
+    'gemini-2.5-flash-image': 'Nano Banana'
+  };
+  return labels[id] || id;
+}
+
+function generationModelIsImage(provider, model) {
+  var id = generationModelId(model);
+  var ml = id.toLowerCase();
+  var record = provider ? getProviderModelCapabilityRecord(provider, id) : {};
+  if (record.image_generation === false) return false;
+  if (record.image_generation === true) return true;
+  if (ml === 'auto' || ml.indexOf('text') === 0 || ml.indexOf('chat') !== -1 ||
+      ml.indexOf('embedding') !== -1 || ml.indexOf('tts') !== -1 ||
+      ml.indexOf('audio') !== -1 || ml.indexOf('transcri') !== -1 ||
+      ml.indexOf('t2v') !== -1 || ml.indexOf('i2v') !== -1 ||
+      ml.indexOf('video') !== -1 || ml.indexOf('veo') !== -1 ||
+      ml.indexOf('sora') !== -1 || ml.indexOf('lyria') !== -1 ||
+      ml.indexOf('rerank') !== -1) return false;
+  if (ml.indexOf('gemini') === 0) {
+    return ml.indexOf('image') !== -1 || ml.indexOf('imagen') !== -1 || ml.indexOf('nano-banana') !== -1;
+  }
+  if (/(image|imagen|diffusion|flux|seedream|dall|midjourney|banana)/.test(ml) ||
+      record.t2i === true || record.i2i === true) return true;
+  if (/^(gpt-|o[1-9](?:-|$)|claude|deepseek|qwen|gemma|grok|llama|mistral|antigravity|deep-research)/.test(ml)) return false;
+  // Unknown custom gateway IDs retain the existing Provider capability contract.
+  return filterModelsByType([id], 'image', provider).length > 0;
+}
+
 function renderProviderList() {
   var container = document.getElementById('providerList');
   var html = '';
   var imageProviders = allProviders.filter(function(p){ return p.type === 'image'; });
 
   function modeModels(provider) {
-    var models = provider.models && provider.models.length > 0 ? provider.models : (provider.model ? [provider.model] : []);
-    return models.filter(function(model) { return modelSupportsGenerationMode(provider, model, currentMode); });
+    return generationProviderModelIds(provider).filter(function(model) { return modelSupportsGenerationMode(provider, model, currentMode); });
   }
 
   var eligibleProviderIds = imageProviders.filter(function(provider) {
-    return modeModels(provider).length > 0 || currentMode === 'inpaint';
+    return provider.enabled !== false && (provider.api_key || provider.has_key) &&
+      (modeModels(provider).length > 0 || currentMode === 'inpaint');
   }).map(function(provider) { return provider.id; });
   selectedProviders = selectedProviders.filter(function(id) { return eligibleProviderIds.indexOf(id) !== -1; });
 
@@ -10026,19 +10078,18 @@ function renderProviderList() {
       var capability = currentMode === 'inpaint' ? getInpaintCapability(p) : { supported: true, reasonCode: '' };
       var modeEligible = modeModels(p).length > 0;
       var capabilityBlocked = !modeEligible && !(currentMode === 'inpaint' && inpaintManualChoice);
-      var disabled = !p.enabled || !configured || capabilityBlocked;
+      var disabled = p.enabled === false || !configured || capabilityBlocked;
       var capabilityHint = currentMode === 'inpaint' && !capability.supported
         ? ' title="' + escAttr(i18nText('creator.inpaint_model_unavailable')) + '"'
         : '';
 
-      var allModels = p.models && p.models.length > 0 ? p.models : (p.model ? [p.model] : []);
-      // 过滤掉非生图模型（视频模型 + LLM模型）
       var filteredModels = modeModels(p);
-      if (filteredModels.length === 0) filteredModels = allModels;
-      var selectedProviderModel = imageProviderModelSelections[p.id] || p.model || '';
+      var selectedProviderModel = imageProviderModelSelections[p.id] || generationModelId(p.model) || '';
+      if (filteredModels.indexOf(selectedProviderModel) === -1) selectedProviderModel = filteredModels[0] || '';
+      if (selectedProviderModel) imageProviderModelSelections[p.id] = selectedProviderModel;
       var modelOpts = filteredModels.length > 3
         ? buildModelOptsGrouped(filteredModels, selectedProviderModel, groupImageModels)
-        : filteredModels.map(function(m){ return '<option value="' + escAttr(m) + '"' + (selectedProviderModel===m?' selected':'') + '>' + escHtml(m) + '</option>'; }).join('');
+        : filteredModels.map(function(m){ return '<option value="' + escAttr(m) + '"' + (selectedProviderModel===m?' selected':'') + '>' + escHtml(generationModelDisplayName(m)) + '</option>'; }).join('');
 
       html += '<div class="provider-card ' + (sel ? 'selected' : '') + ' ' + (disabled ? 'disabled' : '') + '" ' +
               'draggable="' + (!disabled) + '" ' +
@@ -10057,14 +10108,15 @@ function renderProviderList() {
         '</label>' +
       '</div>' +
       '<div style="padding:2px 0 6px 22px;">' +
-        '<select onclick="event.stopPropagation();" onchange="event.stopPropagation();onImageModelChange(\'' + p.id + '\', this.value)" ' + (!sel ? 'disabled' : '') + ' style="width:100%;font-size:11px;padding:4px 8px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);' + (!sel ? 'opacity:0.5;' : '') + '">' +
-          (modelOpts || i18nText('provider.no_models_html')) +
+        '<select data-generation-provider="' + escAttr(p.id) + '" onclick="event.stopPropagation();" onchange="event.stopPropagation();onImageModelChange(\'' + p.id + '\', this.value)" ' + (!sel || disabled ? 'disabled' : '') + ' style="width:100%;font-size:11px;padding:4px 8px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);' + (!sel ? 'opacity:0.5;' : '') + '">' +
+          (modelOpts || '<option value="" disabled>' + escHtml(i18nText('provider.type_model_none')) + '</option>') +
         '</select>' +
       '</div>';
     })(imageProviders[i], i);
   }
 
   container.innerHTML = html || i18nText('provider.no_models_add_html');
+  if (window.genboxModelBrowser) window.genboxModelBrowser.mount(container);
   updateSelCount();
   updateGenerationModelHelp();
 }
@@ -11230,6 +11282,14 @@ function createPreviewPlaceholders(providerStates) {
       state: 'queued'
     };
   }
+  if (keys.length) {
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (mainContent) {
+      mainContent.classList.remove('hidden');
+      mainContent.style.display = 'flex';
+    }
+  }
+  if (window.genboxGenerationUX) window.genboxGenerationUX.progress(providerStates);
 }
 
 function fillPreviewPlaceholder(key, result) {
@@ -11742,6 +11802,7 @@ function generationFailureMessage(data) {
 function finishGenerationTerminalStatus(data, precisionTask) {
   var terminalStatus = String(data && data.status || '').toLowerCase();
   if (['cancelled', 'failed', 'completed'].indexOf(terminalStatus) === -1) return false;
+  if (typeof window !== 'undefined' && window.genboxGenerationUX) window.genboxGenerationUX.finish(data, genCurrentGenId);
 
   var ptxt = document.getElementById('progressText');
   if (precisionTask) updatePrecisionTaskMonitor(data);
@@ -11862,6 +11923,7 @@ function startGenPolling(genId) {
           createPreviewPlaceholders(data.provider_states);
         }
         renderGenPerProviderBars(data.provider_states);
+        if (window.genboxGenerationUX) window.genboxGenerationUX.progress(data.provider_states);
         // 更新实时日志（旧的全局日志区域，保留兼容）
         var logEl = document.getElementById('genLogArea');
         if (logEl) {
@@ -12206,7 +12268,8 @@ function doGenerate() {
     clearInterval(timerInterval);
     stopGenPolling();
     pbox.classList.add('hidden');
-    alert(i18nText('status.submit_failed') + e.message);
+    if (window.genboxGenerationUX) window.genboxGenerationUX.submissionFailed();
+    else alert(i18nText('status.submit_failed') + e.message);
     setStatus(i18nText('status.submit_failed') + e.message);
     setGenerationControls('idle');
     if (!genCurrentGenId) genIsPrecisionTask = false;
@@ -14801,10 +14864,22 @@ function renderProviderEdit() {
   // 加载更新信息
   _loadUpdateInfo();
 
+  function providerGroupIcon(type) {
+    var icons = {
+      image: '<span class="provider-group-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="8" cy="9" r="1.5"></circle><path d="m5 17 4-4 3 3 2-2 5 5"></path></svg></span>',
+      video: '<span class="provider-group-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2"></rect><path d="m9 9 4 3-4 3Zm7 1 5-3v10l-5-3"></path></svg></span>',
+      llm: '<span class="provider-group-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="12" rx="3"></rect><path d="M12 3v4m-5 4h.01m9.99 0h.01M8 19v2m8-2v2"></path><circle cx="9" cy="13" r="1"></circle><circle cx="15" cy="13" r="1"></circle></svg></span>'
+    };
+    return icons[type] || '';
+  }
+  function providerGroupTitle(type) {
+    var key = type === 'image' ? 'provider.image' : type === 'video' ? 'provider.video' : 'creator.prompt_optimization';
+    return i18nText(key).replace(/^[🎨🎬🤖]\s*/u, '');
+  }
   var groups = [
-    { type: 'image', icon: '🎨', title: i18nText('provider.image'), hint: i18nText('provider.group_image_hint'), accent: '#22c55e' },
-    { type: 'video', icon: '🎬', title: i18nText('provider.video'), hint: i18nText('provider.group_video_hint'), accent: '#3b82f6' },
-    { type: 'llm', icon: '🤖', title: i18nText('creator.prompt_optimization'), hint: i18nText('provider.group_llm_hint'), accent: '#f59e0b' }
+    { type: 'image', icon: providerGroupIcon('image'), title: providerGroupTitle('image'), hint: i18nText('provider.group_image_hint'), accent: '#22c55e' },
+    { type: 'video', icon: providerGroupIcon('video'), title: providerGroupTitle('video'), hint: i18nText('provider.group_video_hint'), accent: '#3b82f6' },
+    { type: 'llm', icon: providerGroupIcon('llm'), title: providerGroupTitle('llm'), hint: i18nText('provider.group_llm_hint'), accent: '#f59e0b' }
   ];
 
   html += '<div id="providerGrid" style="display:flex;gap:14px;min-height:420px;">';
@@ -14818,7 +14893,7 @@ function renderProviderEdit() {
       // 卡片头部
       '<div style="padding:14px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,' + group.accent + '08,transparent);display:flex;align-items:center;justify-content:space-between;">' +
         '<div style="display:flex;align-items:center;gap:8px;">' +
-          '<span style="font-size:16px;">' + group.icon + '</span>' +
+          group.icon +
           '<span style="font-size:14px;font-weight:700;color:var(--text-primary);font-family:-apple-system,BlinkMacSystemFont,\'SF Pro Display\',system-ui,sans-serif;">' + group.title + '</span>' +
           '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:' + group.accent + '18;color:' + group.accent + ';font-weight:600;">' + provsInGroup.length + '</span>' +
         '</div>' +
@@ -14840,9 +14915,9 @@ function renderProviderEdit() {
       var et = p.endpoint_type || 'auto';
       var inferredProtocol = et === 'auto' ? inferProviderProtocol(p.base_url, p.model) : et;
       var modelOpts = '';
-      var modelCategory = providerModelCategoryFilters[idx] || 'all';
+      var modelCategory = window.genboxModelBrowser ? 'all' : providerModelCategoryFilters[idx] || 'all';
       if (p.models && p.models.length) {
-        var filteredModels = filterModelsByType(p.models, p.type, p);
+        var filteredModels = generationProviderModelIds(p);
         if (modelCategory !== 'all') {
           filteredModels = filteredModels.filter(function(model) {
             return providerModelCategory(model, p.type) === modelCategory;
@@ -14852,7 +14927,7 @@ function renderProviderEdit() {
         var groupFn = p.type === 'video' ? groupVideoModels : (p.type === 'image' ? groupImageModels : null);
         modelOpts = (groupFn && filteredModels.length > 3)
           ? buildModelOptsGrouped(filteredModels, p.model || '', groupFn)
-          : filteredModels.map(function(m){ return '<option value="' + escAttr(m) + '"' + (p.model===m?' selected':'') + '>' + escHtml(m) + '</option>'; }).join('');
+          : filteredModels.map(function(m){ return '<option value="' + escAttr(m) + '"' + (p.model===m?' selected':'') + '>' + escHtml(generationModelDisplayName(m)) + '</option>'; }).join('');
         if (filteredModels.length === 0 && p.models.length > 0) {
           modelOpts = '<option value="" disabled>' + i18nText('provider.type_model_none') + ' (' + p.models.length + ')</option>';
         }
@@ -15080,19 +15155,40 @@ function renderProviderEdit() {
     body.querySelectorAll('button[onclick^="testProvider("]').forEach(function(btn){ btn.textContent = i18nText('common.test'); });
     body.querySelectorAll('button[onclick^="deleteProvider("]').forEach(function(btn){ btn.textContent = i18nText('common.delete'); });
   } catch (e) {}
+  if (window.genboxProviderSteps) window.genboxProviderSteps(body);
+  if (window.genboxModelBrowser) window.genboxModelBrowser.mount(body);
+}
+
+function providerDraftConnectionSignature(idx) {
+  return JSON.stringify(['id_', 'url_', 'key_', 'keys_', 'type_', 'endpoint_type_', 'skip_proxy_'].map(function(prefix) {
+    var input = document.getElementById(prefix + idx);
+    return input && (input.type === 'checkbox' ? input.checked : input.value);
+  }).concat([collectEndpoints(idx)]));
 }
 
 function saveProvider(idx) {
+  var fetchButton = document.getElementById('fetchBtn_' + idx);
+  if (fetchButton && fetchButton.disabled) {
+    setStatus('请等待模型拉取完成后再保存');
+    return;
+  }
   var pid = document.getElementById('id_' + idx).value || '';
-  // 优先从 localStorage 缓存获取拉取的完整模型列表
-  var currentModels = [];
-  try {
-    var cached = localStorage.getItem('igs_models_' + pid);
-    if (cached) currentModels = JSON.parse(cached);
-  } catch(e){}
+  var modelSelect = document.getElementById('model_' + idx);
+  // Preview results belong to this form, not to a saved Provider or shared cache.
+  var hasPreview = modelSelect && Array.isArray(modelSelect._previewModels);
+  if (hasPreview && modelSelect._previewSignature !== providerDraftConnectionSignature(idx)) {
+    setStatus('接入配置已更改，请重新拉取模型后再保存');
+    return;
+  }
+  var currentModels = hasPreview ? modelSelect._previewModels.slice() : [];
+  if (!hasPreview) {
+    try {
+      var cached = localStorage.getItem('igs_models_' + pid);
+      if (cached) currentModels = JSON.parse(cached);
+    } catch(e){}
+  }
   // 缓存没有时，从下拉框读取
-  if (!currentModels.length) {
-    var modelSelect = document.getElementById('model_' + idx);
+  if (!hasPreview && !currentModels.length) {
     if (modelSelect && modelSelect.options) {
       for (var mi = 0; mi < modelSelect.options.length; mi++) {
         var v = modelSelect.options[mi].value;
@@ -15127,14 +15223,17 @@ function saveProvider(idx) {
     endpoint_type: (document.getElementById('endpoint_type_' + idx) || {value:'auto'}).value,
     quality: '', extra: (findProvider(pid) && findProvider(pid).extra) || {}
   };
-  _authFetch('/api/providers', {
+  return _authFetch('/api/providers', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify(p)
-  }).then(function(r){ return r.json(); }).then(function(data){
-    setStatus(i18nText('provider.saved_prefix') + p.name + i18nText('provider.saved_suffix'));
-    loadProviders().then(function(){
+  }).then(function(r){
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(data){
+    return loadProviders().then(function(){
       renderProviderEdit();
+      setStatus(i18nText('provider.saved_prefix') + p.name + i18nText('provider.saved_suffix'));
     });
   }).catch(function(e){ if (e.message !== 'AUTH_REQUIRED') setStatus(i18nText('common.save_failed_colon') + e.message); });
 }
@@ -15319,31 +15418,54 @@ function fetchModels(idx) {
 
   var btn = document.getElementById('fetchBtn_' + idx);
   var st  = document.getElementById('fetchStatus_' + idx);
+  var select = document.getElementById('model_' + idx);
+  if (btn.disabled) return;
+  var signature = providerDraftConnectionSignature(idx);
   btn.disabled = true; btn.textContent = '...';
   st.textContent = i18nText('provider.connecting'); st.style.color = 'var(--text-muted)';
 
   var tmp = {
-    id:pid||'tmp', name:nameVal, type:typeVal, base_url:urlVal, api_key:keyVal,
+    id:pid.trim(), name:nameVal, type:typeVal, base_url:urlVal.trim(), api_key:keyVal.trim(),
     api_keys: (document.getElementById('keys_' + idx).value || '').split('\n').map(function(s){ return s.trim(); }).filter(function(s){ return s.length > 0; }),
     endpoints: collectEndpoints(idx),
     model: (document.getElementById('model_' + idx) || {value:''}).value,
-    color:colorVal, enabled:enVal, endpoint_type:etVal, models:[],
+    color:colorVal, enabled:enVal, endpoint_type:etVal, models:generationProviderModelIds(allProviders[idx]),
     display_name: (document.getElementById('display_name_' + idx) || {value:''}).value,
     capabilities: {},
     skip_proxy: document.getElementById('skip_proxy_' + idx) ? document.getElementById('skip_proxy_' + idx).checked : false,
-    quality:'', extra:{}
+    quality: (allProviders[idx] && allProviders[idx].quality) || '',
+    extra: (allProviders[idx] && allProviders[idx].extra) || {}
   };
-  document.querySelectorAll('#providerEditBody .cap-check').forEach(function(cb){ tmp.capabilities[cb.dataset.cap] = cb.checked; });
+  document.querySelectorAll('#capsSection_' + idx + ' .cap-check').forEach(function(cb){ tmp.capabilities[cb.dataset.cap] = cb.checked; });
 
-    _authFetch('/api/providers', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(tmp)})
-    .then(function(){ return _authFetch('/api/providers/fetch-models/' + pid); })
-    .then(function(r){ return r.json(); })
+    return _authFetch('/api/providers/fetch-models-preview', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(tmp)})
+    .then(function(response){
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      return response.json();
+    })
     .then(function(data){
+      // Ignore late responses after closing/rebuilding this form.
+      if (!select || !select.isConnected || document.getElementById('model_' + idx) !== select) return;
+      if (providerDraftConnectionSignature(idx) !== signature) {
+        st.textContent = '接入配置已更改，请重新拉取模型';
+        st.style.color = '#f59e0b';
+        return;
+      }
       if (data.success) {
         st.textContent = i18nText('provider.fetch_success_prefix') + data.count + i18nText('provider.fetch_success_suffix') + (data.message ? ' ' + data.message : '');
         st.style.color = data.is_fallback ? '#f59e0b' : '#22c3a5';
-        try { localStorage.setItem('igs_models_' + pid, JSON.stringify(data.models)); } catch(e){}
-        loadProviders().then(function(){ renderProviderEdit(); });
+        // Refresh only this control: keep the wizard, focus and all other drafts.
+        var models = (data.models || []).map(generationModelId).filter(Boolean);
+        select._previewModels = models;
+        select._previewSignature = signature;
+        if (select && select.isConnected) {
+          var chosen = select.value;
+          select.replaceChildren();
+          models.forEach(function(model) { select.add(new Option(generationModelDisplayName(model), model)); });
+          if (chosen && models.indexOf(chosen) < 0) select.add(new Option(generationModelDisplayName(chosen), chosen));
+          if (chosen) select.value = chosen;
+          select.dispatchEvent(new Event('change', {bubbles: true}));
+        }
       } else {
         var msg = data.detail || '拉取失败';
         if (data.provider_type === 'video') {
@@ -16328,6 +16450,7 @@ function videoLog(msg, type) {
   var wrap = document.getElementById('videoLogWrap');
   var area = document.getElementById('videoLogArea');
   if (!wrap || !area) return;
+  wrap.classList.remove('hidden');
   wrap.style.display = 'block';
   var ts = new Date().toLocaleTimeString();
   var colors = { info: 'var(--text-muted)', ok: '#22c55e', warn: '#f59e0b', error: '#ef4444' };
@@ -16343,6 +16466,8 @@ function videoLog(msg, type) {
 function clearVideoLog() {
   var area = document.getElementById('videoLogArea');
   if (area) area.innerHTML = '';
+  var wrap = document.getElementById('videoLogWrap');
+  if (wrap) wrap.classList.add('hidden');
   var hasActiveTasks = videoPollTimer !== null || Object.keys(videoActivePollTasks || {}).length > 0;
   if (hasActiveTasks) {
     document.querySelectorAll('[id^="vlog_"]').forEach(function(el) { el.innerHTML = ''; });
@@ -16451,19 +16576,12 @@ var videoGlobalSettings = {
 };
 
 function getVideoProviderCapabilities(p) {
-  var caps = p.model_capabilities || {};
   var allModels = p.models && p.models.length > 0 ? p.models : (p.model ? [p.model] : []);
   var capSet = {};
-  // Fallback: derive capabilities from model name
   allModels.forEach(function(m) {
-    var mc = caps[m] || [];
-    if (mc.length === 0) {
-      var ml = m.toLowerCase();
-      if (ml.indexOf('t2v') !== -1 && ml.indexOf('i2v') === -1 && ml.indexOf('interpolation') === -1) mc.push('t2v', 'ti2vid');
-      if (ml.indexOf('i2v') !== -1) mc.push('i2v');
-      if (ml.indexOf('interpolation') !== -1) mc.push('keyframes');
-    }
-    mc.forEach(function(c) { capSet[c] = true; });
+    if (isModelMatchMode(m, 'ti2vid', p)) { capSet.t2v = true; capSet.ti2vid = true; }
+    if (isModelMatchMode(m, 'i2vid', p)) capSet.i2v = true;
+    if (isModelMatchMode(m, 'keyframes', p)) capSet.keyframes = true;
   });
   return capSet;
 }
@@ -16492,7 +16610,7 @@ function filterModelsByType(models, providerType, provider) {
       if (record.image_generation === true || record.t2i === true) return true;
       // 排除视频模型
       if (ml.indexOf('t2v') !== -1 || ml.indexOf('i2v') !== -1 || ml.indexOf('r2v') !== -1) return false;
-      if (ml.indexOf('veo_') !== -1) return false;
+      if (/^(veo[-_]|gemini-omni-)/.test(ml)) return false;
       if (ml.indexOf('interpolation') !== -1) return false;
       if (ml.indexOf('video') !== -1 && ml.indexOf('image') === -1) return false;
       // 排除 LLM/文本模型（非生图模型）
@@ -16506,8 +16624,9 @@ function filterModelsByType(models, providerType, provider) {
       return true;
     }
     if (providerType === 'video') {
-      if (record.video_generation === false || record.t2v === false) return false;
+      if (record.video_generation === false) return false;
       if (record.video_generation === true || record.t2v === true || record.i2v === true) return true;
+      if (ml.indexOf('gemini-omni-') === 0) return true;
       // 生视频模型：包含 t2v, i2v, r2v, veo_, interpolation, video
       if (ml.indexOf('t2v') !== -1 || ml.indexOf('i2v') !== -1 || ml.indexOf('r2v') !== -1) return true;
       if (ml.indexOf('veo_') !== -1 || ml.indexOf('veo-') !== -1) return true;
@@ -16526,7 +16645,7 @@ function filterModelsByType(models, providerType, provider) {
     if (providerType === 'llm') {
       // LLM 模型：排除图片和视频模型
       if (ml.indexOf('t2v') !== -1 || ml.indexOf('i2v') !== -1 || ml.indexOf('r2v') !== -1) return false;
-      if (ml.indexOf('veo_') !== -1) return false;
+      if (/^(veo[-_]|gemini-omni-)/.test(ml)) return false;
       if (ml.indexOf('interpolation') !== -1) return false;
       if (ml.indexOf('-4k') !== -1 || ml.indexOf('-2k') !== -1) return false;
       if (ml.indexOf('upsample') !== -1) return false;
@@ -16561,7 +16680,11 @@ function groupVideoModels(models) {
     var m = models[i];
     var ml = m.toLowerCase();
     var cat;
-    if (ml.indexOf('upsample') !== -1 || (ml.indexOf('-4k') !== -1 && ml.indexOf('veo') === -1)) {
+    if (/^gemini-omni-/.test(ml)) {
+      cat = 'Gemini Omni';
+    } else if (/^veo-\d/.test(ml)) {
+      cat = 'Veo';
+    } else if (ml.indexOf('upsample') !== -1 || (ml.indexOf('-4k') !== -1 && ml.indexOf('veo') === -1)) {
       cat = i18nText('video.category.upsample');
     } else if (ml.indexOf('i2v') !== -1) {
       if (ml.indexOf('veo_3') !== -1) cat = i18nText('video.category.veo3_i2v');
@@ -16631,15 +16754,25 @@ function buildModelOptsGrouped(models, selectedModel, groupFn) {
     html += '<optgroup label="' + escHtml(cat) + ' (' + catModels.length + ')">';
     for (var m = 0; m < catModels.length; m++) {
       var md = catModels[m];
-      html += '<option value="' + escAttr(md) + '"' + (selectedModel === md ? ' selected' : '') + '>' + escHtml(md) + '</option>';
+      html += '<option value="' + escAttr(md) + '"' + (selectedModel === md ? ' selected' : '') + '>' + escHtml(generationModelDisplayName(md)) + '</option>';
     }
     html += '</optgroup>';
   }
   return html;
 }
 
-function isModelMatchMode(modelName, mode) {
+function isModelMatchMode(modelName, mode, provider) {
   var ml = (modelName || '').toLowerCase();
+  var record = provider && provider.model_capabilities && provider.model_capabilities[modelName];
+  var capability = {ti2vid: 't2v', i2vid: 'i2v', keyframes: 'keyframes'}[mode];
+  if (record && !Array.isArray(record)) {
+    if (record.video_generation === false || record[capability] === false) return false;
+    if (record[capability] === true || (mode === 'ti2vid' && record.ti2vid === true)) return true;
+  } else if (Array.isArray(record) && record.length) {
+    return record.indexOf(capability) !== -1 || record.indexOf(mode) !== -1;
+  }
+  // Official IDs do not contain gateway-specific t2v/i2v suffixes.
+  if (/^(veo-\d|gemini-omni-)/.test(ml)) return mode === 'ti2vid' || mode === 'i2vid';
   // 排除纯图片模型（含 image 但不含 video）
   if (ml.indexOf('image') !== -1 && ml.indexOf('video') === -1) return false;
   if (mode === 'ti2vid') {
@@ -16648,6 +16781,8 @@ function isModelMatchMode(modelName, mode) {
     if (ml.indexOf('r2v') !== -1) return true;
     // 含 video 关键词的通用模型（如 agnes-video-v2.0）也匹配
     if (ml.indexOf('video') !== -1) return true;
+    if (/^(veo_|sora|kling|seedance|doubao-seedance|hailuo|wan2|hunyuan-video)/.test(ml) &&
+        !/i2v|interpolation/.test(ml)) return true;
     return false;
   }
   if (mode === 'i2vid') {
@@ -16677,12 +16812,13 @@ function renderVideoProviderCards() {
       var borderColor = isSelected ? p.color : 'var(--border)';
       var allModels = p.models && p.models.length > 0 ? p.models : (p.model ? [p.model] : []);
       // Filter models by current sub-tab mode
-      var filteredModels = allModels.filter(function(m) { return isModelMatchMode(m, activeMode); });
-      // If no filtered models, show all (no restriction)
-      if (filteredModels.length === 0) filteredModels = allModels;
+      var filteredModels = allModels.filter(function(m) { return isModelMatchMode(m, activeMode, p); });
+      var previousSelect = document.getElementById('vmodel_' + p.id);
+      var chosenModel = previousSelect ? previousSelect.value : p.model;
+      if (filteredModels.indexOf(chosenModel) < 0) chosenModel = filteredModels[0] || '';
       var modelOpts = filteredModels.length > 3
-        ? buildModelOptsGrouped(filteredModels, '', groupVideoModels)
-        : filteredModels.map(function(m){ return '<option value="' + escAttr(m) + '">' + escHtml(m) + '</option>'; }).join('');
+        ? buildModelOptsGrouped(filteredModels, chosenModel, groupVideoModels)
+        : filteredModels.map(function(m){ return '<option value="' + escAttr(m) + '"' + (m === chosenModel ? ' selected' : '') + '>' + escHtml(m) + '</option>'; }).join('');
       var capSet = getVideoProviderCapabilities(p);
       var capBadges = '';
       if (capSet['t2v'] || capSet['ti2vid']) {
@@ -16714,7 +16850,7 @@ function renderVideoProviderCards() {
         '<div style="display:flex;gap:4px;margin-bottom:6px;">' +
           '<div style="flex:1;">' +
             '<div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">' + i18nText('creator.model') + ' <span style="color:var(--accent);font-size:9px;">(' + (activeMode === 'ti2vid' ? i18nText('video.t2v') : activeMode === 'i2vid' ? i18nText('video.i2v') : i18nText('video.keyframes')) + ')</span></div>' +
-            '<select id="vmodel_' + p.id + '" onchange="onVideoModelChange()" ' + (!isSelected ? 'disabled' : '') + ' style="width:100%;font-size:11px;padding:5px 8px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);' + (!isSelected ? 'opacity:0.5;' : '') + '">' +
+            '<select id="vmodel_' + p.id + '" onchange="onVideoModelChange(event)" ' + (!isSelected ? 'disabled' : '') + ' style="width:100%;font-size:11px;padding:5px 8px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);' + (!isSelected ? 'opacity:0.5;' : '') + '">' +
               (modelOpts || i18nText('provider.no_models_html')) +
             '</select>' +
           '</div>' +
@@ -16754,7 +16890,10 @@ function toggleVideoProvider(vpid) {
 function updateVideoGenerateButton() {
   var btn = document.getElementById('videoGenBtn');
   if (!btn) return;
-  var count = selectedVideoProviderIds.length;
+  var count = selectedVideoProviderIds.filter(function(id) {
+    var select = document.getElementById('vmodel_' + id);
+    return select && !select.disabled && !!select.value;
+  }).length;
   if (count === 0) {
     btn.textContent = i18nText('video.choose_provider');
     btn.disabled = true;
@@ -16779,14 +16918,16 @@ var _videoModelSpecCache = {};
  */
 async function getVideoModelSpec(modelName) {
   if (!modelName) return null;
-  if (_videoModelSpecCache[modelName]) {
-    return _videoModelSpecCache[modelName];
+  var providerId = selectedVideoProviderIds[0] || '';
+  var cacheKey = providerId + ':' + modelName;
+  if (_videoModelSpecCache[cacheKey] || _videoModelSpecCache[modelName]) {
+    return _videoModelSpecCache[cacheKey] || _videoModelSpecCache[modelName];
   }
   try {
-    const resp = await fetch(`/api/video/model-spec/${encodeURIComponent(modelName)}`);
+    const resp = await _authFetch(`/api/video/model-spec/${encodeURIComponent(modelName)}?provider_id=${encodeURIComponent(providerId)}`);
     if (!resp.ok) return null;
     const data = await resp.json();
-    _videoModelSpecCache[modelName] = data.spec;
+    _videoModelSpecCache[cacheKey] = data.spec;
     return data.spec;
   } catch (e) {
     console.warn('获取视频模型参数失败:', e);
@@ -16799,8 +16940,15 @@ async function getVideoModelSpec(modelName) {
  * @param {string} modelName - 模型名称
  */
 async function updateVideoUIByModelSpec(modelName) {
+  var updateId = (window._videoSpecUpdateId || 0) + 1;
+  window._videoSpecUpdateId = updateId;
   const spec = await getVideoModelSpec(modelName);
+  if (window._videoSpecUpdateId !== updateId) return;
   if (!spec) return;
+  if (window.googleVideoUI) {
+    if (spec.native_google) { window.googleVideoUI.apply(spec, modelName); return; }
+    window.googleVideoUI.reset();
+  }
   
   console.log('[VideoSpec] 模型参数约束:', modelName, spec);
   
@@ -16848,7 +16996,7 @@ async function updateVideoUIByModelSpec(modelName) {
     framesInput.placeholder = `${minFrames}-${maxFrames}`;
     
     // 更新帧数规则提示
-    const ruleHint = framesInput.parentElement.querySelector('.text-xs.text-muted');
+    const ruleHint = document.getElementById('videoFrameRule');
     if (ruleHint) {
       ruleHint.textContent = spec.frame_rule || i18nText('video.unlimited');
     }
@@ -16913,12 +17061,15 @@ async function updateVideoUIByModelSpec(modelName) {
   if (seedGroup) {
     seedGroup.style.display = spec.supports_seed ? '' : 'none';
   }
+  var advancedEmpty = document.getElementById('videoAdvancedEmpty');
+  if (advancedEmpty) advancedEmpty.classList.toggle('hidden',
+    !!(spec.inference_steps_range || spec.supports_negative_prompt || spec.supports_seed));
 }
 
 
 function onVideoModelChange(event) {
   // 根据选中的视频模型自动调整推荐参数
-  var sel = event && event.target;
+  var sel = event && event.target || document.getElementById('vmodel_' + selectedVideoProviderIds[0]);
   if (!sel) return;
   var val = sel.value || '';
   // 根据模型名推断推荐尺寸
@@ -16993,10 +17144,12 @@ function setVideoDuration(frames, fps, el) {
 function toggleVideoAdvanced() {
   var adv = document.getElementById('videoAdvanced');
   var chevron = document.getElementById('videoAdvChevron');
-  if (adv.style.display === 'none') {
+  if (adv.classList.contains('hidden') || adv.style.display === 'none') {
+    adv.classList.remove('hidden');
     adv.style.display = 'block';
     chevron.textContent = '▼';
   } else {
+    adv.classList.add('hidden');
     adv.style.display = 'none';
     chevron.textContent = '▶';
   }
@@ -17004,17 +17157,19 @@ function toggleVideoAdvanced() {
 
 function refreshProviderModels(vpid) {
   var prov = videoProviders.find(function(p){ return p.id === vpid; });
-  if (!prov || !prov.models_url) return;
+  if (!prov) return;
   var btn = document.querySelector('#vcard_' + vpid + ' button[onclick*="refresh"]');
   if (btn) { btn.textContent = '...'; btn.disabled = true; }
-  fetch(prov.models_url).then(function(r){ return r.json(); }).then(function(data) {
+  return _authFetch('/api/providers/fetch-models/' + encodeURIComponent(vpid)).then(function(r){
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(data) {
+    if (!data.success) throw new Error(data.detail || i18nText('provider.fetch_failed'));
     var models = data.models || data.items || [];
     prov.models = models;
     prov.model_capabilities = data.model_capabilities || prov.model_capabilities || {};
-    var sel = document.getElementById('vmodel_' + vpid);
-    if (sel) {
-      sel.innerHTML = models.map(function(m){ return '<option value="' + m + '">' + m + '</option>'; }).join('') || i18nText('provider.no_models_html');
-    }
+    var savedProvider = findProvider(vpid);
+    if (savedProvider) savedProvider.models = models;
     renderVideoProviderCards();
     setStatus(prov.name + ' ' + i18nText('provider.fetch_success_suffix') + ' (' + models.length + ')');
   }).catch(function(e) {
@@ -17030,15 +17185,15 @@ function switchVideoSubTab(mode) {
   document.getElementById('vSubTabI2vid').classList.toggle('active', mode === 'i2vid');
   document.getElementById('vSubTabKeyframes').classList.toggle('active', mode === 'keyframes');
 
-  document.getElementById('videoI2VPanel').style.display = (mode === 'i2vid') ? 'block' : 'none';
-  document.getElementById('videoKeyframesPanel').style.display = (mode === 'keyframes') ? 'block' : 'none';
+  document.getElementById('videoI2VPanel').classList.toggle('hidden', mode !== 'i2vid');
+  document.getElementById('videoKeyframesPanel').classList.toggle('hidden', mode !== 'keyframes');
 
   // 切出 i2vid 时清空残留图片，防止误传
-  if (mode !== 'i2vid' && videoImages.length > 0) {
+  if (mode !== 'i2vid') {
     videoImages = [];
     document.getElementById('videoImagePreview').innerHTML = '';
   }
-  if (mode !== 'keyframes' && kfImages.length > 0) {
+  if (mode !== 'keyframes') {
     kfImages = [];
     document.getElementById('kfImagePreview').innerHTML = '';
   }
@@ -17082,6 +17237,7 @@ function handleVideoFileSelect(evt) {
   for (var i = 0; i < files.length; i++) {
     readVideoImageFile(files[i]);
   }
+  evt.target.value = '';
 }
 
 function handleVideoDrop(evt) {
@@ -17094,24 +17250,49 @@ function handleVideoDrop(evt) {
 }
 
 function readVideoImageFile(file) {
+  if (!file.type.startsWith('image/')) { setStatus(i18nText('upload.image_required')); return; }
+  if (file.size > 10 * 1024 * 1024) { setStatus(i18nText('upload.image_too_large')); return; }
+  var targetImages = videoImages;
   var reader = new FileReader();
   reader.onload = function(e) {
+    if (currentVideoMode !== 'i2vid' || targetImages !== videoImages) return;
     videoImages.push(e.target.result);
     renderVideoImagePreview();
   };
+  reader.onerror = function() { setStatus(i18nText('image.data_failed')); };
   reader.readAsDataURL(file);
+}
+
+function appendVideoImageCard(container, src, index, remove) {
+  var card = document.createElement('div');
+  card.className = 'video-image-card';
+  var preview = document.createElement('button');
+  preview.type = 'button';
+  preview.className = 'video-image-open';
+  preview.title = preview.ariaLabel = i18nText('video.preview_image') + ' ' + (index + 1);
+  var image = document.createElement('img');
+  image.src = src;
+  image.alt = i18nText('video.preview_image') + ' ' + (index + 1);
+  preview.appendChild(image);
+  preview.onclick = function() { openLightbox(src, image.alt, ''); };
+  var removeButton = document.createElement('button');
+  removeButton.type = 'button';
+  removeButton.className = 'video-image-remove';
+  removeButton.title = removeButton.ariaLabel = i18nText('video.remove_image') + ' ' + (index + 1);
+  removeButton.textContent = '\u00d7';
+  removeButton.onclick = function() { remove(index); };
+  var label = document.createElement('span');
+  label.className = 'video-image-label';
+  label.textContent = String(index + 1);
+  card.append(preview, removeButton, label);
+  container.appendChild(card);
 }
 
 function renderVideoImagePreview() {
   var container = document.getElementById('videoImagePreview');
   container.innerHTML = '';
   videoImages.forEach(function(img, idx) {
-    var div = document.createElement('div');
-    div.style.cssText = 'position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid var(--border);';
-    div.innerHTML = '<img src="' + img + '" style="width:100%;height:100%;object-fit:cover;">' +
-      '<div onclick="removeVideoImage(' + idx + ')" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.7);color:#fff;width:18px;height:18px;border-radius:50%;text-align:center;line-height:18px;font-size:11px;cursor:pointer;">✕</div>' +
-      '<div style="position:absolute;bottom:2px;left:2px;font-size:9px;background:rgba(0,0,0,0.7);color:#fff;padding:1px 4px;border-radius:3px;">' + (idx === 0 ? '首' : idx === videoImages.length-1 && videoImages.length > 1 ? '尾' : '图' + (idx+1)) + '</div>';
-    container.appendChild(div);
+    appendVideoImageCard(container, img, idx, removeVideoImage);
   });
 }
 
@@ -17126,6 +17307,7 @@ function handleKfFileSelect(evt) {
   for (var i = 0; i < files.length; i++) {
     readKfImageFile(files[i]);
   }
+  evt.target.value = '';
 }
 
 function handleKfDrop(evt) {
@@ -17138,11 +17320,16 @@ function handleKfDrop(evt) {
 }
 
 function readKfImageFile(file) {
+  if (!file.type.startsWith('image/')) { setStatus(i18nText('upload.image_required')); return; }
+  if (file.size > 10 * 1024 * 1024) { setStatus(i18nText('upload.image_too_large')); return; }
+  var targetImages = kfImages;
   var reader = new FileReader();
   reader.onload = function(e) {
+    if (currentVideoMode !== 'keyframes' || targetImages !== kfImages) return;
     kfImages.push(e.target.result);
     renderKfImagePreview();
   };
+  reader.onerror = function() { setStatus(i18nText('image.data_failed')); };
   reader.readAsDataURL(file);
 }
 
@@ -17150,12 +17337,7 @@ function renderKfImagePreview() {
   var container = document.getElementById('kfImagePreview');
   container.innerHTML = '';
   kfImages.forEach(function(img, idx) {
-    var div = document.createElement('div');
-    div.style.cssText = 'position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid var(--border);';
-    div.innerHTML = '<img src="' + img + '" style="width:100%;height:100%;object-fit:cover;">' +
-      '<div onclick="removeKfImage(' + idx + ')" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.7);color:#fff;width:18px;height:18px;border-radius:50%;text-align:center;line-height:18px;font-size:11px;cursor:pointer;">✕</div>' +
-      '<div style="position:absolute;bottom:2px;left:2px;font-size:9px;background:rgba(0,0,0,0.7);color:#fff;padding:1px 4px;border-radius:3px;">帧' + (idx+1) + '</div>';
-    container.appendChild(div);
+    appendVideoImageCard(container, img, idx, removeKfImage);
   });
 }
 
@@ -17237,6 +17419,10 @@ function startVideoGenerate() {
     return;
   }
 
+  var nativeOptions = null;
+  try {
+    if (window.googleVideoUI) nativeOptions = window.googleVideoUI.prepare(tasksToGenerate);
+  } catch (error) { alert(error.message); return; }
   var dims = getVideoDimensions();
   var frames = parseInt(document.getElementById('videoFrames').value) || 121;
   var fps = parseInt(document.getElementById('videoFPS').value) || 24;
@@ -17261,7 +17447,7 @@ function startVideoGenerate() {
   }
 
   // 8n+1 校验
-  if ((frames - 1) % 8 !== 0) {
+  if (!nativeOptions && (frames - 1) % 8 !== 0) {
     var corrected = Math.round((frames - 1) / 8) * 8 + 1;
     if (!confirm(i18nText('video.frames_adjust_confirm_prefix') + frames + i18nText('video.frames_adjust_confirm_middle') + corrected + i18nText('video.frames_adjust_confirm_suffix'))) return;
     frames = corrected;
@@ -17272,6 +17458,7 @@ function startVideoGenerate() {
   var btn = document.getElementById('videoGenBtn');
   btn.disabled = true;
   btn.textContent = '\u23F3 \u63D0\u4EA4\u4E2D...';
+  document.getElementById('videoProgressBar').classList.remove('hidden');
   document.getElementById('videoProgressBar').style.display = 'block';
   var fill = document.getElementById('videoProgressFill');
   fill.style.width = '0%';
@@ -17301,6 +17488,15 @@ function startVideoGenerate() {
 
   function submitNextTask() {
     if (submittedCount >= totalTasks) {
+      if (allTaskData.length === 0) {
+        stopVideoElapsedTimer();
+        fill.classList.remove('video-progress-marquee');
+        document.getElementById('videoProgressText').textContent = '提交失败';
+        document.getElementById('videoTaskStatus').textContent = '提交失败';
+        btn.disabled = false;
+        btn.textContent = '\u{1F680} \u751F\u6210\u89C6\u9891';
+        return;
+      }
       videoLog('\u5168\u90E8\u63D0\u4EA4\u5B8C\u6210\uFF0C\u5F00\u59CB\u8F6E\u8BE2\u72B6\u6001...', 'info');
       startVideoPolling(allTaskData, startTime);
       return;
@@ -17321,6 +17517,7 @@ function startVideoGenerate() {
     if (steps) payload.num_inference_steps = steps;
     if (seed !== null) payload.seed = seed;
     if (negPrompt) payload.negative_prompt = negPrompt;
+    if (nativeOptions) Object.assign(payload, nativeOptions);
 
     submittedCount++;
     btn.textContent = '\u23F3 \u5411 ' + submittedCount + '/' + totalTasks + ' \u63D0\u4EA4...';
@@ -17368,19 +17565,21 @@ function startVideoGenerate() {
       if (!currentVideoTaskId) currentVideoTaskId = data.task_id;
       submitNextTask();
     }).catch(function(e) {
-      submittedCount--;
       btn.textContent = '\u23F3 \u5411 ' + submittedCount + '/' + totalTasks + ' \u63D0\u4EA4...';
       videoLogProvider(task.provider_id, '\u2718 \u63D0\u4EA4\u5931\u8D25: ' + e.message + ' (\u6A21\u578B: ' + task.model + ')', 'error');
+      var placeholder = document.getElementById('vprev_ph_' + task.provider_id);
+      if (placeholder) {
+        placeholder.classList.remove('generating');
+        placeholder.setAttribute('role', 'alert');
+        var spinner = placeholder.querySelector('.spinner');
+        if (spinner) spinner.remove();
+        var message = placeholder.querySelector('.ph-text');
+        if (message) message.textContent = '提交失败: ' + e.message;
+        updateVideoPreviewPlaceholderStatus(task.provider_id, '提交失败');
+      }
       var labelEl3 = document.getElementById('vprog_label_' + task.provider_id);
       if (labelEl3) labelEl3.textContent = '\u2718 \u63D0\u4EA4\u5931\u8D25';
-      if (submittedCount >= totalTasks && allTaskData.length > 0) {
-        videoLog('\u5DF2\u63D0\u4EA4\u90E8\u5206\u4EFB\u52A1\uFF0C\u5F00\u59CB\u8F6E\u8BE2 (' + allTaskData.length + '/' + totalTasks + ')...', 'warn');
-        startVideoPolling(allTaskData, startTime);
-      } else if (allTaskData.length === 0) {
-        stopVideoElapsedTimer();
-        btn.disabled = false;
-        btn.textContent = '\u{1F680} \u751F\u6210\u89C6\u9891';
-      }
+      submitNextTask();
     });
   }
 
@@ -17418,6 +17617,7 @@ function startVideoPolling(allTaskData, startTime) {
   });
 
   var completedCount = 0;
+  var failedCount = 0;
   var totalToComplete = allTaskData.length;
   var pollRound = 0;
   var taskProgressMap = {};  // task_id -> progress
@@ -17451,14 +17651,14 @@ function startVideoPolling(allTaskData, startTime) {
       stopVideoElapsedTimer();
       var fillDone = document.getElementById('videoProgressFill');
       if (fillDone) { fillDone.style.background = ''; fillDone.className = 'video-progress-solid'; fillDone.style.width = '100%'; }
-      document.getElementById('videoProgressText').textContent = '100%';
+      document.getElementById('videoProgressText').textContent = failedCount ? '任务结束，' + failedCount + ' 项失败' : '100%';
       var btn = document.getElementById('videoGenBtn');
       btn.disabled = false;
       btn.textContent = '\u{1F680} \u751F\u6210\u89C6\u9891';
       updateVideoGenerateButton();
       var totalElapsed = Math.round((Date.now() - startTime) / 1000);
-      setStatus('\u89C6\u9891\u751F\u6210\u5B8C\u6210! (' + completedCount + '/' + totalToComplete + ' \u4E2A\u4EFB\u52A1, \u5171\u8017\u65F6 ' + totalElapsed + 's)');
-      videoLog('\u2714 \u5168\u90E8\u4EFB\u52A1\u5B8C\u6210! \u5171\u8017\u65F6 ' + totalElapsed + 's', 'ok');
+      setStatus('视频任务结束：' + (completedCount - failedCount) + ' 项成功，' + failedCount + ' 项失败');
+      videoLog('视频任务结束：' + (completedCount - failedCount) + ' 项成功，' + failedCount + ' 项失败', failedCount ? 'error' : 'ok');
       return;
     }
 
@@ -17479,7 +17679,9 @@ function startVideoPolling(allTaskData, startTime) {
         updateGlobalProgress();
 
         // 更新视频占位卡片状态
-        updateVideoPreviewPlaceholderStatus(provId, '[' + (data.stage || 'processing') + '] ' + Math.round(progress) + '%', progress);
+        var nativeStatus = data.provider_type === 'google_native';
+        var visibleStage = status === 'downloading' ? '下载中' : '生成中';
+        updateVideoPreviewPlaceholderStatus(provId, nativeStatus ? visibleStage : '[' + (data.stage || 'processing') + '] ' + Math.round(progress) + '%', progress);
 
         var progFillEl = document.getElementById('vprog_fill_' + provId);
         if (progFillEl) {
@@ -17490,7 +17692,7 @@ function startVideoPolling(allTaskData, startTime) {
         var progLabel = document.getElementById('vprog_label_' + provId);
         if (progLabel) {
           var stageLabel = data.stage || 'processing';
-          progLabel.textContent = '[' + stageLabel + '] ' + Math.round(progress) + '%' + (elapsed ? ' (' + Math.round(elapsed) + 's)' : '');
+          progLabel.textContent = (nativeStatus ? visibleStage : '[' + stageLabel + '] ' + Math.round(progress) + '%') + (elapsed ? ' (' + Math.round(elapsed) + 's)' : '');
         }
         // 每 20% 或 stage 变化时记录详细日志
         if (!videoProgressMaxLogged) videoProgressMaxLogged = {};
@@ -17543,6 +17745,7 @@ function startVideoPolling(allTaskData, startTime) {
         } else if (status === 'failed' || status === 'error' || status === 'cancelled' || status === 'timeout') {
           delete videoActivePollTasks[tid];
           completedCount++;
+          failedCount++;
           var errMsg = data.error || status;
           var progFillFail = document.getElementById('vprog_fill_' + provId);
           if (progFillFail) { progFillFail.style.width = '0%'; progFillFail.classList.remove('marquee', 'complete'); }
@@ -17625,6 +17828,7 @@ function renderVideoHistory() {
 function renderVideoPerProviderBars() {
   var container = document.getElementById('videoPerProviderSection');
   if (!container) return;
+  container.classList.remove('hidden');
   var html = '';
   selectedVideoProviderIds.forEach(function(pid) {
     var prov = videoProviders.find(function(p) { return p.id === pid; });
@@ -17656,6 +17860,7 @@ function renderVideoGroupedPreview() {
   var emptyEl = document.getElementById('videoPreviewEmpty');
   var countEl = document.getElementById('videoResultCount');
   if (!container) return;
+  container.classList.remove('hidden');
 
   var allItems = [];
   Object.keys(videoPreviewGroups).forEach(function(pid) {
@@ -17722,7 +17927,15 @@ function renderVideoGroupedPreview() {
       function renderVideoItem() {
         viewerWrap.innerHTML = '';
         var cur = completedItems[videoGroupNavIdx[provId] || 0];
-        if (!cur) { viewerWrap.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:20px;">' + i18nText('video.no_completed') + '</div>'; return; }
+        if (!cur) {
+          var errorText = document.createElement('div');
+          errorText.style.cssText = 'color:var(--text-secondary);font-size:13px;padding:20px;overflow-wrap:anywhere;';
+          errorText.setAttribute('role', 'alert');
+          errorText.textContent = failedItems.map(function(item) { return item.error || item.status; }).join(' / ') || i18nText('video.no_completed');
+          viewerWrap.style.background = 'var(--bg-surface)';
+          viewerWrap.appendChild(errorText);
+          return;
+        }
 
         var cntEl = document.getElementById('vgrp_cnt_' + provId);
         if (cntEl) cntEl.textContent = ((videoGroupNavIdx[provId]||0)+1) + ' / ' + completedItems.length;
@@ -17892,6 +18105,7 @@ function playVideoItem(url) {
   var emptyEl = document.getElementById('videoPreviewEmpty');
   if (emptyEl) emptyEl.style.display = 'none';
   var container = document.getElementById('videoPreviewResults');
+  container.classList.remove('hidden');
   container.style.display = 'flex';
   container.innerHTML = '<div style="width:100%;border-radius:10px;overflow:hidden;background:#000;"><video src="' + url + '" controls loop autoplay style="width:100%;max-height:40vh;border-radius:10px;"></video></div>';
 }
@@ -17926,6 +18140,7 @@ function createVideoPreviewPlaceholders(tasks) {
   var container = document.getElementById('videoPreviewResults');
   var emptyEl = document.getElementById('videoPreviewEmpty');
   if (!container) return;
+  container.classList.remove('hidden');
   if (emptyEl) emptyEl.style.display = 'none';
   container.style.display = 'flex';
   container.innerHTML = '';
