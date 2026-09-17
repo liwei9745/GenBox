@@ -1,0 +1,68 @@
+.model-browser-trigger {
+  width: 100%; min-width: 0; min-height: 34px; display: flex; align-items: center;
+  justify-content: space-between; gap: 8px; padding: 7px 10px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-card); color: var(--text-primary); cursor: pointer;
+  text-align: left; font: inherit; font-size: 12px;
+}
+.model-browser-trigger > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-browser-trigger:disabled { opacity: .5; cursor: not-allowed; }
+.model-browser-caret { flex-shrink: 0; }
+select[data-browser-ready][hidden], .provider-model-filter[hidden] { display: none !important; }
+.model-browser-dialog {
+  box-sizing: border-box; width: min(600px, calc(100vw - 24px)); max-width: none;
+  height: min(700px, calc(100dvh - 40px)); max-height: calc(100dvh - 24px);
+  margin: auto; padding: 20px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg-card, #fff); color: var(--text-primary, #202124);
+  box-shadow: 0 16px 64px #0003; overflow: hidden; font-size: 13px; letter-spacing: 0;
+}
+.model-browser-dialog[open] { display: flex; flex-direction: column; gap: 14px; }
+.model-browser-dialog::backdrop { background: #15191f66; backdrop-filter: blur(3px); }
+.model-browser-header { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.model-browser-header strong { font-size: 16px; overflow-wrap: anywhere; }
+.model-browser-close {
+  border: 0; background: transparent; color: var(--text-secondary); font-size: 24px;
+  width: 32px; height: 32px; flex-shrink: 0; padding: 0; cursor: pointer;
+}
+.model-browser-search {
+  box-sizing: border-box; width: 100%; min-height: 38px; flex-shrink: 0;
+  border: 1px solid var(--border); border-radius: 6px; padding: 9px 12px;
+  background: var(--bg-base); color: var(--text-primary); font: inherit;
+}
+.model-browser-tabs {
+  display: flex; gap: 2px; overflow-x: auto; flex-shrink: 0;
+  padding: 3px 0 8px; border-bottom: 1px solid var(--border);
+}
+.model-browser-tabs button {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+  border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+  padding: 7px 9px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer;
+}
+.model-browser-tabs button[aria-pressed="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+.model-browser-tabs button:disabled { opacity: .4; cursor: default; }
+.model-browser-count { font-size: 11px; color: var(--text-muted); font-weight: 400; }
+.model-browser-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.model-browser-group { margin-bottom: 10px; }
+.model-browser-group summary { padding: 10px 6px; cursor: pointer; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+.model-browser-group summary strong { color: var(--text-primary); margin: 0 10px 0 4px; font-size: 13px; }
+.model-browser-row {
+  box-sizing: border-box; width: 100%; min-height: 52px; display: flex;
+  align-items: center; gap: 10px; padding: 10px; margin-top: 3px;
+  background: transparent; color: var(--text-primary); border: 1px solid transparent;
+  border-radius: 6px; text-align: left; cursor: pointer; font: inherit;
+}
+.model-browser-row:hover { background: var(--bg-card-hover); }
+.model-browser-row[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 10%, var(--bg-card)); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.model-browser-copy { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.model-browser-copy strong { display: block; font-size: 13px; font-weight: 500; }
+.model-browser-copy small { display: block; margin-top: 4px; font-size: 11px; color: var(--text-secondary); }
+.model-browser-badge { font-size: 10px; color: var(--text-secondary); background: var(--bg-surface); padding: 3px 6px; border-radius: 4px; flex-shrink: 0; }
+.model-browser-check { width: 14px; flex-shrink: 0; color: var(--accent); font-weight: 700; }
+.model-browser-current, .model-browser-status { color: var(--text-secondary); font-size: 11px; overflow-wrap: anywhere; }
+.model-browser-current { border-top: 1px solid var(--border); padding-top: 10px; }
+.model-browser-trigger:focus-visible, .model-browser-dialog button:focus-visible,
+.model-browser-dialog summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 600px) {
+  .model-browser-dialog { padding: 14px; }
+  .model-browser-badge { display: none; }
+}

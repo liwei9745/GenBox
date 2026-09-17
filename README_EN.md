@@ -20,10 +20,10 @@ The project began as a multi-model image comparison workspace and grew with real
 GenBox is built for visual AI enthusiasts, model evaluators, self-hosting hobbyists, and anyone who wants one interface for OpenAI-compatible services, Gemini, Qwen, Agnes, and other configurable model endpoints.
 
 > [!IMPORTANT]
-> **v2.6.8: Precision Edit major update.** The configured GPT target model has passed user acceptance, with model-first size presets, visual annotation editing, local person cutout, version metadata and first-use navigation. [Read the release notes](release-notes-v2.6.8.md)
+> **v2.6.11: Native Google video and model workbench.** Adds Veo / Omni generation, repairs model discovery steps, introduces searchable capability filters, and improves upload, progress and failure feedback. [Read the release notes](release-notes-v2.6.11.md)
 
 > [!NOTE]
-> Remote precision edits use your configured provider. GPT acceptance was completed by the user; release automation makes no paid generation requests. Other vendors still await manual acceptance. Packages include NumPy, ONNX Runtime, and the local cutout adapter, but **not the ONNX cutout checkpoint**. Production network download and installation remain disabled because provenance, training-data history, and commercial-use rights are **UNVERIFIED**. Operator-provided models must pass integrity and execution checks.
+> Remote precision edits use your configured provider. GPT and the Nano Banana acceptance above cover only the tested endpoint/model/sizes, not all aliases, gateways or ratios. Release automation makes no paid generation requests. Packages include NumPy, ONNX Runtime, and the local cutout adapter, but **not the ONNX cutout checkpoint**. Production network download and installation remain disabled because provenance, training-data history, and commercial-use rights are **UNVERIFIED**. Operator-provided models must pass integrity and execution checks.
 
 ## Main Interface Screenshots
 

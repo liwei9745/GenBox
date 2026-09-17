@@ -4,6 +4,66 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.11] - 2026-09-17
+
+### Added
+
+- Native Google Veo and Gemini Omni video generation, independent of gateway
+  adapters, with bounded output handling and local video publication.
+- Searchable generation model selection with provider groups and capability
+  filters, plus generation progress placeholders and bottom-right notifications.
+
+### Fixed
+
+- Provider model discovery uses unsaved form values without requiring a save
+  round trip or resetting the configuration step; Gemini discovery paginates
+  and uses the effective endpoint credential.
+- Veo image requests match the official SDK wire format. Omni uses inline
+  video delivery while preserving the interaction storage opt-out.
+- Image-to-video upload controls, single-model composer overflow, native
+  video parameter selection, log placement and terminal failure feedback.
+
+### Security
+
+- Native video submissions never automatically retry or fall back to a gateway.
+  Errors retain only safe diagnostic labels; media is validated and bounded.
+- No credentials, user media or local test history are included in this release.
+
+## [2.6.10] - 2026-09-16
+
+### Fixed
+
+- Correct native Gemini connectivity checks to use `/v1beta/models` and
+  `x-goog-api-key`, while preserving OpenAI-compatible endpoint behavior.
+- Preserve bounded, redacted Gemini quota and rate-limit diagnostics.
+- Send Gemini image response modalities using the documented `TEXT` / `IMAGE`
+  enum values.
+
+### Changed
+
+- Provider model controls now default to enabled and expose a clear
+  `停止使用` / `启用模型` primary action.
+- Precision workflow history and provider loading reuse in-flight requests and
+  defer collapsed gallery rendering for faster startup.
+
+## [2.6.9] - 2026-09-14
+
+### Fixed
+
+- Avoid double-decompressing bounded HTTP responses from image gateways.
+- Map Klong Nano Banana target dimensions to explicit resolution tiers;
+  accept validated inline image Data URLs in compatible responses.
+- Preserve selected models and freeze queued request configuration.
+- Keep precision protocol overrides and size authorization isolated per model.
+- Label observed Klong Nano Banana extreme-size failures as experimental,
+  without imposing an incorrect universal 4096-pixel side limit.
+
+### Added
+
+- Native Gemini precision editing and model-specific size catalogues.
+- Automatic documented gateway recipes, reversible advanced connection
+  settings, grouped model selection, and sanitized routing diagnostics.
+
 ## [2.6.8] - 2026-09-10
 
 ### Added

@@ -1,5 +1,500 @@
 # Current Project Status
 
+## 2026-09-17 v2.6.11 Release
+
+- **USER-CONFIRMED:** All current manual acceptance passed, including real Veo
+  and Omni video generation. This supersedes the prior live-Omni open item.
+- **IN PROGRESS:** Preparing v2.6.11 on the existing release branch. Version,
+  Compose image default, bilingual release notes and README previews are aligned.
+  Only reviewed code/tests/public documentation are selected; runtime history,
+  screenshots, local reports and temporary test outputs are excluded.
+- **RELEASE SCOPE:** Provider protocol/capability grouping and model search,
+  draft model discovery and guided steps, image progress/notifications, video
+  composer/upload/feedback repairs and native Google video transport.
+- **VERIFIED / LOCAL:** `python -m pytest -q
+  --basetemp .pytest-tmp-release-2611-final` -> `1798 passed`.
+  Three focused Node suites, four changed JavaScript syntax checks and staged
+  whitespace checks pass. Staged Git-archive sanitizer reports 313 text files
+  and 29 existing public images; no forbidden runtime/credential payloads.
+  `package_release.py --validate-release-tag v2.6.11` passes.
+- **VERIFIED / CLEAN CLONE:** GitHub clone of `4ede382` packaged source/Compose
+  archives and checksums without local runtime files. Packaged-source scan:
+  318 text files (including license sidecars), 29 images. Clean runtime imports,
+  version identity and HTTP startup passed on an isolated local port; stopped
+  afterward. This is local clean-clone evidence, not a VPS deployment.
+- **CI FOLLOW-UP:** PR run `35236125875` failed eight browser cases because
+  fixture injection raced initial Provider discovery. The fixture now awaits
+  `providersLoadPromise` before installing synthetic data; production behavior
+  and acceptance scope are unchanged. Re-run hosted quality before release.
+- **RESUME:** Commit and push this branch, synchronize through existing PR #11
+  after hosted quality checks, then publish the matching v2.6.11 tag once. Tag workflows
+  create client/source/Compose assets and the smoke-tested GHCR image. Do not
+  pre-create a Release: the existing build workflow creates it after clients
+  pass. Record actual workflow run IDs and outcomes separately from acceptance.
+
+## 2026-09-17 Omni Delivery / Storage Compatibility Repair
+
+- **IMPLEMENTED / LOCAL ONLY:** Official Google effective endpoints now dispatch
+  to `providers/google_video.py`, separate from Flow2API and OpenAI gateways.
+  Veo uses `predictLongRunning`, bounded operation polling and authenticated
+  download. Omni uses synchronous Interactions with inline delivery, REST `steps`
+  Base64 output parsing and atomic local saving. The previous blanket
+  official-host 501 guard is superseded, not a live generation acceptance claim.
+- **VERIFIED / RESEARCH:** Read Google Veo, Omni and Omni model documentation
+  through Agent Reach/Jina; checked the pinned official Python SDK through
+  `gh api`. See `docs/GOOGLE-VIDEO-CONTRACT.md` for the guide/SDK discrepancy.
+- **FIXED / LOCAL:** Veo first-frame, last-frame and reference images now use
+  `bytesBase64Encoded` + `mimeType`, matching the SDK, instead of `inlineData`.
+  Actual image format is verified locally before submission. Native seed is
+  hidden/rejected because the pinned Developer API SDK rejects it, despite
+  the guide saying it is supported. Custom gateways are unchanged.
+- **USER-CONFIRMED:** Veo now generates successfully; Omni still returned
+  HTTP 400 identifying `delivery` and `store`. Historical raw errors are absent.
+- **FIXED / LOCAL:** Omni now sends `delivery=inline` with `store=false`;
+  the SDK supports inline delivery and official REST examples show Base64 MP4.
+  The former URI/stateless pairing is the suspected incompatibility, not a
+  proven historical upstream message. Storage consent is unchanged. Inline
+  responses allow bounded Base64 expansion beyond the old 8 MiB JSON limit;
+  decoding, cancellation, MP4 validation and atomic publication are tested.
+  Veo request fields are unchanged in this follow-up.
+- **FIXED / LOCAL UI:** Logs sit between preview and prompt, outside the input
+  card. Official parameter fetches are authenticated and Provider-scoped.
+  Official models do not inherit Agnes 480p, steps or `8n+1`. Veo exposes exact
+  duration/resolution/aspect controls; Omni leaves duration to the model because
+  no explicit duration parameter was verified. Fixed output FPS is 24.
+  Model switching now passes the change event and ignores stale spec responses.
+- **SECURITY:** One generation POST only, no retry/fallback/endpoint rotation.
+  Keys remain in headers and worker memory; remote file/operation identifiers
+  are not exposed as local task IDs. Downloads are size-bounded, atomic and
+  MP4-checked. Redirects are restricted to Google API/Storage hosts; credentials
+  are removed for Storage. Upstream error bodies are never shown or logged.
+  Errors now retain only fixed status/category/parameter-name labels from a
+  bounded body, with submission/polling/download stage distinctions.
+- **VERIFIED:** `python -m pytest tests/test_google_native_video.py
+  tests/test_gemini_official_diagnostics.py -q
+  --basetemp .pytest-tmp-omni-inline` -> `115 passed`.
+  `python -m pytest tests/test_google_video_browser.py -q
+  --basetemp .pytest-tmp-omni-inline-browser` -> `6 passed`.
+  Python compilation and diff checks passed. Tests cover both Omni aliases,
+  all resolutions, preserved store opt-out, inline responses above 8 MiB,
+  corrupt media, limits/cancellation/cleanup and single-POST-only behavior.
+- **VERIFIED / RUNTIME:** Owned lab restart followed by `status --port 8895` on
+  2026-09-17 reports `ONLINE | PID 45196 | HEAD 6109211 | v2.6.10 |
+  runtime 1c5a80d9e7ed`.
+- **USER-CONFIRMED / RESUME:** Live Omni inline and Veo generation subsequently
+  passed manual acceptance. This is not an agent-run paid acceptance test.
+  Refresh the lab; inspect safe diagnostics if a user-authorized attempt fails.
+  For any upstream inline payload limit, do not silently enable store or retry;
+  a future URI mode needs explicit retention disclosure and user choice.
+  A real acceptance run must use
+  one user-selected model and explicit paid-call consent; never auto-retry.
+  Omni editing/extension and arbitrary media URLs are outside this first native
+  adapter. Mixed-model native comparisons require separate submissions.
+
+## 2026-09-17 Video Submission Feedback Repair
+
+- **FIXED / LOCAL:** Video logs, progress, provider status and preview containers
+  remove the global `hidden` class when shown. Advanced options open on the
+  first click; models declaring no advanced parameters show an explicit empty
+  state. Failure placeholders stop spinning and show the backend error as text.
+- **FIXED / LOCAL:** A rejected submission no longer decrements the queue cursor
+  and strands later providers. Remaining selected providers are submitted once;
+  accepted tasks enter polling. All-rejected submissions stop the elapsed timer
+  and restore the Generate button. Narrow-screen composer controls and feedback
+  no longer overlap; desktop and mobile synthetic screenshots were inspected.
+- **VERIFIED:** `python -m pytest tests/test_video_composer_browser.py -q
+  --basetemp .pytest-tmp-video-feedback-accepted` -> `29 passed`;
+  generation-experience browser and Gemini diagnostics tests -> `41 passed`.
+  Node video logging/model-discovery tests, both JS syntax checks and
+  `git diff --check` passed.
+- **VERIFIED / RUNTIME:** On 2026-09-17, owned lab restart and
+  `python scripts/genbox_lab.py status --port 8895` reported
+  `ONLINE | PID 7584 | HEAD 6109211 | v2.6.10 | runtime 6b14161c5207`.
+- **OPEN / RESUME:** Refresh the video page to accept feedback and advanced
+  options. Google's native video generation is still unimplemented: the
+  existing official-host 501 guard remains, before any upstream generation
+  request. This repair does not enable official Veo/Omni generation. Native
+  submission, polling and authenticated download need separate implementation
+  and verification. No real keys, paid calls, production changes or release
+  publication were used here.
+
+## 2026-09-17 Provider Group Icon De-duplication
+
+- **FIXED / LOCAL ONLY:** Provider management group headers no longer render the
+  same emoji twice. They now use one semantic inline SVG per group (image,
+  video, assistant) and remove only the leading legacy emoji from the localized
+  title at this presentation point.
+- **DESIGN DECISION:** Ant Design's icon documentation recommends
+  `@ant-design/icons` as a separate React package and SVG-based rendering.
+  GenBox's current surface is a vanilla static UI with an existing inline-SVG
+  icon language, so adding the full Ant dependency would increase bundle and
+  integration cost without improving this header. The same SVG approach can be
+  reused for future provider actions; a broad icon-library migration is not
+  included in this small fix.
+- **VERIFIED:** `test_provider_model_categories.py`, JavaScript syntax checks,
+  and `git diff --check` cover the change. Static bundle cache version is `v=54`.
+
+## 2026-09-17 Provider Wizard Discovery Draft Fix
+
+- **FIXED / LOCAL ONLY:** Step 2 model discovery now sends the current form
+  values to a non-persisting `POST /api/providers/fetch-models-preview` route.
+  It no longer saves a new Provider as `tmp` before discovery, so a first-time
+  API Key can be used immediately after Step 1 without visiting Step 3 first.
+- **FIXED / LOCAL ONLY:** Preview model IDs remain attached to the current form
+  only. Step 3 is the single persistence point. Existing saved credentials may
+  be reused only when the same base URL/endpoint is retained; changing the
+  connection after discovery requires a fresh fetch. Preview failures preserve
+  the draft and allow retry.
+- **SECURITY:** The preview route never calls `cfg_mgr.save`, does not return
+  credentials, has `Cache-Control: no-store`, and keeps admin/CSRF middleware
+  boundaries. Tests cover new unsaved Providers, saved-secret reuse, changed
+  URLs, failure retry, no-secret echo, and one-save behavior.
+- **VERIFIED:** `25 passed` for the provider preview, wizard browser, and
+  credential-contract tests; `node --check static/js/app-all.js` and
+  `git diff --check` passed. Static bundle cache version is now `v=53`.
+- **RESUME:** Refresh the 8895 lab, enter a new Provider in Step 1, click
+  `下一步`, use `拉取` in Step 2, choose a model, then save in Step 3. No real
+  provider key was used by automated tests.
+
+## 2026-09-17 Official Video Model Discovery Repair
+
+- **FIXED / LOCAL ONLY:** Gemini model discovery uses the configured effective
+  endpoint/key (including `api_keys`), follows bounded model-list pagination,
+  deduplicates returned IDs, and prioritizes Veo/Omni for video Providers without
+  inventing models or dropping the rest of the upstream list. Official errors
+  remain errors, including failures on later pages.
+- **FIXED / LOCAL ONLY:** Video mode filtering recognizes official Veo and
+  Gemini Omni IDs. Omni is classified as video in the model browser. Object and
+  legacy array capability records are supported without mutation; an empty mode
+  no longer falls back to text/image models. Valid selection survives rendering.
+  Video-card refresh now calls the authenticated backend discovery route rather
+  than silently returning when `models_url` is absent.
+- **VERIFIED:** 52 focused Python/browser tests and 126 image/provider regression
+  tests passed. `node tests/test_video_model_discovery.mjs` (bundle/standalone)
+  and `node tests/test_video_logging_ui.mjs` passed, as did JS syntax checks,
+  Python compilation and `git diff --check`.
+- **VERIFIED / RUNTIME:** On 2026-09-17, `python scripts/genbox_lab.py restart
+  --port 8895 --background` followed by `status --port 8895` reported
+  `ONLINE | PID 37972 | HEAD 6109211 | v2.6.10 | runtime 27bb582fcc77`.
+  The lab serves the local uncommitted repair; this supersedes prior runtime
+  identities below. Static asset versions were bumped for refresh.
+- **VERIFIED / RESEARCH:** Google Omni and Veo documentation was re-read through
+  Agent Reach/Jina on 2026-09-17. Omni documents stable
+  `gemini-omni-1.1-flash` and preview `gemini-omni-flash-preview`, with video
+  output and an Interactions API workflow. Veo documents native
+  `predictLongRunning`. These are not the Flow2API chat-completions protocol.
+- **OPEN / GENERATION:** GenBox's existing Gemini video generator is a Flow2API
+  adapter, not a native Google video adapter. Official-host generation now
+  returns an explicit 501 before any upstream request instead of sending the
+  wrong protocol. Native generation, polling and authenticated video download
+  still require implementation and acceptance; model discovery is not E2E.
+- **BOUNDARY / RESUME:** No real key, paid generation, production VPS mutation,
+  Git commit or release publication in this repair. Refresh the 8895 lab and
+  re-fetch the selected video Provider to manually accept model visibility.
+  Actual account visibility/quota remain UNVERIFIED. Next implement native
+  Google video separately, preserving Flow2API and explicit OpenAI gateways.
+
+## 2026-09-17 Model Browser And Provider Fetch Follow-up
+
+- **FIXED / LOCAL ONLY:** Provider model fetching no longer re-renders the
+  entire form through `loadProviders()`; it updates the model control in place,
+  keeps draft values and preserves the three-step wizard position by stable
+  Provider ID. Failed fetches keep the same step and draft as well.
+- **FIXED / LOCAL ONLY:** Image-generation and image-edit model choices now
+  reject text, TTS, audio, embedding, video, and non-image Gemini models even
+  when a Provider-wide capability flag is broad. A hidden/stale model is not
+  silently submitted; selected values remain isolated per Provider.
+- **UI:** The generation model picker now opens an Ant Design-inspired modal
+  browser with search, horizontal capability filters, vertical family groups,
+  counts, collapse/expand, responsive layout, and selected-state highlighting.
+  Google display labels map Nano Banana names to the documented IDs while raw
+  IDs remain option values and request payloads. Verified official image
+  model mapping from Google documentation read on 2026-09-17:
+  `gemini-3.1-flash-lite-image` (Nano Banana 2 Lite),
+  `gemini-3.1-flash-image` (Nano Banana 2),
+  `gemini-3-pro-image` (Nano Banana Pro), and
+  `gemini-2.5-flash-image` (Nano Banana). `gemini-3-pro-image-preview` is
+  display-mapped only when an endpoint actually returns that ID.
+- **VERIFIED:** Focused browser/provider/security regression set passed
+  `88 passed`; `node --check` passed for `app-all.js`,
+  `generation-experience.js`, and `model-browser.js`; `git diff --check`
+  passed. The owned local lab reports `ONLINE | PID 36276 | HEAD 6109211 |
+  v2.6.10 | runtime 568bbee1aa95` on port `8895`.
+- **BOUNDARY:** This is local UI and contract evidence. No provider key was
+  entered, no paid generation was sent, and no GitHub/Release publication was
+  performed. Live upstream model availability remains Provider-specific.
+- **RESUME:** Refresh the newly opened 8895 tab, open a configured image
+  Provider's model picker, verify search/category/family behavior, then use
+  one explicitly user-selected model for any manual generation acceptance.
+
+## 2026-09-17 Generation Feedback And Provider Steps Trial
+
+- LOCAL ONLY: Ant Design-inspired image placeholders, bottom-right terminal
+  notifications, and three-step Provider forms with connection preset dropdowns.
+  Uses existing vanilla JS; no React dependency, provider config migration,
+  automatic save/test, paid generation, or release publication.
+- Progress uses task states, not the server's elapsed-time percentage estimate.
+  Terminal notifications deduplicate task IDs and omit prompts, credentials and
+  raw upstream errors. Success, partial success, failure and cancellation differ.
+- Provider step navigation moves existing controls without recreating inputs;
+  advanced connection fields collapse. Preset changes require confirmation and
+  still require explicit Save. Presets cover Google, OpenAI and a custom gateway.
+- VERIFIED: 82 tests passed across generation controls, model connections,
+  generation-experience browser tests, provider-enabled controls and setup
+  security. Node stop-generation and generation-error regression scripts passed;
+  JS syntax and diff checks passed. Synthetic screenshots inspected at desktop
+  and mobile widths. Real generation and user visual acceptance are UNVERIFIED.
+- RESUME: Refresh the 8895 lab, inspect Provider steps and use an explicitly
+  user-initiated generation to accept feedback visuals. No paid call is needed
+  for automated testing. Revert only generation-experience files, their script
+  includes and guarded integration hooks if rejected.
+
+## 2026-09-16 Gemini Official API Compatibility Repair
+
+- **VERIFIED / DIAGNOSIS:** The local September 16 14:29 t2i failure reached
+  Google's native GenerateContent route and returned HTTP 429. Its requested
+  model was `gemini-3.1-flash-image`; the currently saved default is
+  `gemini-3-pro-image-preview`. The original response body was not retained,
+  so the specific quota/rate limit is UNKNOWN. This is not evidence of an
+  invalid key, unsupported resolution, or an invalid model identifier.
+- **VERIFIED / READ-ONLY LIVE:** Both the configured direct path and configured
+  global proxy returned HTTP 200 to Google's model-list API. The actual GenBox
+  adapter returned 58 models, including both identifiers above; the repaired
+  connectivity handler returned HTTP 200. No generation POST, config save,
+  model rewrite, or paid generation was performed.
+- **FIXED:** Connectivity probes share generation's proxy selection and native
+  Gemini header/path; HTTP 401 is no longer success. Official model-list
+  failures retain their original cause instead of falling back to OpenAI.
+  Gemini t2i/i2i now preserve bounded/redacted error status, quota IDs and retry
+  delay, without automatic retries. Modalities use `TEXT`/`IMAGE`; this
+  normalization is not claimed to explain the historical HTTP 429.
+- **UI:** The enabled flag defaults to true for new providers and retains
+  existing opt-outs. Its primary `停止使用`/`启用模型` control keeps the existing
+  explicit Save workflow. Browser tests cover default, toggle, persisted
+  disabled rendering and preservation of Save/Test/Delete controls.
+- **VERIFIED:** `python -m pytest tests/test_provider_enabled_browser.py
+  tests/test_gemini_official_diagnostics.py tests/test_provider_transport_security.py
+  tests/test_precision_protocol_resolver.py tests/test_gemini_precision_catalog.py
+  tests/test_generation_model_connection.py tests/test_provider_error_safety.py -q`
+  passed (160 tests); `node --check static/js/app-all.js` passed.
+- **RESEARCH:** Google models, image-generation, troubleshooting and rate-limits
+  documentation were read through Agent Reach/Jina using the configured proxy.
+  Official model-list visibility does not prove generation quota availability.
+- **RESUME:** Use the exact model from the successful Cherry Studio request,
+  select only Gemini and one image for manual acceptance. Inspect the new
+  structured 429 evidence if it fails. Real image-generation acceptance and
+  Cherry Studio's exact model/request remain UNVERIFIED. Do not publish this
+  local repair or alter precision capability declarations on this evidence.
+
+## 2026-09-14 Reversible UI Trial
+
+- Follow-up: composition placeholder is now a heading, not an option;
+  selection follows actual prompt text. Primary size modes and AI removal
+  choices have distinct selected states. Trial progress follows native task
+  classes and restores its original icon when disabled.
+- Observed live page reported backend offline with connection controls
+  disabled. Restarted the owned 8895 lab in background mode; status verified
+  ONLINE. Do not bypass disabled consent controls. Current selection in the
+  stale page was an unconfirmed model; size grants require model permission.
+- Verification: `python -m pytest tests/test_precision_ui_trial.py
+  tests/test_precision_protocol_browser.py -q` passed (2 tests), covering
+  projection, consent-state updates, composition edits, progress and rollback.
+  Browser refresh verification was blocked by browser-control timeouts;
+  live permission round-trip and visual acceptance remain unverified.
+- Resume: refresh the page against the online lab and verify permission
+  enable/cancel/revoke with a supported selected model before claiming full
+  live acceptance. No paid generation or publication in this UI pass.
+
+- LOCAL ONLY: opt-in "trial UI" control above the precision model picker.
+  Size cards include aspect outlines; composition and connection choices
+  project existing selects; switches delegate to existing consent handlers.
+- Restore original UI with the same toggle. No grants or request contracts
+  change on toggling; no paid calls, release changes or push in this pass.
+- VERIFIED: two Playwright tests pass (original protocol workflow plus trial
+  selection/delegation/restore at desktop and mobile widths); trial JS syntax
+  passes. Full visual acceptance remains user-owned.
+- RESUME: refresh the 8895 lab and select the trial control above model
+  selection. Keep this local until accepted; remove only the trial includes
+  and trial files if rejected, not existing precision development.
+
+## Release Candidate v2.6.9
+
+- **CURRENT SCOPE:** Preserve user-accepted GPT workflows and consolidate
+  model-scoped connections, native Gemini editing, Klong multipart input,
+  compressed-response handling, explicit resolution tiers, and size warnings.
+- **CORRECTION:** Earlier Vel notes below inferred URL-only input from
+  `Invalid data URL`. That inference is not established; the research document
+  records Base64 support. Automatic Vel input remains conservatively blocked
+  pending verification, with explicit advanced overrides available. It is not
+  included in the successful Klong acceptance claim.
+- **RELEASE:** Bilingual v2.6.9 notes and README are prepared. Local full-suite
+  verification and GitHub publication are in progress; no release completion
+  is claimed yet.
+- **RESUME:** Finish local gates, push only reviewed source/test/docs, publish
+  the version-matched tag through existing CI, and verify release assets.
+  The dated sections below are historical evidence, not current runtime status.
+
+## 2026-09-14 Nano Banana Size Failure Classification
+
+- **USER-CONFIRMED:** Most Klong `nano-banana2` precision presets passed
+  manual acceptance. Remaining failures were reviewed from sanitized workflow
+  history before promoting any new size evidence.
+- **LIKELY SIZE/GEOMETRY LIMIT:** `6144x768` returned `5856x704`. The
+  response ratio also differed by about 3.98%, so strict validation correctly
+  rejected it. This is evidence that this extreme panorama request is not
+  reliable for the current model/endpoint, not proof that all wide ratios fail.
+- **LOCAL SAFETY LIMIT:** `2048x8192` returned `2048x8256`, exceeding GenBox's
+  configured 8192-side limit. The failure occurred during output validation;
+  it is not an upstream “unsupported size” response. The target is at the
+  boundary, not outside it; the returned 8256-pixel side exceeds the limit.
+  The preset now carries an output-safety warning; strict rejection remains.
+- **NOT SIZE FAILURES:** Historical `HTTP 503` responses (including a message
+  about no active Leonardo token) are provider availability/configuration
+  failures. They must not alter size declarations. Earlier connection/read
+  errors are likewise transport failures.
+- **CONFIRMED PASSES:** Recent exact-size successes include `2400x1792`,
+  `1856x2304`, `2304x1856`, `1536x2752`, `3168x1344`, `4096x4096`, and
+  `3392x5056`, all with matching decoded output dimensions.
+- **POLICY:** Keep strict output validation, do not silently crop or rewrite
+  requested sizes, and do not promote a failed or mismatched size to the
+  model's supported-size list. Resolution tiers do not impose a universal
+  4096-pixel side cap: `3392x5056` already has an exact-size success.
+  Warnings for the two observed failures are scoped to Klong `nano-banana2`;
+  user grants, GPT presets, and other gateways remain unchanged.
+
+## 2026-09-14 Klong Explicit Resolution Tier
+
+- **FIXED:** Klong Nano precision requests now map documented target pixels
+  to an explicit `size=1K/2K/4K`. Exact pixels/aspect guidance and strict
+  decoded-output checks remain unchanged. Other gateways/GPT paths are unchanged.
+- **VERIFIED / LIVE:** One synthetic `nano-banana2` edit on the selected Klong
+  provider returned HTTP 200 and actual `2752x1536` for target `2752x1536`,
+  after sending `size=2K`. Strict validation and saving passed without local
+  cropping/resizing; visual inspection showed the source object retained and
+  background expanded. Exactly one POST, no retry, no user image used.
+- **SCOPE:** This validates this provider/model/target only, not every ratio,
+  tier, or annotation behavior. The previous `5504x3072` result was a real
+  decoded 4K-size image, not a UI measurement error.
+- **RESUME:** Manual lab acceptance may now use automatic connection and
+  2K 16:9 (`2752x1536`). Preserve strict sizing and per-model isolation.
+
+## 2026-09-14 Compressed Provider Response Repair
+
+- **FIXED:** Bounded streaming had already decompressed response bytes, but
+  reconstructed an HTTPX response with the original Content-Encoding header.
+  Gzip/deflate responses were decoded twice, reproducing the observed
+  `incorrect header check`. Reconstructed responses now remove encoding and
+  transfer headers and recalculate Content-Length. Decoded byte caps remain.
+- **VERIFIED / LIVE:** Under user authorization, Klong `nano-banana2` T2I
+  returned HTTP 200 and an actual `1024x1024` image for target `1024x1024`.
+  A separate synthetic precision expansion returned HTTP 200 with an image,
+  but target `2752x1536` produced `5504x3072`. Strict validation correctly
+  rejected it. Each operation sent exactly one POST without retry.
+- **BOUNDARY:** T2I is live verified; precision transport returns images,
+  but exact-size editing was not yet accepted at this intermediate stage.
+  The later resolution-tier repair above supersedes that result. No user media or private prompts
+  were used. Synthetic output remains outside the repository.
+- **RESUME:** Investigate Klong resolution-tier mapping separately or verify
+  explicit crop-to-fit; never silently weaken strict sizing. The previous
+  claim that JSON itself explained ReadError was not established evidence.
+
+## 2026-09-11 Precision Model Hierarchy UX
+
+- **IMPLEMENTED / LOCAL ONLY:** Precision model controls now present an
+  explicit dependency order: `模型端点` → `显示模型` → `编辑模型` →
+  `接入方式`. The protocol control remains visible before a model is chosen,
+  but is disabled with a plain-language explanation until it can be applied to
+  the selected exact model.
+- **IMPLEMENTED:** Concise guidance makes the dependency chain
+  visible to first-time users. Model visibility remains draft-only and keeps
+  focus/list scroll; protocol and size state stay scoped to the selected
+  provider/model.
+- **VERIFIED 2026-09-11:** `node --check static/js/app-all.js`,
+  `node tests/test_precision_edit_ui.mjs`,
+  `node tests/test_precision_protocol_ui.mjs`,
+  `node tests/test_precision_gemini_presets.mjs`,
+  `python -m pytest tests/test_precision_protocol_browser.py -q -s`
+  (`1 passed`), the precision protocol/resolver/provider set (`75 passed`),
+  and the focused precision/provider/security set (`521 passed`) passed.
+  The owned lab was refreshed from the current worktree and reports
+  `ONLINE | PID 38128 | HEAD 3423620 | v2.6.8 | runtime 9a12a9a6a4dc`
+  on port `8895` with source fingerprint `33bbc9bc2c6b6bc8`.
+- **BOUNDARY:** This is interaction guidance only; it does not certify a
+  provider/model's upstream image-edit capability. No new paid request was
+  made in this UI pass.
+
+## 2026-09-11 Precision Protocol UX And Gateway Adapter
+
+- **IMPLEMENTED / LOCAL ONLY:** Precision editing now resolves an exact
+  provider/model connection independently from shared Provider defaults. The
+  default follows the existing endpoint protocol; documented Nano aliases
+  use OpenAI Images `/images/edits` (Klong multipart, Vel JSON) without
+  changing the outbound model ID. Manual OpenAI/Gemini overrides remain scoped
+  to the selected model and can be restored to automatic.
+- **IMPLEMENTED:** Text-to-image and image-to-image submissions now send the
+  selected model explicitly instead of mutating the Provider default in the
+  browser. Queued tasks freeze provider configuration before background work.
+  Sanitized task evidence records exact model, protocol, profile, relative
+  route, requested/default size, and decoded output dimensions when available.
+- **IMPLEMENTED:** Precision protocol save/restore and size authorization roll
+  back in-memory state when persistence fails. Provider error diagnostics redact
+  image Data URLs and prompt/instruction fields. Existing GPT model capability
+  and size grants remain isolated from Nano model catalog entries.
+- **VERIFIED 2026-09-11:** `node --check static/js/app-all.js`; precision UI,
+  protocol UI, and Gemini preset Node suites; 3 Playwright browser suites
+  (desktop/mobile synthetic acceptance); 636 focused Python tests; Python
+  compile and `git diff --check` all pass. No paid upstream request, real
+  gateway trial, or production Provider mutation was made.
+- **BOUNDARY:** The prior successful text-to-image history entry did not store
+  the selected outbound model or protocol, so it cannot prove which protocol
+  generated that image. The current lab is ready for manual acceptance. A
+  real Nano Banana precision-edit trial still requires an explicit user
+  confirmation at the moment of submission and must remain a single
+  no-automatic-retry request.
+
+## 2026-09-10 Aggregate Provider Protocol Implementation
+
+- **IMPLEMENTED / LOCAL ONLY:** Per-model precision protocol override is now
+  available. Each model in an aggregate Provider can independently select
+  `inherit` / `openai` / `gemini` transport and a documented size family
+  (GPT Image 2, Nano Banana 1K/Pro/2). The override is stored under
+  `provider.extra.precision_model_overrides[model]` and never mutates the
+  shared Provider endpoint, key, or default profile.
+- **IMPLEMENTED:** `POST /api/providers/{id}/precision-protocol` saves or
+  resets the override. `POST /api/providers/{id}/precision-preflight` runs
+  local-only validation (no upload, no upstream POST) and reports
+  `upstream_requests: 0`. UI adds "生图协议" and "尺寸预设" selects plus
+  "应用到当前模型" / "恢复端点默认" / "检查配置" buttons.
+- **VERIFIED:** 520 focused tests passed (precision contract, workflow,
+  provider, alias, error safety, setup security). Node syntax and Gemini
+  preset contract passed. `py_compile` and `git diff --check` passed.
+- **BOUNDARY:** No real upstream request was made. The aggregate gateway's
+  actual schema for `nano-banana-2-2k` remains unverified. Manual browser
+  acceptance and one explicitly authorized real trial remain pending.
+
+## 2026-09-10 Aggregate Provider Protocol Strategy
+
+- **CORRECTION:** The user-selected `nano-banana-2-2k` was inside an aggregate
+  OpenAI-compatible Provider. Its HTTP 400 / `Invalid data URL` does not prove
+  a native-Gemini requirement or size incompatibility. The current adapter
+  sends multipart files; the upstream parsing/translation cause is unverified.
+- **VERIFIED (READ-ONLY AUDIT):** Current precision transport configuration is
+  Provider-wide. Native Gemini development does not yet implement independent
+  model-specific protocol overrides within one aggregate Provider. Earlier
+  claims of complete gateway size switching were too broad; the added Node
+  catalog suite is source-structure coverage, not browser round-trip evidence.
+- **PROPOSED:** See `PRECISION-AGGREGATE-PROTOCOL-STRATEGY-20260910.md` for
+  independent transport/size-family selection, non-generating preflight,
+  single-request trial policy, model-scoped evidence and GPT isolation tests.
+- **AUTHORIZATION / NOT EXECUTED:** The user authorized a target-model test.
+  No generation request was sent in this strategy task: the gateway's exact
+  schema remains unverified after public documentation lookup failed. Do not
+  consume that authorization on an unbounded sequence of protocol probes.
+- **RESUME:** Implement and review per-model overrides first, then inspect
+  the gateway's documented request format and perform at most one justified,
+  synthetic-image trial under the existing authorization. No Provider settings,
+  model grants or production code changed during this strategy task.
+
 ## 2026-09-10 GPT Acceptance And v2.6.8 Publication
 
 - **USER-CONFIRMED:** GPT target-model precision editing passed manual acceptance.
@@ -36,6 +531,39 @@
   real upstream trial, record sanitized exact target/output sizes, and retain
   strict output checks, scoped authorization and no automatic image-edit POST
   retry. Do not infer other-vendor acceptance from this GPT-target release.
+
+## 2026-09-10 Gemini Nano Banana Precision-Edit Development
+
+- **RESEARCH VERIFIED:** Google AI for Developers documents native image editing
+  through Gemini `generateContent` for `gemini-2.5-flash-image` (Nano Banana),
+  `gemini-3-pro-image` (Nano Banana Pro), and `gemini-3.1-flash-image` (Nano
+  Banana 2). The same documentation defines model-specific aspect-ratio and
+  resolution controls; Gemini 2.5 uses its native 1K table without `imageSize`,
+  while Gemini 3 families expose 1K/2K/4K (3.1 Flash also 512). These are
+  provider documentation facts, not evidence of any configured gateway's
+  availability.
+- **IMPLEMENTED / LOCAL ONLY:** Native Gemini precision editing now has an
+  allowlisted `gemini_generate_content` transport, source/annotation image
+  parts, bounded composition guidance, model-specific native preset catalogs,
+  strict output validation, explicit crop-to-fit, and one-POST/no-retry
+  behavior. GPT-compatible Nano Banana gateway names remain separate and do
+  not inherit native Gemini capability or GPT size records.
+- **IMPLEMENTED:** Model-specific documented presets drive the precision UI
+  candidate list and tier/ratio mapping. Strict selectable sizes still come
+  only from explicit provider/model/size capability records; switching models
+  does not inherit authorization. Unknown or unmappable Gemini sizes fail
+  closed before a request.
+- **VERIFIED:** `python -m py_compile config.py main.py providers/__init__.py`;
+  `git diff --check`; Gemini catalog `10 passed`; native Gemini provider
+  contract `30 passed`; combined precision/provider regression `511 passed`;
+  `node --check static/js/app-all.js`; precision UI and Gemini preset Node
+  suites passed. The owned lab was restarted and reports
+  `ONLINE | PID 40040 | HEAD ec24eb1 | v2.6.8` on port `8895`.
+- **BOUNDARY:** No real Gemini request, upload, paid call, or gateway capability
+  claim was made. Gemini 3.1 Flash extreme 4K dimensions above GenBox's current
+  8192-side safety envelope are withheld. Manual browser acceptance and one
+  explicitly authorized real trial remain pending; record sanitized target and
+  actual output dimensions separately.
 
 ## 2026-09-10 Precision Quick Start
 
@@ -4165,3 +4693,111 @@ full sanitization review, and public release remain later gates.
   supported annotation, verify the highlight, edit text in the draggable
   popover, drag it inside the canvas, close/reopen by selecting the annotation,
   and verify the full-row gallery texture at desktop and narrow widths.
+
+## Precision model/protocol usability pass (2026-09-11)
+
+- **VERIFIED / MODEL ISOLATION:** exact model selection resolves an isolated
+  precision connection and size family. GPT Image 2 records and grants are not
+  inherited by Nano Banana or another model in the same aggregate Provider.
+- **VERIFIED / SIZE CATALOG:** Nano Banana official size candidates and gateway
+  declared candidates are shown separately; candidates remain experimental
+  until the current Provider, exact model, and exact size are explicitly
+  authorized.
+- **VERIFIED / UI:** protocol controls retain a model-first hierarchy, expose
+  automatic connection as the default, keep advanced request-format settings
+  collapsed, and remove numeric step badges in favor of short natural-language
+  guidance. Grouped model checkboxes use local accessible styling; no external
+  runtime dependency was added.
+- **VERIFIED / TEST:** JavaScript syntax/UI/preset checks passed; focused
+  precision/workflow tests passed `226`; provider precision/error-safety tests
+  passed `254`; setup, protocol, resolver, JSON gateway, and browser tests
+  passed `119`; `git diff --check` passed.
+- **VERIFIED / LAB:** `python scripts/genbox_lab.py status --port 8895`
+  reported `ONLINE`, PID `42680`, HEAD `3423620`, version `v2.6.8` on
+  2026-09-11.
+- **BOUNDARY:** no real Nano Banana upstream edit POST was issued in this pass.
+  The prior `HTTP 400 Invalid data URL` remains an upstream input-encoding
+  failure classification, not proof of unsupported size or model capability.
+  A real trial still requires explicit user authorization and is limited to one
+  non-retried POST with sanitized evidence.
+- **RESUME:** manually verify model grouping, protocol auto/manual hierarchy,
+  Nano Banana size-family switching, and Generate readiness in the 8895 lab.
+  Only after that acceptance should a separately authorized single real trial
+  be considered.
+
+## Nano Banana gateway input adjustment (2026-09-11)
+
+- **VERIFIED / CHANGE:** for the documented Vel host and Nano Banana aliases,
+  automatic precision editing uses the documented JSON edit profile. Because
+  that contract requires a server-downloadable image URL, GenBox now blocks a
+  local Data URL before the paid POST and explains the required gateway
+  capability. Explicit per-model overrides remain available for gateways that
+  document Base64/Data URL or multipart support.
+- **RATIONALE:** the authorized trial returned upstream HTTP 400
+  `Invalid data URL`; this is treated as an input-encoding incompatibility
+  signal, not as evidence that the model or target size is unsupported.
+- **TEST:** JSON override, resolver, model-connection, and gateway contracts
+  passed `78` tests after the change. No second real upstream request was made.
+- **RESUME:** use a gateway with a documented local-image input contract for a
+  future single authorized trial; record only sanitized protocol, model,
+  target, status, and actual output dimensions. Do not enumerate profiles or
+  retry automatically.
+# 2026-09-11 Nano Banana Vel Data-URL Preflight
+
+- **FIXED / LOCAL:** Automatic Vel Nano Banana JSON edit recipes now reject
+  GenBox-local `data:image/...` input before any upstream POST. The error tells
+  users that this gateway requires a server-downloadable image URL, that GenBox
+  does not upload local images implicitly, and that text-to-image success does
+  not prove edit-input compatibility.
+- **PRESERVED:** Explicit per-model OpenAI-compatible overrides remain available
+  for gateways that document Base64/Data URL support. GPT model capability and
+  size records remain isolated; edit requests still use one POST with no
+  automatic retry.
+- **VERIFIED 2026-09-11:** The focused JSON/resolver/model-connection suite
+  passed `78` tests; provider precision/alias/error-safety/setup-security
+  passed `295` tests; JavaScript syntax, precision UI suites, Python compile,
+  and `git diff --check` passed. No second paid upstream request was made.
+- **BOUNDARY:** The configured `api.velapi.cc` Nano Banana edit path has one
+  recorded authorized trial failure (`HTTP 400 Invalid data URL`). It is not
+  certified as precision-edit compatible until the gateway accepts a
+  server-downloadable URL or an explicitly documented Base64/Data URL body.
+
+## 2026-09-11 Klong Nano Banana Multipart Alignment
+
+- **FIXED / LOCAL:** Klong's documented `nano-banana2` and
+  `nano-banana-pro` OpenAI-compatible edit route now resolves automatically to
+  the multipart single-source profile. Klong documents multipart uploads and
+  accepts local image input; its optional JSON aliases remain available
+  through an explicit per-model override.
+- **BOUNDARY:** This corrects adapter selection for the observed `ReadError`
+  path but is not live proof that the endpoint, account, model, or size will
+  succeed. A new real trial requires explicit authorization and remains one
+  non-retried POST.
+
+## 2026-09-14 Klong Nano Banana Authorized Trial
+
+- **USER-AUTHORIZED / VERIFIED:** One real trial used a synthetic PNG only:
+  exact model `nano-banana2`, automatic Klong recipe, OpenAI Images multipart
+  single-source upload, target `2752x1536`. Exactly one upstream POST was sent;
+  no endpoint rotation or retry occurred.
+- **RESULT:** The request reached the provider but failed with the sanitized
+  `precision_edit_connection_error` during response handling. This is not a
+  local size-capability rejection or an input-format rejection. Nano Banana
+  precision editing on this Klong account remains unverified.
+- **BOUNDARY:** Do not claim successful model support from this run. Further
+  diagnosis needs provider-side response/connection evidence or a separately
+  authorized trial; no automatic retry is allowed.
+
+## 2026-09-17 Provider Group Icon Deduplication
+
+- **FIXED / LOCAL:** Provider management group headers now render one semantic
+  inline SVG icon for image, video, and LLM groups. Legacy leading emoji are
+  removed from the localized title at this presentation point, preventing
+  duplicate icons such as `🎨 🎨 生图模型`.
+- **DESIGN:** The implementation follows the existing inline SVG language and
+  does not add the React/Ant Design runtime dependency. Ant Design's SVG icon
+  approach was used as a visual reference for consistent outline, sizing, and
+  accessible decorative markup.
+- **VERIFIED 2026-09-17:** `node --check static/js/app-all.js`, focused provider
+  tests (`3 passed`), and `git diff --check` passed. The GenBox lab on port
+  `8895` reported `ONLINE` before this verification pass.

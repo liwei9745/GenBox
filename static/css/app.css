@@ -1679,6 +1679,23 @@ textarea {
 .provider-type-card:hover {
   border-color: rgba(0,122,255,0.2);
 }
+.provider-group-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 18px;
+  color: var(--text-primary);
+}
+.provider-group-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 .provider-col-resize {
   background: transparent;
@@ -1690,6 +1707,53 @@ textarea {
 }
 .provider-col-resize:active {
   background: var(--accent);
+}
+
+.provider-auto-protocol-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 7px 9px;
+  border: 1px solid rgba(0,122,255,0.18);
+  border-radius: 7px;
+  background: linear-gradient(135deg, rgba(0,122,255,0.08), rgba(255,255,255,0.02));
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+.provider-auto-protocol-hint strong { color: var(--accent); }
+.provider-auto-protocol-hint small { flex-basis: 100%; color: var(--text-muted); line-height: 1.45; }
+.provider-auto-protocol-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0,122,255,0.12);
+}
+.provider-auto-protocol-hint[data-protocol="gemini"] .provider-auto-protocol-dot { background: #4285f4; }
+.provider-auto-protocol-hint[data-protocol="openai"] .provider-auto-protocol-dot { background: #10a37f; }
+.provider-auto-protocol-hint[data-protocol="unknown"] .provider-auto-protocol-dot { background: #f59e0b; }
+.provider-model-filter {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin: 0 0 6px;
+}
+.provider-model-filter button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+}
+.provider-model-filter button:hover,
+.provider-model-filter button.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
 }
 }
 
@@ -5469,10 +5533,11 @@ body.dock-auto-hide.dock-pinned .dock-reveal-handle span {
   display: flex;
   min-height: 0;
   height: auto;
-  max-height: none;
+  max-height: calc(100vh - 180px);
   flex-direction: column;
   gap: 10px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 #pageGenerate.precision-workbench .precision-task-log-panel {
@@ -9162,6 +9227,123 @@ body.precision-docs-open {
   }
 }
 
+/* precision protocol controls */
+.precision-protocol-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 0;
+  border-block: 1px solid var(--border);
+}
+
+.precision-protocol-controls.hidden {
+  display: none;
+}
+
+.precision-protocol-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.precision-protocol-controls .precision-picker-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.precision-protocol-controls select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.precision-protocol-controls details {
+  font-size: 11px;
+  min-width: 0;
+}
+
+.precision-protocol-controls details summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+
+.precision-protocol-controls .precision-model-authorization-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.precision-protocol-controls .precision-model-authorization-actions button {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 10px;
+  font-size: 11px;
+}
+
+.precision-protocol-controls small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.precision-protocol-controls [hidden] { display: none !important; }
+
+.precision-generate-shortcut-hint {
+  display: block;
+  margin-top: 4px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+#pageGenerate.precision-workbench .precision-toggle-action {
+  border-radius: 999px;
+  min-height: 30px;
+  padding-inline: 14px;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+#pageGenerate.precision-workbench .precision-toggle-action:not(:disabled):hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface));
+}
+
+#pageGenerate.precision-workbench .precision-model-picker-body,
+#pageGenerate.precision-workbench .precision-model-picker-body > *,
+#pageGenerate.precision-workbench .precision-resize-fields > * {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+#pageGenerate.precision-workbench .precision-edit-inspector select,
+#pageGenerate.precision-workbench .precision-edit-inspector input,
+#pageGenerate.precision-workbench .precision-edit-inspector textarea {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.precision-protocol-controls .btn-warning {
+  border-color: var(--warning, #f59e0b);
+  background: color-mix(in srgb, var(--warning, #f59e0b) 15%, transparent);
+  color: var(--warning-dark, #b45309);
+}
+
+.precision-protocol-controls .btn-warning:hover {
+  background: color-mix(in srgb, var(--warning, #f59e0b) 25%, transparent);
+}
+
 /* precision cutout glass panel */
 #pageGenerate.precision-workbench .precision-edit-inspector {
   gap: 7px;
@@ -10073,11 +10255,124 @@ body.precision-cutout-professional-focus.precision-cutout-professional-dock-coll
   gap: 8px;
   padding-top: 10px;
 }
+#pageGenerate.precision-workbench .precision-model-picker-body > .precision-start-hint {
+  order: 0;
+}
+#pageGenerate.precision-workbench .precision-model-picker-body > label[for="precisionEditProviderEndpoint"] {
+  order: 1;
+}
+#pageGenerate.precision-workbench .precision-model-picker-body > #precisionEditModelVisibility {
+  order: 2;
+}
+#pageGenerate.precision-workbench .precision-model-picker-body > label[for="precisionEditProviderModel"] {
+  order: 3;
+}
+#pageGenerate.precision-workbench .precision-model-picker-body > #precisionProviderStatus {
+  order: 4;
+}
+#pageGenerate.precision-workbench .precision-model-picker-body > #precisionProtocolControls {
+  order: 5;
+}
+#pageGenerate.precision-workbench .precision-model-picker-body > #precisionEditCompatibilityOption,
+#pageGenerate.precision-workbench .precision-model-picker-body > .precision-model-authorization-actions,
+#pageGenerate.precision-workbench .precision-model-picker-body > #precisionModelAuthorizationHint {
+  order: 6;
+}
 #pageGenerate.precision-workbench .precision-model-picker:not([open]) > .precision-model-picker-body { display: none; }
 #pageGenerate.precision-workbench .precision-model-picker-body > small {
   color: var(--text-muted);
   font-size: 11px;
   line-height: 1.45;
+}
+#pageGenerate.precision-workbench .precision-hierarchy-field .precision-picker-label,
+#pageGenerate.precision-workbench .precision-hierarchy-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#pageGenerate.precision-workbench .precision-hierarchy-heading {
+  flex-wrap: wrap;
+  padding-bottom: 2px;
+}
+#pageGenerate.precision-workbench .precision-hierarchy-heading strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+#pageGenerate.precision-workbench .precision-hierarchy-heading small {
+  flex: 1 1 100%;
+  margin-left: 24px;
+}
+#pageGenerate.precision-workbench .precision-model-visibility-trigger > span {
+  display: inline-flex;
+  align-items: center;
+}
+#pageGenerate.precision-workbench .precision-ui-checkbox {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-surface);
+  cursor: pointer;
+  position: relative;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+#pageGenerate.precision-workbench .precision-ui-checkbox::after {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 9px;
+  left: 6px;
+  top: 2px;
+  border-right: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(45deg) scale(0);
+  transition: transform 120ms ease;
+}
+#pageGenerate.precision-workbench .precision-ui-checkbox:hover {
+  border-color: var(--accent);
+}
+#pageGenerate.precision-workbench .precision-ui-checkbox:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  outline-offset: 2px;
+}
+#pageGenerate.precision-workbench .precision-ui-checkbox:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+#pageGenerate.precision-workbench .precision-ui-checkbox:checked::after {
+  transform: rotate(45deg) scale(1);
+}
+#pageGenerate.precision-workbench .precision-ui-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+#pageGenerate.precision-workbench .precision-model-visibility-group-heading,
+#pageGenerate.precision-workbench .precision-model-visibility-option {
+  gap: 8px;
+}
+#pageGenerate.precision-workbench .precision-model-visibility-option {
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+#pageGenerate.precision-workbench .precision-model-visibility-option:hover {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-surface));
+}
+#pageGenerate.precision-workbench .precision-model-visibility-group-heading {
+  min-height: 34px;
+  padding: 6px 8px;
+}
+#pageGenerate.precision-workbench .precision-hierarchy-field select:disabled,
+#pageGenerate.precision-workbench .precision-protocol-controls select:disabled {
+  cursor: not-allowed;
+  opacity: .62;
 }
 #pageGenerate.precision-workbench .precision-quick-tools > .precision-quick-heading {
   justify-content: center;

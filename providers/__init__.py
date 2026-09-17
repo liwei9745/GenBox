@@ -34,6 +34,7 @@ from config import (
     GALLERY_DIR,
     PRECISION_GPT_IMAGE_2_FLEXIBLE_SIZE_POLICY,
     gpt_image_2_size_error,
+    gemini_precision_preset_for_size,
     PrecisionEditProfile,
     ProviderConfig,
     VideoModelSpec,
@@ -41,6 +42,10 @@ from config import (
     normalize_precision_capability_size,
     precision_capability_size_declaration,
     resolve_precision_model_capability,
+    resolve_precision_provider,
+    precision_size_model,
+    precision_documented_gateway_recipe,
+    resolve_image_protocol,
     verify_ssl_enabled,
 )
 
@@ -233,9 +238,15 @@ async def _stream_bounded_provider_response(
         )
         content = await _read_bounded_provider_response(response, max_bytes)
         request = getattr(response, "request", None) or httpx.Request(method, url)
+        # aiter_bytes already decoded compression; do not decode it a second
+        # time when constructing the buffered response.
+        headers = {
+            key: value for key, value in (getattr(response, "headers", {}) or {}).items()
+            if key.lower() not in {"content-encoding", "content-length", "transfer-encoding"}
+        }
         return httpx.Response(
             int(response.status_code),
-            headers=dict(getattr(response, "headers", {}) or {}),
+            headers=headers,
             content=content,
             request=request,
         )
@@ -456,6 +467,7 @@ class PrecisionEditTransportProfile:
     image_field: str
     image_payload: str = "source_and_annotation"
     preserve_size: str = "auto"
+    request_encoding: str = "multipart"
 
 
 @dataclass
@@ -493,7 +505,18 @@ PRECISION_EDIT_TRANSPORT_PROFILES = {
             preserve_size="source_dimensions",
         )
     ),
+    PrecisionEditProfile.OPENAI_IMAGES_EDITS_JSON_DATA_URL_SINGLE_SOURCE_IMAGE.value: (
+        PrecisionEditTransportProfile(
+            path="/images/edits",
+            image_field="image",
+            image_payload="source_only",
+            preserve_size="source_dimensions",
+            request_encoding="json_data_url",
+        )
+    ),
 }
+
+GEMINI_PRECISION_EDIT_PROFILE = "gemini_generate_content"
 
 _SENSITIVE_FIELD_RE = re.compile(
     r"(?i)((?<![\w-])[\"']?(?:x[_-]?api[_-]?key|api[_-]?key|access[_-]?token|"
@@ -506,6 +529,10 @@ _SENSITIVE_QUERY_RE = re.compile(
     r"(?i)(^|[?&;\s])((?:key|api[_-]?key|access[_-]?token|refresh[_-]?token|token|auth(?:orization)?|"
     r"client[_-]?secret|password|secret|signature|sig|credential)=)"
     r"(\[REDACTED\]|[^&#\s\"',;]*)"
+)
+_DATA_URL_RE = re.compile(r"(?is)data:image/[\w.+-]+;base64,[A-Za-z0-9+/=\s]{24,}")
+_PROMPT_FIELD_RE = re.compile(
+    r"(?is)([\"']?(?:prompt|text|instruction|negative_prompt)[\"']?\s*[:=]\s*)(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^,;&}\n]{1,1200})"
 )
 _AUTH_SCHEME_RE = re.compile(
     r"(?i)\b(Bearer|Basic)\s+([^\s,;\"'}]+)"
@@ -654,6 +681,12 @@ def _provider_error_text(value: Any, cfg: ProviderConfig) -> str:
     secrets.extend(getattr(endpoint, "key", "") for endpoint in (getattr(cfg, "endpoints", None) or []))
     for secret in sorted({str(item) for item in secrets if item}, key=len, reverse=True):
         text = text.replace(secret, "[REDACTED]")
+    extra = getattr(cfg, "extra", None)
+    private_values = extra.get("_precision_diagnostic_redactions", []) if isinstance(extra, dict) else []
+    for private_value in sorted({item for item in private_values if isinstance(item, str) and item}, key=len, reverse=True):
+        text = text.replace(private_value, "[REQUEST_CONTENT_REDACTED]")
+    text = _DATA_URL_RE.sub("[IMAGE_DATA_REDACTED]", text)
+    text = _PROMPT_FIELD_RE.sub(r"\1[PROMPT_REDACTED]", text)
     return _redact_sensitive_text(text)
 
 
@@ -1031,39 +1064,7 @@ def _detect_protocol(cfg: ProviderConfig) -> str:
     优先级: URL > Provider ID > Model 名称
     （URL 最可靠：第三方代理 + /v1 → 必定 OpenAI 兼容）
     """
-    url_lower = cfg.base_url.lower()
-
-    # ── 1. URL 最优先 ──
-    # Google 原生 API → Gemini 协议
-    is_google_native = ("googleapis" in url_lower or "gemini.google.com" in url_lower)
-    if is_google_native:
-        return "gemini"
-    # 特定关键字优先于通用 /v1 检测
-    if "agnes" in url_lower:
-        return "agnes"
-    if "qwen" in url_lower or "wanx" in url_lower:
-        return "qwen"
-    # URL 包含 /v1 且不是 googleapis → 第三方 OpenAI 兼容代理
-    if url_lower.rstrip('/').endswith('/v1'):
-        return "openai"
-
-    # ── 2. Provider ID 次之 ──
-    pid = cfg.id.lower()
-    if "agnes" in pid:
-        return "agnes"
-    if "qwen" in pid or "wanx" in pid:
-        return "qwen"
-    # id == "gemini" 但 URL 不是 googleapis → 不走原生协议，走默认 OpenAI
-
-    # ── 3. Model 名称最后（仅限明确的非通用场景）──
-    model_lower = cfg.model.lower()
-    if "agnes" in model_lower:
-        return "agnes"
-    if "wanx" in model_lower or "qwen" in model_lower:
-        return "qwen"
-
-    # 默认走 OpenAI 兼容协议（覆盖绝大多数第三方服务）
-    return "openai"
+    return resolve_image_protocol(cfg)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -1082,12 +1083,33 @@ async def generate_for_provider(
     """
     from .key_pool import key_pool_manager
 
+    if str(kwargs.get("mode") or "").strip().lower() == "precision_edit":
+        try:
+            effective = resolve_precision_provider(cfg, str(kwargs.get("model") or cfg.model or "").strip())
+        except ValueError as exc:
+            return _precision_edit_failure(cfg, "precision_protocol_override_invalid", str(exc))
+        # Endpoint/key injection below must never touch the shared Provider.
+        cfg = effective.model_copy(deep=True)
+        private_values = [prompt, kwargs.get("precision_resize_prompt")]
+        for annotation in kwargs.get("annotations") or []:
+            if isinstance(annotation, dict):
+                private_values.extend(annotation.get(field) for field in ("instruction", "text"))
+        for field in ("image_data", "annotation_image_data"):
+            image_value = kwargs.get(field)
+            if isinstance(image_value, str):
+                private_values.extend((image_value, image_value.partition(",")[2]))
+        # Kept only in this private request copy, never persisted or projected.
+        cfg.extra["_precision_diagnostic_redactions"] = [
+            value for value in private_values if isinstance(value, str) and value
+        ]
     requested_protocol = kwargs.get("protocol")
     protocol = str(requested_protocol).strip().lower() if requested_protocol else _detect_protocol(cfg)
     dispatch_kwargs = dict(kwargs)
     dispatch_kwargs.pop("protocol", None)
     precision_post_budget = None
     if str(dispatch_kwargs.get("mode") or "").strip().lower() == "precision_edit":
+        if not requested_protocol and cfg.endpoint_type in {"openai", "gemini"}:
+            protocol = cfg.endpoint_type
         precision_post_budget = PrecisionEditPostBudget()
         dispatch_kwargs["_precision_post_budget"] = precision_post_budget
 
@@ -1548,6 +1570,7 @@ def _precision_model_is_authorized(cfg: ProviderConfig, model_id: str) -> bool:
 
 def resolve_provider_precision_model_capability(cfg: ProviderConfig, model_id: str):
     """Resolve only persisted model capability or alias metadata."""
+    cfg = resolve_precision_provider(cfg, model_id)
     extra = getattr(cfg, "extra", None)
     model_capabilities = extra.get("model_capabilities") if isinstance(extra, dict) else None
     return resolve_precision_model_capability(
@@ -1571,6 +1594,39 @@ def _precision_edit_transport_profile(
     if isinstance(configured, PrecisionEditProfile):
         configured = configured.value
     return PRECISION_EDIT_TRANSPORT_PROFILES.get(str(configured or "").strip())
+
+
+def _precision_public_image_url_preflight(
+    cfg: ProviderConfig,
+    model_id: str,
+    image_data: object,
+    transport_profile: PrecisionEditTransportProfile,
+) -> ImageResult | None:
+    """Keep an unverified automatic input profile behind explicit trial consent."""
+    if transport_profile.request_encoding != "json_data_url":
+        return None
+    recipe = precision_documented_gateway_recipe(cfg, model_id)
+    extra = getattr(cfg, "extra", None)
+    source = extra.get("_precision_connection_source") if isinstance(extra, dict) else None
+    if recipe.get("gateway") != "vel" or source != "gateway_documentation":
+        return None
+    if not isinstance(image_data, str):
+        return None
+    if not image_data.strip().lower().startswith("data:image/"):
+        return None
+    return _precision_edit_failure(
+        cfg,
+        "precision_edit_public_image_url_required",
+        "当前网关的自动 JSON 改图输入尚未验证通过；此前返回 Invalid data URL，不能据此断定只支持公网 URL。"
+        "请核对端点文档后，通过当前模型的高级接入设置显式选择图片上传方式再试；GenBox 不会自动上传本地图到第三方。"
+        "文生图成功不代表改图输入格式兼容。",
+        details={
+            "model": model_id or None,
+            "gateway": recipe.get("gateway"),
+            "request_encoding": transport_profile.request_encoding,
+            "upstream_request": False,
+        },
+    )
 
 
 def _precision_declared_sizes(model_capabilities: object) -> set[str]:
@@ -1725,10 +1781,7 @@ def precision_model_uses_gpt_image_2_size_contract(
     model_id: str,
 ) -> bool:
     """Identify the exact model or an explicit one-hop canonical alias."""
-    if model_id == "gpt-image-2":
-        return True
-    resolution = _precision_model_capability_resolution(cfg, model_id)
-    return resolution.structure_valid and resolution.canonical_model == "gpt-image-2"
+    return precision_size_model(cfg, model_id) == "gpt-image-2"
 
 
 def _precision_preserve_source_size_error(
@@ -1971,17 +2024,230 @@ async def _download_generated_image(
     return None, "image URL redirect limit exceeded"
 
 
+def _gemini_precision_native_size(cfg: ProviderConfig, model_id: str, size: str) -> dict | None:
+    resolution = _precision_model_capability_resolution(cfg, model_id)
+    if not resolution.structure_valid or not resolution.precision_edit_confirmed:
+        return None
+    value = gemini_precision_preset_for_size(precision_size_model(cfg, model_id), size)
+    if value is None:
+        return None
+    return dict(value["image_config"])
+
+
+async def _dispatch_gemini_precision_edit(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult:
+    """Native Gemini generateContent precision edit; one JSON POST, no fallback."""
+    model_id = str(kwargs.get("model") or cfg.model or "").strip()
+    size_mode = str(kwargs.get("precision_size_mode") or "preserve").strip().lower()
+    target_size = str(kwargs.get("precision_target_size") or "").strip()
+    output_policy = str(kwargs.get("precision_output_size_policy") or "strict").strip()
+    canvas_only = kwargs.get("precision_canvas_only") is True
+    image_data = kwargs.get("image_data")
+    annotation_data = kwargs.get("annotation_image_data")
+    if not isinstance(image_data, str) or not image_data.strip():
+        return _precision_edit_failure(cfg, "precision_edit_image_required", "image_data is required")
+    if size_mode not in {"preserve", "resize"}:
+        return _precision_edit_failure(cfg, "precision_size_mode_invalid", "unsupported precision size mode")
+    if output_policy not in PRECISION_OUTPUT_SIZE_POLICIES:
+        return _precision_edit_failure(cfg, "precision_output_size_policy_invalid", "precision output policy is invalid")
+    try:
+        source_bytes, source_mime = _decode_inpaint_image_data(image_data, "image/png")
+        source_size = _image_dimensions(source_bytes)
+        if canvas_only:
+            annotation_bytes = None
+        else:
+            if not isinstance(annotation_data, str) or not annotation_data.strip():
+                return _precision_edit_failure(cfg, "precision_annotation_image_required", "annotation_image_data is required")
+            annotation_bytes, annotation_mime = _decode_inpaint_image_data(annotation_data, "image/png")
+            if annotation_mime != "image/png" or _image_dimensions(annotation_bytes) != source_size:
+                return _precision_edit_failure(cfg, "precision_edit_payload_invalid", "source and annotation dimensions must match")
+    except ValueError as exc:
+        return _precision_edit_failure(cfg, "precision_edit_payload_invalid", _provider_exception_text(exc, cfg))
+
+    image_config = None
+    expected_size = source_size
+    if size_mode == "resize":
+        if _normalize_precision_size(target_size) is None:
+            return _precision_edit_failure(cfg, "precision_target_size_invalid", "resize mode requires a valid WIDTHxHEIGHT target")
+        image_config = _gemini_precision_native_size(cfg, model_id, target_size)
+        if image_config is None:
+            return _precision_edit_failure(cfg, "precision_edit_target_size_not_declared", "selected Gemini model has no native mapping for this target")
+        expected_size = _precision_size_tuple(target_size)
+        resize_prompt = str(kwargs.get("precision_resize_prompt") or "").strip()
+        if not resize_prompt:
+            return _precision_edit_failure(cfg, "precision_resize_prompt_required", "resize mode requires composition guidance")
+    else:
+        preserve_error = _precision_preserve_source_size_error(cfg, model_id, source_size)
+        if preserve_error:
+            return _precision_edit_failure(cfg, *preserve_error)
+        image_config = _gemini_precision_native_size(cfg, model_id, f"{source_size[0]}x{source_size[1]}")
+        if image_config is None:
+            return _precision_edit_failure(cfg, "precision_edit_source_size_not_declared", "Gemini cannot request this exact source canvas; select a native model size before editing")
+
+    contract = str(kwargs.get("annotation_contract") or "").strip()
+    try:
+        annotations = _normalized_precision_annotations(kwargs.get("annotations"), contract) if not canvas_only else []
+    except ValueError as exc:
+        return _precision_edit_failure(cfg, "precision_annotations_invalid", _provider_exception_text(exc, cfg))
+    if canvas_only:
+        edit_prompt = "Expand the canvas while preserving the source subject, identity, style, and unmarked content."
+        if prompt:
+            edit_prompt += f"\nOverall requirements: {prompt}"
+    elif contract in {PRECISION_ANNOTATION_CONTRACT_V2, PRECISION_ANNOTATION_CONTRACT_V3}:
+        edit_prompt = _precision_v2_provider_prompt(str(prompt or "").strip(), annotations)
+    else:
+        edit_prompt = (
+            "The first image is the source; the second is the annotation overlay. "
+            "Apply changes only at annotated positions and remove annotation marks. Preserve unmarked areas.\n"
+            f"User instruction: {prompt}\nNormalized annotations: "
+            + json.dumps(annotations, ensure_ascii=False, separators=(",", ":"))
+        )
+    edit_prompt += "\n\n" + _precision_strategy_prompt(
+        str(kwargs.get("precision_strategy") or "standard").strip().lower(),
+        str(kwargs.get("precision_selection_mode") or "annotation").strip().lower(),
+        float(kwargs.get("precision_selection_feather") or 0),
+    )
+    if size_mode == "resize":
+        edit_prompt += f"\n\nExpand/outpaint to the target aspect ratio and composition. Guidance: {resize_prompt}"
+    else:
+        edit_prompt += f"\n\nPreserve the source canvas exactly at {source_size[0]}x{source_size[1]}."
+
+    def inline(data: bytes, mime: str) -> dict:
+        return {"inlineData": {"mimeType": mime, "data": base64.b64encode(data).decode("ascii")}}
+    parts = [{"text": edit_prompt}, inline(source_bytes, source_mime)]
+    if annotation_bytes is not None:
+        parts.append(inline(annotation_bytes, "image/png"))
+    payload = {"contents": [{"parts": parts}], "generationConfig": {"responseModalities": ["IMAGE"]}}
+    if image_config:
+        payload["generationConfig"]["imageConfig"] = image_config
+    # Model identifiers are URL path segments, never arbitrary request paths.
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,199}", model_id):
+        return _precision_edit_failure(cfg, "precision_edit_model_invalid", "Gemini model identifier is invalid")
+    base = cfg.base_url.rstrip("/")
+    if base.endswith(("/v1", "/v1beta")):
+        base = base.rsplit("/", 1)[0]
+    url = f"{base}/v1beta/models/{model_id}:generateContent"
+    client = None
+    try:
+        resp, client = await _http_post_with_retry(
+            url, {"x-goog-api-key": cfg.api_key}, payload=payload, timeout=180.0,
+            max_retries=1, retry_transport_errors=False,
+            post_budget=kwargs.get("_precision_post_budget") or PrecisionEditPostBudget(),
+            proxy=_get_proxy_url(cfg), cfg=cfg,
+        )
+        data = _parse_provider_json_response(resp)
+    except httpx.HTTPError as exc:
+        profile = PrecisionEditTransportProfile(
+            path="/v1beta/models/{model}:generateContent", image_field="inlineData",
+        )
+        return _precision_edit_failure(
+            cfg, "precision_edit_upstream_error", _provider_exception_text(exc, cfg),
+            details=_precision_transport_error_details(
+                cfg, model_id, profile, exc,
+                connection_failure=not isinstance(exc, httpx.HTTPStatusError),
+            ),
+        )
+    except (ProviderResponseValidationError, ValueError) as exc:
+        return _precision_edit_failure(cfg, "precision_edit_invalid_response", _provider_exception_text(exc, cfg))
+    finally:
+        if client is not None and hasattr(client, "aclose"):
+            await client.aclose()
+    output_data = None
+    if not isinstance(data, dict):
+        return _precision_edit_failure(cfg, "precision_edit_invalid_response", "Gemini response must be an object")
+    if isinstance(data.get("promptFeedback"), dict) and data["promptFeedback"].get("blockReason"):
+        return _precision_edit_failure(cfg, "precision_edit_safety_blocked", "Gemini blocked the image edit")
+    candidates = data.get("candidates") or []
+    if not isinstance(candidates, list):
+        return _precision_edit_failure(cfg, "precision_edit_invalid_response", "Gemini candidates must be a list")
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        if candidate.get("finishReason") not in (None, "", "STOP"):
+            return _precision_edit_failure(cfg, "precision_edit_no_image_data", "Gemini did not complete an image response")
+        content = candidate.get("content")
+        parts = content.get("parts") if isinstance(content, dict) else None
+        if not isinstance(parts, list):
+            continue
+        for part in parts:
+            if not isinstance(part, dict) or part.get("thought") is True:
+                continue
+            inline_data = part.get("inlineData") or part.get("inline_data")
+            if isinstance(inline_data, dict) and inline_data.get("data"):
+                try:
+                    output_data = _decode_generated_image_base64(inline_data["data"])
+                    _inspect_generated_image(
+                        output_data, declared_mime=inline_data.get("mimeType") or inline_data.get("mime_type"),
+                        max_pixels=PRECISION_MAX_OUTPUT_PIXELS,
+                    )
+                except GeneratedImageValidationError as exc:
+                    return _precision_edit_failure(cfg, "precision_edit_invalid_response", str(exc))
+                break
+            file_data = part.get("fileData") or part.get("file_data")
+            if isinstance(file_data, dict):
+                file_uri = file_data.get("fileUri") or file_data.get("file_uri")
+                if not isinstance(file_uri, str) or not file_uri:
+                    continue
+                output_data, download_error = await _download_generated_image(
+                    None, file_uri, max_pixels=PRECISION_MAX_OUTPUT_PIXELS,
+                )
+                if download_error:
+                    return _precision_edit_failure(
+                        cfg, "precision_edit_result_download_rejected", download_error,
+                    )
+                try:
+                    _inspect_generated_image(
+                        output_data, declared_mime=file_data.get("mimeType") or file_data.get("mime_type"),
+                        max_pixels=PRECISION_MAX_OUTPUT_PIXELS,
+                    )
+                except GeneratedImageValidationError as exc:
+                    return _precision_edit_failure(cfg, "precision_edit_invalid_response", str(exc))
+                break
+        if output_data is not None:
+            break
+    if output_data is None:
+        return _precision_edit_failure(cfg, "precision_edit_no_image_data", "Gemini response contained no image")
+    try:
+        actual_size, output_format, output_alpha = _inspect_precision_output(output_data)
+    except GeneratedImageValidationError as exc:
+        return _precision_edit_failure(cfg, "precision_edit_invalid_response", str(exc))
+    metadata = None
+    warnings = None
+    if actual_size != expected_size:
+        fitted = _fit_crop_precision_output(output_data, expected_size) if size_mode == "resize" and output_policy == "fit_crop" else None
+        if fitted is None:
+            return _precision_edit_failure(cfg, "precision_edit_output_size_mismatch", f"Gemini returned {actual_size[0]}x{actual_size[1]}, expected {expected_size[0]}x{expected_size[1]}")
+        output_data, transform = fitted
+        metadata = {"requested_size": f"{expected_size[0]}x{expected_size[1]}", "provider_actual_size": f"{actual_size[0]}x{actual_size[1]}", "final_size": f"{expected_size[0]}x{expected_size[1]}", "policy": "fit_crop", "transform": transform}
+        warnings = [{"code": "precision_edit_output_fit_crop_applied", "message": "Gemini output was locally fit-cropped to the requested size."}]
+    try:
+        local_path = _save_image(output_data, cfg.id, f"precision_{str(prompt)[:30]}", prompt, generation_metadata=metadata, max_pixels=PRECISION_MAX_OUTPUT_PIXELS)
+    except GeneratedImageValidationError as exc:
+        return _precision_edit_failure(cfg, "precision_edit_invalid_response", str(exc))
+    return ImageResult(success=True, image_data=output_data, local_path=local_path, model=cfg.id, generation_id=f"{cfg.id}_precision_{uuid.uuid4().hex[:8]}", metadata=metadata, warnings=warnings)
+
+
 async def _dispatch_precision_edit(
     cfg: ProviderConfig,
     prompt: str,
     protocol: str,
     **kwargs,
 ) -> ImageResult:
-    """Fail closed unless annotation editing has a verified OpenAI transport."""
+    """Fail closed unless annotation editing has an explicitly selected transport."""
+    model_id = str(kwargs.get("model") or cfg.model or "").strip()
+    try:
+        cfg = resolve_precision_provider(cfg, model_id)
+    except ValueError as exc:
+        return _precision_edit_failure(cfg, "precision_protocol_override_invalid", str(exc))
+    if cfg.extra.get("_precision_override_model") == model_id or cfg.extra.get("_precision_resolved_model") == model_id:
+        protocol = cfg.endpoint_type
     endpoint_type = str(getattr(cfg, "endpoint_type", "auto") or "auto").strip().lower()
     effective_protocol = str(protocol or "auto").strip().lower()
-    model_id = str(kwargs.get("model") or cfg.model or "").strip()
-    if endpoint_type != "openai" or effective_protocol != "openai":
+    native_gemini = (
+        endpoint_type == "gemini"
+        and effective_protocol == "gemini"
+        and str(getattr(getattr(cfg, "precision_edit_profile", None), "value", getattr(cfg, "precision_edit_profile", "")) or "") == GEMINI_PRECISION_EDIT_PROFILE
+    )
+    if not native_gemini and (endpoint_type != "openai" or effective_protocol != "openai"):
         return _precision_edit_failure(
             cfg,
             "precision_edit_protocol_unverified",
@@ -1994,7 +2260,7 @@ async def _dispatch_precision_edit(
             f"model={model_id or 'unknown'} requires explicit capability={PRECISION_EDIT_CAPABILITY}",
         )
     transport_profile = _precision_edit_transport_profile(cfg)
-    if transport_profile is None:
+    if transport_profile is None and not native_gemini:
         return _precision_edit_failure(
             cfg,
             "precision_edit_profile_unsupported",
@@ -2154,6 +2420,8 @@ async def _dispatch_precision_edit(
                 _provider_exception_text(exc, cfg),
             )
 
+    if native_gemini:
+        return await _dispatch_gemini_precision_edit(cfg, prompt_text, **kwargs)
     clean_kwargs = {
         key: value
         for key, value in kwargs.items()
@@ -2494,6 +2762,73 @@ async def _gen_openai(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult
     )
 
 
+def _gemini_http_failure(
+    response: httpx.Response, cfg: ProviderConfig, payload: dict | None = None,
+) -> ImageResult:
+    """Retain bounded Google error evidence without persisting request content."""
+    private = []
+    for content in (payload or {}).get("contents", []):
+        for part in content.get("parts", []):
+            private.extend([part.get("text"), part.get("inlineData", {}).get("data")])
+    safe_cfg = cfg.model_copy(update={"extra": {
+        **cfg.extra,
+        "_precision_diagnostic_redactions": [
+            *cfg.extra.get("_precision_diagnostic_redactions", []),
+            *(value for value in private if isinstance(value, str) and value),
+        ],
+    }})
+
+    def clean(value):
+        return _provider_error_text(value, safe_cfg)[:1200] if isinstance(value, str) else ""
+
+    try:
+        body = response.json()
+        error = body.get("error", {}) if isinstance(body, dict) else {}
+        if not isinstance(error, dict):
+            error = {}
+    except ValueError:
+        error = {}
+    details = {"http_status": response.status_code}
+    status = clean(error.get("status"))
+    message = clean(error.get("message"))
+    if status:
+        details["upstream_status"] = status
+    if message:
+        details["upstream_message"] = message
+    error_items = error.get("details", [])
+    for item in (error_items[:10] if isinstance(error_items, list) else []):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("@type", "")).endswith("/google.rpc.RetryInfo"):
+            delay = clean(item.get("retryDelay"))
+            if re.fullmatch(r"\d+(?:\.\d+)?s", delay):
+                details["retry_delay"] = delay
+        if str(item.get("@type", "")).endswith("/google.rpc.QuotaFailure"):
+            violations = item.get("violations", [])
+            if isinstance(violations, list):
+                details["quota_ids"] = [
+                    clean(v.get("quotaId")) for v in violations[:10]
+                    if isinstance(v, dict) and isinstance(v.get("quotaId"), str)
+                ]
+    hint = {
+        429: "Google 返回限流或配额错误；请核对该模型的项目配额和重试等待时间。",
+        401: "Google 身份验证失败，请检查 API Key。",
+        403: "Google 拒绝访问，请检查密钥权限、项目设置或服务地区。",
+        404: "Google 未找到此模型，请拉取模型并核对完整模型名称。",
+    }.get(response.status_code, "Google 请求失败，请查看上游错误详情。")
+    evidence = f"HTTP {response.status_code} {status}: {message}".strip()
+    if details.get("quota_ids"):
+        evidence += " | quota: " + ", ".join(details["quota_ids"])
+    if details.get("retry_delay"):
+        evidence += " | retry_after: " + details["retry_delay"]
+    return ImageResult(
+        success=False, model=cfg.id,
+        error=f"[{cfg.name}] {hint} {evidence}"[:PROVIDER_ERROR_MAX_LENGTH],
+        error_code="gemini_rate_limit_or_quota" if response.status_code == 429 else "gemini_upstream_http_error",
+        error_details=details,
+    )
+
+
 async def _gen_gemini(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult:
     """Google Gemini 原生协议"""
     model_id = kwargs.get("model") or cfg.model
@@ -2511,7 +2846,8 @@ async def _gen_gemini(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult
         url = f"{base}/v1beta/models/{model_id}:generateContent"
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"responseModalities": ["image", "text"]},
+            # Gemini 原生 API 的枚举值为大写；保留 TEXT 以兼容带文字说明的响应。
+            "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
         }
 
         resp = await _stream_bounded_provider_response(
@@ -2522,6 +2858,8 @@ async def _gen_gemini(cfg: ProviderConfig, prompt: str, **kwargs) -> ImageResult
             json=payload,
             timeout=120.0,
         )
+        if resp.is_error:
+            return _gemini_http_failure(resp, cfg, payload)
         resp.raise_for_status()
         data = _parse_provider_json_response(resp)
 
@@ -3063,6 +3401,7 @@ async def _gen_openai_precision_edit(
         "image/jpeg": "jpg",
         "image/webp": "webp",
     }[image_mime]
+    model_id = str(kwargs.get("model") or cfg.model or "").strip()
     if transport_profile is None:
         transport_profile = _precision_edit_transport_profile(cfg)
     if transport_profile is None:
@@ -3071,9 +3410,16 @@ async def _gen_openai_precision_edit(
             "precision_edit_profile_unsupported",
             "precision_edit requires an allowlisted transport profile",
         )
+    public_url_failure = _precision_public_image_url_preflight(
+        cfg,
+        model_id,
+        image_data,
+        transport_profile,
+    )
+    if public_url_failure is not None:
+        return public_url_failure
     size_mode = str(kwargs.get("precision_size_mode") or "preserve").strip().lower()
     resize_prompt = str(kwargs.get("precision_resize_prompt") or "").strip()
-    model_id = str(kwargs.get("model") or cfg.model or "").strip()
     target_size = str(kwargs.get("precision_target_size") or "")
     generic_size = str(kwargs.get("size") or "").strip().lower()
     output_size_policy = str(kwargs.get("precision_output_size_policy") or "strict")
@@ -3173,8 +3519,30 @@ async def _gen_openai_precision_edit(
         return _precision_edit_failure(cfg, "precision_size_mode_invalid", "unsupported precision size mode")
     quality = kwargs.get("quality") or cfg.quality
     data_dict = {"model": model_id, "prompt": edit_prompt, "n": 1, "size": request_size}
+    if precision_documented_gateway_recipe(cfg, model_id).get("gateway") == "klong":
+        data_dict["response_format"] = "b64_json"
+        # Klong accepts resolution tiers; its pixel-size inference can select
+        # a different tier. Keep exact geometry in the prompt/output contract.
+        preset = gemini_precision_preset_for_size(precision_size_model(cfg, model_id), request_size)
+        if preset and preset.get("tier") in {"1K", "2K", "4K"}:
+            data_dict["size"] = preset["tier"]
     if quality and quality != "default":
         data_dict["quality"] = quality
+    request_body = {"files": files, "data": data_dict}
+    if transport_profile.request_encoding == "json_data_url":
+        recipe = precision_documented_gateway_recipe(cfg, model_id)
+        preset = gemini_precision_preset_for_size(precision_size_model(cfg, model_id), request_size)
+        if recipe.get("gateway") == "vel":
+            tier = recipe.get("size_tier") or (preset or {}).get("tier")
+            if tier:
+                data_dict["quality"] = {"1K": "standard", "2K": "medium", "4K": "high"}.get(tier, "standard")
+        data_dict[transport_profile.image_field] = (
+            f"data:{image_mime};base64," + base64.b64encode(image_bytes).decode("ascii")
+        )
+        # Vel's documented JSON edit contract expects the image fields at the
+        # top level. Keep this scoped to JSON profiles; multipart GPT paths
+        # continue to use the existing files/data request shape.
+        request_body = {"payload": data_dict}
 
     headers = {"Authorization": f"Bearer {cfg.api_key}"}
     url = f"{_ensure_v1(cfg.base_url)}{transport_profile.path}"
@@ -3183,8 +3551,7 @@ async def _gen_openai_precision_edit(
         resp, client = await _http_post_with_retry(
             url,
             headers,
-            files=files,
-            data=data_dict,
+            **request_body,
             timeout=180.0,
             max_retries=1,
             retry_delay=0.25,
@@ -3253,9 +3620,10 @@ async def _gen_openai_precision_edit(
         image_info = result_data[0]
         image_b64 = image_info.get("b64_json")
         image_url = image_info.get("url")
-        if image_b64:
+        inline_url = isinstance(image_url, str) and image_url.lower().startswith("data:")
+        if image_b64 or inline_url:
             try:
-                output_data = _decode_generated_image_base64(image_b64)
+                output_data = _decode_generated_image_base64(image_b64 or image_url)
             except GeneratedImageValidationError as exc:
                 return _precision_edit_failure(
                     cfg,
@@ -3565,7 +3933,7 @@ async def _gen_gemini_edit(cfg: ProviderConfig, prompt: str, image_data: str, st
                 "parts": parts
             }],
             "generationConfig": {
-                "responseModalities": ["image", "text"],
+                "responseModalities": ["TEXT", "IMAGE"],
             },
         }
 
@@ -3577,6 +3945,8 @@ async def _gen_gemini_edit(cfg: ProviderConfig, prompt: str, image_data: str, st
             json=payload,
             timeout=180.0,
         )
+        if resp.is_error:
+            return _gemini_http_failure(resp, cfg, payload)
         resp.raise_for_status()
         data = _parse_provider_json_response(resp)
 
@@ -3884,8 +4254,14 @@ async def _fetch_gemini_models(cfg: ProviderConfig) -> List[str]:
     1. Google 官方 API: /v1beta/models，使用 x-goog-api-key 请求头
     2. OpenAI 兼容代理: /v1/models
     """
+    endpoints = cfg.get_active_endpoints()
+    if not endpoints:
+        raise ValueError("API Key 或 Base URL 未配置")
+    endpoint = endpoints[0]
+    # Use the same effective credential source as generation, including api_keys.
+    official = urlsplit(endpoint.url).hostname == "generativelanguage.googleapis.com"
     # 处理 base_url：移除末尾的 /v1 或 /v1beta
-    base = cfg.base_url.rstrip('/')
+    base = endpoint.url.rstrip('/')
     if base.endswith('/v1') or base.endswith('/v1beta'):
         base = base.rsplit('/', 1)[0]
     
@@ -3897,27 +4273,45 @@ async def _fetch_gemini_models(cfg: ProviderConfig) -> List[str]:
             verify=verify_ssl_enabled(),
         ) as client:
             url = f"{base}/v1beta/models"
-            resp = await _stream_bounded_provider_response(
-                client,
-                "GET",
-                url,
-                success_max_bytes=PROVIDER_MODEL_LIST_RESPONSE_MAX_BYTES,
-                headers={"x-goog-api-key": cfg.api_key},
-            )
-            if resp.status_code == 200:
+            recommended, others = [], []
+            seen_models, seen_tokens = set(), set()
+            page_token = None
+            for _ in range(20):
+                params = {"pageSize": 1000}
+                if page_token:
+                    params["pageToken"] = page_token
+                resp = await _stream_bounded_provider_response(
+                    client, "GET", url,
+                    success_max_bytes=PROVIDER_MODEL_LIST_RESPONSE_MAX_BYTES,
+                    headers={"x-goog-api-key": endpoint.key}, params=params,
+                )
+                if resp.status_code != 200:
+                    failure = _gemini_http_failure(resp, cfg)
+                    raise httpx.HTTPStatusError(
+                        failure.error, request=resp.request, response=resp,
+                    )
                 data = _parse_provider_json_response(resp)
-                models = data.get("models", [])
-                image_models = []
-                other_models = []
-                for m in models:
-                    mid = m.get("name", "").replace("models/", "")
-                    methods = m.get("supportedGenerationMethods", [])
-                    if "generateContent" in methods or "imageGeneration" in methods:
-                        image_models.append(mid)
+                for model in data.get("models", []):
+                    mid = str(model.get("name") or "").removeprefix("models/")
+                    if not mid or mid in seen_models:
+                        continue
+                    seen_models.add(mid)
+                    methods = model.get("supportedGenerationMethods") or []
+                    if cfg.type == "video":
+                        preferred = mid.startswith(("veo-", "veo_", "gemini-omni-"))
                     else:
-                        other_models.append(mid)
-                return image_models + other_models
+                        preferred = "generateContent" in methods or "imageGeneration" in methods
+                    (recommended if preferred else others).append(mid)
+                page_token = data.get("nextPageToken")
+                if not page_token:
+                    return recommended + others
+                if not isinstance(page_token, str) or page_token in seen_tokens:
+                    raise ValueError("Gemini model-list pagination did not advance")
+                seen_tokens.add(page_token)
+            raise ValueError("Gemini model-list pagination limit exceeded")
     except Exception:
+        if official:
+            raise
         pass  # fallback 到 OpenAI 兼容格式
 
     # Fallback: 尝试 OpenAI 兼容格式

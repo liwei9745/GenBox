@@ -139,6 +139,22 @@ def test_friendly_generation_error_uses_configured_key_redaction_before_excerpt(
     assert "[REDACTED]" in message
 
 
+def test_provider_error_redacts_image_data_urls_and_prompt_fields():
+    from providers import _provider_error_text
+
+    provider = _provider("syntheticConfiguredCredential")
+    image = "data:image/png;base64," + ("Q" * 96)
+    technical = (
+        'HTTP 400: {"prompt":"private user instruction: replace the sign",'
+        '"image":"' + image + '","message":"invalid data URL"}'
+    )
+    redacted = _provider_error_text(technical, provider)
+    assert image not in redacted
+    assert "private user instruction" not in redacted
+    assert "[IMAGE_DATA_REDACTED]" in redacted
+    assert "[PROMPT_REDACTED]" in redacted
+
+
 def test_redaction_consumes_complete_escaped_json_credential_value():
     from providers import _redact_sensitive_text
 

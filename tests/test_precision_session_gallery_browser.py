@@ -43,7 +43,12 @@ def test_precision_inspector_model_first_disclosure_and_metadata_layout(tmp_path
             order = page.evaluate("""() => [...document.querySelector('.precision-edit-inspector').children]
                 .filter(el => el.matches('#precisionTaskMonitor, .precision-model-picker, .precision-edit-actions, .precision-quick-tools'))
                 .map(el => el.id || el.className)""")
-            assert order == ["precisionTaskMonitor", "precisionModelPicker", "precision-edit-actions", "precision-quick-tools"]
+            assert order == [
+                "precisionTaskMonitor",
+                "precisionModelPicker",
+                "precision-edit-actions",
+                "precision-quick-tools precision-trial-smart-tools",
+            ]
             model = page.locator("#precisionModelPicker")
             summary = page.locator("#btnPrecisionModelPickerToggle")
             assert model.get_attribute("open") is None
