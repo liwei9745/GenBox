@@ -63,9 +63,10 @@ def test_duplicate_content_reuses_verified_asset_without_merging_provenance(tmp_
     first = manager.import_content("job-first", "first.mp4", source, origin="upload")
     second = manager.import_content("job-second", "second.mp4", source, origin="library")
 
-    assert second.asset_id == first.asset_id
-    assert second.origin == first.origin
-    assert len(list((manager.assets_root).glob("*/asset.json"))) == 1
+    assert second.asset_id != first.asset_id
+    assert first.origin == "upload"
+    assert second.origin == "library"
+    assert len(list((manager.assets_root).glob("*/asset.json"))) == 2
 
 
 def test_duplicate_lookup_rejects_tampered_published_bytes(tmp_path: Path) -> None:
@@ -147,20 +148,23 @@ def test_audio_thumbnail_is_explicitly_unsupported(tmp_path: Path) -> None:
         manager.derive_thumbnail(record)
     assert caught.value.code == "unsupported_capability"
     assert caught.value.stage == "thumbnail"
+    assert not list(manager.assets_root.rglob(".thumbnail-*"))
 
 
 def test_missing_ffmpeg_dependency_is_actionable(tmp_path: Path) -> None:
-    manager = _manager(tmp_path, ffmpeg="definitely-not-an-installed-ffmpeg")
+    manager = _manager(tmp_path)
     record = manager.import_content(
         "job-no-ffmpeg",
         "clip.mp4",
         (FIXTURES / "cfr-h264.mp4").read_bytes(),
     )
+    manager.ffmpeg = "definitely-not-an-installed-ffmpeg"
 
     with pytest.raises(MediaIngestError) as caught:
         manager.derive_thumbnail(record)
     assert caught.value.code == "dependency_missing"
     assert caught.value.stage == "thumbnail"
+    assert not list(manager.assets_root.rglob(".thumbnail-*"))
 
 
 @pytest.mark.parametrize(
@@ -216,6 +220,7 @@ def test_admission_limits_are_enforced_before_probe(tmp_path: Path) -> None:
         manager.import_content("job-large", "clip.mp4", b"x" * 33)
     assert caught.value.code == "asset_too_large"
     assert caught.value.stage == "admission"
+    assert not list(manager.staging_root.rglob(".upload-*"))
 
 
 def test_batch_count_and_total_limits_are_bounded(tmp_path: Path) -> None:
@@ -242,6 +247,7 @@ def test_batch_count_and_total_limits_are_bounded(tmp_path: Path) -> None:
             [("one.mp4", b"a"), ("two.mp4", b"b"), ("three.mp4", b"c")],
         )
     assert caught.value.code == "invalid_request"
+    assert not list(manager.staging_root.rglob(".upload-*"))
 
 
 def test_missing_probe_dependency_is_actionable(tmp_path: Path) -> None:
@@ -265,7 +271,7 @@ def test_probe_timeout_is_retryable_and_does_not_leak_details(
     def timeout(*args, **kwargs):
         raise subprocess.TimeoutExpired(cmd=["ffprobe"], timeout=0.01)
 
-    monkeypatch.setattr(subprocess, "run", timeout)
+    monkeypatch.setattr(ingest_module, "run_media", timeout)
     with pytest.raises(MediaIngestError) as caught:
         manager.probe(staged)
     assert caught.value.code == "probe_timeout"

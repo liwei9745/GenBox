@@ -1,63 +1,64 @@
 # Current Project Status
 
-## Active Goal: WB-1 W1-2 Media Slice (In Progress)
+## Active Goal: WB-1 W1-2 Authenticated Media Integration (In Progress)
 
-- **GOAL:** Use a bounded unattended protocol to start W1-2 media-asset work
-  without crossing production, paid-provider, destructive-data or frozen-
-  contract boundaries.
+- **GOAL:** Harden local media admission, wire authenticated import and exact
+  library registration, and verify this integration gate. This is not the
+  entire WB-1 asset/project/UI acceptance gate.
 - **CURRENT STAGE:** W1-0 and W1-1 passed on 2026-09-18. On 2026-09-18 the
   autonomous execution protocol was enabled in
   `docs/VIDEO-WORKBENCH-AUTONOMOUS-EXECUTION.md`. The clean branch is
   `codex/wb1-baseline-20260918`, based on `origin/master` at `02ce25e`.
-  The first W1-2 media admission slice is implemented and locally verified;
-  full asset routes, project persistence and UI remain unimplemented.
+  The isolated media module and the first authenticated asset API are now
+  implemented. Project persistence, proxy/cancellation workflows and UI remain
+  unimplemented.
 - **GUARDRAILS:** Use synthetic local fixtures only, make no paid generation
   calls, do not upload private media, keep existing generation routes unchanged,
   keep shared contracts/status/release files under coordinator ownership, and
   pause for the manual gates in the autonomous execution protocol.
-- **EXIT CONDITION:** W1-0/W1-1 **MET** on 2026-09-18. The first
-  `WB1-MEDIA` slice passes focused and existing regressions; the packet remains
-  `running` until publication/cleanup, library registration, route ownership
-  and the full VA-02/VA-04/VA-12/VA-13 evidence are complete.
+- **EXIT CONDITION:** This local integration gate requires focused route/media
+  tests, existing generation regression and full-suite evidence; all three
+  passed at this checkpoint. `WB1-MEDIA`
+  remains `running` until proxy/cancellation/recovery and full
+  VA-02/VA-03/VA-04/VA-12/VA-13 evidence are complete.
 
-## 2026-09-18 Bounded Unattended Execution Enabled
+## 2026-09-18 Authenticated Media Integration Checkpoint (UTC)
 
-- **VERIFIED / LOCAL:** The new autonomous execution protocol defines the
-  default low-risk action set, mandatory human-confirmation gates, two-cycle
-  repair cap, pause conditions, Git/file ownership rules and recovery record.
-- **VERIFIED / PROCESS:** The Agent collaboration protocol and WB-1 plan now
-  reference the same unattended boundary. This changes workflow control only;
-  it does not claim media routes, workers, project storage or UI implementation.
-- **CURRENT:** Continue W1-2 in the isolated branch using synthetic fixtures.
-  No Provider, network upload, private media, production/VPS, source deletion
-  or release action is authorized.
-- **RESUME:** Read the autonomous protocol, verify `git status` and baseline,
-  then continue from the first owned `video_workbench/media/` slice. The next
-  bounded work is media cleanup/publication hardening; stop if a shared entry
-  point or frozen contract must change.
-
-## 2026-09-18 WB-1 W1-2 Media Admission Slice
-
-- **IMPLEMENTED / LOCAL:** `video_workbench/media/` now provides server-owned
-  staging, safe filename/kind admission, streamed SHA-256 hashing, bounded
-  batch limits, external `ffprobe` invocation with `stdin=DEVNULL`, sanitized
-  error codes, codec/container/stream/dimension/audio checks, duplicate lookup
-  with byte rehash, atomic asset publication with a private manifest, and
-  bounded JPEG thumbnail derivation with atomic cache reuse.
-- **VERIFIED / LOCAL:** `python -m pytest
-  tests/test_video_workbench_media.py tests/test_video_workbench_wb1_contracts.py
-  -q` -> `26 passed` (23 media, 3 contract), including publication-rollback
-  and thumbnail hardening.
+- **USER-CONFIRMED:** Continue the next shared-entry integration gate in goal
+  mode with bounded unattended execution. Coordinator-owned changes to
+  `main.py` are limited to new router registration and workbench error/CSRF
+  handling. Existing generation/provider behavior is not redesigned.
+- **IMPLEMENTED / LOCAL:** `/api/video-workbench/` now provides bounded
+  multipart import, exact library registration, asset metadata/list/content/
+  thumbnail and durable import-result reads. Auth requires the configured
+  administrator key even in dev mode; mutations require an explicit trusted
+  Origin/Referer. Existing GenBox has one admin workspace, not multiple users.
+- **IMPLEMENTED / LOCAL:** Native workers have protocol/demuxer allowlists,
+  decode validation, bounded output/deadline/concurrency and process resource
+  controls. Staging ownership, batch rollback, reparse checks, digest
+  verification, atomic directory publication and distinct library provenance
+  replace weaker behavior in the original media slice.
+- **VERIFIED / LOCAL:** Four `test_video_workbench_*` modules -> `83 passed`
+  (2026-09-18 UTC), including published-asset/cleanup-failure preservation.
+  Compilation and `git diff --check` pass.
 - **VERIFIED / REGRESSION:** `python -m pytest
   tests/test_google_native_video.py tests/test_gemini_official_diagnostics.py
-  tests/test_provider_model_categories.py -q` -> `131 passed`; browser video
-  regression -> `78 passed`.
-- **BOUNDARY:** This slice has no FastAPI route, authentication wiring,
-  library registration, proxy worker, project store, UI or Provider call. It
-  does not complete WB-1.
-- **RESUME:** Continue only in `video_workbench/media/` and matching tests.
-  Shared `main.py`, route registration and frozen DTO changes require a review
-  gate before editing.
+  tests/test_provider_model_categories.py -q` -> `131 passed`; three existing
+  video browser modules -> `78 passed in 148.19s`. Final
+  `python -m pytest -q` -> **`1924 passed in 265.86s`**.
+- **VERIFIED / CHANGE REVIEW:** The staged 20-file source/test/document set
+  excludes runtime data, original media and the four pre-existing debug
+  directories. Added-line secret/local-path heuristic review passed; this is
+  not a claim that a comprehensive secret scanner or independent audit ran.
+- **BOUNDARY:** Synthetic fixtures and isolated temporary stores only.
+  No paid Provider, private upload, production/VPS mutation, dependency
+  installation, service restart or release. Cross-platform/packaged worker
+  behavior and independent review remain unverified.
+- **DETAILS / RESUME:** Read
+  `docs/VIDEO-WORKBENCH-W1-2-INTEGRATION.md`, verify the branch and Git state,
+  address remaining W1-2 work before
+  starting project/UI packets. Leave the four existing `tmp-debug-media*`
+  directories untouched and unstaged.
 
 ## 2026-09-18 WB-1 W1-0/W1-1 Evidence
 

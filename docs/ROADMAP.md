@@ -8,7 +8,7 @@ mock-based tests, UI, and live-environment verification are separate evidence.
 
 USER-CONFIRMED new direction on 2026-09-18; use separate WB phase IDs rather
 than renumbering extension phases. WB-0 is complete; current primary work is
-WB-1 implementation planning.
+WB-1 W1-2 media implementation and authenticated integration.
 Existing extension and release obligations retain their recorded status.
 
 | Phase | Status | Gate |
@@ -29,9 +29,9 @@ Execution details and ownership: [plan](VIDEO-WORKBENCH-PLAN.md),
 [team](VIDEO-WORKBENCH-TEAM.md), and the
 [WB-1 implementation packet](VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md).
 WB-0 completion was a documentation and preparation gate. WB-1 now has a
-locally verified media-admission slice on its isolated branch, but the phase
-is not complete: authenticated routes, exact library registration, durable
-projects, UI and full acceptance evidence remain outstanding.
+locally verified media-admission and authenticated import/library API slices
+on its isolated branch, but the phase is not complete: proxy/cancellation
+workflows, durable projects, UI and full acceptance evidence remain outstanding.
 
 ## Phase 0: Project Fact And Documentation Baseline
 

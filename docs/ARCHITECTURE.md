@@ -76,9 +76,12 @@ modules sit behind existing GenBox auth/provider/library boundaries. Canonical
 edit intents and capability descriptors isolate shared UI/project state from
 vendor wire protocols.
 
-This is a design boundary, not a claim that those modules exist. Keep existing
-generation routes and transports unchanged. Exact schemas, resource limits and
-engine selection require WB-0 evidence before implementation.
+WB-0 froze the core contract at revision 0.2. The first WB-1 implementation now
+has an isolated media manager, bounded native worker, asset/import journal
+service and authenticated router. See
+[the W1-2 checkpoint](VIDEO-WORKBENCH-W1-2-INTEGRATION.md) for its verified
+scope and remaining gaps. Project/timeline/render/online-edit modules are
+still planned. Existing generation routes and transports remain unchanged.
 
 ## Future Message Channel Architecture
 

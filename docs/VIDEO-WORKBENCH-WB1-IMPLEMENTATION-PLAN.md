@@ -1,7 +1,7 @@
 # Video Workbench WB-1 Implementation Plan
 
-Date: 2026-09-18. Revision: 0.3.
-Status: **W1-0/W1-1 complete; W1-2 preparation active; business implementation not started.**
+Date: 2026-09-18 (UTC). Revision: 0.4.
+Status: **W1-0/W1-1 complete; W1-2 first media/API gate locally verified; remaining media work pending.**
 
 This plan turns the frozen WB-0 contracts into an executable implementation
 strategy for the first vertical slice. It is subordinate to
@@ -267,15 +267,18 @@ W1-0 and W1-1 are complete on the isolated branch
 `codex/wb1-baseline-20260918`, based on `origin/master` at `02ce25e`.
 The shared fixture/DTO/error/auth packet is recorded in
 [VIDEO-WORKBENCH-WB1-FIXTURES.md](VIDEO-WORKBENCH-WB1-FIXTURES.md).
-No WB-1 business module or route has been implemented.
+The media module and authenticated asset router are implemented. See
+[W1-2 integration evidence](VIDEO-WORKBENCH-W1-2-INTEGRATION.md).
+Project persistence, proxy/cancellation workflows, UI and independent review
+remain outstanding. The single administrator owns the current workspace;
+this implementation does not introduce multi-user tenancy.
 
 ## 11. Immediate Next Action
 
-Activate the bounded unattended protocol, inspect the current repository
-boundaries, and prepare only `WB1-MEDIA` and `WB1-PROJECT` from this baseline.
-Keep their scope limited to the frozen contract. The first W1-2 slice is local
-media admission/staging/probe planning; it must not yet add provider calls or
-shared-route changes. Dispatch `WB1-UI` after route DTOs and the fixture server
-are stable; run `WB1-REVIEW` only at the first integrated checkpoint. Any
-contract, shared-entry-point, external-environment or destructive-data change
-pauses for human confirmation.
+Preserve the locally verified integration checkpoint, then continue the
+remaining W1-2 media gates: proxy handling, cancellation and
+lease/recovery behavior, large-library performance and a browser-ready picker.
+Do not start W1-3/W1-4 merely to bypass those acceptance gaps. The coordinator
+has approval for the narrow new-router wiring; this does not authorize changes
+to existing Provider transports, authentication semantics elsewhere, frozen
+DTOs, production or release operations.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -28,7 +29,6 @@ class MediaLimits:
     max_still_height: int = 4096
     max_audio_channels: int = 2
     max_audio_sample_rate_hz: int = 96_000
-    max_asset_duration_us: int = 120_000_000
     probe_timeout_seconds: float = 10.0
 
     def __post_init__(self) -> None:
@@ -43,9 +43,14 @@ class MediaLimits:
             self.max_still_height,
             self.max_audio_channels,
             self.max_audio_sample_rate_hz,
-            self.max_asset_duration_us,
         )
-        if any(int(value) <= 0 for value in numeric) or self.probe_timeout_seconds <= 0:
+        if any(type(value) is not int or value <= 0 for value in numeric):
+            raise ValueError("media limits must be positive integers")
+        if (
+            type(self.probe_timeout_seconds) not in (int, float)
+            or not math.isfinite(self.probe_timeout_seconds)
+            or not 0 < self.probe_timeout_seconds <= 10
+        ):
             raise ValueError("media limits must be positive")
         if self.max_video_audio_bytes > 512 * 1024 * 1024:
             raise ValueError("video/audio limit exceeds frozen WB-1 boundary")

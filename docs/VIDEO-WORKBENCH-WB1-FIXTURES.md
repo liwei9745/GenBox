@@ -212,7 +212,8 @@ W1-1 does not create an endpoint or mark any VA case as passed.
 The clean implementation branch is `codex/wb1-baseline-20260918`, based on
 `origin/master` at `02ce25e`. The branch contains the frozen WB-0 documents,
 this W1-1 contract packet and the isolated `video_workbench/media/` admission
-slice. It still has no workbench route, project store, UI or Provider adapter.
+slice. As of the 2026-09-18 (UTC) integration checkpoint it also has authenticated
+media routes; project storage, UI and Provider adapters remain unimplemented.
 
 Observed local commands on 2026-09-18:
 

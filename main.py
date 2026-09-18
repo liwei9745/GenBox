@@ -1851,6 +1851,28 @@ GENBOX_LOCAL_URL = f"http://localhost:{GENBOX_PORT}"
 GENBOX_LOOPBACK_URL = f"http://127.0.0.1:{GENBOX_PORT}"
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", f"{GENBOX_LOCAL_URL},{GENBOX_LOOPBACK_URL}").split(",")
+
+# Keep workbench storage lazy so importing the app never creates asset data.
+from video_workbench.api import build_router as build_workbench_router
+from video_workbench.api import PREFIX as WORKBENCH_API_PREFIX, problem_response as workbench_problem_response
+from video_workbench.assets import AssetService as WorkbenchAssetService
+
+_workbench_asset_service = None
+
+
+def _get_workbench_asset_service():
+    global _workbench_asset_service
+    if _workbench_asset_service is None:
+        _workbench_asset_service = WorkbenchAssetService(
+            STORAGE_DIR / "video_workbench", GALLERY_DIR, STORAGE_DIR / "videos",
+        )
+    return _workbench_asset_service
+
+
+app.include_router(build_workbench_router(
+    _get_workbench_asset_service, lambda: get_admin_key(), lambda: ALLOWED_ORIGINS,
+))
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -1901,6 +1923,10 @@ async def add_security_headers(request: Request, call_next):
 @app.middleware("http")
 async def csrf_protection(request: Request, call_next):
     """CSRF 防护：校验 Origin/Referer 头"""
+    if request.url.path.startswith(WORKBENCH_API_PREFIX + "/"):
+        # Workbench routes require an explicit same/trusted origin even in
+        # development and return their frozen safe error vocabulary.
+        return await call_next(request)
     if request.method in ("POST", "PUT", "DELETE"):
         origin = request.headers.get("origin", "")
         referer = request.headers.get("referer", "")
@@ -7142,6 +7168,8 @@ async def admin_auth_middleware(request: Request, call_next):
     # 校验 Header
     admin_key = request.headers.get("X-Admin-Key", "")
     if not verify_admin_key(admin_key):
+        if path.startswith(WORKBENCH_API_PREFIX + "/"):
+            return workbench_problem_response("auth_required", "auth")
         return JSONResponse(status_code=401, content={"error": "未授权，请先登录", "code": "AUTH_REQUIRED"})
     return await call_next(request)
 

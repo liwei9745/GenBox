@@ -1,8 +1,26 @@
 # Video Workbench Acceptance Matrix
 
-Date: 2026-09-18. Revision: 0.2.
-Status: **WB-0 planning gates PASS; WB-1-WB-4 implementation cases NOT RUN.**
+Date: 2026-09-18 (UTC). Revision: 0.3 (evidence update; case criteria unchanged).
+Status: **WB-0 planning gates PASS; W1-2 backend subcases have local evidence; full WB-1-WB-4 cases remain unaccepted.**
 No historical generation test result counts as workbench acceptance.
+
+## W1-2 Local Evidence
+
+See [the integration checkpoint](VIDEO-WORKBENCH-W1-2-INTEGRATION.md) for
+commands, runtime, fixtures, ownership and limitations. These are subcase
+results, not phase acceptance:
+
+| Case | Observed subcase | Result | Still required |
+| --- | --- | --- | --- |
+| VA-02 | Synthetic external media API, hashes, repeated request and original preservation | PASS locally | File picker/drop UI and complete interrupted-upload recovery |
+| VA-03 | Exact library API, changed/missing source rejection, authenticated lazy thumbnails | PASS locally | Library-picker pagination/search journey and performance |
+| VA-04 | Existing format fixtures, corruption, disguised playlist, worker deadlines/output and admission faults | PASS locally | Complete rotation/PTS/VFR and stress/disk-full matrix |
+| VA-12 | Owned-file cleanup, publication rollback, worker deadline termination | PASS locally | User cancellation, leases and restart cleanup recovery |
+| VA-13 | Auth/CSRF, single-workspace ownership, path/reparse guards and bounded errors | PASS locally | Independent integrated review and broader hostile-media coverage |
+| VA-01 / VA-15 / VA-16 | Project durability, workbench UI and packaged execution | NOT RUN | Implement and verify at their designated gates |
+
+The old-generation regression suite is compatibility evidence only. No online
+Provider acceptance or paid generation was performed.
 
 ## WB-0 Preparation Gates
 

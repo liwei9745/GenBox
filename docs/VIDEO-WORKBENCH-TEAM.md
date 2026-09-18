@@ -1,7 +1,11 @@
 # Video Workbench Agent Collaboration Protocol
 
-Date: 2026-09-18. Revision: 0.5.
-Status: **Frozen protocol; W1-0/W1-1 complete; WB1-MEDIA/WB1-PROJECT ready; unattended execution enabled.**
+Date: 2026-09-18 (UTC). Revision: 0.6.
+Status: **W1-0/W1-1 complete; WB1-MEDIA running; WB1-PROJECT ready but not started; unattended execution enabled.**
+
+Current execution is coordinator-only. No additional Agent was dispatched for
+the media integration checkpoint. Shared wiring is coordinator-owned; an
+independent review has not occurred and must not be inferred from local tests.
 
 ## Operating Model
 
