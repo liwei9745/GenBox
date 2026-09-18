@@ -1,6 +1,6 @@
 # Video Workbench WB-1 Implementation Plan
 
-Date: 2026-09-19. Revision: 0.2.
+Date: 2026-09-18. Revision: 0.2.
 Status: **W1-0/W1-1 complete; W1-2 implementation not started.**
 
 This plan turns the frozen WB-0 contracts into an executable implementation

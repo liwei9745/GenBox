@@ -1,6 +1,6 @@
 # Video Workbench Agent Collaboration Protocol
 
-Date: 2026-09-19. Revision: 0.4.
+Date: 2026-09-18. Revision: 0.4.
 Status: **Frozen protocol; W1-0/W1-1 complete; WB1-MEDIA/WB1-PROJECT ready.**
 
 ## Operating Model

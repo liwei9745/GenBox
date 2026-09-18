@@ -1,6 +1,6 @@
 # Video Workbench WB-1 Shared Fixtures And Interfaces
 
-Date: 2026-09-19. Revision: 0.2.
+Date: 2026-09-18. Revision: 0.2.
 Status: **W1-0/W1-1 PASS; WB-1 business implementation not started.**
 
 This document freezes the shared input vocabulary for the WB-1 media and
@@ -214,7 +214,7 @@ The clean implementation branch is `codex/wb1-baseline-20260918`, based on
 this W1-1 contract packet and no media worker, project store, workbench route,
 UI or Provider adapter.
 
-Observed local commands on 2026-09-19:
+Observed local commands on 2026-09-18:
 
 ```text
 python -m pytest tests/test_google_native_video.py tests/test_gemini_official_diagnostics.py tests/test_provider_model_categories.py -q

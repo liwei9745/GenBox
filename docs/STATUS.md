@@ -4,17 +4,17 @@
 
 - **GOAL:** Establish an isolated WB-1 baseline and freeze shared synthetic
   fixtures, DTOs, error codes and auth/ownership expectations.
-- **CURRENT STAGE:** W1-0 and W1-1 passed on 2026-09-19. The clean branch is
+- **CURRENT STAGE:** W1-0 and W1-1 passed on 2026-09-18. The clean branch is
   `codex/wb1-baseline-20260918`, based on `origin/master` at `02ce25e`.
   No WB-1 business implementation has started.
 - **GUARDRAILS:** Use synthetic local fixtures only, make no paid generation
   calls, do not upload private media, keep existing generation routes unchanged,
   and keep shared contracts/status/release files under coordinator ownership.
-- **EXIT CONDITION:** **MET** on 2026-09-19. The bounded WB1-MEDIA and
+- **EXIT CONDITION:** **MET** on 2026-09-18. The bounded WB1-MEDIA and
   WB1-PROJECT packets are now ready; W1-2 implementation remains a separate
   target.
 
-## 2026-09-19 WB-1 W1-0/W1-1 Evidence
+## 2026-09-18 WB-1 W1-0/W1-1 Evidence
 
 - **VERIFIED / LOCAL:** `python -m pytest tests/test_google_native_video.py
   tests/test_gemini_official_diagnostics.py tests/test_provider_model_categories.py

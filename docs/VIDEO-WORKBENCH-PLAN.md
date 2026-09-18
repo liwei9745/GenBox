@@ -1,6 +1,6 @@
 # Video Workbench Development Plan
 
-Date: 2026-09-19. Revision: 0.4.
+Date: 2026-09-18. Revision: 0.4.
 Current primary objective: WB-1 W1-2 media/project implementation dispatch.
 Authorization: W1-0/W1-1 preparation is complete; only the bounded WB1-MEDIA
 and WB1-PROJECT packets may now be dispatched. No provider work, paid calls,
