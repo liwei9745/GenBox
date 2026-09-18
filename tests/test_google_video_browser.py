@@ -1,5 +1,8 @@
 """Google-native video controls with synthetic backend contracts."""
 
+import re
+
+import pytest
 from playwright.sync_api import expect
 
 from test_generation_experience_browser import page
@@ -54,6 +57,41 @@ def test_omni_does_not_expose_agnes_parameters(page):
     expect(page.locator("#videoSteps")).not_to_be_visible()
     expect(page.locator("#videoSeed")).not_to_be_visible()
     expect(page.locator("#videoAdvancedEmpty")).to_be_visible()
+
+
+def test_native_last_frame_explains_capability_without_enabling_it(page):
+    native(page, "gemini-omni-1.1-flash")
+    last_frame = page.locator('input[name="videoImageRole"][value="last_frame"]')
+    expect(last_frame).to_be_disabled()
+    expect(page.locator("#videoImageRoleHint")).to_contain_text("单独尾帧不可用")
+    expect(last_frame.locator("..")).to_have_attribute("title", re.compile("当前模型未开放单独尾帧"))
+    page.locator('input[name="videoImageRole"][value="first_last"]').locator("..").click()
+    page.locator("#videoFileInput").set_input_files([
+        {"name": f"frame{i}.png", "mimeType": "image/png", "buffer": PNG} for i in range(2)
+    ])
+    expect(page.locator("#videoImagePreview .video-image-label")).to_have_text(["首帧", "尾帧"])
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize("width", [1494, 1024, 390])
+def test_video_role_capsules_remain_legible_and_inside_asset_panel(page, tmp_path, theme, width):
+    page.set_viewport_size({"width": width, "height": 994 if width != 1024 else 700})
+    native(page, "gemini-omni-1.1-flash")
+    page.evaluate("theme => applyTheme(theme === 'dark' ? 'graphite' : 'apple-mono')", theme)
+    role = page.locator('label.video-image-role-option:has(input[value="reference"])')
+    role.click()
+    expect(role.locator("span")).to_have_css("color", "rgb(255, 255, 255)")
+    panel = page.locator("#videoI2VPanel")
+    assert panel.evaluate("el => el.scrollWidth <= el.clientWidth + 1")
+    assert page.evaluate("""() => {
+        const panel = document.querySelector('#videoI2VPanel').getBoundingClientRect();
+        return [...document.querySelectorAll('.video-image-role-option, #videoImageRoleHint')]
+            .every(el => {
+                const r = el.getBoundingClientRect();
+                return r.top >= panel.top && r.bottom <= panel.bottom + 1;
+            });
+    }""")
+    panel.screenshot(path=str(tmp_path / f"video-role-capsules-{theme}-{width}.png"))
 
 
 def test_model_change_refreshes_parameters_without_stale_480p(page):

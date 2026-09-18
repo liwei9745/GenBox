@@ -6,7 +6,7 @@
   <title>GenBox</title>
   <link rel="stylesheet" href="/static/css/app.css?v=38">
   <link rel="stylesheet" href="/static/css/pages.css?v=17">
-  <link rel="stylesheet" href="/static/css/video-workbench.css?v=3">
+  <link rel="stylesheet" href="/static/css/video-workbench.css?v=10">
 </head>
 <body>
 
@@ -1195,20 +1195,24 @@
                 <span id="videoResultCount" class="text-xs text-muted"></span>
               </div>
             </div>
-            <div id="videoPreviewEmpty" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;text-align:center;padding:40px 20px;">
-              <div><span data-i18n="video.empty_1">🎬 选择模型 + 输入提示词</span><br><br><span data-i18n="video.empty_2">生成后视频将在此处分组展示</span></div>
-            </div>
-            <div id="videoPreviewResults" class="hidden flex-col gap-12" style="overflow-y:auto;max-height:calc(100vh - 300px);"></div>
-            <div class="text-xs font-semibold text-secondary mb-6 mt-10"><span data-i18n="video.session">📋 本次会话</span></div>
-            <div id="videoHistoryList" style="overflow-y:auto;max-height:calc(100vh - 520px);">
-              <div class="text-xs text-muted text-center p-20"><span data-i18n="video.none">暂无视频</span></div>
+            <div class="video-preview-content">
+              <div class="video-preview-main">
+                <div id="videoPreviewEmpty" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;text-align:center;padding:40px 20px;">
+                  <div><span data-i18n="video.empty_1">🎬 选择模型 + 输入提示词</span><br><br><span data-i18n="video.empty_2">生成后视频将在此处分组展示</span></div>
+                </div>
+                <div id="videoPreviewResults" class="hidden flex-col gap-12" style="overflow-y:auto;max-height:calc(100vh - 300px);"></div>
+                <div class="text-xs font-semibold text-secondary mb-6 mt-10"><span data-i18n="video.session">📋 本次会话</span></div>
+                <div id="videoHistoryList" style="overflow-y:auto;max-height:calc(100vh - 520px);">
+                  <div class="text-xs text-muted text-center p-20"><span data-i18n="video.none">暂无视频</span></div>
+                </div>
+              </div>
+              <aside id="videoFeedbackSlot" class="video-preview-log" aria-label="实时日志"></aside>
             </div>
           </div>
 
           <!-- Bottom: Video Input -->
           <div class="generate-bottom-row">
             <div class="generate-input-col" style="flex:1;">
-              <div id="videoFeedbackSlot"></div>
               <div class="video-composer glass-card">
                 <div class="video-composer-toolbar">
                   <label for="videoPrompt" class="text-sm font-bold"><span data-i18n="video.prompt">📝 视频提示词</span></label>
@@ -1219,40 +1223,70 @@
                   </div>
                 </div>
                 <div class="video-composer-body">
-                <textarea id="videoPrompt" rows="6" placeholder="描述你想生成的视频内容..." class="text-sm" data-i18n-placeholder="video.prompt_placeholder"></textarea>
+                <div class="video-prompt-shell">
+                  <textarea id="videoPrompt" rows="6" placeholder="描述你想生成的视频内容..." class="text-sm" data-i18n-placeholder="video.prompt_placeholder"></textarea>
+                  <div class="video-prompt-tools" role="toolbar" aria-label="提示词工具">
+                    <button type="button" id="videoNewSession" class="video-tool-button" aria-label="新会话" title="新会话"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11v6a2 2 0 0 1-2 2H7l-4 3V5a2 2 0 0 1 2-2h8M19 2v6m-3-3h6"/></svg></button>
+                    <button type="button" id="videoWebSearch" class="video-tool-button" aria-label="网络搜索" title="网络搜索（在新标签页打开）"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg></button>
+                    <button type="button" id="videoAttach" class="video-tool-button" aria-label="上传附件" title="上传附件（参考图片或关键帧图片）"><span aria-hidden="true">+</span></button>
+                    <button type="button" id="videoQuickPrompt" class="video-tool-button" aria-label="快速提示词" title="快速提示词"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 2-9 12h7l-1 8 10-12h-7z"/></svg></button>
+                    <button type="button" id="videoPromptAuto" class="video-tool-button" aria-label="恢复自动高度" title="恢复自动高度"><span aria-hidden="true">↕</span></button>
+                  </div>
+                </div>
 
                 <div id="videoI2VPanel" class="video-assets-panel hidden">
                   <div class="text-sm font-semibold text-secondary mb-8"><span data-i18n="video.reference">📷 参考图片</span></div>
-                  <div class="mb-8">
-                    <div class="sub-tabs">
-                      <button class="sub-tab active" onclick="setVideoImageRole('first_frame',this)"><span data-i18n="video.first_frame">⬅️ 首帧</span></button>
-                      <button class="sub-tab" onclick="setVideoImageRole('reference',this)"><span data-i18n="video.reference_short">🖼 参考</span></button>
-                      <button class="sub-tab" onclick="setVideoImageRole('first_last',this)"><span data-i18n="video.first_last">🔗 首尾帧</span></button>
-                      <button class="sub-tab" onclick="setVideoImageRole('last_frame',this)"><span data-i18n="video.last_frame">➡️ 尾帧</span></button>
+                  <div class="video-image-workspace">
+                    <div class="video-image-role-options" role="radiogroup" aria-label="参考图片类型">
+                      <label class="video-image-role-option is-selected">
+                        <input type="radio" name="videoImageRole" value="first_frame" checked onchange="setVideoImageRole(this.value,this.parentElement)">
+                        <span data-i18n="video.first_frame">首帧</span>
+                      </label>
+                      <label class="video-image-role-option">
+                        <input type="radio" name="videoImageRole" value="reference" onchange="setVideoImageRole(this.value,this.parentElement)">
+                        <span data-i18n="video.reference_short">参考</span>
+                      </label>
+                      <label class="video-image-role-option">
+                        <input type="radio" name="videoImageRole" value="first_last" onchange="setVideoImageRole(this.value,this.parentElement)">
+                        <span data-i18n="video.first_last">首尾帧</span>
+                      </label>
+                      <label class="video-image-role-option">
+                        <input type="radio" name="videoImageRole" value="last_frame" onchange="setVideoImageRole(this.value,this.parentElement)">
+                        <span data-i18n="video.last_frame">尾帧</span>
+                      </label>
+                    </div>
+                    <div class="video-image-materials">
+                      <div class="video-upload-list" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleVideoDrop(event)">
+                        <div id="videoImagePreview" class="video-image-preview"></div>
+                      </div>
+                      <div class="video-image-actions" role="group" aria-label="添加参考图片">
+                        <div class="video-image-add-option video-image-action-combo">
+                          <button type="button" id="videoUploadZone" class="video-image-add-main" onclick="document.getElementById('videoFileInput').click()" title="拖拽图片或点击上传" aria-label="上传参考图片">
+                            <span class="video-upload-plus" aria-hidden="true">+</span>
+                            <span data-i18n="video.add_image">添加图片</span>
+                          </button>
+                          <button type="button" class="video-image-add-library" onclick="openVideoPreviewPicker()" title="从图库取图" aria-label="从图库取图">图库</button>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div class="video-upload-list" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleVideoDrop(event)">
-                    <div id="videoImagePreview" class="video-image-preview"></div>
-                    <button type="button" id="videoUploadZone" class="video-upload-card" onclick="document.getElementById('videoFileInput').click()" title="拖拽图片或点击上传" aria-label="上传参考图片">
-                      <span class="video-upload-plus" aria-hidden="true">+</span>
-                      <span data-i18n="video.add_image">添加图片</span>
-                    </button>
-                  </div>
+                  <p id="videoImageRoleHint" class="video-image-role-hint hidden" role="status"></p>
                   <input type="file" id="videoFileInput" accept="image/*" class="hidden" onchange="handleVideoFileSelect(event)" multiple>
-                  <button type="button" class="btn-ghost video-gallery-action" onclick="openVideoPreviewPicker()"><span data-i18n="video.pick_gallery">🎯 从图库取图</span></button>
                 </div>
 
                 <div id="videoKeyframesPanel" class="video-assets-panel hidden">
                   <div class="text-sm font-semibold text-secondary mb-8"><span data-i18n="video.keyframe_images">🖼 关键帧图片</span></div>
-                  <div class="video-upload-list" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleKfDrop(event)">
+                  <div class="video-upload-list" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleKfDrop(event)" role="group" aria-label="关键帧素材">
                     <div id="kfImagePreview" class="video-image-preview"></div>
-                    <button type="button" id="kfUploadZone" class="video-upload-card" onclick="document.getElementById('kfFileInput').click()" title="拖拽多张关键帧图片或点击上传" aria-label="上传关键帧图片">
-                      <span class="video-upload-plus" aria-hidden="true">+</span>
-                      <span data-i18n="video.add_image">添加图片</span>
-                    </button>
+                    <div class="video-image-add-option">
+                      <button type="button" id="kfUploadZone" class="video-image-add-main" onclick="document.getElementById('kfFileInput').click()" title="拖拽多张关键帧图片或点击上传" aria-label="上传关键帧图片">
+                        <span class="video-upload-plus" aria-hidden="true">+</span>
+                        <span data-i18n="video.add_image">添加图片</span>
+                      </button>
+                      <button type="button" class="video-image-add-library" onclick="openVideoPreviewPicker()" title="从图库取图"><span aria-hidden="true">图库</span></button>
+                    </div>
                   </div>
                   <input type="file" id="kfFileInput" accept="image/*" class="hidden" onchange="handleKfFileSelect(event)" multiple>
-                  <button type="button" class="btn-ghost video-gallery-action" onclick="openVideoPreviewPicker()"><span data-i18n="video.pick_gallery">🎯 从图库取图</span></button>
                 </div>
                 </div>
 
@@ -1941,9 +1975,12 @@
       };
     })();
   </script>
-  <script src="/static/js/i18n.js?v=35"></script>
-<script src="/static/js/app-all.js?v=57"></script>
-<script src="/static/js/google-video-ui.js?v=1"></script>
+  <script src="/static/js/i18n.js?v=36"></script>
+<script src="/static/js/app-all.js?v=59"></script>
+<script src="/static/js/video-preview-cards.js?v=1"></script>
+<script src="/static/js/google-video-ui.js?v=4"></script>
+<script src="/static/js/video-layout.js?v=2"></script>
+<script src="/static/js/video-prompt-tools.js?v=2"></script>
 <link rel="stylesheet" href="/static/css/generation-experience.css?v=1">
 <script src="/static/js/generation-experience.js?v=2"></script>
 <link rel="stylesheet" href="/static/css/model-browser.css?v=1">

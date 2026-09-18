@@ -1,10 +1,242 @@
 # Current Project Status
 
+## 2026-09-18 v2.6.12 Release Candidate And WB-0 Readiness
+
+- **USER-CONFIRMED:** The latest video composer UI repair is ready to
+  solidify and publish. This is a patch release after the published v2.6.11;
+  the existing tag will not be moved.
+- **IMPLEMENTED / LOCAL:** v2.6.12 release identity, bilingual notes, README
+  pointers and Docker defaults are prepared for the reviewed video UI and safe
+  Google diagnostics. No Omni editing or new provider is included.
+- **VERIFIED / LOCAL:** Full regression after the release-document and selected
+  role-contrast fixes: `python -m pytest -q` -> `1844 passed` on 2026-09-18.
+  Release packaging tests, JavaScript syntax checks, `py_compile` and
+  `git diff --check` also pass.
+- **VERIFIED / DOCUMENTS:** `docs/VIDEO-WORKBENCH-READINESS.md` audits the
+  PRD, contracts, acceptance matrix, plan and Agent protocol. WB-0 is aligned
+  but remains in progress; W0.2-W0.5 evidence and numeric media/schema
+  decisions are still required before WB-1.
+- **RELEASE GATE:** Commit, hosted quality, tag workflows, Release assets and
+  GHCR publication remain pending for v2.6.12. Do not call the release
+  published until those results are recorded.
+- **RESUME:** Run focused and full regression, perform secret/package checks,
+  commit only reviewed files, push through the normal PR path, then create
+  `v2.6.12` on the merged commit. After release verification, dispatch only
+  read-only W0.2-W0.4 research packets.
+
+## 2026-09-18 Video Reference-Asset Composite Action Position
+
+- **USER-CONFIRMED:** 复合“添加图片/图库”入口应位于参考素材区右上角，
+  不是右下角。
+- **IMPLEMENTED / LOCAL:** 复合卡已改为素材区右上角浮动定位；缩略图列表
+  预留右侧空间，素材列表仍可独立滚动，复合卡不会被滚动内容推移或覆盖。
+- **VERIFIED / LOCAL:** `python -m pytest tests/test_video_composer_browser.py
+  -q --basetemp .pytest-tmp-video-composite-topright` -> `51 passed`
+  （2026-09-18），覆盖 1494、1024、390 宽度与滚动固定行为。
+- **RESUME:** 重启 8895 后刷新
+  `http://127.0.0.1:8895/#/video/i2vid/multi` 验收右上角位置。
+
+## 2026-09-18 Video Reference-Asset Composite Action
+
+- **USER-CONFIRMED:** 将“添加图片”和“图库”合并为一个复合按钮，固定在
+  参考素材区右侧，采用截图所示的竖向卡片比例。
+- **IMPLEMENTED / LOCAL:** 图生视频参考素材区现在使用一个独立复合卡：
+  上半区为“＋ 添加图片”，下半区为“图库”；上传和图库仍调用原有事件，
+  不改变素材数组、图库弹窗或草稿状态。
+- **IMPLEMENTED / LOCAL:** 复合卡固定在素材区域底部，不随缩略图列表滚动；
+  高度收敛到工作区可用空间，避免在窄屏或多图状态下越界。
+- **VERIFIED / LOCAL:** `python -m pytest tests/test_video_composer_browser.py
+  -q --basetemp .pytest-tmp-video-composite-button3` -> `51 passed`
+  （2026-09-18）。覆盖 1494、1024、390 宽度、上传、图库、滚动固定和
+  能力选择回归。
+- **RESUME:** 重启 8895 后刷新
+  `http://127.0.0.1:8895/#/video/i2vid/multi` 验收复合按钮；不刷新现有
+  标签中的草稿，后续可继续微调卡片比例或文案。
+
+## 2026-09-18 Video Reference-Asset Layout —方案 A
+
+- **USER-CONFIRMED:** 选择方案 A；上传与图库入口固定在素材区域右下方，
+  与首帧/参考/首尾帧/尾帧选择区并行，不随缩略图滚动。
+- **IMPLEMENTED / LOCAL:** 真实视频工作台已应用方案 A。参考图类型使用
+  竖排原生单选控件，缩略图位于右侧；上传和图库为同尺寸方形按钮并排靠右，
+  保持操作区独立固定。
+- **IMPLEMENTED / LOCAL:** 去除重复装饰图标，保留单选状态、禁用能力提示和
+  键盘语义；现有上传、图库选择、缩略图与草稿数据流未改动。
+- **VERIFIED / LOCAL:** `python -m pytest
+  tests/test_video_composer_browser.py tests/test_video_assets_designs_browser.py
+  -q` -> `54 passed`（2026-09-18）。`node --check static/js/i18n.js`
+  和 `git diff --check` 通过。
+- **VERIFIED / RUNTIME:** 已确认无活动视频任务后执行
+  `python scripts/genbox_lab.py restart --port 8895 --background`。截至
+  2026-09-18，`status --port 8895` 返回 ONLINE，PID `31592`，HEAD
+  `cbdf9ac`，v2.6.11，runtime `24a395bc539d`；工作台和独立方案页 HTTP
+  均返回 200。现有浏览器标签未自动刷新。
+- **BOUNDARY:** 本次没有发起真实或可能计费的视频生成请求；Omni 真实生成
+  是否恢复仍需用户明确授权一次受控复现后才能确认。
+- **RESUME:** 用户可打开
+  `http://127.0.0.1:8895/#/video/i2vid/multi` 验收方案 A；如仍显示旧
+  页面，请手动刷新或打开新标签。后续再继续视频编辑工作台开发。
+
+## 2026-09-18 Video Failure Diagnosis And UI Alternatives
+
+- **CURRENT PRIMARY OBJECTIVE:** Diagnose repeated native video failures.
+  WB-0 remains a draft initiative; no editing-workbench phase is accepted here.
+- **VERIFIED / LOCAL HISTORY:** Earlier Omni tasks succeeded on 2026-09-18;
+  three afternoon Omni tasks failed with the old generic exception message.
+  The accepted backend request builder was unchanged by the frontend edits.
+- **UNVERIFIED / ROOT CAUSE:** Historical exceptions were discarded. Timing
+  alone cannot distinguish proxy interruption, timeout, decoding or local I/O.
+  A keyless Google models GET returned HTTP 403 through the configured proxy;
+  that demonstrates reachability, not generation access or long-read stability.
+- **IMPLEMENTED / LOCAL:** Safe stage/type-specific transport and file errors,
+  explicit synchronous Omni submission/wait stage, and guarded steps/content
+  parsing. No raw exception text, credentials or private paths enter errors.
+  Existing payload, privacy settings, timeout and no-paid-retry policy remain.
+- **IMPLEMENTED / PROTOTYPE:** `static/video-assets-designs.html` provides five
+  isolated interactive alternatives with vertically stacked roles and adjacent
+  thumbnails. These use native controls, not an installed Ant Design runtime.
+  Upload/library are explicitly simulated; no API calls or draft changes.
+  Production appearance awaits the user's choice.
+- **IMPLEMENTED / LOCAL:** Four reference-image roles are vertically stacked
+  soft-relief capsules, with a green checked state and native radio keyboard
+  semantics. The supplied screenshots inspired appearance only; no swipe
+  gesture or external component dependency was introduced.
+- **IMPLEMENTED / LOCAL:** Thumbnails occupy the adjacent upload area before
+  the add/library tile. Asset scrolling does not move role controls. Labels
+  identify reference number, first/last position or keyframe number. Batch
+  reads preserve input order rather than FileReader completion order.
+- **FIXED / LOCAL:** Gallery selection now uses one native dialog with a
+  persistent close button, Escape/backdrop dismissal, focus restoration,
+  dismissible loading/empty/error states and ignored late responses. Captions
+  are text nodes, not interpolated HTML; selection is bound to the original
+  mode and draft array.
+- **CAPABILITY BOUNDARY:** Native Google single-last-frame remains disabled
+  according to the existing adapter contract. A visible reason and tooltip
+  explain the supported first/last alternative only where that model supports
+  it. No provider wire protocol or live capability claim was changed.
+- **VERIFIED / LOCAL:** `python -m pytest tests/test_video_composer_browser.py
+  tests/test_google_video_browser.py tests/test_generation_experience_browser.py
+  tests/test_google_native_video.py tests/test_video_assets_designs_browser.py
+  -q` -> `183 passed`. Synthetic browser
+  screenshots cover 1494/1024/390 widths and actual Apple Mono/Graphite themes.
+  Five-design desktop/mobile screenshots inspected; a dark-label contrast fix
+  was followed by `3 passed` in its browser suite. `git diff --check` passed.
+  No paid generation call ran. Live documentation retrieval timed out in this
+  pass; the previously accepted request contract was preserved.
+- **VERIFIED / RUNTIME:** Rechecked zero active video tasks before
+  `python scripts/genbox_lab.py restart --port 8895 --background`. At 17:43
+  +08:00 on 2026-09-18, `status --port 8895` returned ONLINE, PID 29724,
+  HEAD cbdf9ac, v2.6.11, runtime c22bae0518f0. The prototype returned HTTP 200
+  with all five designs and the contrast fix. Existing tabs were not refreshed.
+- **RESUME:** Request authorization for one controlled paid call if needed
+  to establish the current generation failure using the new bounded errors.
+  No live recovery claim is justified yet. Apply a UI design only after user
+  selection. Keep existing browser drafts intact; no commit/push/release.
+
+## 2026-09-18 Video Preview Card Polish
+
+- **IMPLEMENTED / LOCAL:** Video results now use compact provider-grouped cards
+  that mirror the image-generation preview language. Completed videos show a
+  metadata thumbnail and open in the existing authenticated lightbox on click;
+  download and library actions remain available on each card. Failed results
+  stay visible as bounded alert cards.
+- **IMPLEMENTED / LOCAL:** Generating video cards reuse the image-generation
+  stage placeholder track and avoid fabricated exact percentages. Reference
+  image roles now use accessible vertical radio-style cards with provider
+  capability disabling preserved.
+- **VERIFIED / LOCAL:** `node --check` passes for the changed JavaScript files;
+  focused video composer tests pass; the full video/Google/
+  generation-experience regression run passes (`57 passed`, 2026-09-18).
+- **IMPLEMENTED / LOCAL:** Upload and media-library actions now share one
+  horizontal reference-image action group, role cards no longer duplicate
+  decorative icons, and the prompt composer remains compact while supporting
+  automatic growth, scrolling, and manual resize. Quick prompts are a
+  draggable/resizable floating dialog.
+- **IMPLEMENTED / LOCAL:** Live logs are mounted in an independent,
+  proportionally sized panel beside the preview on desktop and below it on
+  narrow screens. Video results remain compact thumbnails and open the
+  existing lightbox only after an explicit click.
+- **VERIFIED / RUNTIME:** `python scripts/genbox_lab.py restart --port 8895`
+  succeeded on 2026-09-18; `status --port 8895` reports ONLINE, PID 44736,
+  HEAD cbdf9ac, v2.6.11. This is a local development runtime only.
+- **VERIFIED / LOCAL:** `python -m pytest tests/test_video_composer_browser.py
+  tests/test_google_video_browser.py tests/test_generation_experience_browser.py
+  -q` -> `57 passed`; JavaScript syntax checks and `git diff --check` pass.
+- **RESUME:** Perform headed manual acceptance of the eight commented UI
+  points. No provider request, release, commit, or push was performed for
+  this frontend polish.
+
+## 2026-09-18 Video Composer Layout And Prompt Tools
+
+- **CURRENT PRIMARY OBJECTIVE:** User-requested frontend repairs before returning
+  to WB-0 workbench feasibility. Workbench documents remain drafts.
+- **IMPLEMENTED / LOCAL:** Video layout now uses explicit grid placement and a
+  full-width bottom composer. Pointer/keyboard separators change actual grid
+  dimensions instead of obsolete Flex ratios. Handles sit outside the scrolling
+  preview; single-model mode retains vertical resizing.
+- **IMPLEMENTED / LOCAL:** Prompt grows with content up to a compact automatic
+  limit, then scrolls. Native manual vertical resize is retained across typing,
+  bounded by viewport space, with an explicit automatic-height reset.
+  Feedback is rendered beside the preview instead of consuming composer space;
+  attachment thumbnails stay compact.
+- **IMPLEMENTED / LOCAL:** Input toolbar adds confirmed new-session reset,
+  image attachment routing, editable prompt-fragment insertion and web-search
+  entry. New session preserves files/provider selection and refuses active jobs.
+  Search opens Bing only after separately entered keywords are submitted;
+  it does not send the existing prompt or enable model web grounding.
+- **VERIFIED / RUNTIME:** After observing the user's displayed task completed,
+  owned `genbox_lab.py restart --port 8895 --background` succeeded.
+  `status --port 8895` on 2026-09-18 -> ONLINE, PID 11568, HEAD cbdf9ac,
+  v2.6.11, runtime c43d1dc3def0. Served HTML includes both new scripts.
+  The user's existing tab was not refreshed; its draft was not changed.
+- **VERIFIED / LOCAL:** `python -m pytest tests/test_video_composer_browser.py
+  tests/test_google_video_browser.py tests/test_generation_experience_browser.py
+  -q --basetemp .pytest-tmp-video-toolbar-accepted-0918` -> `55 passed`.
+  Both new JavaScript files pass `node --check`; `git diff --check` passes.
+  Synthetic desktop/mobile screenshots inspected. Tests cover pointer/keyboard
+  resize, native textarea resize, short-desktop bounds, manual-size retention,
+  reset confirmation, active-job protection, attachment routing and explicit
+  keyword-only search. Search navigation is mocked; no search data transmitted.
+- **RESUME:** Frontend repair is locally verified; user acceptance remains next.
+  Then return to WB-0 document review and bounded feasibility. No paid requests,
+  real search transmission, release,
+  commit or push. Existing saved generation remains unchanged. User can open
+  a second video tab to inspect new UI without discarding the current draft.
+
+## 2026-09-18 Video Workbench WB-0 Documentation
+
+- **WORKBENCH OBJECTIVE:** Prepare and review workbench scope/contracts;
+  implementation is not started. Existing extension/release obligations below
+  are preserved, not claimed complete or reverified.
+- **USER-CONFIRMED:** Independent workbench, external image/video/audio import,
+  GenBox media selection, online editing presets, incremental editing/export
+  scope and future additional models through provider-neutral adapters.
+- **DRAFTED:** Eight topic documents cover PRD (VW-01 through VW-13), core
+  contract, provider extensions, AI qualification, UX, acceptance (VA-01 through
+  VA-20), WB-0 through WB-4 plan, and Agent ownership/handoff/review protocol.
+  Entry point: [Video Workbench PRD](VIDEO-WORKBENCH-PRD.md).
+- **VERIFIED / LOCAL SOURCE:** Read authoritative docs and inspected gallery,
+  metadata, image picker and Google request builder. Existing source-video
+  editing is absent; image-only Base64 selection and substring metadata lookup
+  are not reused as trusted workbench media interfaces.
+- **NOT RUN:** New functionality, feasibility spikes, independent review,
+  runtime/browser tests, paid calls or package builds. No tools installed,
+  services restarted, Agent workers dispatched, Git commit or push performed.
+- **VERIFIED / DOCUMENT CHECKS:** `git diff --check` passed. PowerShell checked
+  eight topic files, 27 relative Markdown links, all 13 VW requirement mappings,
+  balanced code fences and trailing whitespace: PASS. These are documentation
+  integrity checks, not independent design review or application tests.
+- **RESUME:** W0.1 is a draft, not phase acceptance. Review scope and the pending
+  engine/codec/limits/schema/privacy decisions, then prepare W0.2-W0.4 bounded
+  research/spike packets under [the plan](VIDEO-WORKBENCH-PLAN.md).
+  Do not begin WB-1 until W0.5 gates are satisfied. Qualify each future provider
+  independently; a fake adapter test is not live multi-model support.
+
 ## 2026-09-17 v2.6.11 Release
 
 - **USER-CONFIRMED:** All current manual acceptance passed, including real Veo
   and Omni video generation. This supersedes the prior live-Omni open item.
-- **IN PROGRESS:** Preparing v2.6.11 on the existing release branch. Version,
+- **PUSHED / BUILDING:** v2.6.11 is tagged on master. Version,
   Compose image default, bilingual release notes and README previews are aligned.
   Only reviewed code/tests/public documentation are selected; runtime history,
   screenshots, local reports and temporary test outputs are excluded.
@@ -26,11 +258,15 @@
   fixture injection raced initial Provider discovery. The fixture now awaits
   `providersLoadPromise` before installing synthetic data; production behavior
   and acceptance scope are unchanged. Re-run hosted quality before release.
-- **RESUME:** Commit and push this branch, synchronize through existing PR #11
-  after hosted quality checks, then publish the matching v2.6.11 tag once. Tag workflows
-  create client/source/Compose assets and the smoke-tested GHCR image. Do not
-  pre-create a Release: the existing build workflow creates it after clients
-  pass. Record actual workflow run IDs and outcomes separately from acceptance.
+- **VERIFIED / GITHUB:** Follow-up `cbdf9ac` passed hosted PR quality run
+  `35237636270`; PR #11 merged as `f9c0640` with an identical source tree.
+  Annotated tag `v2.6.11` was pushed to that merge commit on 2026-09-17.
+- **BUILDING / RESUME:** Desktop release run `35238257678` and Docker tag run
+  `35238257668` started successfully. Completion/assets/registry publication
+  are still unverified at handoff. Inspect these runs, fix any failure without
+  moving the published tag, then verify Release assets/checksums and GHCR image.
+  Do not pre-create a Release: the existing build workflow creates it after
+  all clients pass. This post-dispatch status update is local handoff evidence.
 
 ## 2026-09-17 Omni Delivery / Storage Compatibility Repair
 

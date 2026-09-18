@@ -72,6 +72,22 @@ Arbitrary upstream messages, field paths, descriptions and bodies are never
 returned or logged. Errors identify submission, operation polling, file polling
 or download; malformed/oversized error bodies preserve a generic HTTP failure.
 
+Transport failures expose only exception-type-derived categories (connection,
+proxy, read/write timeout, interrupted response, or decoding) and the stage.
+Local file errors expose only fixed permission/disk categories. Exception text,
+private paths and upstream content are never interpolated into public errors.
+Omni submission explicitly includes waiting for its synchronous response.
+Interrupted or timed-out submission is an uncertain upstream outcome, not proof
+that no billable work occurred; no automatic generation retry is performed.
+Malformed Omni steps/content produce bounded schema errors.
+
+VERIFIED local history inspection on 2026-09-18: earlier Omni successes are
+followed by three afternoon failures with the old generic exception message.
+UNVERIFIED: the specific historical exception and root cause; the original
+exception details were discarded. A keyless models GET returned HTTP 403 through
+the configured proxy, demonstrating reachability only, not generation access
+or long-response reliability. Diagnostic hardening is not live recovery evidence.
+
 ## Parameters
 
 - Veo 3.1: 4, 6, 8 seconds; 720p/1080p/4k; Lite excludes 4k.
@@ -94,6 +110,12 @@ videos, extending previous interactions and multi-turn sessions are not
 implemented. A failed native request never falls back to Flow2API.
 
 ## Resume
+
+The separate planned workbench uses
+[provider-neutral editing interfaces](VIDEO-WORKBENCH-PROVIDERS.md) and
+[an AI qualification gate](VIDEO-WORKBENCH-AI.md). Those drafts do not expand
+this implemented generation contract. Source-video upload/edit needs separate
+implementation and acceptance; preserve the currently accepted generation path.
 
 Run `tests/test_google_native_video.py`, `tests/test_google_video_browser.py`
 and the existing video suites before changing contracts. Existing manual

@@ -67,6 +67,19 @@ GenBox receiver completion does not imply chatgpt2api sender completion.
   committed.
 - `tests/`: unit and route-level behavior tests.
 
+## Planned Video Workbench Architecture
+
+The [core contract](VIDEO-WORKBENCH-CONTRACT.md) and
+[provider extension contract](VIDEO-WORKBENCH-PROVIDERS.md) define this
+initiative. Proposed asset, project, timeline, local-render and online-edit
+modules sit behind existing GenBox auth/provider/library boundaries. Canonical
+edit intents and capability descriptors isolate shared UI/project state from
+vendor wire protocols.
+
+This is a design boundary, not a claim that those modules exist. Keep existing
+generation routes and transports unchanged. Exact schemas, resource limits and
+engine selection require WB-0 evidence before implementation.
+
 ## Future Message Channel Architecture
 
 Future message-channel support extends GenBox with a bounded messaging layer. It

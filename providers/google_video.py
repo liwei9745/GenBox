@@ -132,6 +132,26 @@ class GoogleVideoError(Exception):
     """Public, bounded error with no upstream response body or credential."""
 
 
+def safe_failure(exc, stage="本地处理"):
+    """Map exception types only: exception messages may contain credentials."""
+    categories = (
+        (httpx.ConnectTimeout, "连接超时，请检查代理是否可连接 Google"),
+        (httpx.ReadTimeout, "等待响应超时，上游是否已生成尚不确定"),
+        (httpx.WriteTimeout, "发送请求超时，上游是否已接收尚不确定"),
+        (httpx.PoolTimeout, "等待本地连接超时"),
+        (httpx.ProxyError, "代理握手失败，请检查代理服务"),
+        (httpx.ConnectError, "连接建立失败，请检查代理、DNS 或 TLS 连接"),
+        (httpx.ReadError, "响应读取中断，上游是否已生成尚不确定"),
+        (httpx.WriteError, "请求发送中断，上游是否已接收尚不确定"),
+        (httpx.RemoteProtocolError, "远端或代理提前断开响应，上游是否已生成尚不确定"),
+        (httpx.DecodingError, "响应压缩数据损坏或不完整"),
+        (PermissionError, "本地文件访问被拒绝，请检查视频目录权限或文件占用"),
+        (OSError, "本地文件读写失败，请检查磁盘空间与目录权限"),
+    )
+    reason = next((label for kind, label in categories if isinstance(exc, kind)), "响应处理发生内部错误")
+    return GoogleVideoError(f"Google 视频{stage}：{reason}；未自动重试生成。")
+
+
 def _error_hint(error):
     """Emit only fixed vocabulary; upstream text can echo credentials and media."""
     if not isinstance(error, dict):
@@ -208,6 +228,15 @@ def _check_response(response, stage):
 
 def _json(client, method, url, key, payload=None, *, stage="提交",
           max_bytes=8 * 1024 * 1024, cancelled=lambda: False):
+    try:
+        return _json_response(client, method, url, key, payload, stage=stage,
+                              max_bytes=max_bytes, cancelled=cancelled)
+    except httpx.HTTPError as exc:
+        raise safe_failure(exc, stage) from None
+
+
+def _json_response(client, method, url, key, payload=None, *, stage="提交",
+                   max_bytes=8 * 1024 * 1024, cancelled=lambda: False):
     with client.stream(method, url, headers={"x-goog-api-key": key},
                        **({"json": payload} if payload is not None else {})) as response:
         _check_response(response, stage)
@@ -275,6 +304,13 @@ def _file_id(uri):
 
 
 def _download(client, file_id, key, destination, cancelled):
+    try:
+        return _download_response(client, file_id, key, destination, cancelled)
+    except (httpx.HTTPError, OSError) as exc:
+        raise safe_failure(exc, "下载保存") from None
+
+
+def _download_response(client, file_id, key, destination, cancelled):
     url = f"{BASE}/files/{file_id}:download?alt=media"
     temporary = destination.with_suffix(".part")
     try:
@@ -321,13 +357,23 @@ def run_generation(url, payload, key, destination, *, proxy=None, cancelled=lamb
         on_stage("generating")
         # Inline Omni media needs Base64 expansion plus a bounded JSON envelope.
         limit = 4 * ((MAX_VIDEO_BYTES + 2) // 3) + 1024 * 1024 if "/interactions" in url else 8 * 1024 * 1024
-        result = _json(client, "POST", url, key, payload, max_bytes=limit, cancelled=cancelled)
+        result = _json(client, "POST", url, key, payload, max_bytes=limit, cancelled=cancelled,
+                       stage="提交并等待生成响应" if "/interactions" in url else "提交")
         if "/interactions" in url:
             # Synchronous Omni: the REST output lives in steps, not SDK output_video.
             if result.get("status") != "completed":
                 raise GoogleVideoError("Google Omni 未返回已完成的视频；未自动重试生成。")
-            videos = [part for step in result.get("steps", []) if step.get("type") == "model_output"
-                      for part in step.get("content", []) if part.get("type") == "video"]
+            steps = result.get("steps")
+            if not isinstance(steps, list):
+                raise GoogleVideoError("Google Omni 响应缺少有效的 steps 列表；未自动重试生成。")
+            videos = []
+            for step in steps:
+                if not isinstance(step, dict) or step.get("type") != "model_output":
+                    continue
+                content = step.get("content")
+                if not isinstance(content, list):
+                    raise GoogleVideoError("Google Omni 响应的 content 不是有效列表；未自动重试生成。")
+                videos.extend(part for part in content if isinstance(part, dict) and part.get("type") == "video")
             if videos and "data" in videos[0]:
                 on_stage("downloading")
                 _save_inline_video(videos[0], Path(destination), cancelled)
