@@ -1,18 +1,29 @@
 # Current Project Status
 
-## Active Goal: WB-0 Stage Preparation (Complete)
+## Active Goal: WB-1 Implementation Strategy (In Progress)
 
-- **GOAL:** Complete G1-G4 from `docs/VIDEO-WORKBENCH-PLAN.md`: media
-  feasibility, online AI feasibility, UX feasibility, and coordinator/reviewer
-  contract freeze.
-- **CURRENT STAGE:** G1-G4 are complete. W0.2-W0.4 evidence is recorded,
-  W0.5 froze the first-release scope/contracts/limits/acceptance/ownership.
-  WB-1 implementation has not started.
+- **GOAL:** Review and sequence the WB-1 asset/project implementation plan from
+  the frozen WB-0 contracts; establish task packets, branch rules, evidence
+  gates and stop conditions before business code starts.
+- **CURRENT STAGE:** The detailed WB-1 plan is drafted on 2026-09-18.
+  W1-0 baseline/branch preparation and W1-1 shared fixtures/interfaces are not
+  started. No WB-1 business implementation has started.
 - **GUARDRAILS:** Use synthetic local fixtures only, make no paid generation
-  calls, do not upload private media, and keep shared contracts/status/release
-  files under coordinator ownership.
-- **EXIT CONDITION:** **MET** on 2026-09-18. The preparation gate is complete;
-  later implementation, live-provider and packaging gates remain phase-specific.
+  calls, do not upload private media, keep existing generation routes unchanged,
+  and keep shared contracts/status/release files under coordinator ownership.
+- **EXIT CONDITION:** Plan review passes, then W1-0 and W1-1 evidence is
+  recorded; only then may the bounded WB1-MEDIA/WB1-PROJECT packets become ready.
+
+## 2026-09-18 WB-1 Strategy Draft
+
+- **DRAFT / LOCAL:** `docs/VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md` defines
+  the G5 objective, requirements VW-01/02/03/04/10/11, VA-01/02/03/04/12/13/
+  15/20 evidence, five execution waves, four ownership packets, verification
+  loop, branch strategy and stop conditions.
+- **BOUNDARY:** This is planning evidence only. There is no WB-1 route, media
+  worker, project store, UI or provider adapter claim.
+- **NEXT:** Review the plan, create a clean `codex/` branch from the latest
+  `origin/master`, then run W1-0/W1-1. Keep provider work deferred to WB-3.
 
 ## 2026-09-18 v2.6.12 Release And WB-0 Readiness
 
