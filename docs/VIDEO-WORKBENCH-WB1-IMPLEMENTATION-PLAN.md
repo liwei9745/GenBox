@@ -1,7 +1,7 @@
 # Video Workbench WB-1 Implementation Plan
 
-Date: 2026-09-18 (UTC). Revision: 0.4.
-Status: **W1-0/W1-1 complete; W1-2 first media/API gate locally verified; remaining media work pending.**
+Date: 2026-09-18 (UTC). Revision: 0.5.
+Status: **W1-0/W1-1 complete; W1-2 local preview/lifecycle subgate verified; remaining media criteria pending.**
 
 This plan turns the frozen WB-0 contracts into an executable implementation
 strategy for the first vertical slice. It is subordinate to
@@ -269,15 +269,17 @@ The shared fixture/DTO/error/auth packet is recorded in
 [VIDEO-WORKBENCH-WB1-FIXTURES.md](VIDEO-WORKBENCH-WB1-FIXTURES.md).
 The media module and authenticated asset router are implemented. See
 [W1-2 integration evidence](VIDEO-WORKBENCH-W1-2-INTEGRATION.md).
-Project persistence, proxy/cancellation workflows, UI and independent review
+Local proxy/cancellation/recovery now have synthetic evidence in
+[the lifecycle checkpoint](VIDEO-WORKBENCH-W1-2-LIFECYCLE.md).
+Project persistence, UI and independent review
 remain outstanding. The single administrator owns the current workspace;
 this implementation does not introduce multi-user tenancy.
 
 ## 11. Immediate Next Action
 
-Preserve the locally verified integration checkpoint, then continue the
-remaining W1-2 media gates: proxy handling, cancellation and
-lease/recovery behavior, large-library performance and a browser-ready picker.
+Verify the preserved lifecycle checkpoint and continue the remaining
+W1-2 media gates: startup diagnostics,
+large-library performance, a browser-ready picker and broader fault coverage.
 Do not start W1-3/W1-4 merely to bypass those acceptance gaps. The coordinator
 has approval for the narrow new-router wiring; this does not authorize changes
 to existing Provider transports, authentication semantics elsewhere, frozen

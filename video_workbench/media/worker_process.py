@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import threading
+import signal
 
 
 MEMORY_BYTES = 1024 * 1024 * 1024
@@ -71,25 +73,37 @@ def _windows_job():
 
 
 def main() -> int:
-    command = sys.argv[1:]
-    if not command:
+    kind = sys.argv[1] if len(sys.argv) > 1 else ""
+    command = sys.argv[2:]
+    if not command or kind not in {"probe", "render"}:
         return 125
     try:
         if os.name == "nt":
             job_handle = _windows_job()
-            child = subprocess.Popen(command, stdin=subprocess.DEVNULL)
-            result = child.wait()
-            del job_handle  # Raw handle remains alive until process exit.
-            return result
-        import resource
+        else:
+            import resource
 
-        resource.setrlimit(resource.RLIMIT_AS, (MEMORY_BYTES, MEMORY_BYTES))
-        resource.setrlimit(resource.RLIMIT_CPU, (10, 10))
-        resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_FILE_BYTES, MAX_OUTPUT_FILE_BYTES))
-        resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
-        resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
-        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-        os.execv(command[0], command)
+            cpu_seconds = 120 if kind == "render" else 10
+            output_bytes = 512 * 1024 * 1024 if kind == "render" else MAX_OUTPUT_FILE_BYTES
+            resource.setrlimit(resource.RLIMIT_AS, (MEMORY_BYTES, MEMORY_BYTES))
+            resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
+            resource.setrlimit(resource.RLIMIT_FSIZE, (output_bytes, output_bytes))
+            resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
+            resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
+            resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+
+        def watch_parent():
+            # The application owns the write end. EOF also occurs on a crash,
+            # so no stale PID lookup or unrelated-process termination is needed.
+            while os.read(sys.stdin.fileno(), 1):
+                pass
+            if os.name != "nt" and os.getpgrp() == os.getpid():
+                os.killpg(os.getpgrp(), signal.SIGKILL)
+            os._exit(125)
+
+        threading.Thread(target=watch_parent, daemon=True).start()
+        child = subprocess.Popen(command, stdin=subprocess.DEVNULL)
+        return child.wait()
     except (OSError, ValueError):
         return 125
     return 125

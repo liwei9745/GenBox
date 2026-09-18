@@ -8,6 +8,7 @@ import re
 import secrets
 import shutil
 import threading
+from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request
@@ -51,6 +52,22 @@ def _origin(value):
 
 
 def build_router(get_service, get_admin_key, allowed_origins):
+    used_services = set()
+
+    def resolve_service():
+        service = get_service()
+        used_services.add(service)
+        return service
+
+    @asynccontextmanager
+    async def lifespan(app):
+        try:
+            yield
+        finally:
+            for service in tuple(used_services):
+                await run_in_threadpool(service.close)
+                used_services.discard(service)
+
     class WorkbenchRoute(APIRoute):
         def get_route_handler(self):
             endpoint = super().get_route_handler()
@@ -79,7 +96,7 @@ def build_router(get_service, get_admin_key, allowed_origins):
                     return problem_response("internal", "import")
             return guarded
 
-    router = APIRouter(prefix=PREFIX, route_class=WorkbenchRoute)
+    router = APIRouter(prefix=PREFIX, route_class=WorkbenchRoute, lifespan=lifespan)
 
     def no_query(request):
         if request.query_params:
@@ -94,7 +111,7 @@ def build_router(get_service, get_admin_key, allowed_origins):
         too_large = False
         total = 0
         try:
-            service = get_service()
+            service = resolve_service()
             service.media._ensure_directory(service.media.root)
             # Multipart spooling and owned staging coexist during this call.
             # Admit only when both temporary allowances are available.
@@ -136,6 +153,7 @@ def build_router(get_service, get_admin_key, allowed_origins):
                     return await run_in_threadpool(
                         service.import_files, WORKSPACE_OWNER, ids[0],
                         [(item.filename, item.file) for item in files],
+                        asynchronous=request.headers.get("prefer", "").lower() == "respond-async",
                     )
                 finally:
                     await form.close()
@@ -163,7 +181,7 @@ def build_router(get_service, get_admin_key, allowed_origins):
             raise _fail("invalid_request", "admission")
         request_id = request.headers.get("x-request-id", "")
         return await run_in_threadpool(
-            get_service().register_library, WORKSPACE_OWNER, request_id, **body,
+            resolve_service().register_library, WORKSPACE_OWNER, request_id, **body,
         )
 
     @router.get("/assets")
@@ -176,7 +194,7 @@ def build_router(get_service, get_admin_key, allowed_origins):
         except ValueError:
             raise _fail("invalid_request", "admission", field="limit") from None
         return await run_in_threadpool(
-            get_service().list_assets, WORKSPACE_OWNER,
+            resolve_service().list_assets, WORKSPACE_OWNER,
             cursor=parameters.get("cursor", ""), kind=parameters.get("kind"),
             query=parameters.get("query", ""), limit=limit,
         )
@@ -184,37 +202,100 @@ def build_router(get_service, get_admin_key, allowed_origins):
     @router.get("/assets/{asset_id}")
     async def asset_view(asset_id: str, request: Request):
         no_query(request)
-        asset = await run_in_threadpool(get_service().asset, WORKSPACE_OWNER, asset_id)
+        asset = await run_in_threadpool(resolve_service().asset, WORKSPACE_OWNER, asset_id)
         return asset.as_view()
 
     @router.get("/jobs/{job_id}")
     async def job_view(job_id: str, request: Request):
         no_query(request)
-        return await run_in_threadpool(get_service().job, WORKSPACE_OWNER, job_id)
+        return await run_in_threadpool(resolve_service().job, WORKSPACE_OWNER, job_id)
+
+    @router.post("/jobs/{job_id}/cancel")
+    async def cancel_job(job_id: str, request: Request):
+        no_query(request)
+        async for chunk in request.stream():
+            if chunk:
+                raise _fail("invalid_request", "admission")
+        return await run_in_threadpool(resolve_service().cancel, WORKSPACE_OWNER, job_id)
+
+    @router.post("/assets/{asset_id}/proxy")
+    async def prepare_proxy(asset_id: str, request: Request):
+        no_query(request)
+        async for chunk in request.stream():
+            if chunk:
+                raise _fail("invalid_request", "admission")
+        result = await run_in_threadpool(
+            resolve_service().prepare_proxy, WORKSPACE_OWNER, request.headers.get("x-request-id", ""), asset_id,
+        )
+        return JSONResponse(result, status_code=202)
+
+    @router.get("/assets/{asset_id}/proxy")
+    async def proxy_content(asset_id: str, request: Request):
+        no_query(request)
+        service = resolve_service()
+        derived = await run_in_threadpool(service.proxy, WORKSPACE_OWNER, asset_id)
+        return _leased_response(service, derived.path, "video/mp4", request, asset_id + "-preview.mp4")
 
     @router.get("/assets/{asset_id}/thumbnail")
     async def thumbnail(asset_id: str, request: Request):
         no_query(request)
-        service = get_service()
+        service = resolve_service()
         asset = await run_in_threadpool(service.asset, WORKSPACE_OWNER, asset_id)
-        derived = await run_in_threadpool(service.media.derive_thumbnail, asset)
-        return _media_response(derived.path, "image/jpeg", request, asset_id + ".jpg")
+        with service.runtime.lease(asset.storage_path):
+            derived = await run_in_threadpool(service.media.derive_thumbnail, asset)
+        return _leased_response(service, derived.path, "image/jpeg", request, asset_id + ".jpg")
 
     @router.get("/assets/{asset_id}/content")
     async def asset_content(asset_id: str, request: Request):
         no_query(request)
-        asset = await run_in_threadpool(get_service().asset, WORKSPACE_OWNER, asset_id)
+        service = resolve_service()
+        asset = await run_in_threadpool(service.asset, WORKSPACE_OWNER, asset_id)
         mime = {
             "mp4": "video/mp4", "webm": "video/webm", "png": "image/png",
             "jpeg": "image/jpeg", "webp": "image/webp", "mp3": "audio/mpeg", "wav": "audio/wav",
         }[asset.metadata.format]
-        return _media_response(asset.storage_path, mime, request, asset_id + "." + asset.metadata.format)
+        return _leased_response(service, asset.storage_path, mime, request, asset_id + "." + asset.metadata.format)
 
     return router
 
 
-def _media_response(path, mime, request, filename):
+def _leased_response(service, path, mime, request, filename):
+    lease = service.runtime.lease(path)
+    lease.__enter__()
+    try:
+        return _media_response(path, mime, request, filename, release=lambda: lease.__exit__(None, None, None))
+    except BaseException:
+        lease.__exit__(None, None, None)
+        raise
+
+
+class _OwnedStreamingResponse(StreamingResponse):
+    def __init__(self, *args, close, **kwargs):
+        self._close = close
+        super().__init__(*args, **kwargs)
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            # Disconnect may happen before the generator's first iteration.
+            self._close()
+
+
+def _media_response(path, mime, request, filename, release=lambda: None):
     handle = path.open("rb")
+    close_lock = threading.Lock()
+    closed = False
+
+    def close():
+        nonlocal closed
+        with close_lock:
+            if not closed:
+                closed = True
+                try:
+                    handle.close()
+                finally:
+                    release()
     try:
         size = os.fstat(handle.fileno()).st_size
         start, end = 0, size - 1
@@ -233,13 +314,13 @@ def _media_response(path, mime, request, filename):
                 raise ValueError
         handle.seek(start)
     except ValueError:
-        handle.close()
+        close()
         return JSONResponse(
             {"error": _fail("invalid_request", "lookup").as_dict()},
             status_code=416, headers={"Content-Range": f"bytes */{size}"},
         )
     except Exception:
-        handle.close()
+        close()
         raise
 
     def chunks():
@@ -252,7 +333,7 @@ def _media_response(path, mime, request, filename):
                 remaining -= len(chunk)
                 yield chunk
         finally:
-            handle.close()
+            close()
 
     headers = {
         "Accept-Ranges": "bytes", "Content-Length": str(end - start + 1),
@@ -261,7 +342,7 @@ def _media_response(path, mime, request, filename):
     }
     if raw_range:
         headers["Content-Range"] = f"bytes {start}-{end}/{size}"
-    return StreamingResponse(
+    return _OwnedStreamingResponse(
         chunks(), media_type=mime, headers=headers, status_code=206 if raw_range else 200,
-        background=BackgroundTask(handle.close),
+        background=BackgroundTask(close), close=close,
     )

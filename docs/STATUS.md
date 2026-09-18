@@ -1,26 +1,56 @@
 # Current Project Status
 
-## Active Goal: WB-1 W1-2 Authenticated Media Integration (In Progress)
+## Active Phase: WB-1 W1-2 Media (Lifecycle Subgate Verified)
 
-- **GOAL:** Harden local media admission, wire authenticated import and exact
-  library registration, and verify this integration gate. This is not the
-  entire WB-1 asset/project/UI acceptance gate.
+- **GOAL:** The bounded local proxy/cancellation/recovery subgoal is verified.
+  Finish remaining W1-2 media criteria before project persistence or UI.
+  This is not the entire WB-1 asset/project/UI acceptance gate.
 - **CURRENT STAGE:** W1-0 and W1-1 passed on 2026-09-18. On 2026-09-18 the
   autonomous execution protocol was enabled in
   `docs/VIDEO-WORKBENCH-AUTONOMOUS-EXECUTION.md`. The clean branch is
   `codex/wb1-baseline-20260918`, based on `origin/master` at `02ce25e`.
-  The isolated media module and the first authenticated asset API are now
-  implemented. Project persistence, proxy/cancellation workflows and UI remain
+  The authenticated media/API checkpoint is committed at `a772d48`.
+  Local proxy/cancellation/recovery are now implemented and locally verified.
+  Project persistence and independent workbench UI remain
   unimplemented.
 - **GUARDRAILS:** Use synthetic local fixtures only, make no paid generation
   calls, do not upload private media, keep existing generation routes unchanged,
   keep shared contracts/status/release files under coordinator ownership, and
   pause for the manual gates in the autonomous execution protocol.
-- **EXIT CONDITION:** This local integration gate requires focused route/media
-  tests, existing generation regression and full-suite evidence; all three
-  passed at this checkpoint. `WB1-MEDIA`
-  remains `running` until proxy/cancellation/recovery and full
+- **EXIT CONDITION:** This local lifecycle gate passed focused route/media
+  tests, existing generation regression and full-suite verification; the
+  sanitized checkpoint is scoped to the dedicated development branch. `WB1-MEDIA`
+  remains `running` until full
   VA-02/VA-03/VA-04/VA-12/VA-13 evidence are complete.
+
+## 2026-09-18 Local Preview And Recovery Checkpoint (UTC)
+
+- **USER-CONFIRMED:** Continue the next phase in goal mode with bounded
+  unattended execution. No release or online-model execution is included.
+- **IMPLEMENTED / LOCAL:** Optional asynchronous import, owned-job cancel,
+  separate bounded H.264 proxy jobs, authenticated preview ranges, input and
+  delivery leases, exclusive runtime ownership and durable interrupted state.
+- **VERIFIED / LOCAL:** Proxy fixtures cover VFR intervals, source PTS offset,
+  rotation, sample aspect ratio and delayed audio. Actual child termination,
+  parent-process crash and store recovery tests pass; unknown files and
+  original media remain unchanged.
+- **VERIFIED / COMMANDS:** Seven `test_video_workbench_*` modules ->
+  **`118 passed in 41.29s`**; final `python -m pytest -q` ->
+  **`1959 passed in 293.09s`**. Compilation and diff checks pass.
+  The full run includes existing provider/generation/browser regressions.
+- **VERIFIED / CHANGE REVIEW:** Explicit 16-file staging excludes runtime
+  files and pre-existing debug directories. Added-line secret/private-path
+  heuristics pass; no comprehensive scanner or independent audit is claimed.
+  The development branch has no open PR and does not match inspected build
+  workflow push triggers. No release or service restart occurred.
+- **BOUNDARY:** Unknown/pre-journal remnants are retained, not guessed or
+  recursively removed. Partial caches fail closed. This is not complete orphan
+  garbage collection, independent review or packaged support.
+- **DETAILS / RESUME:** Read
+  `docs/VIDEO-WORKBENCH-W1-2-LIFECYCLE.md`. Verify Git/remote checkpoint identity
+  on resume, then remain on the outstanding W1-2
+  diagnostics/library/fault-coverage gates. Do not start project/UI work
+  to bypass remaining media acceptance.
 
 ## 2026-09-18 Authenticated Media Integration Checkpoint (UTC)
 

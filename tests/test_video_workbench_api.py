@@ -30,6 +30,7 @@ def runtime(tmp_path, monkeypatch):
         yield client, service
     for staged in list(service.media._issued.values()):
         service.media.cleanup_staged(staged)
+    service.close()
 
 
 def upload(client, request_id="req_test", fixture="cfr-h264.mp4", headers=None):
@@ -103,6 +104,7 @@ def test_idempotency_survives_service_restart_and_conflicts_on_changed_bytes(run
     client, service = runtime
     first = upload(client)
     first_id = asset_id(first)
+    service.close()
     restored = AssetService(service.media.root, service.gallery, service.videos)
     monkeypatch.setattr(main, "_workbench_asset_service", restored)
     repeated = upload(client)
@@ -112,6 +114,7 @@ def test_idempotency_survives_service_restart_and_conflicts_on_changed_bytes(run
     assert changed.json()["error"]["code"] == "conflict"
     assert len(list(service.media.assets_root.glob("*/asset.json"))) == 1
     assert client.get(PREFIX + "/assets/" + first_id, headers=HEADERS).status_code == 200
+    restored.close()
 
 
 def test_corrupt_import_has_safe_per_file_failure_and_no_assets(runtime):

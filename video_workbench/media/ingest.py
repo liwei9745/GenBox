@@ -26,7 +26,7 @@ from typing import Any, BinaryIO, Iterable, Iterator, Mapping, Optional
 
 from .errors import MediaIngestError, media_error
 from .models import AssetRecord, DerivedMedia, MediaKind, MediaLimits, ProbeMetadata, StagedMedia
-from .worker import WorkerLimitError, run_media
+from .worker import WorkerLimitError, check_cancelled, current_execution, run_media
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
@@ -88,6 +88,7 @@ _MAX_THUMBNAIL_BYTES = 4 * 1024 * 1024
 _RESERVATION_BYTES = 1024 * 1024 * 1024
 _RESERVATION_LOCK = threading.Lock()
 _RESERVATIONS: set[tuple[object, str]] = set()
+_RENDER_RESERVATIONS: set[object] = set()
 
 
 def _message(code: str) -> str:
@@ -320,7 +321,7 @@ class MediaIngestManager:
                     raise _fail("disk_space", "staging", retryable=True) from None
                 # Conservative across volumes: outstanding jobs cannot consume
                 # another job's 1-GiB temporary allowance.
-                if free < (len(_RESERVATIONS) + 1) * _RESERVATION_BYTES:
+                if free < (len(_RESERVATIONS) + len(_RENDER_RESERVATIONS) + 1) * _RESERVATION_BYTES:
                     raise _fail("disk_space", "staging", retryable=True)
                 _RESERVATIONS.add(reservation)
         job_dir = self.staging_root / safe_job_id
@@ -348,6 +349,7 @@ class MediaIngestManager:
         reader = getattr(content, "read", None)
         if callable(reader):
             while True:
+                check_cancelled()
                 chunk = reader(1024 * 1024)
                 if inspect.isawaitable(chunk):
                     raise _fail("invalid_request", "admission", field="file")
@@ -362,6 +364,7 @@ class MediaIngestManager:
         except TypeError:
             raise _fail("invalid_request", "admission", field="file") from None
         for chunk in iterator:
+            check_cancelled()
             if not isinstance(chunk, (bytes, bytearray, memoryview)):
                 raise _fail("invalid_request", "admission", field="file")
             if chunk:
@@ -389,6 +392,7 @@ class MediaIngestManager:
                 raise _fail("internal", "staging")
             with os.fdopen(fd, "wb") as handle:
                 for chunk in self._iter_chunks(content):
+                    check_cancelled()
                     total += len(chunk)
                     if total > limit:
                         raise _fail("asset_too_large", "admission", field="file")
@@ -710,6 +714,7 @@ class MediaIngestManager:
             actual_digest = hashlib.sha256()
             with original.open("rb") as handle:
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    check_cancelled()
                     actual_digest.update(chunk)
             if actual_digest.hexdigest() != digest:
                 return None
@@ -724,6 +729,10 @@ class MediaIngestManager:
                 preview_revision=int(data.get("preview_revision", 1)),
                 storage_path=original,
             )
+        except MediaIngestError as error:
+            if error.code == "job_cancelled":
+                raise
+            return None
         except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
             return None
 
@@ -764,10 +773,11 @@ class MediaIngestManager:
         # collapse it into an unrelated upload (or another library source).
         duplicate = self.find_by_digest(staged.content_sha256, origin=origin) if origin == "upload" else None
         if duplicate is not None:
-            try:
-                self.cleanup_staged(staged)
-            except MediaIngestError:
-                pass
+            if current_execution() is None:
+                try:
+                    self.cleanup_staged(staged)
+                except MediaIngestError:
+                    pass
             return duplicate
         safe_asset_id = asset_id or f"ast_{uuid.uuid4().hex}"
         directory = self._asset_dir(safe_asset_id)
@@ -821,6 +831,7 @@ class MediaIngestManager:
             self._assert_confined(directory, self.assets_root)
             if directory.exists():
                 raise _fail("conflict", "publish", field="asset_id")
+            check_cancelled()
             # The public namespace sees either a complete directory or none.
             os.rename(pending_directory, directory)
             published = True
@@ -842,10 +853,11 @@ class MediaIngestManager:
                     pass
         # Publication is committed. A leftover owned staging file must not
         # turn that success into a misleading retry of the import.
-        try:
-            self.cleanup_staged(staged)
-        except MediaIngestError:
-            pass
+        if current_execution() is None:
+            try:
+                self.cleanup_staged(staged)
+            except MediaIngestError:
+                pass
         return record
 
     def _unlink_temporary(self, path: Path, root: Path) -> None:
@@ -861,6 +873,7 @@ class MediaIngestManager:
         total = 0
         with path.open("rb") as handle:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                check_cancelled()
                 total += len(chunk)
                 if total > 512 * 1024 * 1024:
                     raise _fail("asset_too_large", "lookup", field="file")

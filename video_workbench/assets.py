@@ -15,11 +15,15 @@ import uuid
 
 from .media import MediaIngestError, MediaIngestManager
 from .media.ingest import _fail, _safe_id
+from .media.worker import check_cancelled, execution_scope
+from .media.proxy import ProxyRenderer
+from .runtime import StoreRuntime
 
 
 WORKSPACE_OWNER = "genbox-admin"
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 _DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
+_TERMINAL = {"succeeded", "failed", "cancelled", "interrupted"}
 
 
 def _now():
@@ -35,6 +39,85 @@ class AssetService:
         self.videos = Path(videos).absolute()
         self.jobs = self.media.root / "jobs"
         self._mutation = threading.Lock()
+        self.runtime = StoreRuntime(self.media)
+        self._active = {}
+        self._threads = set()
+        self._recovered = False
+        self.proxies = ProxyRenderer(self.media)
+
+    def _ready(self, owner):
+        self._owner(owner)
+        with self.runtime.lock:
+            self.runtime.acquire()
+            if not self._recovered:
+                self._recover()
+                self._recovered = True
+
+    def _recover(self):
+        if not self.jobs.exists():
+            return
+        self.media._assert_confined(self.jobs, self.media.root)
+        for path in self.jobs.glob("job_*.json"):
+            data = self._read_job(path, WORKSPACE_OWNER)
+            if data["view"]["state"] not in _TERMINAL:
+                data["view"].update(state="interrupted", stage="recovery", updated_at=_now())
+                self._write_job(path, data)
+            self._recover_staging(path, data)
+
+    def _recover_staging(self, path, data):
+        # Only exact declared upload files are eligible. Unknown publish
+        # directories and files from a pre-journal crash remain untouched.
+        entries = data.get("staging", [])
+        if not isinstance(entries, list) or len(entries) > 10:
+            raise _fail("internal", "recovery")
+        owned = []
+        for entry in entries:
+            if not isinstance(entry, dict) or set(entry) != {"directory", "file"}:
+                raise _fail("internal", "recovery")
+            directory, name = entry["directory"], entry["file"]
+            if (
+                not isinstance(directory, str) or not re.fullmatch(r"stage_[a-f0-9]{32}", directory)
+                or not isinstance(name, str) or not re.fullmatch(
+                    r"(?:\.upload-[a-z0-9_]+\.(?:mp4|webm|png|jpg|jpeg|webp|wav|mp3)"
+                    r"|\.proxy-[a-f0-9]{32}\.(?:mp4|json))", name,
+                )
+            ):
+                raise _fail("internal", "recovery")
+            target = self.media.staging_root / directory / name
+            self.media._assert_confined(target, self.media.staging_root / directory)
+            if self.runtime.leased(target):
+                raise _fail("cleanup_pending", "recovery", retryable=True)
+            owned.append(target)
+        try:
+            for target in owned:
+                target.unlink(missing_ok=True)
+        except OSError:
+            data["view"].update(state="failed", stage="cleanup", updated_at=_now())
+            self._write_job(path, data)
+            return
+        if entries:
+            data["staging"] = []
+            data["leases"] = []
+            self._write_job(path, data)
+
+    def close(self):
+        with self.runtime.lock:
+            for _, event in self._active.values():
+                event.set()
+            threads = list(self._threads)
+        for thread in threads:
+            thread.join(timeout=5)
+        # Staging precedes a journal/active entry. Keep the process lock until
+        # admission has exited as well, including synchronous import calls.
+        if not self._mutation.acquire(timeout=5):
+            raise _fail("cleanup_pending", "shutdown", retryable=True)
+        try:
+            with self.runtime.lock:
+                if self._active or any(thread.is_alive() for thread in threads):
+                    raise _fail("cleanup_pending", "shutdown", retryable=True)
+                self.runtime.close()
+        finally:
+            self._mutation.release()
 
     @staticmethod
     def _owner(owner):
@@ -109,7 +192,7 @@ class AssetService:
             existing = self._read_job(path, owner)
             if existing.get("intent") != intent:
                 raise _fail("conflict", "admission", field="request_id")
-            if existing["view"]["state"] not in {"succeeded", "failed"}:
+            if existing["view"]["state"] not in _TERMINAL and path.stem not in self._active:
                 # Never replay an interrupted import. A new request ID is an
                 # explicit new import; already published bytes remain intact.
                 existing["view"].update(state="interrupted", stage="import", updated_at=_now())
@@ -141,6 +224,8 @@ class AssetService:
         self.media._assert_confined(self.jobs, self.media.root)
         for path in self.jobs.glob("job_*.json"):
             record = self._read_job(path, owner)
+            if record["intent"].get("operation") not in {"upload", "library"}:
+                continue
             if any(
                 result.get("asset_id") == asset_id and result.get("state") == "ready"
                 for result in record["results"]
@@ -155,6 +240,7 @@ class AssetService:
         raise _fail("not_found", "lookup", field="asset_id")
 
     def asset(self, owner, asset_id):
+        self._ready(owner)
         self._asset_authorized(owner, asset_id)
         directory = self.media.assets_root / asset_id
         record = self.media._read_record(directory)
@@ -162,13 +248,16 @@ class AssetService:
             raise _fail("not_found", "lookup", field="asset_id")
         return record
 
-    def import_files(self, owner, request_id, files):
+    def import_files(self, owner, request_id, files, *, asynchronous=False):
         self._owner(owner)
         self._job_path(request_id)
         with self._exclusive():
+            self._ready(owner)
             staged = self.media.stage_batch(f"stage_{uuid.uuid4().hex}", files)
             data = None
             path = None
+            created = False
+            handed_off = False
             try:
                 intent = {
                     "operation": "upload",
@@ -177,14 +266,197 @@ class AssetService:
                         for item in staged
                     ],
                 }
-                path, data, created = self._start_job(owner, request_id, intent)
+                with self.runtime.lock:
+                    path, data, created = self._start_job(owner, request_id, intent)
                 if created:
-                    self._publish_files(path, data, staged, "upload")
+                    self._prepare_execution(path, data, staged)
+                    if asynchronous:
+                        with self.runtime.lock:
+                            response = self._response(data)
+                            thread = threading.Thread(
+                                target=self._execute_import, args=(path, data, staged, "upload"), daemon=True,
+                            )
+                            self._threads.add(thread)
+                            try:
+                                thread.start()
+                            except RuntimeError:
+                                self._threads.discard(thread)
+                                self._active.pop(path.stem, None)
+                                data["view"].update(state="failed", stage="worker", updated_at=_now())
+                                self._write_job(path, data)
+                                raise _fail("internal", "worker") from None
+                            handed_off = True
+                        return response
+                    handed_off = True
+                    self._execute_import(path, data, staged, "upload")
             finally:
-                self._cleanup_files(staged, path, data)
+                if not handed_off:
+                    if created and data["view"]["state"] not in _TERMINAL:
+                        self._abort_preparation(path, data)
+                    self._cleanup_files(staged, path, data)
             return self._response(data)
 
+    def _abort_preparation(self, path, data):
+        with self.runtime.lock:
+            data["view"].update(state="failed", stage="admission", updated_at=_now())
+            self._write_job(path, data)
+
+    def _prepare_execution(self, path, data, staged):
+        with self.runtime.lock:
+            data["staging"] = [
+                {"directory": item.job_id, "file": item.path.name} for item in staged
+            ]
+            data["leases"] = [{"digest": item.content_sha256} for item in staged]
+            data["view"].update(state="queued", stage="import", updated_at=_now())
+            self._write_job(path, data)
+            self._active[path.stem] = (data, threading.Event())
+
+    def _execute_import(self, path, data, staged, origin):
+        with self.runtime.lock:
+            event = self._active[path.stem][1]
+        try:
+            with execution_scope(path.stem, event):
+                with self.runtime.lock:
+                    check_cancelled()
+                    data["view"].update(state="preparing", stage="probe", updated_at=_now())
+                    self._write_job(path, data)
+                self._publish_files(path, data, staged, origin)
+        except Exception as error:
+            with self.runtime.lock:
+                cancelled = isinstance(error, MediaIngestError) and error.code == "job_cancelled"
+                safe = error if isinstance(error, MediaIngestError) else _fail("internal", "import")
+                completed = {item["index"] for item in data["results"]}
+                for index in range(len(staged)):
+                    if index not in completed:
+                        data["results"].append({"index": index, "state": "rejected", "error": safe.as_dict()})
+                data["view"].update(
+                    state="cancelled" if cancelled else "failed", stage="import", updated_at=_now(),
+                )
+                self._write_job(path, data)
+        finally:
+            try:
+                self._cleanup_files(staged, path, data)
+            finally:
+                with self.runtime.lock:
+                    self._active.pop(path.stem, None)
+                    self._threads.discard(threading.current_thread())
+
+    def cancel(self, owner, job_id):
+        self._ready(owner)
+        self._validate_job_id(job_id)
+        with self.runtime.lock:
+            path = self.jobs / f"{job_id}.json"
+            data = self._read_job(path, owner)
+            if data["view"]["state"] in _TERMINAL:
+                return self._response(data)
+            active = self._active.get(job_id)
+            if active is None:
+                data["view"].update(state="interrupted", stage="recovery", updated_at=_now())
+            else:
+                data, event = active
+                data["view"].update(state="cancel_requested", updated_at=_now())
+                event.set()
+            self._write_job(path, data)
+            return self._response(data)
+
+    def proxy(self, owner, asset_id):
+        asset = self.asset(owner, asset_id)
+        if asset.kind != "video":
+            raise _fail("unsupported_capability", "proxy")
+        derived = self.proxies.existing(asset)
+        if derived is None:
+            raise _fail("not_found", "proxy")
+        return derived
+
+    def prepare_proxy(self, owner, request_id, asset_id):
+        self._owner(owner)
+        self._job_path(request_id)
+        with self._exclusive():
+            asset = self.asset(owner, asset_id)
+            if asset.kind != "video":
+                raise _fail("unsupported_capability", "proxy")
+            intent = {
+                "operation": "proxy", "asset_id": asset.asset_id,
+                "digest": asset.content_sha256, "preview_revision": asset.preview_revision,
+            }
+            with self.runtime.lock:
+                path = self._job_path(request_id)
+                if path.exists():
+                    _, data, _ = self._start_job(owner, request_id, intent)
+                    return self._response(data)
+                reservation = self.proxies.reservation()
+                reservation.__enter__()
+                try:
+                    pending, manifest = self.proxies.allocate()
+                    path, data, _ = self._start_job(owner, request_id, intent)
+                    data["staging"] = [
+                        {"directory": item.parent.name, "file": item.name} for item in (pending, manifest)
+                    ]
+                    data["leases"] = [{"asset_id": asset.asset_id, "digest": asset.content_sha256}]
+                    data["view"].update(operation="proxy", state="queued", stage="proxy")
+                    self._write_job(path, data)
+                    self._active[path.stem] = (data, threading.Event())
+                    response = self._response(data)
+                    thread = threading.Thread(
+                        target=self._execute_proxy,
+                        args=(path, data, asset, pending, manifest, reservation), daemon=True,
+                    )
+                    self._threads.add(thread)
+                    try:
+                        thread.start()
+                    except RuntimeError:
+                        self._threads.discard(thread)
+                        self._active.pop(path.stem, None)
+                        data["view"].update(state="failed", stage="worker", updated_at=_now())
+                        self._write_job(path, data)
+                        raise _fail("internal", "worker") from None
+                    return response
+                except BaseException:
+                    reservation.__exit__(None, None, None)
+                    raise
+
+    def _execute_proxy(self, path, data, asset, pending, manifest, reservation):
+        try:
+            with execution_scope(path.stem, self._active[path.stem][1]):
+                with self.runtime.lease(asset.storage_path):
+                    with self.runtime.lock:
+                        check_cancelled()
+                        data["view"].update(state="running", stage="proxy", updated_at=_now())
+                        self._write_job(path, data)
+                    self.proxies.render(asset, pending, manifest)
+                    with self.runtime.lock:
+                        check_cancelled()
+                        data["results"] = [{"index": 0, "state": "ready", "asset_id": asset.asset_id}]
+                        data["view"].update(
+                            state="succeeded", stage="proxy", asset_ids=[asset.asset_id], updated_at=_now(),
+                        )
+                        self._write_job(path, data)
+        except Exception as error:
+            with self.runtime.lock:
+                cancelled = isinstance(error, MediaIngestError) and error.code == "job_cancelled"
+                safe = error if isinstance(error, MediaIngestError) else _fail("internal", "proxy")
+                data["results"] = [{"index": 0, "state": "rejected", "error": safe.as_dict()}]
+                data["view"].update(state="cancelled" if cancelled else "failed", updated_at=_now())
+                self._write_job(path, data)
+        finally:
+            try:
+                with self.runtime.lock:
+                    persisted = self._read_job(path, data["owner"])
+                    if persisted["view"]["state"] in _TERMINAL:
+                        self._recover_staging(path, persisted)
+            finally:
+                reservation.__exit__(None, None, None)
+                with self.runtime.lock:
+                    self._active.pop(path.stem, None)
+                    self._threads.discard(threading.current_thread())
+
     def _cleanup_files(self, staged, path, data):
+        if data is not None and path is not None and data.get("staging"):
+            persisted = self._read_job(path, data["owner"])
+            declared = {(entry["directory"], entry["file"]) for entry in persisted.get("staging", [])}
+            owns_files = any((item.job_id, item.path.name) in declared for item in staged)
+            if owns_files and persisted["view"]["state"] not in _TERMINAL:
+                raise _fail("cleanup_pending", "cleanup", retryable=True)
         pending = []
         for index, item in enumerate(staged):
             if self.media._issued.get(item.path) is not item:
@@ -194,6 +466,11 @@ class AssetService:
             except MediaIngestError:
                 pending.append(index)
         if not pending:
+            if data is not None and path is not None and data["view"]["state"] in _TERMINAL:
+                with self.runtime.lock:
+                    data["staging"] = []
+                    data["leases"] = []
+                    self._write_job(path, data)
             return
         error = _fail("cleanup_pending", "cleanup", retryable=True)
         if data is None or path is None:
@@ -208,19 +485,28 @@ class AssetService:
 
     def _publish_files(self, path, data, staged, origin):
         for index, item in enumerate(staged):
+            check_cancelled()
             try:
-                asset = self.media.publish(item, self.media.probe(item), origin=origin)
-                data["results"].append({"index": index, "state": "ready", "asset_id": asset.asset_id})
-                data["view"]["asset_ids"].append(asset.asset_id)
+                with self.runtime.lease(item.path):
+                    asset = self.media.publish(item, self.media.probe(item), origin=origin)
+                with self.runtime.lock:
+                    data["results"].append({"index": index, "state": "ready", "asset_id": asset.asset_id})
+                    data["view"]["asset_ids"].append(asset.asset_id)
             except MediaIngestError as error:
-                data["results"].append({"index": index, "state": "rejected", "error": error.as_dict()})
-            data["view"]["updated_at"] = _now()
+                if error.code == "job_cancelled":
+                    raise
+                with self.runtime.lock:
+                    data["results"].append({"index": index, "state": "rejected", "error": error.as_dict()})
+            with self.runtime.lock:
+                data["view"]["updated_at"] = _now()
+                self._write_job(path, data)
+        with self.runtime.lock:
+            check_cancelled()
+            data["view"].update(
+                state="failed" if any(item["state"] == "rejected" for item in data["results"]) else "succeeded",
+                stage="import", updated_at=_now(),
+            )
             self._write_job(path, data)
-        data["view"].update(
-            state="failed" if any(item["state"] == "rejected" for item in data["results"]) else "succeeded",
-            stage="import", updated_at=_now(),
-        )
-        self._write_job(path, data)
 
     def _library_path(self, kind, item_id):
         if kind not in {"image", "video"} or (
@@ -255,11 +541,13 @@ class AssetService:
         ):
             raise _fail("invalid_request", "admission", field="expected_sha256")
         with self._exclusive():
+            self._ready(owner)
             source = self._library_path(library_kind, library_item_id)
             with source.open("rb") as handle:
                 staged = self.media.stage_stream(f"stage_{uuid.uuid4().hex}", source.name, handle)
             data = None
             path = None
+            created = False
             try:
                 if expected_sha256 and expected_sha256 != "sha256:" + staged.content_sha256:
                     raise _fail("conflict", "admission", field="expected_sha256")
@@ -272,23 +560,32 @@ class AssetService:
                     # Recheck the exact source, not only the copied bytes.
                     if self.media._hash_file(source)[1] != staged.content_sha256:
                         raise _fail("conflict", "admission", field="library_item_id")
-                    self._publish_files(path, data, [staged], "library")
+                    self._prepare_execution(path, data, [staged])
+                    self._execute_import(path, data, [staged], "library")
             finally:
+                if created and data["view"]["state"] not in _TERMINAL:
+                    self._abort_preparation(path, data)
                 self._cleanup_files([staged], path, data)
             return self._response(data)
 
-    def job(self, owner, job_id):
+    @staticmethod
+    def _validate_job_id(job_id):
         _safe_id(job_id, field="job_id")
         if not re.fullmatch(r"job_[0-9a-f]{64}", job_id):
             raise _fail("job_not_found", "lookup")
-        data = self._read_job(self.jobs / f"{job_id}.json", owner)
-        if data["view"]["state"] == "preparing" and not self._mutation.locked():
-            # Read projection only: safe across reload; no implicit replay.
-            data["view"]["state"] = "interrupted"
-        return self._response(data)
+
+    def job(self, owner, job_id):
+        self._ready(owner)
+        self._validate_job_id(job_id)
+        with self.runtime.lock:
+            data = self._read_job(self.jobs / f"{job_id}.json", owner)
+            if data["view"]["state"] not in _TERMINAL and job_id not in self._active:
+                data["view"].update(state="interrupted", stage="recovery", updated_at=_now())
+                self._write_job(self.jobs / f"{job_id}.json", data)
+            return self._response(data)
 
     def list_assets(self, owner, *, cursor="", kind=None, query="", limit=20):
-        self._owner(owner)
+        self._ready(owner)
         if kind not in {None, "image", "video", "audio"} or (
             type(limit) is not int or not 1 <= limit <= 50
             or not isinstance(query, str) or len(query) > 128
