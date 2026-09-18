@@ -1,5 +1,17 @@
 # GenBox Extension Center Product Definition
 
+## Additional Product Initiative: Video Editing Workbench
+
+USER-CONFIRMED direction on 2026-09-18: add an independent, online-AI-assisted
+video editing workbench with external image/video/audio import, GenBox media
+library selection, non-destructive basic editing, candidate comparison and
+export. Support future editing models through a provider-neutral extension
+contract; Google is the first adapter candidate, not the workbench's identity.
+
+The [Video Workbench PRD](VIDEO-WORKBENCH-PRD.md) owns requirements VW-01
+through VW-13 and first-release/deferred scope. Its implementation is planned,
+not delivered. Existing extension-center goals and acceptance remain unchanged.
+
 ## Background
 
 `yukkcat/chatgpt2api` can generate and retain images on a remote VPS. Generated

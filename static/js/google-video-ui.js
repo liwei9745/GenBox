@@ -5,8 +5,6 @@
   if (feedback && document.getElementById('videoFeedbackSlot')) {
     var slot = document.getElementById('videoFeedbackSlot');
     slot.appendChild(feedback);
-    var bottom = document.querySelector('#pageVideo .generate-bottom-row');
-    bottom.parentElement.insertBefore(slot, bottom);
   }
   function el(id) { return document.getElementById(id); }
   function options(select, values, selected) {
@@ -21,12 +19,21 @@
   }
   function reset() {
     current = null;
+    el('videoImageRoleHint').classList.add('hidden');
+    el('videoImageRoleHint').textContent = '';
     el('videoNativeOptions').classList.add('hidden');
     ['videoDurationPresets', 'videoFramesRow', 'videoFPS', 'videoFPSLabel', 'videoDurationLabel'].forEach(function(id) {
       el(id).classList.remove('hidden');
     });
-    document.querySelectorAll('#videoI2VPanel button[onclick*="setVideoImageRole"]').forEach(function(button) {
-      button.disabled = false;
+    document.querySelectorAll('#videoI2VPanel input[name="videoImageRole"]').forEach(function(input) {
+      input.disabled = false;
+      if (input.parentElement) {
+        input.parentElement.removeAttribute('aria-disabled');
+        input.parentElement.classList.remove('is-disabled');
+        input.parentElement.removeAttribute('title');
+        input.parentElement.removeAttribute('aria-describedby');
+        input.parentElement.removeAttribute('tabindex');
+      }
     });
   }
   function sync() {
@@ -64,16 +71,37 @@
     el('videoNegPrompt').closest('.form-group').style.display = 'none';
     el('videoSeed').closest('.form-group').style.display = spec.supports_seed ? '' : 'none';
     el('videoAdvancedEmpty').classList.toggle('hidden', spec.supports_seed);
-    document.querySelectorAll('#videoI2VPanel button[onclick*="setVideoImageRole"]').forEach(function(button) {
-      var match = button.getAttribute('onclick').match(/setVideoImageRole\('([^']+)'/);
-      button.disabled = !!match && spec.image_roles.indexOf(match[1]) === -1;
+    document.querySelectorAll('#videoI2VPanel input[name="videoImageRole"]').forEach(function(input) {
+      var supported = spec.image_roles.indexOf(input.value) !== -1;
+      input.disabled = !supported;
+      if (input.parentElement) {
+        input.parentElement.setAttribute('aria-disabled', supported ? 'false' : 'true');
+        input.parentElement.classList.toggle('is-disabled', !supported);
+        var reason = input.value === 'last_frame' ?
+          '当前模型未开放单独尾帧。' + (spec.image_roles.indexOf('first_last') !== -1 ?
+            '可选择首尾帧并添加两张图片。' : '') :
+          '当前模型不支持此图片类型。';
+        input.parentElement.title = supported ? '' : reason;
+        if (!supported) {
+          input.parentElement.tabIndex = 0;
+          input.parentElement.setAttribute('aria-describedby', 'videoImageRoleHint');
+        } else {
+          input.parentElement.removeAttribute('tabindex');
+          input.parentElement.removeAttribute('aria-describedby');
+        }
+      }
     });
+    var hint = el('videoImageRoleHint');
+    hint.textContent = spec.image_roles.indexOf('first_last') !== -1 ?
+      '单独尾帧不可用；首尾帧：第 1 张为首帧，第 2 张为尾帧。' :
+      '当前模型仅支持首帧图片。';
+    hint.classList.remove('hidden');
     if (spec.image_roles.indexOf(window.videoImageRole) === -1) {
       var role = spec.image_roles[0];
-      var button = Array.from(document.querySelectorAll('#videoI2VPanel button[onclick]')).find(function(candidate) {
-        return candidate.getAttribute('onclick').indexOf("'" + role + "'") !== -1;
+      var input = Array.from(document.querySelectorAll('#videoI2VPanel input[name="videoImageRole"]')).find(function(candidate) {
+        return candidate.value === role;
       });
-      if (button) window.setVideoImageRole(role, button);
+      if (input) window.setVideoImageRole(role, input.parentElement);
     }
     sync();
   }

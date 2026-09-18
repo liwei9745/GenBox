@@ -377,6 +377,55 @@ def test_error_identifies_non_submission_stage(tmp_path, stage):
     assert "PERMISSION_DENIED" in str(exc.value)
 
 
+@pytest.mark.parametrize("error_type,label", [
+    (httpx.ReadTimeout, "等待响应超时"),
+    (httpx.ConnectTimeout, "连接超时"),
+    (httpx.ReadError, "响应读取中断"),
+    (httpx.RemoteProtocolError, "提前断开"),
+    (httpx.ProxyError, "代理握手失败"),
+    (httpx.DecodingError, "响应压缩数据"),
+])
+def test_transport_failure_is_specific_safe_and_never_resubmits(tmp_path, error_type, label):
+    def handler(req):
+        raise error_type("private prompt and " + KEY)
+    calls, factory = transport(handler)
+    url, payload = google.build_request(request(), "gemini-omni-1.1-flash")
+    with pytest.raises(google.GoogleVideoError) as exc:
+        google.run_generation(url, payload, KEY, tmp_path / "test.mp4", client_factory=factory)
+    assert label in str(exc.value)
+    assert "提交并等待生成响应" in str(exc.value)
+    assert KEY not in str(exc.value) and "private prompt" not in str(exc.value)
+    assert len(calls) == 1
+
+
+def test_transport_failure_after_headers_is_not_generic(tmp_path):
+    class BrokenStream(httpx.SyncByteStream):
+        def __iter__(self):
+            yield b'{"status":"completed",'
+            raise httpx.ReadError(KEY)
+    calls, factory = transport(lambda req: httpx.Response(200, stream=BrokenStream()))
+    url, payload = google.build_request(request(), "gemini-omni-1.1-flash")
+    with pytest.raises(google.GoogleVideoError, match="响应读取中断"):
+        google.run_generation(url, payload, KEY, tmp_path / "test.mp4", client_factory=factory)
+    assert len(calls) == 1 and not (tmp_path / "test.mp4").exists()
+
+
+@pytest.mark.parametrize("steps", [None, {}, [{"type": "model_output", "content": None}]])
+def test_omni_malformed_output_is_bounded_error(tmp_path, steps):
+    calls, factory = transport(lambda req: httpx.Response(
+        200, json={"status": "completed", "steps": steps}))
+    url, payload = google.build_request(request(), "gemini-omni-1.1-flash")
+    with pytest.raises(google.GoogleVideoError, match="列表"):
+        google.run_generation(url, payload, KEY, tmp_path / "test.mp4", client_factory=factory)
+    assert len(calls) == 1
+
+
+def test_disk_and_unknown_errors_do_not_leak_private_paths():
+    assert "文件访问被拒绝" in str(google.safe_failure(PermissionError(KEY), "下载保存"))
+    assert "内部错误" in str(google.safe_failure(RuntimeError(KEY)))
+    assert KEY not in str(google.safe_failure(RuntimeError(KEY)))
+
+
 @pytest.mark.parametrize("upstream,expected", [
     ("API key not valid. Please pass a valid API key.", "API Key 无效"),
     ("This request requires billing to be enabled.", "请检查项目付费状态"),
@@ -390,7 +439,13 @@ def test_known_error_categories_are_fixed_public_labels(upstream, expected):
     assert KEY not in hint
 
 
-def test_native_route_uses_effective_key_and_local_task_id(monkeypatch, tmp_path):
+@pytest.mark.parametrize("failure,stage,label", [
+    (None, None, None),
+    (httpx.ReadTimeout(KEY), "generating", "等待响应超时"),
+    (PermissionError(KEY), "downloading", "文件访问被拒绝"),
+    (RuntimeError(KEY), "generating", "内部错误"),
+])
+def test_native_route_uses_effective_key_and_local_task_id(monkeypatch, tmp_path, failure, stage, label):
     cfg = ProviderConfig(id="google", type="video", name="Google", base_url=google.BASE,
                          api_key="", api_keys=[KEY], model="gemini-omni-1.1-flash")
     monkeypatch.setattr(main.cfg_mgr, "get_video_providers", lambda: [cfg])
@@ -403,6 +458,9 @@ def test_native_route_uses_effective_key_and_local_task_id(monkeypatch, tmp_path
     def run(url, payload, key, path, **kwargs):
         assert url == google.BASE + "/interactions"
         assert key == KEY
+        if failure:
+            kwargs["on_stage"](stage)
+            raise failure
         path.write_bytes(MP4)
         return True
 
@@ -417,9 +475,17 @@ def test_native_route_uses_effective_key_and_local_task_id(monkeypatch, tmp_path
     assert result["status"] == "queued"
     assert result["provider_type"] == "google_native"
     status = asyncio.run(main.video_status(result["task_id"]))
-    assert status["status"] == "completed"
-    assert status["video_url_local"].startswith("/api/video/file/google_")
+    assert status["status"] == ("failed" if failure else "completed")
+    if failure:
+        assert label in status["error"]
+        assert "未自动重试生成" in status["error"]
+        assert saved[0]["error"] == status["error"]
+        if stage == "downloading":
+            assert "下载保存" in status["error"]
+    else:
+        assert status["video_url_local"].startswith("/api/video/file/google_")
     assert KEY not in json.dumps(status)
+    assert KEY not in json.dumps(saved)
     assert "interactions" not in json.dumps(saved)
 
 

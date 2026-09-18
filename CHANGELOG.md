@@ -4,6 +4,24 @@ All notable GenBox changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.12] - 2026-09-18
+
+### Fixed
+
+- Keep the image-to-video reference asset controls stable while thumbnails
+  scroll; place the combined upload/library action card at the workspace top
+  right.
+- Improve compact video result placeholders, independent feedback logs,
+  prompt composer sizing and responsive single/multi-model layouts.
+- Classify native Google video transport, response parsing and local file
+  failures without exposing upstream responses or retrying a possibly billed
+  request.
+
+### Tests
+
+- Add responsive browser coverage for reference roles, upload/library actions,
+  gallery dismissal, prompt tools, preview cards and scroll-position stability.
+
 ## [2.6.11] - 2026-09-17
 
 ### Added

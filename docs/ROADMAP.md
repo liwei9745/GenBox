@@ -4,6 +4,30 @@ Status values are `Planned`, `In Progress`, `Blocked`, and `Complete`. A phase i
 complete only when its acceptance criteria have recorded evidence. Code,
 mock-based tests, UI, and live-environment verification are separate evidence.
 
+## Video Workbench Initiative
+
+USER-CONFIRMED new direction on 2026-09-18; use separate WB phase IDs rather
+than renumbering extension phases. Current primary work is WB-0 documentation.
+Existing extension and release obligations retain their recorded status.
+
+| Phase | Status | Gate |
+| --- | --- | --- |
+| WB-0: Scope, contracts and feasibility | In Progress | Draft review, bounded spikes and schema/limit decisions |
+| WB-1: Assets and projects | Planned | External/library import and durable project acceptance |
+| WB-2: Basic editing and export | Planned | Non-destructive timeline and real rendered output |
+| WB-3: Online editing and provider extensions | Planned | Qualified adapter, candidate workflow and authorized live edit |
+| WB-4: Integrated acceptance | Planned | Regression, independent review and packaged-runtime evidence |
+
+Topic contracts: [PRD](VIDEO-WORKBENCH-PRD.md),
+[core](VIDEO-WORKBENCH-CONTRACT.md),
+[providers](VIDEO-WORKBENCH-PROVIDERS.md),
+[AI](VIDEO-WORKBENCH-AI.md),
+[acceptance](VIDEO-WORKBENCH-ACCEPTANCE.md),
+[readiness review](VIDEO-WORKBENCH-READINESS.md).
+Execution details and ownership: [plan](VIDEO-WORKBENCH-PLAN.md),
+[team](VIDEO-WORKBENCH-TEAM.md).
+No workbench phase is complete; documentation is not implementation evidence.
+
 ## Phase 0: Project Fact And Documentation Baseline
 
 **Status:** Complete

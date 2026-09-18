@@ -16442,6 +16442,9 @@ var videoPreviewGroups = {};  // { provider_id: [ {task_id, video_url, video_url
 var videoGroupNavIdx = {};    // { provider_id: current index }
 var videoActivePollTasks = {}; // { task_id: {provider_id, ...} } 跟踪活跃轮询任务
 var videoPreviewPlaceholders = {}; // { provider_id: { cardEl, ... } } 视频生成中的占位卡片
+var videoProvidersLoadPromise = null;
+var videoProvidersCacheAt = 0;
+var VIDEO_PROVIDERS_CACHE_TTL = 30000;
 
 // ═══════════════════════════════════════════════════════════════════
 // 视频实时日志
@@ -16544,11 +16547,9 @@ function resetVideoDragStyle() {
 
 function loadVideoProviders() {
   var container=document.getElementById('videoProviderCards');
-  _authFetch('/api/providers').then(function(r){
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    return r.json();
-  }).then(function(data){
+  function applyCatalog(data) {
     videoProviders = (data.providers || []).filter(function(p){ return p.type === 'video'; });
+    videoProvidersCacheAt = Date.now();
     if(!Array.isArray(selectedVideoProviderIds))selectedVideoProviderIds=[];
     if((localStorage.getItem('igs_video_workbench')||'multi')==='single'){
       var selectedVideo=selectedVideoProviderIds[0];
@@ -16557,6 +16558,23 @@ function loadVideoProviders() {
     }
     renderVideoProviderCards();
     renderCreatorProviderPickers();
+    return videoProviders;
+  }
+  // Reuse the already-loaded provider catalog for instant first paint, then
+  // refresh in the background when the short-lived cache expires.
+  if (Array.isArray(allProviders) && allProviders.length && !videoProviders.length) {
+    applyCatalog({providers: allProviders});
+  }
+  if (videoProvidersLoadPromise) return videoProvidersLoadPromise;
+  if (videoProviders.length && Date.now() - videoProvidersCacheAt < VIDEO_PROVIDERS_CACHE_TTL) {
+    renderVideoProviderCards();
+    return Promise.resolve(videoProviders);
+  }
+  videoProvidersLoadPromise = _authFetch('/api/providers').then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(data){
+    applyCatalog(data);
   }).catch(function(error){
     videoProviders=[];
     selectedVideoProviderIds=[];
@@ -16565,7 +16583,9 @@ function loadVideoProviders() {
     updateVideoGenerateButton();
     setStatus(i18nText('video.models_load_failed_prefix') + error.message);
     console.error('loadVideoProviders failed',error);
-  });
+    return [];
+  }).finally(function(){ videoProvidersLoadPromise = null; });
+  return videoProvidersLoadPromise;
 }
 
 // 全局视频设置状态（尺寸/FPS/帧数在全局生效，模型按 Provider 卡片独立）
@@ -17227,43 +17247,57 @@ function switchVideoSubTab(mode) {
 
 function setVideoImageRole(role, el) {
   videoImageRole = role;
-  el.parentElement.querySelectorAll('.sub-tab').forEach(function(t){ t.classList.remove('active'); });
-  el.classList.add('active');
+  var root = el && el.parentElement ? el.parentElement : null;
+  if (root) {
+    root.querySelectorAll('.sub-tab, .video-image-role-option').forEach(function(t){ t.classList.remove('active', 'is-selected'); });
+  }
+  if (el) {
+    el.classList.add('active');
+    var input = el.matches && el.matches('label') ? el.querySelector('input') : null;
+    if (input) input.checked = true;
+  }
+  renderVideoImagePreview();
 }
 
 // 图片上传处理
 function handleVideoFileSelect(evt) {
-  var files = evt.target.files;
-  for (var i = 0; i < files.length; i++) {
-    readVideoImageFile(files[i]);
-  }
+  readVideoImageBatch(evt.target.files, 'i2vid');
   evt.target.value = '';
 }
 
 function handleVideoDrop(evt) {
   evt.preventDefault();
   evt.currentTarget.classList.remove('dragover');
-  var files = evt.dataTransfer.files;
-  for (var i = 0; i < files.length; i++) {
-    if (files[i].type.startsWith('image/')) readVideoImageFile(files[i]);
-  }
+  readVideoImageBatch(evt.dataTransfer.files, 'i2vid');
+}
+
+function readVideoImageBatch(files, mode) {
+  var targetImages = mode === 'keyframes' ? kfImages : videoImages;
+  // FileReader completion order must not swap the first and last frames.
+  return Promise.all(Array.from(files).map(function(file) {
+    if (!file.type.startsWith('image/')) { setStatus(i18nText('upload.image_required')); return null; }
+    if (file.size > 10 * 1024 * 1024) { setStatus(i18nText('upload.image_too_large')); return null; }
+    return new Promise(function(resolve) {
+      var reader = new FileReader();
+      reader.onload = function(event) { resolve(event.target.result); };
+      reader.onerror = function() { setStatus(i18nText('image.data_failed')); resolve(null); };
+      reader.onabort = function() { resolve(null); };
+      reader.readAsDataURL(file);
+    });
+  })).then(function(images) {
+    if (currentVideoMode !== mode ||
+        targetImages !== (mode === 'keyframes' ? kfImages : videoImages)) return;
+    images.forEach(function(image) { if (image) targetImages.push(image); });
+    if (mode === 'keyframes') renderKfImagePreview();
+    else renderVideoImagePreview();
+  });
 }
 
 function readVideoImageFile(file) {
-  if (!file.type.startsWith('image/')) { setStatus(i18nText('upload.image_required')); return; }
-  if (file.size > 10 * 1024 * 1024) { setStatus(i18nText('upload.image_too_large')); return; }
-  var targetImages = videoImages;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    if (currentVideoMode !== 'i2vid' || targetImages !== videoImages) return;
-    videoImages.push(e.target.result);
-    renderVideoImagePreview();
-  };
-  reader.onerror = function() { setStatus(i18nText('image.data_failed')); };
-  reader.readAsDataURL(file);
+  return readVideoImageBatch([file], 'i2vid');
 }
 
-function appendVideoImageCard(container, src, index, remove) {
+function appendVideoImageCard(container, src, index, remove, roleLabel) {
   var card = document.createElement('div');
   card.className = 'video-image-card';
   var preview = document.createElement('button');
@@ -17283,7 +17317,8 @@ function appendVideoImageCard(container, src, index, remove) {
   removeButton.onclick = function() { remove(index); };
   var label = document.createElement('span');
   label.className = 'video-image-label';
-  label.textContent = String(index + 1);
+  label.textContent = roleLabel || String(index + 1);
+  label.title = label.textContent;
   card.append(preview, removeButton, label);
   container.appendChild(card);
 }
@@ -17292,7 +17327,10 @@ function renderVideoImagePreview() {
   var container = document.getElementById('videoImagePreview');
   container.innerHTML = '';
   videoImages.forEach(function(img, idx) {
-    appendVideoImageCard(container, img, idx, removeVideoImage);
+    var role = videoImageRole === 'reference' ? '参考图 ' + (idx + 1) :
+      videoImageRole === 'first_last' ? (idx === 0 ? '首帧' : idx === 1 ? '尾帧' : '超出首尾帧数量') :
+      (videoImageRole === 'last_frame' ? '尾帧' : '首帧') + (videoImages.length > 1 ? ' ' + (idx + 1) : '');
+    appendVideoImageCard(container, img, idx, removeVideoImage, role);
   });
 }
 
@@ -17303,41 +17341,27 @@ function removeVideoImage(idx) {
 
 // 关键帧图片处理
 function handleKfFileSelect(evt) {
-  var files = evt.target.files;
-  for (var i = 0; i < files.length; i++) {
-    readKfImageFile(files[i]);
-  }
+  readVideoImageBatch(evt.target.files, 'keyframes');
   evt.target.value = '';
 }
 
 function handleKfDrop(evt) {
   evt.preventDefault();
   evt.currentTarget.classList.remove('dragover');
-  var files = evt.dataTransfer.files;
-  for (var i = 0; i < files.length; i++) {
-    if (files[i].type.startsWith('image/')) readKfImageFile(files[i]);
-  }
+  readVideoImageBatch(evt.dataTransfer.files, 'keyframes');
 }
 
 function readKfImageFile(file) {
-  if (!file.type.startsWith('image/')) { setStatus(i18nText('upload.image_required')); return; }
-  if (file.size > 10 * 1024 * 1024) { setStatus(i18nText('upload.image_too_large')); return; }
-  var targetImages = kfImages;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    if (currentVideoMode !== 'keyframes' || targetImages !== kfImages) return;
-    kfImages.push(e.target.result);
-    renderKfImagePreview();
-  };
-  reader.onerror = function() { setStatus(i18nText('image.data_failed')); };
-  reader.readAsDataURL(file);
+  return readVideoImageBatch([file], 'keyframes');
 }
 
 function renderKfImagePreview() {
   var container = document.getElementById('kfImagePreview');
   container.innerHTML = '';
   kfImages.forEach(function(img, idx) {
-    appendVideoImageCard(container, img, idx, removeKfImage);
+    var role = '关键帧 ' + (idx + 1);
+    if (kfImages.length === 2) role += idx === 0 ? ' · 首帧' : ' · 尾帧';
+    appendVideoImageCard(container, img, idx, removeKfImage, role);
   });
 }
 
@@ -17348,52 +17372,103 @@ function removeKfImage(idx) {
 
 // 从图库取图弹窗
 function openVideoPreviewPicker() {
-  // 简单实现：直接拉取图库图片列表
+  if (document.getElementById('videoPickerOverlay')) return;
+  var picker = showVideoImagePickerModal(null);
+  var controller = new AbortController();
+  picker.addEventListener('close', function() { controller.abort(); }, {once: true});
   setStatus(i18nText('video.loading_gallery_images'));
-  _authFetch('/api/preview/images').then(function(r){ return r.json(); }).then(function(data){
-    var items = data.items || [];
-    if (items.length === 0) {
-      alert(i18nText('video.gallery_empty'));
-      return;
-    }
-    showVideoImagePickerModal(items);
-  }).catch(function(e){ alert(i18nText('common.load_failed_prefix') + e.message); });
+  _authFetch('/api/preview/images', {signal: controller.signal}).then(function(r){
+    if (!r.ok) throw new Error('gallery_request_failed');
+    return r.json();
+  }).then(function(data){
+    if (picker.isConnected && picker.open) picker.setItems(Array.isArray(data.items) ? data.items : []);
+  }).catch(function(error){
+    if (error.name !== 'AbortError' && picker.isConnected && picker.open)
+      picker.showMessage('图库加载失败，请关闭后重试。');
+  });
 }
 
 function showVideoImagePickerModal(items) {
-  // 创建临时弹窗
-  var overlay = document.createElement('div');
+  var existing = document.getElementById('videoPickerOverlay');
+  if (existing) return existing;
+  var opener = document.activeElement;
+  var mode = currentVideoMode;
+  var targetImages = mode === 'keyframes' ? kfImages : videoImages;
+  var overlay = document.createElement('dialog');
   overlay.id = 'videoPickerOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
-  var box = document.createElement('div');
-  box.style.cssText = 'background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:600px;width:90%;max-height:70vh;overflow-y:auto;';
-  box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="font-size:14px;font-weight:700;">' + i18nText('video.pick_image_title') + '</h3><button onclick="document.getElementById(\'videoPickerOverlay\').remove()" style="background:none;border:none;color:var(--text-secondary);font-size:18px;cursor:pointer;">?</button></div>' +
-    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;" id="videoPickerGrid"></div>';
-  overlay.appendChild(box);
+  overlay.className = 'video-picker-dialog';
+  overlay.setAttribute('aria-labelledby', 'videoPickerTitle');
+  var header = document.createElement('div');
+  header.className = 'video-picker-header';
+  var heading = document.createElement('h3');
+  heading.id = 'videoPickerTitle';
+  heading.textContent = i18nText('video.pick_image_title');
+  var close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'btn-ghost video-picker-close';
+  close.textContent = '\u00d7';
+  close.setAttribute('aria-label', '关闭图片选择');
+  close.title = '关闭图片选择';
+  close.onclick = function() { overlay.close(); };
+  header.append(heading, close);
+  var grid = document.createElement('div');
+  grid.id = 'videoPickerGrid';
+  grid.className = 'video-picker-grid';
+  overlay.append(header, grid);
   document.body.appendChild(overlay);
-
-  var grid = document.getElementById('videoPickerGrid');
-  items.forEach(function(item) {
-    var card = document.createElement('div');
-    card.style.cssText = 'border-radius:8px;overflow:hidden;border:2px solid var(--border);cursor:pointer;transition:border-color 0.15s;';
-    card.innerHTML = '<img src="' + item.data + '" style="width:100%;height:90px;object-fit:cover;">' +
-      '<div style="font-size:9px;color:var(--text-muted);padding:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (item.prompt || item.filename).substring(0, 30) + '</div>';
-    card.onmouseover = function() { card.style.borderColor = 'var(--accent)'; };
-    card.onmouseout = function() { card.style.borderColor = 'var(--border)'; };
-    card.onclick = function() {
-      // 添加到当前图片列表
-      if (currentVideoMode === 'keyframes') {
-        kfImages.push(item.data);
-        renderKfImagePreview();
-      } else {
-        videoImages.push(item.data);
-        renderVideoImagePreview();
-      }
-      document.getElementById('videoPickerOverlay').remove();
-      setStatus(i18nText('video.image_added'));
-    };
-    grid.appendChild(card);
+  overlay.addEventListener('close', function() {
+    overlay.remove();
+    if (opener && opener.isConnected) opener.focus();
   });
+  overlay.addEventListener('click', function(event) {
+    var rect = overlay.getBoundingClientRect();
+    if (event.target === overlay &&
+        (event.clientX < rect.left || event.clientX > rect.right ||
+         event.clientY < rect.top || event.clientY > rect.bottom)) overlay.close();
+  });
+  overlay.showMessage = function(text) {
+    var message = document.createElement('p');
+    message.className = 'video-picker-message';
+    message.setAttribute('role', 'status');
+    message.textContent = text;
+    grid.replaceChildren(message);
+  };
+  overlay.setItems = function(list) {
+    grid.replaceChildren();
+    list.forEach(function(item, index) {
+      if (!item || typeof item.data !== 'string') return;
+      var card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'video-picker-item';
+      card.setAttribute('aria-label', '选择图库图片 ' + (index + 1));
+      var image = document.createElement('img');
+      image.src = item.data;
+      image.alt = '';
+      image.loading = 'lazy';
+      var caption = document.createElement('span');
+      caption.textContent = String(item.prompt || item.filename || '图片').substring(0, 60);
+      card.append(image, caption);
+      card.onclick = function() {
+        if (currentVideoMode !== mode ||
+            targetImages !== (mode === 'keyframes' ? kfImages : videoImages)) {
+          overlay.close();
+          return;
+        }
+        targetImages.push(item.data);
+        if (mode === 'keyframes') renderKfImagePreview();
+        else renderVideoImagePreview();
+        overlay.close();
+        setStatus(i18nText('video.image_added'));
+      };
+      grid.appendChild(card);
+    });
+    if (!grid.childElementCount) overlay.showMessage(i18nText('video.gallery_empty'));
+  };
+  if (items === null) overlay.showMessage(i18nText('video.loading_gallery_images'));
+  else overlay.setItems(items);
+  overlay.showModal();
+  close.focus();
+  return overlay;
 }
 
 // 生成视频
@@ -18142,7 +18217,7 @@ function createVideoPreviewPlaceholders(tasks) {
   if (!container) return;
   container.classList.remove('hidden');
   if (emptyEl) emptyEl.style.display = 'none';
-  container.style.display = 'flex';
+  container.style.display = 'grid';
   container.innerHTML = '';
 
   // 清理旧占位符
@@ -18158,10 +18233,13 @@ function createVideoPreviewPlaceholders(tasks) {
     card.className = 'fade-in prev-card generating';
     card.id = 'vprev_ph_' + task.provider_id;
 
-    // 占位区：转圈动效（和图片预览一样的 4:3 比例）
+    // 占位区：复用生图的阶段提示和动态轨道，不伪造精确百分比
     var ph = document.createElement('div');
-    ph.className = 'prev-placeholder';
-    ph.innerHTML = '<div class="spinner"></div><div class="ph-text">' + escHtml(provName) + '</div>';
+    ph.className = 'prev-placeholder generation-placeholder';
+    ph.setAttribute('aria-busy', 'true');
+    ph.innerHTML =
+      '<div class="generation-placeholder-label ph-text">' + escHtml(provName) + ' \u00B7 \u51C6\u5907\u4E2D</div>' +
+      '<div class="generation-placeholder-track" aria-hidden="true"><span></span></div>';
     card.appendChild(ph);
 
     // 底部信息

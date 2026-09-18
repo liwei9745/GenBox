@@ -802,3 +802,36 @@ failure-path tests demonstrate that unverified artifacts cannot execute.
 - Browser mirror selection and arbitrary download routing are retired.
 - Release availability remains informational. Users verify and install from the
   canonical GitHub Release manually until the signed update chain exists.
+
+## ADR-028: Video Workbench Separates Local Editing From Online Model Adapters
+
+**Status:** Accepted direction; detailed contracts remain draft
+**Date:** 2026-09-18
+
+### Context
+
+The user approved an independent video workbench, external media import,
+GenBox library reuse and future support for additional online editing models.
+Existing generation support does not establish uploaded-video-edit support.
+
+### Decision
+
+Keep non-destructive local editing/project/render operations independent from
+online AI. Use provider-neutral edit intents and explicitly qualified adapters;
+Google is the first candidate, not a universal API. Model discovery or an
+OpenAI-compatible endpoint never self-grants video-editing capability.
+Retain originals and candidate lineage; no automatic paid retries or implicit
+cloud-upload consent. Existing image/video generation behavior is protected by
+regression gates. No local generative model deployment is required.
+
+Use one coordinating development workflow with bounded specialist assignments
+and independent verification. Existing authoritative docs outrank generated task
+plans; tool/role templates cannot override project authorization or safety.
+
+### Consequences
+
+The workbench has WB-0 through WB-4 phases and the contracts linked from
+[its PRD](VIDEO-WORKBENCH-PRD.md). Engine selection, limits and exact schemas
+remain WB-0 decisions. A second fake adapter tests interface separation but
+does not count as a second supported live model. No implementation, live edit
+acceptance or tool migration is implied by this decision.

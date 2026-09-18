@@ -6322,7 +6322,7 @@ async def video_generate(req: VideoGenerateRequest):
 def _start_google_video(req, provider, endpoint):
     import threading
     from providers import _get_proxy_url
-    from providers.google_video import build_request, run_generation, GoogleVideoError
+    from providers.google_video import build_request, run_generation, GoogleVideoError, safe_failure
 
     if not endpoint or not endpoint.key:
         raise HTTPException(status_code=400, detail="Google 视频 API Key 未配置。")
@@ -6362,9 +6362,10 @@ def _start_google_video(req, provider, endpoint):
         except GoogleVideoError as exc:
             if not cancelled():
                 info.update(status="failed", error=str(exc))
-        except Exception:
+        except Exception as exc:
             if not cancelled():
-                info.update(status="failed", error="Google 视频连接或响应处理失败；未自动重试生成。")
+                failed_stage = "下载保存" if info["status"] == "downloading" else "本地处理"
+                info.update(status="failed", error=str(safe_failure(exc, failed_stage)))
         finally:
             _save_video_history_entry(info)
 
