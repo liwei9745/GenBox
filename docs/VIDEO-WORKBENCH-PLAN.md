@@ -41,6 +41,28 @@ implementation to avoid an unresolved current gate.
 
 All implementation and acceptance below is pending.
 
+## Stage Goals
+
+The workbench is advanced by evidence-backed stage goals. A stage is complete
+only when its exit evidence is recorded; a document draft, UI mockup, catalog
+entry or fake adapter is not implementation evidence.
+
+| Stage | Goal | Required evidence | Exit decision |
+| --- | --- | --- | --- |
+| G0 Release baseline | Keep v2.6.12 reproducible and separate from workbench scope | Merged release, hosted checks, client/container assets, status record | Baseline is frozen; no WB code is mixed into release repair work |
+| G1 Media feasibility (W0.2) | Prove the local media path can import, probe, proxy and render bounded synthetic assets | Codec/engine matrix, resource limits, synthetic render report, dependency risks | Choose the supported local media engine and limits |
+| G2 AI feasibility (W0.3) | Define a provider-neutral online edit contract and qualify the first evidence-backed adapter boundary | Official-source review, canonical intents, capability matrix, privacy/recovery matrix, no-paid-call fixture tests | Freeze adapter contract; keep unsupported capabilities explicit |
+| G3 UX feasibility (W0.4) | Validate the smallest usable editor workflow before implementation | Low-fidelity flow, state matrix, consent/error states, performance envelope | Freeze the WB-1 interaction path and measurable UX constraints |
+| G4 Contract review (W0.5) | Consolidate G1-G3 into implementation-ready contracts and ownership packets | Reviewed project schema, asset identity, limits, error enum, ownership map and task packets | Authorize WB-1 only after coordinator and independent review pass |
+| G5 Asset vertical slice (WB-1) | Import external media and select GenBox library assets into restart-safe projects | Browser journey, persistence/restart evidence, malformed/disk-full/auth tests | Authorize WB-2 local editing |
+| G6 Local editing slice (WB-2) | Deliver non-destructive trim/split/reorder/save/export without online AI | Mixed-media render, A/V sync, revision and conflict evidence | Authorize WB-3 online editing |
+| G7 Online editing (WB-3) | Add bounded provider adapters, presets and candidate comparison | Fake second adapter, recovery tests, authorized live evidence | Authorize WB-4 integration and packaging |
+| G8 Integrated delivery (WB-4) | Verify the complete workbench across supported targets and release boundaries | Independent review, regression, performance, packaging and clean-install evidence | Release or return to the failed stage |
+
+The current objective is **G1-G4 only**. No WB-1 implementation, paid
+generation call, private-media upload or provider-specific UI is authorized
+until G4 passes.
+
 ## WB-0: Preparation
 
 | Task | Owner | Dependencies | Deliverable |
