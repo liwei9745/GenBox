@@ -45,7 +45,8 @@
   with byte rehash, and atomic asset publication with a private manifest.
 - **VERIFIED / LOCAL:** `python -m pytest
   tests/test_video_workbench_media.py tests/test_video_workbench_wb1_contracts.py
-  -q` -> `22 passed`.
+  -q` -> `23 passed` (20 media, 3 contract), including publication-rollback
+  hardening.
 - **VERIFIED / REGRESSION:** `python -m pytest
   tests/test_google_native_video.py tests/test_gemini_official_diagnostics.py
   tests/test_provider_model_categories.py -q` -> `131 passed`; browser video

@@ -521,6 +521,9 @@ class MediaIngestManager:
             raise _fail("invalid_request", "lookup", field="content_sha256")
         if not self.assets_root.exists():
             return None
+        if self.assets_root.is_symlink() or not self.assets_root.is_dir():
+            raise _fail("internal", "lookup")
+        self._assert_confined(self.assets_root, self.root)
         for directory in self.assets_root.iterdir():
             if not directory.is_dir() or directory.is_symlink():
                 continue
@@ -557,8 +560,11 @@ class MediaIngestManager:
         manifest = directory / "asset.json"
         temp_original: Optional[Path] = None
         temp_manifest: Optional[Path] = None
+        published = False
+        directory_created = False
         try:
             directory.mkdir(parents=False)
+            directory_created = True
             self._assert_confined(directory, self.assets_root)
             fd, raw_original = tempfile.mkstemp(prefix=".original-", suffix=".tmp", dir=directory)
             temp_original = Path(raw_original)
@@ -595,6 +601,7 @@ class MediaIngestManager:
                 os.fsync(output.fileno())
             os.replace(temp_manifest, manifest)
             temp_manifest = None
+            published = True
             self.cleanup_staged(staged)
             return record
         except MediaIngestError:
@@ -606,6 +613,17 @@ class MediaIngestManager:
                 temp_original.unlink(missing_ok=True)
             if temp_manifest is not None:
                 temp_manifest.unlink(missing_ok=True)
+            if directory_created and not published and directory.exists() and not directory.is_symlink():
+                for owned_path in (manifest, original):
+                    if owned_path.exists() and not owned_path.is_symlink():
+                        owned_path.unlink(missing_ok=True)
+                try:
+                    directory.rmdir()
+                except OSError:
+                    # A failed publication must not hide its original error.
+                    # The directory is still confined and contains no public
+                    # manifest, so a later orphan-recovery pass may remove it.
+                    pass
 
     def import_content(
         self,

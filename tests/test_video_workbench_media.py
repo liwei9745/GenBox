@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from video_workbench.media import MediaIngestError, MediaIngestManager, MediaLimits
+import video_workbench.media.ingest as ingest_module
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "video_workbench"
@@ -78,6 +79,36 @@ def test_duplicate_lookup_rejects_tampered_published_bytes(tmp_path: Path) -> No
     manifests = list(manager.assets_root.glob("*/asset.json"))
     assert len(manifests) == 1
     assert json.loads(manifests[0].read_text(encoding="utf-8"))["content_sha256"] == record.content_sha256
+
+
+def test_failed_manifest_publication_leaves_no_visible_partial_asset(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = _manager(tmp_path)
+    staged = manager.stage_stream(
+        "job-publication-failure",
+        "clip.mp4",
+        (FIXTURES / "cfr-h264.mp4").read_bytes(),
+    )
+    metadata = manager.probe(staged)
+    real_replace = ingest_module.os.replace
+    calls = 0
+
+    def fail_manifest(source, target):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("synthetic manifest failure")
+        return real_replace(source, target)
+
+    monkeypatch.setattr(ingest_module.os, "replace", fail_manifest)
+    with pytest.raises(MediaIngestError) as caught:
+        manager.publish(staged, metadata, asset_id="ast_publication_failure")
+
+    assert caught.value.code == "disk_space"
+    assert not (manager.assets_root / "ast_publication_failure" / "asset.json").exists()
+    manager.cleanup_staged(staged)
 
 
 @pytest.mark.parametrize(
