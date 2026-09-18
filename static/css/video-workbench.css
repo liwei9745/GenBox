@@ -777,6 +777,8 @@
     flex-direction: column;
     overflow: visible;
     flex: 1 0 auto;
+    width: 100%;
+    min-width: 0;
   }
   #pageVideo .video-preview-frame {
     flex: 0 0 280px;
