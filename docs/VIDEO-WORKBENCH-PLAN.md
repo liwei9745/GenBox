@@ -1,6 +1,6 @@
 # Video Workbench Development Plan
 
-Date: 2026-09-18. Revision: 0.1.
+Date: 2026-09-18. Revision: 0.2.
 Current primary objective: WB-0 scope/contract preparation only.
 Authorization: write planning documents and collaboration strategy; no paid
 calls, implementation, tool installation, release, or deployment in this task.
@@ -33,7 +33,7 @@ implementation to avoid an unresolved current gate.
 
 | Phase | Status | Exit gate |
 | --- | --- | --- |
-| WB-0 | In Progress: document drafts written; review/spikes NOT RUN | Approved scope, frozen schemas/limits, evidence-backed feasibility |
+| WB-0 | In Progress: W0.2/W0.4 evidence complete; W0.3 research complete; W0.5 blockers open | Approved scope, frozen schemas/limits, evidence-backed feasibility |
 | WB-1 | Planned | VA-01 through VA-04; applicable VA-12/13 |
 | WB-2 | Planned | VA-05 through VA-07, local part of VA-15/20 |
 | WB-3 | Planned | VA-08 through VA-11, VA-17 through VA-19; applicable VA-12/13 |
@@ -149,8 +149,18 @@ recipes and confirmed-cost batches. Each needs its own requirements and gates.
 
 ## Current Handoff
 
-W0.1: Drafted, awaiting document review; not phase acceptance.
-W0.2-W0.5: Not started. No delegated implementation agents or live trials.
-Next action: review the scope and open WB-0 decisions, then prepare bounded
-research/spike task packets. Do not silently launch paid calls or auto-upgrade
-GSD/Agency tools. Retain existing user changes and release handoff in STATUS.
+W0.1: Complete as the planning baseline.
+W0.2: Evidence report complete; cross-target packaging, exact limits and
+FFmpeg licensing remain open.
+W0.3: Official-source research report complete; live source-video editing,
+remote-handle recovery and provider qualification remain blocked.
+W0.4: Low-fidelity UX report complete; measured shell dimensions and browser
+smoke evidence remain open.
+W0.5: Review recorded in
+[VIDEO-WORKBENCH-W0.5-REVIEW.md](VIDEO-WORKBENCH-W0.5-REVIEW.md);
+WB-1 is not authorized.
+
+Next action: resolve the W0.5 blocker table, then rerun independent review.
+Only a W0.5 pass may authorize WB-1 implementation packets. Do not silently
+launch paid calls, upload private media, or auto-upgrade GSD/Agency tools.
+Retain existing user changes and release handoff in STATUS.
