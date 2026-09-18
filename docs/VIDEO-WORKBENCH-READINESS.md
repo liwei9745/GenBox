@@ -1,7 +1,7 @@
 # Video Workbench WB-0 Readiness Review
 
-Date: 2026-09-18. Revision: 0.4.
-Status: **WB-0 PASS; WB-1 implementation plan in review; code not started.**
+Date: 2026-09-19. Revision: 0.5.
+Status: **WB-0 PASS; W1-0/W1-1 PASS; W1-2 implementation not started.**
 
 ## Review Scope
 
@@ -21,7 +21,7 @@ editing support.
 | Interaction and responsive UX | `VIDEO-WORKBENCH-UX.md` | ALIGNED; W0.4 low-fidelity report complete |
 | Acceptance and evidence rules | `VIDEO-WORKBENCH-ACCEPTANCE.md` | WB-0 gates PASS; implementation cases NOT RUN |
 | Phase dependencies and gates | `VIDEO-WORKBENCH-PLAN.md` / `ROADMAP.md` | ALIGNED |
-| Agent ownership and handoff | `VIDEO-WORKBENCH-TEAM.md` / `VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md` | FROZEN packets; plan in review; implementation not started |
+| Agent ownership and handoff | `VIDEO-WORKBENCH-TEAM.md` / `VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md` | W1-0/W1-1 PASS; media/project packets ready; implementation not started |
 
 The v2.6.12 UI changes remain inside the existing generation/video composer.
 They do not create WB-1 asset storage, project persistence, timeline editing,
@@ -82,11 +82,10 @@ interface coverage, not live provider support.
 ## Gate Result
 
 - **WB-0:** **PASS**; W0.2-W0.5 evidence and planning contracts are frozen.
-- **WB-1:** **PLAN IN REVIEW; implementation not started**. Its local evidence
-  gates remain required before WB-2.
+- **WB-1:** **W1-0/W1-1 PASS; W1-2 implementation not started**. Its local
+  evidence gates remain required before WB-2.
 - **v2.6.12 release:** independent from the workbench; it contains only the
   accepted video composer/diagnostic repairs and documentation baseline.
-- **Next safe action:** review the detailed WB-1 implementation plan, execute
-  W1-0/W1-1 on a clean branch based on the latest `origin/master`, then dispatch
-  only the frozen packets. Do not enable online editing or claim packaged
-  support.
+- **Next safe action:** dispatch only `WB1-MEDIA` and `WB1-PROJECT` from the
+  clean branch and shared fixture packet. Do not enable online editing or claim
+  packaged support.

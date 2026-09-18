@@ -1,9 +1,10 @@
 # Video Workbench Development Plan
 
-Date: 2026-09-18. Revision: 0.3.
-Current primary objective: WB-1 implementation strategy and plan review.
-Authorization: write and review planning documents; no WB-1 business code,
-paid calls, private-media upload, tool installation, release, or deployment.
+Date: 2026-09-19. Revision: 0.4.
+Current primary objective: WB-1 W1-2 media/project implementation dispatch.
+Authorization: W1-0/W1-1 preparation is complete; only the bounded WB1-MEDIA
+and WB1-PROJECT packets may now be dispatched. No provider work, paid calls,
+private-media upload, release, or deployment.
 
 ## Reading And Authority
 
@@ -35,7 +36,7 @@ only after that phase's plan and evidence gates pass.
 | Phase | Status | Exit gate |
 | --- | --- | --- |
 | WB-0 | **Complete (2026-09-18): W0.2-W0.5 evidence and planning freeze accepted** | Approved scope, frozen schemas/limits, evidence-backed feasibility |
-| WB-1 | **Plan in review; code not started** | VA-01 through VA-04; applicable VA-12/13 |
+| WB-1 | **In progress: W1-0/W1-1 complete; W1-2 not started** | VA-01 through VA-04; applicable VA-12/13 |
 | WB-2 | Planned | VA-05 through VA-07, local part of VA-15/20 |
 | WB-3 | Planned | VA-08 through VA-11, VA-17 through VA-19; applicable VA-12/13 |
 | WB-4 | Planned | All required cases, regressions, packaging and independent review |
@@ -60,10 +61,9 @@ entry or fake adapter is not implementation evidence.
 | G7 Online editing (WB-3) | Add bounded provider adapters, presets and candidate comparison | Fake second adapter, recovery tests, authorized live evidence | Authorize WB-4 integration and packaging |
 | G8 Integrated delivery (WB-4) | Verify the complete workbench across supported targets and release boundaries | Independent review, regression, performance, packaging and clean-install evidence | Release or return to the failed stage |
 
-G1-G4 are complete. The current objective is to review the detailed WB-1
-implementation plan and then execute only its W1-0/W1-1 preparation tasks.
-No WB-1 business code, paid generation call, private-media upload or
-provider-specific UI is authorized in this planning step.
+G1-G4 are complete. W1-0/W1-1 are now complete on the isolated WB-1 branch.
+The current objective is to dispatch the bounded media and project packets.
+No online Provider work or paid generation call is authorized.
 
 ## WB-0: Preparation
 
@@ -166,12 +166,12 @@ W0.4: Low-fidelity UX baseline frozen; browser journey evidence remains
 implementation acceptance.
 W0.5: PASS recorded in
 [VIDEO-WORKBENCH-W0.5-REVIEW.md](VIDEO-WORKBENCH-W0.5-REVIEW.md);
-WB-1 detailed implementation plan is drafted for review; implementation has not
+W1-0/W1-1 preparation is complete; W1-2 business implementation has not
 started.
 
-Next action: review
-[VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md](VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md),
-then execute W1-0 and W1-1 on a clean branch based on the latest `origin/master`.
+Next action: dispatch `WB1-MEDIA` and `WB1-PROJECT` from the clean branch
+described in
+[VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md](VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md).
 Do not silently launch paid calls, upload private media, or auto-upgrade
 GSD/Agency tools.
 Retain existing user changes and release handoff in STATUS.

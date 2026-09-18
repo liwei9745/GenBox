@@ -1,0 +1,99 @@
+{
+  "contract_revision": "VIDEO-WORKBENCH-CONTRACT.md@0.2",
+  "asset_view": {
+    "asset_id": "ast_synthetic_video_01",
+    "kind": "video",
+    "origin": "upload",
+    "content_sha256": "sha256:511d06b5a15b2d3609aaf35bb14cb9ff68b528c50f07143f7ac68bb7e935593f",
+    "byte_length": 198310,
+    "state": "ready",
+    "metadata": {
+      "format": "mp4",
+      "video_codec": "h264",
+      "width": 640,
+      "height": 360,
+      "duration_us": 2000000,
+      "time_base": {"num": 1, "den": 15360},
+      "audio_streams": 0,
+      "rotation": 0
+    },
+    "preview_revision": 1
+  },
+  "library_registration_request": {
+    "library_kind": "video",
+    "library_item_id": "gallery_exact_id",
+    "expected_sha256": null
+  },
+  "project_view": {
+    "schema_version": 1,
+    "project_id": "prj_synthetic_01",
+    "revision": 1,
+    "title": "Synthetic import smoke",
+    "output_profile": {
+      "profile_id": "landscape_1080p_30",
+      "canvas": {"width": 1920, "height": 1080},
+      "fps": {"num": 30, "den": 1},
+      "fit_mode": "contain"
+    },
+    "asset_refs": [
+      {
+        "asset_id": "ast_synthetic_video_01",
+        "kind": "video",
+        "digest": "sha256:511d06b5a15b2d3609aaf35bb14cb9ff68b528c50f07143f7ac68bb7e935593f"
+      }
+    ],
+    "tracks": [
+      {"track_id": "trk_picture", "kind": "picture", "clips": []},
+      {"track_id": "trk_audio", "kind": "audio", "clips": []}
+    ],
+    "candidate_refs": [],
+    "created_at": "2026-09-18T00:00:00Z",
+    "updated_at": "2026-09-18T00:00:00Z"
+  },
+  "job_view": {
+    "job_id": "job_synthetic_import_01",
+    "operation": "import",
+    "state": "preparing",
+    "stage": "probe",
+    "progress": null,
+    "asset_ids": [],
+    "project_id": null,
+    "request_id": "req_synthetic_import_01",
+    "created_at": "2026-09-18T00:00:00Z",
+    "updated_at": "2026-09-18T00:00:01Z"
+  },
+  "error_codes": [
+    "invalid_request",
+    "auth_required",
+    "forbidden",
+    "not_found",
+    "conflict",
+    "unsupported_media",
+    "media_corrupt",
+    "asset_too_large",
+    "dimension_limit",
+    "duration_limit",
+    "probe_timeout",
+    "dependency_missing",
+    "disk_space",
+    "job_not_found",
+    "job_cancelled",
+    "cleanup_pending",
+    "provider_unavailable",
+    "unsupported_capability",
+    "consent_required",
+    "submission_unknown",
+    "remote_failed",
+    "invalid_result",
+    "internal"
+  ],
+  "auth_matrix": [
+    {"operation": "import_external", "auth": true, "csrf": true, "ownership": "request_or_job_owner", "path_rule": "multipart_only"},
+    {"operation": "register_library", "auth": true, "csrf": true, "ownership": "visible_exact_library_item", "path_rule": "no_substring_or_path"},
+    {"operation": "list_assets", "auth": true, "csrf": false, "ownership": "owner_scoped", "path_rule": "preview_handle_only"},
+    {"operation": "create_read_project", "auth": true, "csrf": true, "ownership": "project_owner", "path_rule": "opaque_project_id"},
+    {"operation": "save_project", "auth": true, "csrf": true, "ownership": "project_owner_revision", "path_rule": "no_absolute_paths"},
+    {"operation": "read_cancel_job", "auth": true, "csrf": true, "ownership": "job_owner", "path_rule": "opaque_job_id"},
+    {"operation": "media_delivery", "auth": true, "csrf": false, "ownership": "referenced_asset_owner", "path_rule": "confined_final_path"}
+  ]
+}

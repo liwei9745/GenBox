@@ -1,7 +1,7 @@
 # Video Workbench WB-1 Implementation Plan
 
-Date: 2026-09-18. Revision: 0.1.
-Status: **Draft for coordinator review; no WB-1 code has started.**
+Date: 2026-09-19. Revision: 0.2.
+Status: **W1-0/W1-1 complete; W1-2 implementation not started.**
 
 This plan turns the frozen WB-0 contracts into an executable implementation
 strategy for the first vertical slice. It is subordinate to
@@ -260,9 +260,17 @@ WB-1 may advance to WB-2 only when all of the following are recorded:
 Passing this gate authorizes WB-2 local editing only. It does not authorize
 online provider work, real video edits or a release.
 
-## 10. Immediate Next Action
+## 10. Current Execution State
 
-Review this plan against the frozen WB-0 contracts. After approval, execute
-W1-0 and W1-1, then dispatch only WB1-MEDIA and WB1-PROJECT. Dispatch WB1-UI
-after the route DTOs and fixture server are stable; run WB1-REVIEW only at the
-first integrated checkpoint.
+W1-0 and W1-1 are complete on the isolated branch
+`codex/wb1-baseline-20260918`, based on `origin/master` at `02ce25e`.
+The shared fixture/DTO/error/auth packet is recorded in
+[VIDEO-WORKBENCH-WB1-FIXTURES.md](VIDEO-WORKBENCH-WB1-FIXTURES.md).
+No WB-1 business module or route has been implemented.
+
+## 11. Immediate Next Action
+
+Dispatch only `WB1-MEDIA` and `WB1-PROJECT` from this baseline. Keep their
+scope limited to the frozen contract. Dispatch `WB1-UI` after route DTOs and
+the fixture server are stable; run `WB1-REVIEW` only at the first integrated
+checkpoint.

@@ -1,29 +1,37 @@
 # Current Project Status
 
-## Active Goal: WB-1 Implementation Strategy (In Progress)
+## Active Goal: WB-1 W1-0/W1-1 Preparation (Complete)
 
-- **GOAL:** Review and sequence the WB-1 asset/project implementation plan from
-  the frozen WB-0 contracts; establish task packets, branch rules, evidence
-  gates and stop conditions before business code starts.
-- **CURRENT STAGE:** The detailed WB-1 plan is drafted on 2026-09-18.
-  W1-0 baseline/branch preparation and W1-1 shared fixtures/interfaces are not
-  started. No WB-1 business implementation has started.
+- **GOAL:** Establish an isolated WB-1 baseline and freeze shared synthetic
+  fixtures, DTOs, error codes and auth/ownership expectations.
+- **CURRENT STAGE:** W1-0 and W1-1 passed on 2026-09-19. The clean branch is
+  `codex/wb1-baseline-20260918`, based on `origin/master` at `02ce25e`.
+  No WB-1 business implementation has started.
 - **GUARDRAILS:** Use synthetic local fixtures only, make no paid generation
   calls, do not upload private media, keep existing generation routes unchanged,
   and keep shared contracts/status/release files under coordinator ownership.
-- **EXIT CONDITION:** Plan review passes, then W1-0 and W1-1 evidence is
-  recorded; only then may the bounded WB1-MEDIA/WB1-PROJECT packets become ready.
+- **EXIT CONDITION:** **MET** on 2026-09-19. The bounded WB1-MEDIA and
+  WB1-PROJECT packets are now ready; W1-2 implementation remains a separate
+  target.
 
-## 2026-09-18 WB-1 Strategy Draft
+## 2026-09-19 WB-1 W1-0/W1-1 Evidence
 
-- **DRAFT / LOCAL:** `docs/VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md` defines
-  the G5 objective, requirements VW-01/02/03/04/10/11, VA-01/02/03/04/12/13/
-  15/20 evidence, five execution waves, four ownership packets, verification
-  loop, branch strategy and stop conditions.
+- **VERIFIED / LOCAL:** `python -m pytest tests/test_google_native_video.py
+  tests/test_gemini_official_diagnostics.py tests/test_provider_model_categories.py
+  -q` -> `131 passed in 2.18s`.
+- **VERIFIED / LOCAL:** `python -m pytest tests/test_google_video_browser.py
+  tests/test_video_composer_browser.py tests/test_generation_experience_browser.py
+  -q` -> `78 passed in 147.08s`.
+- **VERIFIED / LOCAL:** `python -m pytest
+  tests/test_video_workbench_wb1_contracts.py -q` -> `3 passed in 1.00s`.
+- **VERIFIED / LOCAL:** `tests/fixtures/video_workbench/manifest.json` matches
+  all checked-in synthetic fixture sizes and SHA-256 digests.
+- **VERIFIED / LOCAL:** `docs/VIDEO-WORKBENCH-WB1-FIXTURES.md` freezes the
+  shared DTO, error and auth matrix for both backend packets.
 - **BOUNDARY:** This is planning evidence only. There is no WB-1 route, media
   worker, project store, UI or provider adapter claim.
-- **NEXT:** Review the plan, create a clean `codex/` branch from the latest
-  `origin/master`, then run W1-0/W1-1. Keep provider work deferred to WB-3.
+- **NEXT:** Dispatch `WB1-MEDIA` and `WB1-PROJECT` from the clean branch. Keep
+  provider work deferred to WB-3.
 
 ## 2026-09-18 v2.6.12 Release And WB-0 Readiness
 

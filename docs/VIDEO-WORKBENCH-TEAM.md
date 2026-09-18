@@ -1,7 +1,7 @@
 # Video Workbench Agent Collaboration Protocol
 
-Date: 2026-09-18. Revision: 0.3.
-Status: **Frozen protocol; WB-1 implementation plan in review; code not started.**
+Date: 2026-09-19. Revision: 0.4.
+Status: **Frozen protocol; W1-0/W1-1 complete; WB1-MEDIA/WB1-PROJECT ready.**
 
 ## Operating Model
 
@@ -151,4 +151,7 @@ revision from WB-0.
 
 The detailed wave order, dependencies, exit evidence and stop conditions are
 defined in [VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md](VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md).
-The plan must be reviewed before any packet changes from `planned` to `ready`.
+W1-0/W1-1 evidence has been recorded in
+[VIDEO-WORKBENCH-WB1-FIXTURES.md](VIDEO-WORKBENCH-WB1-FIXTURES.md). The
+`WB1-MEDIA` and `WB1-PROJECT` packets may now change from `planned` to `ready`;
+`WB1-UI` remains dependent on stable route DTOs and fixture-server behavior.

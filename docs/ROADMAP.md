@@ -14,7 +14,7 @@ Existing extension and release obligations retain their recorded status.
 | Phase | Status | Gate |
 | --- | --- | --- |
 | WB-0: Scope, contracts and feasibility | **Complete (2026-09-18)** | W0.2-W0.5 evidence, frozen scope/contracts/limits/acceptance/ownership |
-| WB-1: Assets and projects | In Progress (planning only) | External/library import and durable project acceptance |
+| WB-1: Assets and projects | In Progress (W1-0/W1-1 complete; W1-2 not started) | External/library import and durable project acceptance |
 | WB-2: Basic editing and export | Planned | Non-destructive timeline and real rendered output |
 | WB-3: Online editing and provider extensions | Planned | Qualified adapter, candidate workflow and authorized live edit |
 | WB-4: Integrated acceptance | Planned | Regression, independent review and packaged-runtime evidence |

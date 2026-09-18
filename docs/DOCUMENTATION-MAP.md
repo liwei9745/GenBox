@@ -61,6 +61,7 @@ not establish real Provider, cutout quality, or cross-environment E2E.
 | [`docs/STATUS.md`](STATUS.md) | Dated current evidence, blockers, boundaries, and resume point | Compare claims with code/tests; label external facts `VERIFIED`, `UNVERIFIED`, or `USER-CONFIRMED` |
 | [`docs/ROADMAP.md`](ROADMAP.md) | Phase order, topic contracts, deliverables, and acceptance criteria | Change phase status only when evidence satisfies its gate |
 | [`docs/VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md`](VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md) | WB-1 task waves, Agent packets, evidence gates, and stop conditions | Update only when the frozen WB-1 strategy or ownership changes |
+| [`docs/VIDEO-WORKBENCH-WB1-FIXTURES.md`](VIDEO-WORKBENCH-WB1-FIXTURES.md) | W1-1 synthetic fixtures, shared DTOs, error codes, and auth matrix | Update when the accepted WB-1 fixture or interface contract changes |
 | [`CHANGELOG.md`](../CHANGELOG.md) | Version-level user-visible changes and `Unreleased` | Add product changes; avoid session narration |
 | [`HANDOFF.md`](../HANDOFF.md) | Immediate objective and short resume context | Rewrite after substantial work; never treat it as product truth |
 
