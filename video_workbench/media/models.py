@@ -137,3 +137,23 @@ class AssetRecord:
             "preview_revision": self.preview_revision,
         }
 
+
+@dataclass(frozen=True)
+class DerivedMedia:
+    """A private derived artifact, such as a thumbnail or proxy."""
+
+    asset_id: str
+    kind: str
+    preview_revision: int
+    byte_length: int
+    content_sha256: str
+    path: Path = field(repr=False, compare=False)
+
+    def as_view(self) -> dict[str, Any]:
+        return {
+            "asset_id": self.asset_id,
+            "kind": self.kind,
+            "preview_revision": self.preview_revision,
+            "byte_length": self.byte_length,
+            "content_sha256": f"sha256:{self.content_sha256}",
+        }

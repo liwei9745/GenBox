@@ -111,6 +111,58 @@ def test_failed_manifest_publication_leaves_no_visible_partial_asset(
     manager.cleanup_staged(staged)
 
 
+def test_thumbnail_is_bounded_atomic_and_reused(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    record = manager.import_content(
+        "job-thumbnail",
+        "clip.mp4",
+        (FIXTURES / "cfr-h264.mp4").read_bytes(),
+    )
+
+    first = manager.derive_thumbnail(record)
+    second = manager.derive_thumbnail(record)
+
+    assert first.path.is_file()
+    assert first.path == second.path
+    assert first.content_sha256 == second.content_sha256
+    assert first.as_view()["content_sha256"].startswith("sha256:")
+    assert str(first.path) not in str(first.as_view())
+    from PIL import Image
+
+    with Image.open(first.path) as image:
+        assert image.format == "JPEG"
+        assert image.width <= 320
+        assert image.height <= 180
+
+
+def test_audio_thumbnail_is_explicitly_unsupported(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    record = manager.import_content(
+        "job-audio-thumbnail",
+        "voice.wav",
+        (FIXTURES / "audio-pcm.wav").read_bytes(),
+    )
+
+    with pytest.raises(MediaIngestError) as caught:
+        manager.derive_thumbnail(record)
+    assert caught.value.code == "unsupported_capability"
+    assert caught.value.stage == "thumbnail"
+
+
+def test_missing_ffmpeg_dependency_is_actionable(tmp_path: Path) -> None:
+    manager = _manager(tmp_path, ffmpeg="definitely-not-an-installed-ffmpeg")
+    record = manager.import_content(
+        "job-no-ffmpeg",
+        "clip.mp4",
+        (FIXTURES / "cfr-h264.mp4").read_bytes(),
+    )
+
+    with pytest.raises(MediaIngestError) as caught:
+        manager.derive_thumbnail(record)
+    assert caught.value.code == "dependency_missing"
+    assert caught.value.stage == "thumbnail"
+
+
 @pytest.mark.parametrize(
     ("filename", "fixture_name", "code", "stage"),
     [

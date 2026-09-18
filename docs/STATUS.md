@@ -42,18 +42,19 @@
   staging, safe filename/kind admission, streamed SHA-256 hashing, bounded
   batch limits, external `ffprobe` invocation with `stdin=DEVNULL`, sanitized
   error codes, codec/container/stream/dimension/audio checks, duplicate lookup
-  with byte rehash, and atomic asset publication with a private manifest.
+  with byte rehash, atomic asset publication with a private manifest, and
+  bounded JPEG thumbnail derivation with atomic cache reuse.
 - **VERIFIED / LOCAL:** `python -m pytest
   tests/test_video_workbench_media.py tests/test_video_workbench_wb1_contracts.py
-  -q` -> `23 passed` (20 media, 3 contract), including publication-rollback
-  hardening.
+  -q` -> `26 passed` (23 media, 3 contract), including publication-rollback
+  and thumbnail hardening.
 - **VERIFIED / REGRESSION:** `python -m pytest
   tests/test_google_native_video.py tests/test_gemini_official_diagnostics.py
   tests/test_provider_model_categories.py -q` -> `131 passed`; browser video
   regression -> `78 passed`.
 - **BOUNDARY:** This slice has no FastAPI route, authentication wiring,
-  library registration, thumbnail/proxy worker, project store, UI or Provider
-  call. It does not complete WB-1.
+  library registration, proxy worker, project store, UI or Provider call. It
+  does not complete WB-1.
 - **RESUME:** Continue only in `video_workbench/media/` and matching tests.
   Shared `main.py`, route registration and frozen DTO changes require a review
   gate before editing.

@@ -232,5 +232,6 @@ generation, user media or source deletion. Browser regression is baseline
 evidence only; it is not WB-1 acceptance.
 
 The W1-2 media slice additionally uses only checked-in synthetic fixtures and
-local temporary directories. Its focused evidence is recorded in `STATUS.md`;
-it does not change this shared DTO/error/auth vocabulary.
+local temporary directories for admission, probing, publication and thumbnail
+derivation. Its focused evidence is recorded in `STATUS.md`; it does not
+change this shared DTO/error/auth vocabulary.

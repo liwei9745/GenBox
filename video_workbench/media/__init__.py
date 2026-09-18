@@ -2,10 +2,11 @@
 
 from .errors import MediaIngestError, MediaProblem
 from .ingest import MediaIngestManager
-from .models import AssetRecord, MediaLimits, ProbeMetadata, StagedMedia
+from .models import AssetRecord, DerivedMedia, MediaLimits, ProbeMetadata, StagedMedia
 
 __all__ = [
     "AssetRecord",
+    "DerivedMedia",
     "MediaIngestError",
     "MediaIngestManager",
     "MediaLimits",
@@ -13,4 +14,3 @@ __all__ = [
     "ProbeMetadata",
     "StagedMedia",
 ]
-

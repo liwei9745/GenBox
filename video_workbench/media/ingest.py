@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Iterable, Iterator, Mapping, Optional
 
 from .errors import MediaIngestError, media_error
-from .models import AssetRecord, MediaKind, MediaLimits, ProbeMetadata, StagedMedia
+from .models import AssetRecord, DerivedMedia, MediaKind, MediaLimits, ProbeMetadata, StagedMedia
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
@@ -55,6 +55,7 @@ _SAFE_MESSAGES = {
     "internal": "本地媒体处理失败。",
     "not_found": "素材不存在。",
 }
+_MAX_THUMBNAIL_BYTES = 4 * 1024 * 1024
 
 
 def _message(code: str) -> str:
@@ -197,12 +198,14 @@ class MediaIngestManager:
         root: os.PathLike[str] | str,
         *,
         ffprobe: str = "ffprobe",
+        ffmpeg: str = "ffmpeg",
         limits: Optional[MediaLimits] = None,
     ) -> None:
         self.root = Path(root).resolve()
         self.staging_root = self.root / "staging"
         self.assets_root = self.root / "assets"
         self.ffprobe = str(ffprobe)
+        self.ffmpeg = str(ffmpeg)
         self.limits = limits or MediaLimits()
 
     def _ensure_directory(self, path: Path, *, code: str = "disk_space") -> None:
@@ -623,6 +626,145 @@ class MediaIngestManager:
                     # A failed publication must not hide its original error.
                     # The directory is still confined and contains no public
                     # manifest, so a later orphan-recovery pass may remove it.
+                    pass
+
+    @staticmethod
+    def _hash_file(path: Path) -> tuple[int, str]:
+        digest = hashlib.sha256()
+        total = 0
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                total += len(chunk)
+                digest.update(chunk)
+        return total, digest.hexdigest()
+
+    def _existing_thumbnail(
+        self,
+        target: Path,
+        asset_id: str,
+        revision: int,
+    ) -> Optional[DerivedMedia]:
+        if target.is_symlink() or not target.is_file():
+            return None
+        try:
+            size, digest = self._hash_file(target)
+            if size <= 0 or size > _MAX_THUMBNAIL_BYTES:
+                return None
+            from PIL import Image
+
+            with Image.open(target) as image:
+                image.verify()
+            with Image.open(target) as image:
+                width, height = image.size
+                image_format = image.format
+            if image_format != "JPEG" or width > 320 or height > 180:
+                return None
+            return DerivedMedia(
+                asset_id=asset_id,
+                kind="thumbnail",
+                preview_revision=revision,
+                byte_length=size,
+                content_sha256=digest,
+                path=target,
+            )
+        except (OSError, ValueError):
+            return None
+
+    def derive_thumbnail(
+        self,
+        asset: AssetRecord,
+        *,
+        preview_revision: Optional[int] = None,
+    ) -> DerivedMedia:
+        """Generate a bounded JPEG thumbnail without exposing local paths."""
+
+        if asset.state != "ready" or asset.storage_path is None:
+            raise _fail("not_found", "thumbnail", field="asset_id")
+        if asset.kind == "audio":
+            raise _fail("unsupported_capability", "thumbnail", field="asset_id")
+        source = asset.storage_path
+        self._assert_confined(source, self.assets_root)
+        if source.is_symlink() or not source.is_file():
+            raise _fail("not_found", "thumbnail", field="asset_id")
+        revision = asset.preview_revision if preview_revision is None else int(preview_revision)
+        if revision <= 0:
+            raise _fail("invalid_request", "thumbnail", field="preview_revision")
+        asset_dir = source.parent
+        if asset_dir.is_symlink():
+            raise _fail("internal", "thumbnail")
+        self._assert_confined(asset_dir, self.assets_root)
+        derived_dir = asset_dir / "derived" / str(revision)
+        self._ensure_directory(derived_dir)
+        self._assert_confined(derived_dir, self.assets_root)
+        target = derived_dir / "thumbnail.jpg"
+        if target.is_symlink():
+            raise _fail("internal", "thumbnail")
+        existing = self._existing_thumbnail(target, asset.asset_id, revision)
+        if existing is not None:
+            return existing
+        temporary: Optional[Path] = None
+        try:
+            fd, raw_temp = tempfile.mkstemp(
+                prefix=".thumbnail-",
+                suffix=".jpg",
+                dir=derived_dir,
+            )
+            temporary = Path(raw_temp)
+            os.close(fd)
+            result = subprocess.run(
+                [
+                    self.ffmpeg,
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-i",
+                    str(source),
+                    "-frames:v",
+                    "1",
+                    "-vf",
+                    "scale=320:180:force_original_aspect_ratio=decrease,"
+                    "pad=320:180:(ow-iw)/2:(oh-ih)/2",
+                    "-q:v",
+                    "5",
+                    str(temporary),
+                ],
+                cwd=str(derived_dir),
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=self.limits.probe_timeout_seconds,
+                check=False,
+            )
+        except FileNotFoundError:
+            raise _fail("dependency_missing", "thumbnail") from None
+        except subprocess.TimeoutExpired:
+            raise _fail("probe_timeout", "thumbnail", retryable=True) from None
+        except OSError:
+            raise _fail("dependency_missing", "thumbnail") from None
+        try:
+            if result.returncode != 0 or temporary is None or not temporary.is_file():
+                raise _fail("media_corrupt", "thumbnail", field="asset_id")
+            output = self._existing_thumbnail(temporary, asset.asset_id, revision)
+            if output is None:
+                raise _fail("invalid_result", "thumbnail", field="asset_id")
+            os.replace(temporary, target)
+            temporary = None
+            return DerivedMedia(
+                asset_id=asset.asset_id,
+                kind="thumbnail",
+                preview_revision=revision,
+                byte_length=output.byte_length,
+                content_sha256=output.content_sha256,
+                path=target,
+            )
+        finally:
+            if temporary is not None:
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
                     pass
 
     def import_content(
