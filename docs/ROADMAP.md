@@ -14,7 +14,7 @@ Existing extension and release obligations retain their recorded status.
 | Phase | Status | Gate |
 | --- | --- | --- |
 | WB-0: Scope, contracts and feasibility | **Complete (2026-09-18)** | W0.2-W0.5 evidence, frozen scope/contracts/limits/acceptance/ownership |
-| WB-1: Assets and projects | In Progress (W1-0/W1-1 complete; W1-2 not started) | External/library import and durable project acceptance |
+| WB-1: Assets and projects | In Progress (W1-2 media slice) | External/library import and durable project acceptance |
 | WB-2: Basic editing and export | Planned | Non-destructive timeline and real rendered output |
 | WB-3: Online editing and provider extensions | Planned | Qualified adapter, candidate workflow and authorized live edit |
 | WB-4: Integrated acceptance | Planned | Regression, independent review and packaged-runtime evidence |
@@ -28,9 +28,10 @@ Topic contracts: [PRD](VIDEO-WORKBENCH-PRD.md),
 Execution details and ownership: [plan](VIDEO-WORKBENCH-PLAN.md),
 [team](VIDEO-WORKBENCH-TEAM.md), and the
 [WB-1 implementation packet](VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md).
-WB-0 completion is a documentation and preparation gate only; WB-1
-business implementation has not started and planning documents are not
-implementation evidence.
+WB-0 completion was a documentation and preparation gate. WB-1 now has a
+locally verified media-admission slice on its isolated branch, but the phase
+is not complete: authenticated routes, exact library registration, durable
+projects, UI and full acceptance evidence remain outstanding.
 
 ## Phase 0: Project Fact And Documentation Baseline
 

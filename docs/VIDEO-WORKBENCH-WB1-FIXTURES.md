@@ -1,7 +1,7 @@
 # Video Workbench WB-1 Shared Fixtures And Interfaces
 
-Date: 2026-09-18. Revision: 0.2.
-Status: **W1-0/W1-1 PASS; WB-1 business implementation not started.**
+Date: 2026-09-18. Revision: 0.3.
+Status: **W1-0/W1-1 PASS; WB1-MEDIA first admission slice locally verified.**
 
 This document freezes the shared input vocabulary for the WB-1 media and
 project packets. It is derived from the WB-0 contracts and the synthetic
@@ -211,8 +211,8 @@ W1-1 does not create an endpoint or mark any VA case as passed.
 
 The clean implementation branch is `codex/wb1-baseline-20260918`, based on
 `origin/master` at `02ce25e`. The branch contains the frozen WB-0 documents,
-this W1-1 contract packet and no media worker, project store, workbench route,
-UI or Provider adapter.
+this W1-1 contract packet and the isolated `video_workbench/media/` admission
+slice. It still has no workbench route, project store, UI or Provider adapter.
 
 Observed local commands on 2026-09-18:
 
@@ -230,3 +230,7 @@ python -m pytest tests/test_video_workbench_wb1_contracts.py -q
 The baseline and contract tests used no network fetch, Provider request, paid
 generation, user media or source deletion. Browser regression is baseline
 evidence only; it is not WB-1 acceptance.
+
+The W1-2 media slice additionally uses only checked-in synthetic fixtures and
+local temporary directories. Its focused evidence is recorded in `STATUS.md`;
+it does not change this shared DTO/error/auth vocabulary.

@@ -1,6 +1,6 @@
 # Current Project Status
 
-## Active Goal: WB-1 W1-2 Unattended Preparation (In Progress)
+## Active Goal: WB-1 W1-2 Media Slice (In Progress)
 
 - **GOAL:** Use a bounded unattended protocol to start W1-2 media-asset work
   without crossing production, paid-provider, destructive-data or frozen-
@@ -9,14 +9,16 @@
   autonomous execution protocol was enabled in
   `docs/VIDEO-WORKBENCH-AUTONOMOUS-EXECUTION.md`. The clean branch is
   `codex/wb1-baseline-20260918`, based on `origin/master` at `02ce25e`.
-  W1-2 preparation is active; no WB-1 business implementation has started.
+  The first W1-2 media admission slice is implemented and locally verified;
+  full asset routes, project persistence and UI remain unimplemented.
 - **GUARDRAILS:** Use synthetic local fixtures only, make no paid generation
   calls, do not upload private media, keep existing generation routes unchanged,
   keep shared contracts/status/release files under coordinator ownership, and
   pause for the manual gates in the autonomous execution protocol.
-- **EXIT CONDITION:** W1-0/W1-1 **MET** on 2026-09-18. WB1-MEDIA and
-  WB1-PROJECT remain `ready`; W1-2 implementation requires a bounded slice,
-  focused evidence and coordinator review before it can be marked `accepted`.
+- **EXIT CONDITION:** W1-0/W1-1 **MET** on 2026-09-18. The first
+  `WB1-MEDIA` slice passes focused and existing regressions; the packet remains
+  `running` until publication/cleanup, library registration, route ownership
+  and the full VA-02/VA-04/VA-12/VA-13 evidence are complete.
 
 ## 2026-09-18 Bounded Unattended Execution Enabled
 
@@ -26,13 +28,34 @@
 - **VERIFIED / PROCESS:** The Agent collaboration protocol and WB-1 plan now
   reference the same unattended boundary. This changes workflow control only;
   it does not claim media routes, workers, project storage or UI implementation.
-- **CURRENT:** Begin W1-2 preparation in the isolated branch using synthetic
-  fixtures. No Provider, network upload, private media, production/VPS, source
-  deletion or release action is authorized.
+- **CURRENT:** Continue W1-2 in the isolated branch using synthetic fixtures.
+  No Provider, network upload, private media, production/VPS, source deletion
+  or release action is authorized.
 - **RESUME:** Read the autonomous protocol, verify `git status` and baseline,
-  then inspect the existing media/library storage boundaries before creating
-  the first owned `video_workbench/media/` slice. Stop if a shared entry point
-  or frozen contract must change.
+  then continue from the first owned `video_workbench/media/` slice. The next
+  bounded work is media cleanup/publication hardening; stop if a shared entry
+  point or frozen contract must change.
+
+## 2026-09-18 WB-1 W1-2 Media Admission Slice
+
+- **IMPLEMENTED / LOCAL:** `video_workbench/media/` now provides server-owned
+  staging, safe filename/kind admission, streamed SHA-256 hashing, bounded
+  batch limits, external `ffprobe` invocation with `stdin=DEVNULL`, sanitized
+  error codes, codec/container/stream/dimension/audio checks, duplicate lookup
+  with byte rehash, and atomic asset publication with a private manifest.
+- **VERIFIED / LOCAL:** `python -m pytest
+  tests/test_video_workbench_media.py tests/test_video_workbench_wb1_contracts.py
+  -q` -> `22 passed`.
+- **VERIFIED / REGRESSION:** `python -m pytest
+  tests/test_google_native_video.py tests/test_gemini_official_diagnostics.py
+  tests/test_provider_model_categories.py -q` -> `131 passed`; browser video
+  regression -> `78 passed`.
+- **BOUNDARY:** This slice has no FastAPI route, authentication wiring,
+  library registration, thumbnail/proxy worker, project store, UI or Provider
+  call. It does not complete WB-1.
+- **RESUME:** Continue only in `video_workbench/media/` and matching tests.
+  Shared `main.py`, route registration and frozen DTO changes require a review
+  gate before editing.
 
 ## 2026-09-18 WB-1 W1-0/W1-1 Evidence
 
