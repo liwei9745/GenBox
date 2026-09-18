@@ -115,15 +115,25 @@
     manualHeight = null;
     fit();
   });
-  // Native textarea resizing is deliberate; keep that height on subsequent input.
+  // Keep the native resize affordance, but mirror its corner drag ourselves so
+  // constrained grid/overflow layouts behave consistently across browsers.
   prompt.addEventListener('pointerdown', function (event) {
+    if (event.button !== 0) return;
     var rect = prompt.getBoundingClientRect();
     if (event.clientX < rect.right - 20 || event.clientY < rect.bottom - 20) return;
+    event.preventDefault();
+    var startY = event.clientY;
+    var startHeight = rect.height;
+    function move(moveEvent) {
+      setHeight(startHeight + moveEvent.clientY - startY);
+    }
     function done() {
       setHeight(prompt.getBoundingClientRect().height);
+      window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', done);
       window.removeEventListener('pointercancel', done);
     }
+    window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', done);
     window.addEventListener('pointercancel', done);
   });
