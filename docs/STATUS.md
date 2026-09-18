@@ -1,5 +1,19 @@
 # Current Project Status
 
+## Active Goal: WB-0 Stage Preparation
+
+- **GOAL:** Complete G1-G4 from `docs/VIDEO-WORKBENCH-PLAN.md`: media
+  feasibility, online AI feasibility, UX feasibility, and coordinator/reviewer
+  contract freeze.
+- **CURRENT STAGE:** G1-G3 are ready to dispatch as bounded read-only tasks;
+  G4 follows their evidence. WB-1 implementation is not authorized yet.
+- **GUARDRAILS:** Use synthetic local fixtures only, make no paid generation
+  calls, do not upload private media, and keep shared contracts/status/release
+  files under coordinator ownership.
+- **EXIT CONDITION:** Freeze project/asset schemas, numeric limits, provider
+  intent and error contracts, UX flow, acceptance cases and Agent task packets;
+  then record an explicit WB-0 pass or blocker before starting WB-1.
+
 ## 2026-09-18 v2.6.12 Release And WB-0 Readiness
 
 - **USER-CONFIRMED:** The latest video composer UI repair is ready to
