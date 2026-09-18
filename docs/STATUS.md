@@ -1,28 +1,37 @@
 # Current Project Status
 
-## 2026-09-18 v2.6.12 Release Candidate And WB-0 Readiness
+## 2026-09-18 v2.6.12 Release And WB-0 Readiness
 
 - **USER-CONFIRMED:** The latest video composer UI repair is ready to
   solidify and publish. This is a patch release after the published v2.6.11;
   the existing tag will not be moved.
-- **IMPLEMENTED / LOCAL:** v2.6.12 release identity, bilingual notes, README
-  pointers and Docker defaults are prepared for the reviewed video UI and safe
-  Google diagnostics. No Omni editing or new provider is included.
+- **IMPLEMENTED / RELEASED:** v2.6.12 release identity, bilingual notes,
+  README pointers and Docker defaults are published for the reviewed video UI
+  and safe Google diagnostics. No Omni editing or new provider is included.
 - **VERIFIED / LOCAL:** Full regression after the release-document and selected
   role-contrast fixes: `python -m pytest -q` -> `1844 passed` on 2026-09-18.
   Release packaging tests, JavaScript syntax checks, `py_compile` and
   `git diff --check` also pass.
+- **VERIFIED / HOSTED:** PR #12 passed the Master PR Quality Gate at run
+  `35351050684` after the mobile asset-overlap and prompt-resize fixes, then
+  merged to `master` as `f934562d45abba64bb95e5b9c1144f834e4096b2`.
+- **VERIFIED / RELEASE:** Tag `v2.6.12` points to the merged release commit.
+  Desktop workflow `35351936197` passed release-source tests and Windows,
+  macOS and Linux packaged-runtime smoke tests, and created the GitHub Release.
+  Docker workflow `35351936274` passed exact-image runtime/HTTP smoke tests and
+  published the smoke-tested GHCR image.
+- **VERIFIED / ASSETS:** Release `v2.6.12` contains Windows, macOS, Linux,
+  source, Docker Compose and `SHA256SUMS.txt` assets. The published image is
+  `ghcr.io/liwei9745/genbox:2.6.12`.
 - **VERIFIED / DOCUMENTS:** `docs/VIDEO-WORKBENCH-READINESS.md` audits the
   PRD, contracts, acceptance matrix, plan and Agent protocol. WB-0 is aligned
   but remains in progress; W0.2-W0.5 evidence and numeric media/schema
   decisions are still required before WB-1.
-- **RELEASE GATE:** Commit, hosted quality, tag workflows, Release assets and
-  GHCR publication remain pending for v2.6.12. Do not call the release
-  published until those results are recorded.
-- **RESUME:** Run focused and full regression, perform secret/package checks,
-  commit only reviewed files, push through the normal PR path, then create
-  `v2.6.12` on the merged commit. After release verification, dispatch only
-  read-only W0.2-W0.4 research packets.
+- **BOUNDARY:** The independent editing workbench remains documentation-only.
+  Do not describe the release as WB-1 implementation or as live Omni editing.
+- **RESUME:** Dispatch only the read-only W0.2-W0.4 research packets from the
+  approved task protocol, then perform W0.5 coordinator/reviewer consolidation
+  before creating any WB-1 implementation plan.
 
 ## 2026-09-18 Video Reference-Asset Composite Action Position
 
