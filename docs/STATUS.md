@@ -5,8 +5,9 @@
 - **GOAL:** Complete G1-G4 from `docs/VIDEO-WORKBENCH-PLAN.md`: media
   feasibility, online AI feasibility, UX feasibility, and coordinator/reviewer
   contract freeze.
-- **CURRENT STAGE:** G1-G3 are ready to dispatch as bounded read-only tasks;
-  G4 follows their evidence. WB-1 implementation is not authorized yet.
+- **CURRENT STAGE:** G1/W0.2 and G3/W0.4 evidence reports are complete;
+  G2/W0.3 official-source research is complete; G4/W0.5 is reviewed with
+  blockers. WB-1 implementation is not authorized yet.
 - **GUARDRAILS:** Use synthetic local fixtures only, make no paid generation
   calls, do not upload private media, and keep shared contracts/status/release
   files under coordinator ownership.
@@ -38,14 +39,40 @@
   source, Docker Compose and `SHA256SUMS.txt` assets. The published image is
   `ghcr.io/liwei9745/genbox:2.6.12`.
 - **VERIFIED / DOCUMENTS:** `docs/VIDEO-WORKBENCH-READINESS.md` audits the
-  PRD, contracts, acceptance matrix, plan and Agent protocol. WB-0 is aligned
-  but remains in progress; W0.2-W0.5 evidence and numeric media/schema
-  decisions are still required before WB-1.
+  PRD, contracts, acceptance matrix, plan and Agent protocol. The W0.2-W0.4
+  evidence reports and W0.5 review now exist; WB-0 remains in progress because
+  numeric media/schema decisions, measured UX envelope and live-provider
+  qualification are still blocked before WB-1.
 - **BOUNDARY:** The independent editing workbench remains documentation-only.
   Do not describe the release as WB-1 implementation or as live Omni editing.
-- **RESUME:** Dispatch only the read-only W0.2-W0.4 research packets from the
-  approved task protocol, then perform W0.5 coordinator/reviewer consolidation
-  before creating any WB-1 implementation plan.
+- **RESUME:** Resolve the W0.5 blocker table in
+  `docs/VIDEO-WORKBENCH-W0.5-REVIEW.md`, then rerun independent review.
+  Only an explicit W0.5 pass may authorize a WB-1 implementation plan.
+
+## 2026-09-18 Video Workbench WB-0 Evidence Review
+
+- **VERIFIED / LOCAL:** `docs/VIDEO-WORKBENCH-W0.2-MEDIA.md` records a
+  synthetic-only FFmpeg/ffprobe spike: H.264 MP4, VP9 WebM, H.264/AAC,
+  VFR, WAV, MP3, thumbnail, proxy and trim/render checks. The local chain is
+  feasible; cross-target packaging, exact limits and codec licensing remain
+  open.
+- **VERIFIED / OFFICIAL + LOCAL:** `docs/VIDEO-WORKBENCH-W0.3-AI.md` records
+  current Google Omni/Veo/Interactions/Files evidence and the existing
+  adapter boundary. Omni source-video editing is a candidate path, not an
+  implemented GenBox feature; no paid request or private upload was made.
+- **VERIFIED / LOCAL:** `docs/VIDEO-WORKBENCH-W0.4-UX.md` records the
+  preview-first low-fidelity flow, import/library/missing/conflict/consent/
+  candidate states, four acceptance viewports and accessibility budgets.
+- **VERIFIED / REVIEW:** `docs/VIDEO-WORKBENCH-W0.5-REVIEW.md` consolidates
+  the evidence. G1 and G3 are pass-with-blockers, G2 is research-pass/live-
+  blocked, and G4 is blocked on numeric media/schema decisions, measured UX
+  envelope and one separately authorized provider qualification.
+- **BOUNDARY:** WB-0 remains in progress and WB-1 is not authorized. These
+  reports are preparation evidence, not implementation, live editing support,
+  or release scope.
+- **RESUME:** Resolve the W0.5 blocker table and rerun review before writing
+  WB-1 implementation packets. Keep shared entry points and status under
+  coordinator ownership.
 
 ## 2026-09-18 Video Reference-Asset Composite Action Position
 
