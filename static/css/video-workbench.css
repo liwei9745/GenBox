@@ -818,7 +818,25 @@
   #pageVideo .video-assets-panel {
     overflow: visible;
   }
-  #pageVideo .video-image-workspace .video-upload-list { max-height: 180px; }
+  #pageVideo .video-image-workspace {
+    grid-template-columns: 96px minmax(0, 1fr);
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  #pageVideo .video-image-materials {
+    overflow: hidden;
+    max-width: 100%;
+  }
+  #pageVideo .video-image-actions .video-image-action-combo {
+    width: 108px;
+    flex-basis: 108px;
+    max-width: none;
+  }
+  #pageVideo .video-image-workspace .video-upload-list {
+    max-height: 180px;
+    max-width: 100%;
+  }
   #pageVideo .video-preview-content {
     grid-template-columns: minmax(0, 1fr);
   }
