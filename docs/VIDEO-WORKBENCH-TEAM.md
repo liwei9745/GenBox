@@ -1,7 +1,7 @@
 # Video Workbench Agent Collaboration Protocol
 
-Date: 2026-09-18. Revision: 0.2.
-Status: **Frozen WB-0 collaboration protocol; WB-1 implementation not started.**
+Date: 2026-09-18. Revision: 0.3.
+Status: **Frozen protocol; WB-1 implementation plan in review; code not started.**
 
 ## Operating Model
 
@@ -148,3 +148,7 @@ shortcut.
 No multi-agent installation is needed merely to execute this plan. Each future
 dispatch must use the task-packet fields above and the accepted contract
 revision from WB-0.
+
+The detailed wave order, dependencies, exit evidence and stop conditions are
+defined in [VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md](VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md).
+The plan must be reviewed before any packet changes from `planned` to `ready`.

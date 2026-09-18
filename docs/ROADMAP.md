@@ -7,13 +7,14 @@ mock-based tests, UI, and live-environment verification are separate evidence.
 ## Video Workbench Initiative
 
 USER-CONFIRMED new direction on 2026-09-18; use separate WB phase IDs rather
-than renumbering extension phases. Current primary work is WB-0 documentation.
+than renumbering extension phases. WB-0 is complete; current primary work is
+WB-1 implementation planning.
 Existing extension and release obligations retain their recorded status.
 
 | Phase | Status | Gate |
 | --- | --- | --- |
 | WB-0: Scope, contracts and feasibility | **Complete (2026-09-18)** | W0.2-W0.5 evidence, frozen scope/contracts/limits/acceptance/ownership |
-| WB-1: Assets and projects | Planned | External/library import and durable project acceptance |
+| WB-1: Assets and projects | In Progress (planning only) | External/library import and durable project acceptance |
 | WB-2: Basic editing and export | Planned | Non-destructive timeline and real rendered output |
 | WB-3: Online editing and provider extensions | Planned | Qualified adapter, candidate workflow and authorized live edit |
 | WB-4: Integrated acceptance | Planned | Regression, independent review and packaged-runtime evidence |
@@ -25,9 +26,11 @@ Topic contracts: [PRD](VIDEO-WORKBENCH-PRD.md),
 [acceptance](VIDEO-WORKBENCH-ACCEPTANCE.md),
 [readiness review](VIDEO-WORKBENCH-READINESS.md).
 Execution details and ownership: [plan](VIDEO-WORKBENCH-PLAN.md),
-[team](VIDEO-WORKBENCH-TEAM.md).
+[team](VIDEO-WORKBENCH-TEAM.md), and the
+[WB-1 implementation packet](VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md).
 WB-0 completion is a documentation and preparation gate only; WB-1
-implementation has not started and documentation is not implementation evidence.
+business implementation has not started and planning documents are not
+implementation evidence.
 
 ## Phase 0: Project Fact And Documentation Baseline
 

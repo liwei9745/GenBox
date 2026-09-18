@@ -1,16 +1,17 @@
 # Video Workbench Development Plan
 
-Date: 2026-09-18. Revision: 0.2.
-Current primary objective: WB-0 scope/contract preparation only.
-Authorization: write planning documents and collaboration strategy; no paid
-calls, implementation, tool installation, release, or deployment in this task.
+Date: 2026-09-18. Revision: 0.3.
+Current primary objective: WB-1 implementation strategy and plan review.
+Authorization: write and review planning documents; no WB-1 business code,
+paid calls, private-media upload, tool installation, release, or deployment.
 
 ## Reading And Authority
 
 Read [PRD](VIDEO-WORKBENCH-PRD.md), [contract](VIDEO-WORKBENCH-CONTRACT.md),
 [providers](VIDEO-WORKBENCH-PROVIDERS.md), [AI](VIDEO-WORKBENCH-AI.md),
 [UX](VIDEO-WORKBENCH-UX.md), [acceptance](VIDEO-WORKBENCH-ACCEPTANCE.md)
-and [team](VIDEO-WORKBENCH-TEAM.md).
+and [team](VIDEO-WORKBENCH-TEAM.md). The detailed WB-1 packet is
+[VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md](VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md).
 
 Topic phases use WB IDs; they do not renumber or complete extension phases.
 GSD execution artifacts are derived from these documents, not a rival source of
@@ -26,15 +27,15 @@ WB-0 scope + contracts + feasibility
   -> WB-4 integration, live acceptance, packaging
 ```
 
-Research can proceed independently within WB-0. Do not begin later-phase
-implementation to avoid an unresolved current gate.
+Research can proceed independently within a phase, but implementation starts
+only after that phase's plan and evidence gates pass.
 
 ## Phase Ledger
 
 | Phase | Status | Exit gate |
 | --- | --- | --- |
 | WB-0 | **Complete (2026-09-18): W0.2-W0.5 evidence and planning freeze accepted** | Approved scope, frozen schemas/limits, evidence-backed feasibility |
-| WB-1 | Planned | VA-01 through VA-04; applicable VA-12/13 |
+| WB-1 | **Plan in review; code not started** | VA-01 through VA-04; applicable VA-12/13 |
 | WB-2 | Planned | VA-05 through VA-07, local part of VA-15/20 |
 | WB-3 | Planned | VA-08 through VA-11, VA-17 through VA-19; applicable VA-12/13 |
 | WB-4 | Planned | All required cases, regressions, packaging and independent review |
@@ -59,10 +60,10 @@ entry or fake adapter is not implementation evidence.
 | G7 Online editing (WB-3) | Add bounded provider adapters, presets and candidate comparison | Fake second adapter, recovery tests, authorized live evidence | Authorize WB-4 integration and packaging |
 | G8 Integrated delivery (WB-4) | Verify the complete workbench across supported targets and release boundaries | Independent review, regression, performance, packaging and clean-install evidence | Release or return to the failed stage |
 
-The current objective was **G1-G4 only** and is now complete. No WB-1
-implementation, paid generation call, private-media upload or provider-specific
-UI was started during WB-0. The next safe artifact is a reviewed WB-1
-implementation plan.
+G1-G4 are complete. The current objective is to review the detailed WB-1
+implementation plan and then execute only its W1-0/W1-1 preparation tasks.
+No WB-1 business code, paid generation call, private-media upload or
+provider-specific UI is authorized in this planning step.
 
 ## WB-0: Preparation
 
@@ -106,6 +107,8 @@ Possible independent packages after schema freeze: media ingestion backend and
 asset-browser frontend with contract fixtures. Coordinator alone wires shared
 entry points. Integrate early; frontend mocks are not end-to-end evidence.
 Exit: imported assets and projects survive restart without changing originals.
+Detailed execution strategy:
+[VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md](VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md).
 
 ## WB-2: Local Editing Vertical Slice
 
@@ -163,9 +166,12 @@ W0.4: Low-fidelity UX baseline frozen; browser journey evidence remains
 implementation acceptance.
 W0.5: PASS recorded in
 [VIDEO-WORKBENCH-W0.5-REVIEW.md](VIDEO-WORKBENCH-W0.5-REVIEW.md);
-WB-1 implementation has not started.
+WB-1 detailed implementation plan is drafted for review; implementation has not
+started.
 
-Next action: create and review the WB-1 implementation plan from the frozen
-contract. Do not silently launch paid calls, upload private media, or
-auto-upgrade GSD/Agency tools.
+Next action: review
+[VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md](VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md),
+then execute W1-0 and W1-1 on a clean branch based on the latest `origin/master`.
+Do not silently launch paid calls, upload private media, or auto-upgrade
+GSD/Agency tools.
 Retain existing user changes and release handoff in STATUS.
