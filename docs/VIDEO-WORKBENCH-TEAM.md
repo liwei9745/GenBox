@@ -1,7 +1,7 @@
 # Video Workbench Agent Collaboration Protocol
 
-Date: 2026-09-18. Revision: 0.4.
-Status: **Frozen protocol; W1-0/W1-1 complete; WB1-MEDIA/WB1-PROJECT ready.**
+Date: 2026-09-18. Revision: 0.5.
+Status: **Frozen protocol; W1-0/W1-1 complete; WB1-MEDIA/WB1-PROJECT ready; unattended execution enabled.**
 
 ## Operating Model
 
@@ -13,6 +13,12 @@ installing competing autonomous controllers.
 This governs agents developing GenBox, not a multi-agent runtime in the product.
 Follow runtime and user rules for delegation. A role roster is not permission
 to spawn agents. Planning this strategy does not execute it.
+
+The bounded unattended rules are normative in
+[VIDEO-WORKBENCH-AUTONOMOUS-EXECUTION.md](VIDEO-WORKBENCH-AUTONOMOUS-EXECUTION.md).
+They allow low-risk local work to continue, but never grant permission for
+production/VPS changes, paid Provider calls, destructive media operations,
+contract changes or release publication.
 
 ## Sources And Tool Policy
 
@@ -155,3 +161,12 @@ W1-0/W1-1 evidence has been recorded in
 [VIDEO-WORKBENCH-WB1-FIXTURES.md](VIDEO-WORKBENCH-WB1-FIXTURES.md). The
 `WB1-MEDIA` and `WB1-PROJECT` packets may now change from `planned` to `ready`;
 `WB1-UI` remains dependent on stable route DTOs and fixture-server behavior.
+
+## Unattended Execution State
+
+The coordinator may continue `ready -> running -> review` for bounded local
+tasks without asking for a turn-by-turn confirmation. The coordinator must
+pause at the gates listed in the autonomous execution protocol and record the
+exact recovery command. “Unattended” means bounded continuation within the
+current authorized workspace; it is not a background process or permission to
+publish, deploy or spend money.

@@ -1,7 +1,7 @@
 # Video Workbench WB-1 Implementation Plan
 
-Date: 2026-09-18. Revision: 0.2.
-Status: **W1-0/W1-1 complete; W1-2 implementation not started.**
+Date: 2026-09-18. Revision: 0.3.
+Status: **W1-0/W1-1 complete; W1-2 preparation active; business implementation not started.**
 
 This plan turns the frozen WB-0 contracts into an executable implementation
 strategy for the first vertical slice. It is subordinate to
@@ -9,7 +9,8 @@ strategy for the first vertical slice. It is subordinate to
 [ROADMAP](ROADMAP.md), [PRD](VIDEO-WORKBENCH-PRD.md),
 [core contract](VIDEO-WORKBENCH-CONTRACT.md), [UX baseline](VIDEO-WORKBENCH-UX.md),
 [acceptance matrix](VIDEO-WORKBENCH-ACCEPTANCE.md), and the
-[Agent protocol](VIDEO-WORKBENCH-TEAM.md).
+[Agent protocol](VIDEO-WORKBENCH-TEAM.md). Bounded unattended execution is
+defined by [the autonomous execution protocol](VIDEO-WORKBENCH-AUTONOMOUS-EXECUTION.md).
 
 ## 1. Goal
 
@@ -270,7 +271,11 @@ No WB-1 business module or route has been implemented.
 
 ## 11. Immediate Next Action
 
-Dispatch only `WB1-MEDIA` and `WB1-PROJECT` from this baseline. Keep their
-scope limited to the frozen contract. Dispatch `WB1-UI` after route DTOs and
-the fixture server are stable; run `WB1-REVIEW` only at the first integrated
-checkpoint.
+Activate the bounded unattended protocol, inspect the current repository
+boundaries, and prepare only `WB1-MEDIA` and `WB1-PROJECT` from this baseline.
+Keep their scope limited to the frozen contract. The first W1-2 slice is local
+media admission/staging/probe planning; it must not yet add provider calls or
+shared-route changes. Dispatch `WB1-UI` after route DTOs and the fixture server
+are stable; run `WB1-REVIEW` only at the first integrated checkpoint. Any
+contract, shared-entry-point, external-environment or destructive-data change
+pauses for human confirmation.

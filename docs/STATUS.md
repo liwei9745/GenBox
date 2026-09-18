@@ -1,18 +1,38 @@
 # Current Project Status
 
-## Active Goal: WB-1 W1-0/W1-1 Preparation (Complete)
+## Active Goal: WB-1 W1-2 Unattended Preparation (In Progress)
 
-- **GOAL:** Establish an isolated WB-1 baseline and freeze shared synthetic
-  fixtures, DTOs, error codes and auth/ownership expectations.
-- **CURRENT STAGE:** W1-0 and W1-1 passed on 2026-09-18. The clean branch is
+- **GOAL:** Use a bounded unattended protocol to start W1-2 media-asset work
+  without crossing production, paid-provider, destructive-data or frozen-
+  contract boundaries.
+- **CURRENT STAGE:** W1-0 and W1-1 passed on 2026-09-18. On 2026-09-18 the
+  autonomous execution protocol was enabled in
+  `docs/VIDEO-WORKBENCH-AUTONOMOUS-EXECUTION.md`. The clean branch is
   `codex/wb1-baseline-20260918`, based on `origin/master` at `02ce25e`.
-  No WB-1 business implementation has started.
+  W1-2 preparation is active; no WB-1 business implementation has started.
 - **GUARDRAILS:** Use synthetic local fixtures only, make no paid generation
   calls, do not upload private media, keep existing generation routes unchanged,
-  and keep shared contracts/status/release files under coordinator ownership.
-- **EXIT CONDITION:** **MET** on 2026-09-18. The bounded WB1-MEDIA and
-  WB1-PROJECT packets are now ready; W1-2 implementation remains a separate
-  target.
+  keep shared contracts/status/release files under coordinator ownership, and
+  pause for the manual gates in the autonomous execution protocol.
+- **EXIT CONDITION:** W1-0/W1-1 **MET** on 2026-09-18. WB1-MEDIA and
+  WB1-PROJECT remain `ready`; W1-2 implementation requires a bounded slice,
+  focused evidence and coordinator review before it can be marked `accepted`.
+
+## 2026-09-18 Bounded Unattended Execution Enabled
+
+- **VERIFIED / LOCAL:** The new autonomous execution protocol defines the
+  default low-risk action set, mandatory human-confirmation gates, two-cycle
+  repair cap, pause conditions, Git/file ownership rules and recovery record.
+- **VERIFIED / PROCESS:** The Agent collaboration protocol and WB-1 plan now
+  reference the same unattended boundary. This changes workflow control only;
+  it does not claim media routes, workers, project storage or UI implementation.
+- **CURRENT:** Begin W1-2 preparation in the isolated branch using synthetic
+  fixtures. No Provider, network upload, private media, production/VPS, source
+  deletion or release action is authorized.
+- **RESUME:** Read the autonomous protocol, verify `git status` and baseline,
+  then inspect the existing media/library storage boundaries before creating
+  the first owned `video_workbench/media/` slice. Stop if a shared entry point
+  or frozen contract must change.
 
 ## 2026-09-18 WB-1 W1-0/W1-1 Evidence
 
