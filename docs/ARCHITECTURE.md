@@ -78,10 +78,13 @@ vendor wire protocols.
 
 WB-0 froze the core contract at revision 0.2. The first WB-1 implementation now
 has an isolated media manager, bounded native worker, asset/import journal
-service and authenticated router. See
-[the W1-2 checkpoint](VIDEO-WORKBENCH-W1-2-INTEGRATION.md) for its verified
-scope and remaining gaps. Project/timeline/render/online-edit modules are
-still planned. Existing generation routes and transports remain unchanged.
+service and authenticated router. Local proxy rendering, cancellation and
+recovery are verified in [the lifecycle checkpoint](VIDEO-WORKBENCH-W1-2-LIFECYCLE.md).
+Tool-launch diagnostics, short-lived browse-only validation caching and
+storage-fault behavior are tracked in
+[the usability checkpoint](VIDEO-WORKBENCH-W1-2-USABILITY.md).
+Project/timeline/final-export/online-edit modules are still planned. Existing
+generation routes and transports remain unchanged.
 
 ## Future Message Channel Architecture
 

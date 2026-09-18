@@ -1,8 +1,8 @@
 # Current Project Status
 
-## Active Phase: WB-1 W1-2 Media (Lifecycle Subgate Verified)
+## Active Phase: WB-1 W1-2 Media (Usability Subgate Verified)
 
-- **GOAL:** The bounded local proxy/cancellation/recovery subgoal is verified.
+- **GOAL:** The bounded diagnostics/catalogue/storage-fault subgate is verified.
   Finish remaining W1-2 media criteria before project persistence or UI.
   This is not the entire WB-1 asset/project/UI acceptance gate.
 - **CURRENT STAGE:** W1-0 and W1-1 passed on 2026-09-18. On 2026-09-18 the
@@ -11,17 +11,41 @@
   `codex/wb1-baseline-20260918`, based on `origin/master` at `02ce25e`.
   The authenticated media/API checkpoint is committed at `a772d48`.
   Local proxy/cancellation/recovery are now implemented and locally verified.
+  The diagnostics/catalogue/fault slice starts from `0f8b817`; focused and full
+  regression now pass.
   Project persistence and independent workbench UI remain
   unimplemented.
 - **GUARDRAILS:** Use synthetic local fixtures only, make no paid generation
   calls, do not upload private media, keep existing generation routes unchanged,
   keep shared contracts/status/release files under coordinator ownership, and
   pause for the manual gates in the autonomous execution protocol.
-- **EXIT CONDITION:** This local lifecycle gate passed focused route/media
-  tests, existing generation regression and full-suite verification; the
-  sanitized checkpoint is scoped to the dedicated development branch. `WB1-MEDIA`
+- **EXIT CONDITION:** Focused/full regression, compile/diff checks and the
+  15-file sanitization review passed; preserve only the dedicated branch.
+  `WB1-MEDIA`
   remains `running` until full
   VA-02/VA-03/VA-04/VA-12/VA-13 evidence are complete.
+
+## 2026-09-18 Diagnostics And Storage-Fault Checkpoint (UTC)
+
+- **USER-CONFIRMED:** Continue the next bounded stage in goal mode, unattended
+  within the existing safety protocol. No paid models or release.
+- **IMPLEMENTED / LOCAL:** Startup/authenticated tool-launch diagnostics;
+  single-pass journal lookup, bounded short-lived browsing validation cache;
+  sanitized background persistence failure and same-process recovery cleanup.
+- **VERIFIED / FOCUSED:** Final ten-module workbench run:
+  **`140 passed in 64.55s`**, treating uncaught worker-thread exceptions as failures.
+  A Windows restored-mtime cache defect was found and repaired; strict media
+  reads still perform byte verification.
+- **VERIFIED / FULL:** `python -m pytest -q -W
+  error::pytest.PytestUnhandledThreadExceptionWarning` ->
+  **`1981 passed in 325.02s`**. Compilation and diff checks pass.
+- **VERIFIED / REVIEW:** Fifteen explicit source/test/document files; added-line
+  secret/private-path heuristics and staged diff checks pass. No independent
+  security audit is claimed. No open branch PR or matching workflow push
+  trigger was found; preservation is development-branch-only.
+- **DETAILS / RESUME:** `docs/VIDEO-WORKBENCH-W1-2-USABILITY.md`. Remain on
+  W1-2 and audit remaining media criteria; no project/UI or full-phase
+  completion is implied. Verify the report-containing commit and remote SHA.
 
 ## 2026-09-18 Local Preview And Recovery Checkpoint (UTC)
 

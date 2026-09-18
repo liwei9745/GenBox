@@ -22,6 +22,7 @@ from starlette.background import BackgroundTask
 
 from .assets import WORKSPACE_OWNER
 from .media import MediaIngestError
+from .media.diagnostics import MediaDiagnostics
 from .media.ingest import _fail
 from .multipart import MediaMultipartParser
 
@@ -53,6 +54,7 @@ def _origin(value):
 
 def build_router(get_service, get_admin_key, allowed_origins):
     used_services = set()
+    diagnostics = MediaDiagnostics()
 
     def resolve_service():
         service = get_service()
@@ -61,6 +63,7 @@ def build_router(get_service, get_admin_key, allowed_origins):
 
     @asynccontextmanager
     async def lifespan(app):
+        await run_in_threadpool(diagnostics.snapshot)
         try:
             yield
         finally:
@@ -101,6 +104,12 @@ def build_router(get_service, get_admin_key, allowed_origins):
     def no_query(request):
         if request.query_params:
             raise _fail("invalid_request", "admission")
+
+    @router.get("/diagnostics")
+    async def media_diagnostics(request: Request):
+        no_query(request)
+        snapshot = await run_in_threadpool(diagnostics.snapshot)
+        return JSONResponse(snapshot, headers={"Cache-Control": "private, no-store"})
 
     @router.post("/imports")
     async def import_external(request: Request):

@@ -614,7 +614,7 @@ class MediaIngestManager:
         self._assert_confined(target, self.assets_root)
         return target
 
-    def _read_record(self, directory: Path) -> Optional[AssetRecord]:
+    def _read_record(self, directory: Path, *, verify_content: bool = True) -> Optional[AssetRecord]:
         self._assert_confined(directory, self.assets_root)
         manifest = directory / "asset.json"
         original = directory / "original"
@@ -711,13 +711,14 @@ class MediaIngestManager:
                 return None
             if int(data["byte_length"]) != original.stat().st_size:
                 return None
-            actual_digest = hashlib.sha256()
-            with original.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    check_cancelled()
-                    actual_digest.update(chunk)
-            if actual_digest.hexdigest() != digest:
-                return None
+            if verify_content:
+                actual_digest = hashlib.sha256()
+                with original.open("rb") as handle:
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        check_cancelled()
+                        actual_digest.update(chunk)
+                if actual_digest.hexdigest() != digest:
+                    return None
             return AssetRecord(
                 asset_id=str(data["asset_id"]),
                 kind=str(data["kind"]),  # type: ignore[arg-type]

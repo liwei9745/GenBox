@@ -29,9 +29,11 @@ Execution details and ownership: [plan](VIDEO-WORKBENCH-PLAN.md),
 [team](VIDEO-WORKBENCH-TEAM.md), and the
 [WB-1 implementation packet](VIDEO-WORKBENCH-WB1-IMPLEMENTATION-PLAN.md).
 WB-0 completion was a documentation and preparation gate. WB-1 now has a
-locally verified media-admission and authenticated import/library API slices
-on its isolated branch, but the phase is not complete: proxy/cancellation
-workflows, durable projects, UI and full acceptance evidence remain outstanding.
+locally verified media-admission, authenticated import/library APIs and local
+proxy/cancellation/recovery slices on its isolated branch.
+[Diagnostics/catalogue/storage-fault evidence](VIDEO-WORKBENCH-W1-2-USABILITY.md)
+tracks the next bounded subgate. The phase is not complete: remaining media
+acceptance, durable projects, UI and independent integrated review are outstanding.
 
 ## Phase 0: Project Fact And Documentation Baseline
 

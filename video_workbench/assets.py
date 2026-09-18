@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from collections import OrderedDict
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -11,12 +12,14 @@ from pathlib import Path
 import re
 import tempfile
 import threading
+import time
 import uuid
 
 from .media import MediaIngestError, MediaIngestManager
 from .media.ingest import _fail, _safe_id
 from .media.worker import check_cancelled, execution_scope
 from .media.proxy import ProxyRenderer
+from .media.fingerprint import change_token
 from .runtime import StoreRuntime
 
 
@@ -44,6 +47,7 @@ class AssetService:
         self._threads = set()
         self._recovered = False
         self.proxies = ProxyRenderer(self.media)
+        self._listing_cache = OrderedDict()
 
     def _ready(self, owner):
         self._owner(owner)
@@ -90,8 +94,12 @@ class AssetService:
             owned.append(target)
         try:
             for target in owned:
-                target.unlink(missing_ok=True)
-        except OSError:
+                issued = self.media._issued.get(target)
+                if issued is not None:
+                    self.media.cleanup_staged(issued)
+                else:
+                    target.unlink(missing_ok=True)
+        except (OSError, MediaIngestError):
             data["view"].update(state="failed", stage="cleanup", updated_at=_now())
             self._write_job(path, data)
             return
@@ -216,6 +224,58 @@ class AssetService:
     def _response(data):
         return {"job": dict(data["view"]), "files": list(data["results"])}
 
+    def _for_listing(self, key, paths, verify):
+        def fingerprint():
+            stats = []
+            for path in paths:
+                self.media._reject_link(path)
+                info = path.stat()
+                changed = change_token(path, info)
+                if changed is None:
+                    return None
+                stats.append((
+                    info.st_dev, info.st_ino, info.st_mode, info.st_size,
+                    info.st_mtime_ns, changed,
+                ))
+            return tuple(stats)
+
+        try:
+            before = fingerprint()
+        except FileNotFoundError:
+            raise _fail("not_found", "lookup", field="asset_id") from None
+        with self.runtime.lock:
+            cached = self._listing_cache.get(key)
+            if before is not None and cached and cached[0] == before and time.monotonic() < cached[1]:
+                self._listing_cache.move_to_end(key)
+                return cached[2]
+        result = verify()
+        # Cached checks are browsing hints only, never ownership grants or
+        # authority to deliver/process bytes. Sensitive paths always rehash.
+        try:
+            unchanged = before is not None and fingerprint() == before
+        except FileNotFoundError:
+            unchanged = False
+        if result is not None and unchanged:
+            with self.runtime.lock:
+                self._listing_cache[key] = (before, time.monotonic() + 5, result)
+                self._listing_cache.move_to_end(key)
+                while len(self._listing_cache) > 256:
+                    self._listing_cache.popitem(last=False)
+        return result
+
+    def _check_library_claim(self, intent, *, listing=False):
+        source = intent["source"]
+        resolved = self._library_path(source["kind"], source["id"])
+
+        def verify():
+            return self.media._hash_file(resolved)[1]
+
+        digest = self._for_listing(
+            ("library", source["kind"], source["id"]), (resolved,), verify,
+        ) if listing else verify()
+        if digest != source["digest"]:
+            raise _fail("conflict", "lookup", field="asset_id")
+
     def _asset_authorized(self, owner, asset_id):
         self._owner(owner)
         _safe_id(asset_id, field="asset_id")
@@ -231,10 +291,7 @@ class AssetService:
                 for result in record["results"]
             ):
                 if record["intent"]["operation"] == "library":
-                    source = record["intent"]["source"]
-                    resolved = self._library_path(source["kind"], source["id"])
-                    if self.media._hash_file(resolved)[1] != source["digest"]:
-                        raise _fail("conflict", "lookup", field="asset_id")
+                    self._check_library_claim(record["intent"])
                 return
         # Unclaimed/orphan assets are never exposed by a content hash.
         raise _fail("not_found", "lookup", field="asset_id")
@@ -274,7 +331,8 @@ class AssetService:
                         with self.runtime.lock:
                             response = self._response(data)
                             thread = threading.Thread(
-                                target=self._execute_import, args=(path, data, staged, "upload"), daemon=True,
+                                target=self._background,
+                                args=(self._execute_import, path, data, staged, "upload"), daemon=True,
                             )
                             self._threads.add(thread)
                             try:
@@ -295,6 +353,16 @@ class AssetService:
                         self._abort_preparation(path, data)
                     self._cleanup_files(staged, path, data)
             return self._response(data)
+
+    @staticmethod
+    def _background(operation, *args):
+        try:
+            operation(*args)
+        except (MediaIngestError, OSError):
+            # If even failure/cleanup persistence is unavailable, retain the
+            # journal and declared files. A later read/restart marks unfinished
+            # work interrupted; never replay or emit native/private error text.
+            pass
 
     def _abort_preparation(self, path, data):
         with self.runtime.lock:
@@ -329,6 +397,8 @@ class AssetService:
                 for index in range(len(staged)):
                     if index not in completed:
                         data["results"].append({"index": index, "state": "rejected", "error": safe.as_dict()})
+                if len(completed) == len(staged) and data["results"]:
+                    data["results"][-1]["error"] = safe.as_dict()
                 data["view"].update(
                     state="cancelled" if cancelled else "failed", stage="import", updated_at=_now(),
                 )
@@ -398,8 +468,8 @@ class AssetService:
                     self._active[path.stem] = (data, threading.Event())
                     response = self._response(data)
                     thread = threading.Thread(
-                        target=self._execute_proxy,
-                        args=(path, data, asset, pending, manifest, reservation), daemon=True,
+                        target=self._background,
+                        args=(self._execute_proxy, path, data, asset, pending, manifest, reservation), daemon=True,
                     )
                     self._threads.add(thread)
                     try:
@@ -581,7 +651,9 @@ class AssetService:
             data = self._read_job(self.jobs / f"{job_id}.json", owner)
             if data["view"]["state"] not in _TERMINAL and job_id not in self._active:
                 data["view"].update(state="interrupted", stage="recovery", updated_at=_now())
-                self._write_job(self.jobs / f"{job_id}.json", data)
+                path = self.jobs / f"{job_id}.json"
+                self._write_job(path, data)
+                self._recover_staging(path, data)
             return self._response(data)
 
     def list_assets(self, owner, *, cursor="", kind=None, query="", limit=20):
@@ -593,18 +665,38 @@ class AssetService:
             raise _fail("invalid_request", "admission")
         if cursor:
             _safe_id(cursor, field="cursor")
-        ids = set()
+        claims = {}
         if self.jobs.exists():
             self.media._assert_confined(self.jobs, self.media.root)
             for path in self.jobs.glob("job_*.json"):
                 data = self._read_job(path, owner)
-                ids.update(item["asset_id"] for item in data["results"] if item.get("state") == "ready")
+                if data["intent"].get("operation") not in {"upload", "library"}:
+                    continue
+                for item in data["results"]:
+                    if item.get("state") == "ready":
+                        asset_id = _safe_id(item["asset_id"], field="asset_id")
+                        claims.setdefault(asset_id, data["intent"])
         selected = []
-        for asset_id in sorted(ids):
+        for asset_id in sorted(claims):
             if asset_id <= cursor or query.casefold() not in asset_id.casefold():
                 continue
             try:
-                record = self.asset(owner, asset_id)
+                directory = self.media.assets_root / asset_id
+                self.media._assert_confined(directory, self.media.assets_root)
+                # Reject nonmatching kinds using bounded manifest parsing;
+                # metadata alone is never added to the response.
+                metadata = self.media._read_record(directory, verify_content=False)
+                if metadata is None or (kind is not None and metadata.kind != kind):
+                    continue
+                record = self._for_listing(
+                    ("asset", asset_id),
+                    (directory, directory / "asset.json", directory / "original"),
+                    lambda: self.media._read_record(directory),
+                )
+                if record is None or record != metadata:
+                    continue
+                if claims[asset_id]["operation"] == "library":
+                    self._check_library_claim(claims[asset_id], listing=True)
             except MediaIngestError as error:
                 if error.code in {"not_found", "conflict"}:
                     continue

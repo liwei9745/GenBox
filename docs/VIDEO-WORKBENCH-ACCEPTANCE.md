@@ -1,22 +1,23 @@
 # Video Workbench Acceptance Matrix
 
-Date: 2026-09-18 (UTC). Revision: 0.4 (evidence update; case criteria unchanged).
+Date: 2026-09-18 (UTC). Revision: 0.5 (evidence update; case criteria unchanged).
 Status: **WB-0 planning gates PASS; W1-2 backend subcases have local evidence; full WB-1-WB-4 cases remain unaccepted.**
 No historical generation test result counts as workbench acceptance.
 
 ## W1-2 Local Evidence
 
-See [the integration checkpoint](VIDEO-WORKBENCH-W1-2-INTEGRATION.md) and
-[the local lifecycle checkpoint](VIDEO-WORKBENCH-W1-2-LIFECYCLE.md) for
+See [the integration checkpoint](VIDEO-WORKBENCH-W1-2-INTEGRATION.md),
+[the local lifecycle checkpoint](VIDEO-WORKBENCH-W1-2-LIFECYCLE.md), and
+[diagnostics/catalogue/fault evidence](VIDEO-WORKBENCH-W1-2-USABILITY.md) for
 commands, runtime, fixtures, ownership and limitations. These are subcase
 results, not phase acceptance:
 
 | Case | Observed subcase | Result | Still required |
 | --- | --- | --- | --- |
 | VA-02 | Synthetic external media API, hashes, repeated request and original preservation | PASS locally | File picker/drop UI and complete interrupted-upload recovery |
-| VA-03 | Exact library API, changed/missing source rejection, authenticated lazy thumbnails | PASS locally | Library-picker pagination/search journey and performance |
-| VA-04 | Format fixtures, corruption, playlist rejection, bounded workers, VFR intervals, shifted PTS, rotation/SAR and delayed audio proxies | PASS locally | Broader stress/disk-full and hostile-container matrix |
-| VA-12 | Authenticated cancellation, owned-child termination, input/delivery leases, actual process-crash recovery and confined declared-file cleanup | PASS locally | Browser cancellation journey, pre-journal orphan repair, full fault matrix and later upstream-unknown cases |
+| VA-03 | Exact library API, changed/missing source rejection, lazy thumbnails, 1,000-record catalogue operation counts and warm-page cache invalidation | PASS locally | Library-picker browser journey and measured latency; source-name lookup indexing |
+| VA-04 | Format/display/timing fixtures, bounded workers, launch diagnostics, low-space admission and injected original/proxy/journal write failures | PASS locally | Broader near-limit stress and hostile-container matrix |
+| VA-12 | Authenticated cancellation, child termination, leases, process-crash and same-process disk-recovery cleanup | PASS locally | Browser cancellation journey, pre-journal orphan repair, remaining fault matrix and later upstream-unknown cases |
 | VA-13 | Auth/CSRF, single-workspace ownership, path/reparse guards and bounded errors | PASS locally | Independent integrated review and broader hostile-media coverage |
 | VA-01 / VA-15 / VA-16 | Project durability, workbench UI and packaged execution | NOT RUN | Implement and verify at their designated gates |
 
