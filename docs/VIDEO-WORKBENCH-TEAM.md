@@ -1,7 +1,7 @@
 # Video Workbench Agent Collaboration Protocol
 
-Date: 2026-09-18. Revision: 0.1.
-Status: Proposed task-execution protocol. No agents dispatched by this document.
+Date: 2026-09-18. Revision: 0.2.
+Status: **Frozen WB-0 collaboration protocol; WB-1 implementation not started.**
 
 ## Operating Model
 
@@ -126,9 +126,25 @@ No automatic agent-to-agent spawning tree, unlimited debate loop, unsolicited
 background automation or repeat paid generation. A blocked agent returns bounded
 evidence and a precise dependency rather than waiting silently.
 
-## First Dispatch Wave (Not Started)
+## Frozen WB-1 Ownership Packets
 
-After W0.1 review, package media feasibility and online-edit protocol research
-as independent read-only tasks. Coordinator consolidates schemas and UX flow.
-Then an independent reviewer checks W0.5 before implementation.
-No multi-agent installation is needed merely to write or review these documents.
+The following ownership is frozen for the next phase. These are task packets,
+not evidence that implementation has started:
+
+| Packet | Primary owner | Owned paths (once created) | Review boundary |
+| --- | --- | --- | --- |
+| WB1-MEDIA | Media engineer | `video_workbench/media/`, probe/proxy/render tests | Coordinator reviews limits and worker invocation |
+| WB1-PROJECT | Coordinator + project-storage implementer | `video_workbench/projects/`, schema/revision tests | Independent reviewer checks conflict/restart behavior |
+| WB1-UI | Frontend implementer | isolated workbench JS/CSS and browser tests | UX specialist checks four viewports and keyboard path |
+| WB1-REVIEW | Independent reviewer | read-only review report and evidence ledger | No implementation edits or release actions |
+
+The AI adapter specialist is **not** assigned to WB-1 implementation. That role
+activates in WB-3 for the frozen provider contract, fake adapter A/B tests and
+the separately authorized live edit gate. The coordinator serializes shared
+`main.py`, `static/index.html`, global styles, authoritative docs and any
+release files. No packet may broaden the frozen scope or add a provider-specific
+shortcut.
+
+No multi-agent installation is needed merely to execute this plan. Each future
+dispatch must use the task-packet fields above and the accepted contract
+revision from WB-0.

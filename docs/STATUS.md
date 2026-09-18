@@ -1,19 +1,18 @@
 # Current Project Status
 
-## Active Goal: WB-0 Stage Preparation
+## Active Goal: WB-0 Stage Preparation (Complete)
 
 - **GOAL:** Complete G1-G4 from `docs/VIDEO-WORKBENCH-PLAN.md`: media
   feasibility, online AI feasibility, UX feasibility, and coordinator/reviewer
   contract freeze.
-- **CURRENT STAGE:** G1/W0.2 and G3/W0.4 evidence reports are complete;
-  G2/W0.3 official-source research is complete; G4/W0.5 is reviewed with
-  blockers. WB-1 implementation is not authorized yet.
+- **CURRENT STAGE:** G1-G4 are complete. W0.2-W0.4 evidence is recorded,
+  W0.5 froze the first-release scope/contracts/limits/acceptance/ownership.
+  WB-1 implementation has not started.
 - **GUARDRAILS:** Use synthetic local fixtures only, make no paid generation
   calls, do not upload private media, and keep shared contracts/status/release
   files under coordinator ownership.
-- **EXIT CONDITION:** Freeze project/asset schemas, numeric limits, provider
-  intent and error contracts, UX flow, acceptance cases and Agent task packets;
-  then record an explicit WB-0 pass or blocker before starting WB-1.
+- **EXIT CONDITION:** **MET** on 2026-09-18. The preparation gate is complete;
+  later implementation, live-provider and packaging gates remain phase-specific.
 
 ## 2026-09-18 v2.6.12 Release And WB-0 Readiness
 
@@ -39,15 +38,27 @@
   source, Docker Compose and `SHA256SUMS.txt` assets. The published image is
   `ghcr.io/liwei9745/genbox:2.6.12`.
 - **VERIFIED / DOCUMENTS:** `docs/VIDEO-WORKBENCH-READINESS.md` audits the
-  PRD, contracts, acceptance matrix, plan and Agent protocol. The W0.2-W0.4
-  evidence reports and W0.5 review now exist; WB-0 remains in progress because
-  numeric media/schema decisions, measured UX envelope and live-provider
-  qualification are still blocked before WB-1.
+  PRD, frozen contracts, acceptance matrix, plan and Agent protocol. The
+  W0.2-W0.5 evidence and freeze revisions now exist; WB-0 is complete.
 - **BOUNDARY:** The independent editing workbench remains documentation-only.
   Do not describe the release as WB-1 implementation or as live Omni editing.
-- **RESUME:** Resolve the W0.5 blocker table in
-  `docs/VIDEO-WORKBENCH-W0.5-REVIEW.md`, then rerun independent review.
-  Only an explicit W0.5 pass may authorize a WB-1 implementation plan.
+- **RESUME:** Create and review the WB-1 implementation plan from the frozen
+  contract. Do not claim local editing, online editing or packaged support
+  before their phase-specific acceptance gates.
+
+## 2026-09-18 Video Workbench WB-0 Completion
+
+- **VERIFIED / REVIEW:** W0.5 is now `PASS`. The core contract freezes the
+  first-release media matrix, resource limits, project JSON shape, logical
+  storage layout, API operations and safe error vocabulary.
+- **VERIFIED / REVIEW:** Provider-neutral capability states, UX interaction
+  baseline, WB-0 preparation gates and WB-1 ownership packets are frozen.
+- **BOUNDARY:** This closes documentation/preparation only. WB-1 code,
+  online source-video editing, live provider qualification and packaged
+  media support remain unimplemented or later-phase gates.
+- **NEXT:** Write the WB-1 implementation plan and dispatch only the frozen
+  media/project/UI/reviewer packets after plan review. Keep AI adapter work
+  deferred to WB-3.
 
 ## 2026-09-18 Video Workbench WB-0 Evidence Review
 
@@ -64,15 +75,12 @@
   preview-first low-fidelity flow, import/library/missing/conflict/consent/
   candidate states, four acceptance viewports and accessibility budgets.
 - **VERIFIED / REVIEW:** `docs/VIDEO-WORKBENCH-W0.5-REVIEW.md` consolidates
-  the evidence. G1 and G3 are pass-with-blockers, G2 is research-pass/live-
-  blocked, and G4 is blocked on numeric media/schema decisions, measured UX
-  envelope and one separately authorized provider qualification.
-- **BOUNDARY:** WB-0 remains in progress and WB-1 is not authorized. These
-  reports are preparation evidence, not implementation, live editing support,
-  or release scope.
-- **RESUME:** Resolve the W0.5 blocker table and rerun review before writing
-  WB-1 implementation packets. Keep shared entry points and status under
-  coordinator ownership.
+  the evidence. G1-G4 pass for preparation; live provider, packaged media and
+  browser journey checks remain later implementation gates.
+- **BOUNDARY:** WB-0 is complete as documentation/preparation only. WB-1 code,
+  live editing support and release scope remain unimplemented.
+- **RESUME:** Create the WB-1 implementation plan from the frozen contract and
+  keep shared entry points and status under coordinator ownership.
 
 ## 2026-09-18 Video Reference-Asset Composite Action Position
 

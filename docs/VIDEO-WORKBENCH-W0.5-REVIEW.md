@@ -1,7 +1,7 @@
 # Video Workbench W0.5 Contract And Readiness Review
 
-Date: 2026-09-18. Revision: 0.1.
-Status: **WB-0 REVIEWED; WB-1 BLOCKED**
+Date: 2026-09-18. Revision: 0.2.
+Status: **WB-0 PASS; WB-1 implementation not started**
 
 This is the coordinator and independent-reviewer consolidation for the
 preparation stages in [the development plan](VIDEO-WORKBENCH-PLAN.md). It
@@ -13,13 +13,13 @@ live provider, or authorize a paid request.
 | Input | Result | Boundary |
 | --- | --- | --- |
 | [PRD](VIDEO-WORKBENCH-PRD.md) | ALIGNED | Product scope is independent from the existing generation pages. |
-| [Core contract](VIDEO-WORKBENCH-CONTRACT.md) | ALIGNED, limits open | Proposed schema and recovery invariants are usable, but exact numeric limits are not frozen. |
-| [Provider contract](VIDEO-WORKBENCH-PROVIDERS.md) | ALIGNED | Adapter-neutral boundary is sound; no live adapter is accepted by this review. |
+| [Core contract](VIDEO-WORKBENCH-CONTRACT.md) | **FROZEN FOR WB-1 PLANNING** | Schema, media boundary, numeric limits, storage and error vocabulary are explicit; implementation routes do not yet exist. |
+| [Provider contract](VIDEO-WORKBENCH-PROVIDERS.md) | **FROZEN FOR WB-0/WB-3** | Adapter-neutral boundary is sound; live profiles remain unavailable. |
 | [AI boundary](VIDEO-WORKBENCH-AI.md) | ALIGNED | Google/Omni is a candidate, not a universal API or current source-video-edit feature. |
 | [Acceptance matrix](VIDEO-WORKBENCH-ACCEPTANCE.md) | ALIGNED | VA-01 through VA-20 remain future implementation gates. |
-| [W0.2 media report](VIDEO-WORKBENCH-W0.2-MEDIA.md) | **PASS WITH BLOCKERS** | Synthetic local media, proxy and render evidence is complete; packaging and limits remain open. |
+| [W0.2 media report](VIDEO-WORKBENCH-W0.2-MEDIA.md) | **PASS** | Synthetic local media, proxy and render evidence supports the frozen WB-1 planning matrix; package smoke remains WB-4. |
 | [W0.3 AI report](VIDEO-WORKBENCH-W0.3-AI.md) | **RESEARCH PASS** | Official online-edit shape is documented; live qualification and recovery remain open. |
-| [W0.4 UX report](VIDEO-WORKBENCH-W0.4-UX.md) | **PASS WITH BLOCKERS** | Low-fidelity flow and viewport/accessibility gates are ready for implementation planning. |
+| [W0.4 UX report](VIDEO-WORKBENCH-W0.4-UX.md) | **PASS** | Low-fidelity flow and viewport/accessibility targets are frozen for WB-1 planning; browser proof remains implementation evidence. |
 | [Agent protocol](VIDEO-WORKBENCH-TEAM.md) | ALIGNED | Coordinator owns shared contracts and status; workers have bounded packets. |
 
 ## 2. Decisions Frozen For Planning
@@ -56,29 +56,28 @@ decomposition, not implementation completion:
     asset, inspector, job and provider panels collapse or scroll rather than
     pushing the primary media out of view.
 
-## 3. Decisions Still Open Before WB-1
+## 3. Later-Phase Evidence (Not WB-0 Blockers)
 
-These are implementation blockers and must be resolved with evidence in the
-next review revision:
+The following remain mandatory for the phases that implement or release them.
+They do not invalidate the WB-0 preparation pass because the current objective
+was read-only feasibility and contract freeze:
 
 | Blocker | Required decision | Owner |
 | --- | --- | --- |
-| Media package matrix | Declared Windows/macOS/Linux/Docker FFmpeg build, codec license/provenance, browser playback behavior | Coordinator + media engineer |
-| Import limits | Maximum bytes, dimensions, duration, streams, project length, clip count, concurrent jobs and disk reservation | Coordinator + media engineer |
-| Output profile | Initial canvas/FPS/fit mode, H.264/AAC compatibility and A/V sync tolerance | Coordinator + media engineer |
-| Asset storage | Exact managed paths, staging cleanup, thumbnail/proxy revisions, library identity and relink rules | Coordinator |
-| API schemas | Concrete request/response schemas, error enum, CSRF/auth boundary and idempotency behavior | Coordinator |
-| Provider live gate | One authorized synthetic source-video edit, remote handle expiry, cancellation and unknown-submission reconciliation | AI adapter specialist + user authorization |
-| UX measurements | Measured minimum preview/timeline sizes and four-viewport browser smoke evidence | Product/UX + coordinator |
+| Packaged media matrix | Windows/macOS/Linux/Docker FFmpeg build, codec provenance and browser playback | WB-4 |
+| Import fault evidence | Oversized/corrupt/VFR/rotation/disk-full/cleanup/restart behavior | WB-1/WB-4 |
+| Local render evidence | A/V sync, immutable publication and measured performance | WB-2/WB-4 |
+| Provider live gate | One authorized synthetic source-video edit, remote handle expiry, cancellation and reconciliation | WB-3/WB-4 |
+| UX browser evidence | Four viewport journey, keyboard path and measured shell dimensions | WB-1/WB-4 |
 
-No value may be promoted from the `PROPOSED` tables in W0.2 or the acceptance
-envelope into a public contract without recording the fixture, command,
-runtime identity and reviewer.
+The frozen planning values in the core contract are not runtime proof. Each
+later implementation gate must record fixture, command, runtime identity,
+result and reviewer before advertising the corresponding feature.
 
-## 4. WB-1 Task Packets After Blocker Closure
+## 4. WB-1 Task Packets For Plan Review
 
-WB-1 remains blocked, but the following packets are ready to be refined once
-the open decisions are ratified:
+WB-1 implementation has not started. The following packets are ready to be
+refined into the reviewed WB-1 implementation plan:
 
 | Packet | Scope | Must not include |
 | --- | --- | --- |
@@ -87,38 +86,37 @@ the open decisions are ratified:
 | WB1-UI | Empty/import/library flow, asset list, timeline shell and responsive/keyboard behavior against fixtures | Shared global CSS or unreviewed schema changes |
 | WB1-REVIEW | Auth/path/ownership/disk-full/restart/browser review at four viewports | Implementation edits or release actions |
 
-Each packet must cite the accepted schema revision, VA cases, baseline commit,
+Each packet must cite the frozen schema revision, VA cases, baseline commit,
 owned files, fixture digests, commands and stop conditions. Shared
 `main.py`, `static/index.html`, authoritative docs, release files and global
 styles remain coordinator-owned and serialized.
 
 ## 5. Gate Result
 
-- **G1 / W0.2 media feasibility:** **PASS WITH BLOCKERS**. Local synthetic
-  decode/proxy/render path is demonstrated; cross-target packaging and exact
-  limits are not accepted.
+- **G1 / W0.2 media feasibility:** **PASS**. Local synthetic
+  decode/proxy/render path is demonstrated and the conservative WB-1 media
+  matrix and limits are frozen. Cross-target packaging is a later gate.
 - **G2 / W0.3 online AI feasibility:** **RESEARCH PASS; LIVE BLOCKED**.
   Official Omni editing documentation is recorded; GenBox source-video edit
   support, private-handle recovery and one authorized live edit are absent.
-- **G3 / W0.4 UX feasibility:** **PASS WITH BLOCKERS**. The smallest
-  preview-first workflow and state matrix are ready for contract review.
-- **G4 / W0.5 contract review:** **BLOCKED** until the open decisions above
-  are resolved and independently checked.
-- **WB-0:** **IN PROGRESS**.
-- **WB-1:** **NOT AUTHORIZED**.
+- **G3 / W0.4 UX feasibility:** **PASS**. The smallest preview-first
+  workflow, state matrix and measurable target envelope are frozen.
+- **G4 / W0.5 contract review:** **PASS**. Scope, contract, limits,
+  acceptance gates and ownership packets are frozen for planning.
+- **WB-0:** **PASS**.
+- **WB-1:** **PLANNED; implementation not started**.
 
-This is the intentional result: the project has a staged target and bounded
-task packets, but it has not used a design draft or a mock adapter to bypass
-media, schema, privacy or provider gates.
+This is the intentional result: the project may now prepare a WB-1
+implementation plan, but it has not used a design draft or a mock adapter to
+claim local editing, online editing or packaged-runtime support.
 
 ## 6. Resume Instructions
 
-1. Coordinator updates the numeric media/schema/error decisions and records
-   their evidence.
-2. User authorizes at most one controlled live source-video edit only after
-   the consent and provider-account/region conditions are shown; use synthetic
-   or explicitly redistributable media.
-3. Reviewer reruns the W0.5 checklist and changes the gate only from observed
-   evidence.
-4. If G4 passes, create the WB-1 implementation plan and dispatch only the
-   four bounded packets above. If any gate remains open, keep WB-1 blocked.
+1. Create the WB-1 implementation plan from the frozen contract revision; do
+   not edit application entry points until the plan is reviewed.
+2. Dispatch only the four bounded WB-1 packets in
+   `VIDEO-WORKBENCH-TEAM.md`, with explicit file ownership.
+3. Keep source-video provider work unavailable until WB-3 obtains separate
+   user authorization and live evidence.
+4. Run the later acceptance gates before claiming any implementation or
+   release completion.

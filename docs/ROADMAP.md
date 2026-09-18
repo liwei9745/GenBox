@@ -12,7 +12,7 @@ Existing extension and release obligations retain their recorded status.
 
 | Phase | Status | Gate |
 | --- | --- | --- |
-| WB-0: Scope, contracts and feasibility | In Progress | Draft review, bounded spikes and schema/limit decisions |
+| WB-0: Scope, contracts and feasibility | **Complete (2026-09-18)** | W0.2-W0.5 evidence, frozen scope/contracts/limits/acceptance/ownership |
 | WB-1: Assets and projects | Planned | External/library import and durable project acceptance |
 | WB-2: Basic editing and export | Planned | Non-destructive timeline and real rendered output |
 | WB-3: Online editing and provider extensions | Planned | Qualified adapter, candidate workflow and authorized live edit |
@@ -26,7 +26,8 @@ Topic contracts: [PRD](VIDEO-WORKBENCH-PRD.md),
 [readiness review](VIDEO-WORKBENCH-READINESS.md).
 Execution details and ownership: [plan](VIDEO-WORKBENCH-PLAN.md),
 [team](VIDEO-WORKBENCH-TEAM.md).
-No workbench phase is complete; documentation is not implementation evidence.
+WB-0 completion is a documentation and preparation gate only; WB-1
+implementation has not started and documentation is not implementation evidence.
 
 ## Phase 0: Project Fact And Documentation Baseline
 

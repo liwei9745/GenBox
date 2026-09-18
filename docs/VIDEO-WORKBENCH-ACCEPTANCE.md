@@ -1,8 +1,24 @@
 # Video Workbench Acceptance Matrix
 
-Date: 2026-09-18. Revision: 0.1.
-Status: All new workbench cases NOT RUN. This file defines future gates.
+Date: 2026-09-18. Revision: 0.2.
+Status: **WB-0 planning gates PASS; WB-1-WB-4 implementation cases NOT RUN.**
 No historical generation test result counts as workbench acceptance.
+
+## WB-0 Preparation Gates
+
+These gates certify preparation artifacts, not product implementation:
+
+| Gate | Expected proof | Result |
+| --- | --- | --- |
+| WB0-01 Stage goals | G0-G8 ledger and dependency graph in `VIDEO-WORKBENCH-PLAN.md` | PASS |
+| WB0-02 Read-only feasibility | W0.2 media, W0.3 provider and W0.4 UX reports; no private upload or paid call | PASS |
+| WB0-03 Contract freeze | Core/provider/UX contracts contain first-release scope, schema, limits and error boundary | PASS |
+| WB0-04 Acceptance freeze | VA-01 through VA-20 map to phases; WB-0 targets and later live gates remain explicit | PASS |
+| WB0-05 Agent protocol | Coordinator ownership, WB1 packets and independent review boundary are recorded | PASS |
+
+The evidence for these gates is the WB-0 document set at commit `44c3f27`
+plus the follow-up freeze revision. They do not mark VA-01 through VA-20 as
+passed.
 
 ## Requirements And Cases
 
@@ -34,16 +50,16 @@ No historical generation test result counts as workbench acceptance.
 Use generated synthetic fixtures or redistributable fixtures with provenance:
 short CFR video with audio, VFR video, portrait/rotation metadata, silent clip,
 PNG/JPEG/WebP stills, supported WAV/MP3 audio, mixed sample rates, corrupt
-containers and boundary-limit files. These are candidate formats until the
-WB-0 decoder/export matrix is frozen; do not silently expand support.
+containers and boundary-limit files. These match the frozen WB-1 planning
+matrix in the core contract; do not silently expand support.
 
 Record source checksums, duration/time-base metadata and expected rendering
 outcomes. Never include user footage, private prompts or real credentials.
 AI-quality examples need authorized reference footage separate from fixtures.
 
-## Measurable Targets To Ratify In WB-0
+## Frozen Measurement Targets (Not Yet Measured)
 
-Proposed test envelope, not an existing benchmark: a two-minute project with
+The frozen test envelope is a two-minute project with
 20 picture clips, one audio track and 1080p source media; proxy preview up to
 720p. Record OS, CPU, RAM, storage, codec build, browser and cache state.
 
@@ -56,8 +72,8 @@ Proposed test envelope, not an existing benchmark: a two-minute project with
 - Cancellation: acknowledge within 1 second; owned local worker stops within
   5 seconds or reports bounded cleanup-pending state.
 
-WB-0 records measured values and accepts or revises targets before implementation
-planning closes. Record render time and memory, but do not promise real-time
+WB-1/WB-4 must measure these targets and may revise them only through a
+contract change. Record render time and memory, but do not promise real-time
 encoding across all machines. Cloud latency is measured separately and is not
 included in local-interaction promises.
 

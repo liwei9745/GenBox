@@ -1,7 +1,7 @@
 # Video Workbench Product Requirements
 
-Date: 2026-09-18. Revision: 0.1.
-Status: Draft for scope review; no workbench implementation or acceptance.
+Date: 2026-09-18. Revision: 0.2.
+Status: **WB-0 scope frozen; no workbench implementation or acceptance.**
 
 ## Authority And Reading Order
 
@@ -20,7 +20,11 @@ local generative models, reusable editing presets, GenBox library selection,
 external media import, and gradual expansion toward everyday video editing.
 USER-CONFIRMED addition: support future online video-editing models through
 extensible provider interfaces; the workbench must not be Google-specific.
-The detailed limits and UX below are proposed, not separately user-accepted.
+The first-release scope is frozen by WB-0. Numeric media limits and the
+provider-neutral contract are frozen in
+[VIDEO-WORKBENCH-CONTRACT.md](VIDEO-WORKBENCH-CONTRACT.md) and
+[VIDEO-WORKBENCH-PROVIDERS.md](VIDEO-WORKBENCH-PROVIDERS.md); UX gates are
+frozen in [VIDEO-WORKBENCH-UX.md](VIDEO-WORKBENCH-UX.md).
 
 ## Product Outcome
 

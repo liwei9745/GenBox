@@ -1,7 +1,7 @@
 # Video Workbench Interaction Specification
 
-Date: 2026-09-18. Revision: 0.1.
-Status: Proposed interaction contract, not a finished mockup or implemented UI.
+Date: 2026-09-18. Revision: 0.2.
+Status: **Frozen WB-0 interaction baseline; no workbench UI implemented.**
 Scope: [PRD](VIDEO-WORKBENCH-PRD.md). Provider behavior:
 [extension contract](VIDEO-WORKBENCH-PROVIDERS.md).
 
@@ -92,3 +92,16 @@ Respect reduced motion; text must not overlap or rely on color alone.
 WB-0 produces a reviewed low-fidelity flow before detailed visual implementation.
 Screenshots use synthetic fixtures only, never exposed keys or private media.
 Do not add a separate frontend framework merely to copy a component-library demo.
+
+## WB-0 Interaction Freeze
+
+The preview-first shell, four acceptance viewports, state matrix, consent
+boundary and accessibility/performance targets in this document are the
+required WB-1 interaction baseline. Detailed visual styling, provider-specific
+controls and desktop/mobile parity beyond the stated path remain implementation
+work and must not expand the first-release scope silently.
+
+WB-1 starts with the local path only: empty project -> external/library asset
+selection -> validation -> timeline placement -> atomic save -> refresh/restart
+restore. Online provider selection, presets and candidate acceptance remain
+disabled or explanatory until WB-3 qualifies a provider profile.
