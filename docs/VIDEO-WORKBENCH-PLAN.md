@@ -33,7 +33,7 @@ implementation to avoid an unresolved current gate.
 
 | Phase | Status | Exit gate |
 | --- | --- | --- |
-| WB-0 | In Progress: W0.2/W0.4 evidence complete; W0.3 research complete; W0.5 blockers open | Approved scope, frozen schemas/limits, evidence-backed feasibility |
+| WB-0 | **Complete (2026-09-18): W0.2-W0.5 evidence and planning freeze accepted** | Approved scope, frozen schemas/limits, evidence-backed feasibility |
 | WB-1 | Planned | VA-01 through VA-04; applicable VA-12/13 |
 | WB-2 | Planned | VA-05 through VA-07, local part of VA-15/20 |
 | WB-3 | Planned | VA-08 through VA-11, VA-17 through VA-19; applicable VA-12/13 |
@@ -59,9 +59,10 @@ entry or fake adapter is not implementation evidence.
 | G7 Online editing (WB-3) | Add bounded provider adapters, presets and candidate comparison | Fake second adapter, recovery tests, authorized live evidence | Authorize WB-4 integration and packaging |
 | G8 Integrated delivery (WB-4) | Verify the complete workbench across supported targets and release boundaries | Independent review, regression, performance, packaging and clean-install evidence | Release or return to the failed stage |
 
-The current objective is **G1-G4 only**. No WB-1 implementation, paid
-generation call, private-media upload or provider-specific UI is authorized
-until G4 passes.
+The current objective was **G1-G4 only** and is now complete. No WB-1
+implementation, paid generation call, private-media upload or provider-specific
+UI was started during WB-0. The next safe artifact is a reviewed WB-1
+implementation plan.
 
 ## WB-0: Preparation
 
@@ -76,19 +77,23 @@ until G4 passes.
 W0.2-W0.4 may be researched in parallel when explicitly dispatched. Media spike
 and mock protocol tests may not upload private media or call paid APIs.
 
-Required decisions before WB-1:
+Decisions frozen for WB-1 planning:
 
-- Engine/dependency selection and supported client/container packaging strategy.
-- Supported codec/container matrix and numerical resource limits.
-- Project JSON schema, rational FPS/output profiles and proxy time mapping.
-- Asset storage paths, revision/lease strategy, upload chunking choice and
-  failure cleanup. Resumable upload is optional, restart safety is mandatory.
-- Exact API schemas/error enums; frontend/backend agree on sample fixtures.
-- Initial low-fidelity UX review and agreed performance test envelope.
+- FFmpeg/ffprobe worker boundary and the conservative input/output/resource
+  matrix in the core contract.
+- Project JSON schema, rational time representation, output profiles and proxy
+  mapping.
+- Logical asset/project/job storage, revision/lease strategy, bounded
+  multipart import and restart-safe cleanup.
+- Logical API operations, error enum, auth/CSRF, conflict and idempotency
+  semantics.
+- Low-fidelity UX path, fixed viewports and frozen interaction/performance
+  targets.
 
 Additional decisions before WB-3: verified source upload/edit shape, initial
 provider capabilities, private remote-handle lifecycle and storage disclosure,
-post-submit reconciliation policy and authorized live-test plan.
+post-submit reconciliation policy and authorized live-test plan. Packaged
+cross-target media behavior remains a WB-4 gate.
 
 ## WB-1: Assets And Durable Projects
 
@@ -150,17 +155,17 @@ recipes and confirmed-cost batches. Each needs its own requirements and gates.
 ## Current Handoff
 
 W0.1: Complete as the planning baseline.
-W0.2: Evidence report complete; cross-target packaging, exact limits and
-FFmpeg licensing remain open.
-W0.3: Official-source research report complete; live source-video editing,
-remote-handle recovery and provider qualification remain blocked.
-W0.4: Low-fidelity UX report complete; measured shell dimensions and browser
-smoke evidence remain open.
-W0.5: Review recorded in
+W0.2: Evidence report complete; frozen planning matrix accepted. Cross-target
+packaging and fault evidence remain later-phase gates.
+W0.3: Official-source research report complete; source-video editing remains
+unavailable until WB-3 qualification.
+W0.4: Low-fidelity UX baseline frozen; browser journey evidence remains
+implementation acceptance.
+W0.5: PASS recorded in
 [VIDEO-WORKBENCH-W0.5-REVIEW.md](VIDEO-WORKBENCH-W0.5-REVIEW.md);
-WB-1 is not authorized.
+WB-1 implementation has not started.
 
-Next action: resolve the W0.5 blocker table, then rerun independent review.
-Only a W0.5 pass may authorize WB-1 implementation packets. Do not silently
-launch paid calls, upload private media, or auto-upgrade GSD/Agency tools.
+Next action: create and review the WB-1 implementation plan from the frozen
+contract. Do not silently launch paid calls, upload private media, or
+auto-upgrade GSD/Agency tools.
 Retain existing user changes and release handoff in STATUS.

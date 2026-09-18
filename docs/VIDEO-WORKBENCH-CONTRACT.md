@@ -1,6 +1,7 @@
 # Video Workbench Core Contract
 
-Date: 2026-09-18. Revision: 0.1. Status: Proposed implementation contract.
+Date: 2026-09-18. Revision: 0.2.
+Status: **Frozen WB-0 planning contract; implementation routes do not yet exist.**
 No routes, schemas or modules described as proposed here exist by implication.
 Scope: [PRD](VIDEO-WORKBENCH-PRD.md). Gates: [plan](VIDEO-WORKBENCH-PLAN.md).
 Online model extension: [provider contract](VIDEO-WORKBENCH-PROVIDERS.md).
@@ -174,3 +175,214 @@ Document upload failures, disk exhaustion and orphan recovery.
 Reuse existing provider and library boundaries without silently broadening them.
 Dependency/codec redistribution review and desktop/container availability are
 WB-0 and WB-4 gates, not implied by having ffmpeg on one development machine.
+
+## WB-0 Freeze: First-Release Contract
+
+This section supersedes earlier `Proposed` wording for the purpose of planning
+WB-1. It freezes the first-release boundary and conservative validation limits;
+it does not claim that the routes or modules already exist. A limit may be
+revised only through a contract revision with new fixture evidence and
+acceptance impact.
+
+### Frozen first-release media boundary
+
+The first local editing slice uses **FFmpeg/ffprobe as an external worker
+dependency**. The worker is invoked with argument arrays, a confined working
+directory and bounded process/resource controls. GenBox must expose a startup
+diagnostic when either executable is missing; it must not silently install a
+codec package.
+
+| Input / output | Frozen WB-1 planning rule |
+| --- | --- |
+| Video input | MP4/H.264 with optional AAC, and WebM/VP9 as input-only |
+| Audio input | WAV/PCM or MP3; AAC is accepted when carried by an accepted MP4 |
+| Still input | PNG, JPEG or WebP after decoder/content validation |
+| Output | MP4/H.264 `yuv420p`; AAC when an audio stream is present |
+| Preview proxy | H.264 MP4, maximum 1280x720; never used as export source |
+| Thumbnail | JPEG, maximum 320x180 display target |
+| Video dimensions | Maximum 1920x1080 for WB-1 imports |
+| Still dimensions | Maximum 4096x4096 |
+| Audio | At most 2 channels and 96 kHz; render may resample to the output profile |
+| Stream count | At most one video stream and one audio stream; reject subtitle/data streams |
+| Rejected inputs | Playlists, archives, embedded network references, arbitrary URLs and unknown codecs |
+
+These are **FROZEN / PLANNING** limits, not claims of the maximum that the
+current host can decode. They are intentionally narrower than FFmpeg's local
+capabilities so WB-1 can provide predictable errors and bounded resource use.
+WebM/VP9 is not an export promise; packaged-runtime and browser checks remain
+WB-4 acceptance evidence.
+
+### Frozen resource limits
+
+| Limit | Value | Enforcement point |
+| --- | ---: | --- |
+| One asset | 512 MiB video/audio; 64 MiB still | staging admission before probe |
+| One import request | 10 files and 1 GiB total | request validation |
+| Project duration | 120 seconds | client hint and server validation |
+| Picture clips | 20 clips on the single picture track | project validation |
+| Audio clips | 20 clips on the single audio track | project validation |
+| Tracks | one picture/video track plus one audio track | project validation |
+| Still duration | 0.5 to 30 seconds | timeline validation |
+| Local media jobs | 2 probe jobs and 1 render job per instance | scheduler |
+| Online edit observation | 1 submitted edit per project at a time | job/idempotency boundary |
+| Temporary reservation | 1 GiB per local probe/render job | admission and cleanup |
+| Project JSON | 4 MiB serialized state | save validation |
+
+The 120-second/20-clip envelope is the same planning target described in the
+acceptance matrix. W0.2's synthetic measurements establish feasibility of the
+worker path, not a performance guarantee for large media. WB-4 must measure
+memory, disk and cross-target behavior before a release claim.
+
+### Frozen output profiles
+
+WB-1 exposes two profiles:
+
+```json
+{
+  "profile_id": "landscape_1080p_30",
+  "canvas": {"width": 1920, "height": 1080},
+  "fps": {"num": 30, "den": 1},
+  "fit_mode": "contain",
+  "video_codec": "h264",
+  "pixel_format": "yuv420p",
+  "audio_codec": "aac"
+}
+```
+
+The second profile is `portrait_1080p_30` with a 1080x1920 canvas. The
+workbench may select 24/1 or 25/1 as an explicit profile revision later, but
+WB-1 uses 30/1 only. Letterbox/contain is explicit; silent crop, stretch and
+automatic aspect-ratio changes are forbidden. Source time remains represented
+with integer microseconds and rational stream time bases.
+
+### Frozen logical storage layout
+
+These are logical, confined paths; no absolute path is exposed to the browser:
+
+```text
+storage/video_workbench/staging/{job_id}/
+storage/video_workbench/assets/{asset_id}/original
+storage/video_workbench/assets/{asset_id}/derived/{preview_revision}/
+storage/video_workbench/projects/{project_id}.json
+storage/video_workbench/jobs/{job_id}.json
+```
+
+Staging is owned by the import/job ID and may be cleaned only after the job is
+terminal. Originals, projects and accepted candidates have separate lifetimes.
+Derived thumbnails/proxies are reproducible and may be removed only when no
+active lease references them.
+
+### Frozen project JSON shape
+
+The following is the minimum server-validated shape. Additional fields require
+a schema revision; unknown fields are rejected rather than silently dropped.
+
+```json
+{
+  "schema_version": 1,
+  "project_id": "prj_opaque",
+  "revision": 1,
+  "title": "untitled",
+  "output_profile": {
+    "profile_id": "landscape_1080p_30",
+    "canvas": {"width": 1920, "height": 1080},
+    "fps": {"num": 30, "den": 1},
+    "fit_mode": "contain"
+  },
+  "asset_refs": [
+    {"asset_id": "ast_opaque", "kind": "video", "digest": "sha256:..."}
+  ],
+  "tracks": [
+    {
+      "track_id": "trk_picture",
+      "kind": "picture",
+      "clips": [
+        {
+          "clip_id": "clip_opaque",
+          "asset_id": "ast_opaque",
+          "source_in_us": 0,
+          "source_out_us": 2000000,
+          "timeline_start_us": 0,
+          "duration_us": 2000000,
+          "playback_rate": {"num": 1, "den": 1}
+        }
+      ]
+    },
+    {"track_id": "trk_audio", "kind": "audio", "clips": []}
+  ],
+  "candidate_refs": [],
+  "created_at": "2026-09-18T00:00:00Z",
+  "updated_at": "2026-09-18T00:00:00Z"
+}
+```
+
+The server recomputes digests, duration and asset metadata. `expected_revision`
+is required on every save. A stale revision returns `conflict` and leaves both
+the stored revision and the caller's draft intact.
+
+### Frozen logical API operations
+
+The implementation may choose framework-specific route spelling, but it must
+expose these operations with the listed semantics:
+
+| Operation | Required request fields | Required result |
+| --- | --- | --- |
+| Import external | multipart bytes, request ID | local asset/job ID; per-file state |
+| Register library | exact library item identity | validated opaque asset ID or `missing` |
+| List assets | cursor, kind, bounded query | paginated metadata; lazy preview handles |
+| Create project | title, output profile | project ID and revision 1 |
+| Read project | project ID | latest valid snapshot |
+| Save project | project ID, expected revision, validated document | new revision or `conflict` |
+| Relink asset | project/clip ID, replacement asset ID | revalidated revision |
+| Preflight local/online | project revision, clip IDs, operation | immutable plan ID and warnings |
+| Submit job | plan ID, idempotency key, consent ID when online | durable local job ID |
+| Read/cancel job | job ID | sanitized state; no resubmission |
+| Accept candidate | candidate ID, expected project revision | new revision or `conflict` |
+
+All operations use the existing authenticated application boundary and
+appropriate CSRF protection. Browser input cannot contain shell commands,
+filesystem paths, arbitrary URLs, provider credentials or upstream request
+bodies.
+
+### Frozen error vocabulary
+
+The public error object is:
+
+```json
+{
+  "code": "unsupported_media",
+  "stage": "probe",
+  "message": "此素材格式不在当前工作台支持范围内。",
+  "retryable": false,
+  "field": "file"
+}
+```
+
+Allowed `code` values are:
+
+`invalid_request`, `auth_required`, `forbidden`, `not_found`, `conflict`,
+`unsupported_media`, `media_corrupt`, `asset_too_large`, `dimension_limit`,
+`duration_limit`, `probe_timeout`, `dependency_missing`, `disk_space`,
+`job_not_found`, `job_cancelled`, `cleanup_pending`, `provider_unavailable`,
+`unsupported_capability`, `consent_required`, `submission_unknown`,
+`remote_failed`, `invalid_result`, and `internal`.
+
+Messages are localized safe text. Raw exceptions, provider bodies, signed
+URLs, credentials and private paths never appear in the public error.
+
+### WB-0 versus later gates
+
+WB-0 freezes the planning contract above. The following remain later-phase
+acceptance evidence and are not blockers to declaring the preparation phase
+complete:
+
+- cross-platform packaged FFmpeg/browser behavior (`VA-16`, WB-4);
+- stress, disk-full, hostile-media and restart tests (`VA-04`, `VA-12`,
+  `VA-13`, WB-1/WB-4);
+- a real Google or other provider source-video edit (`VA-17`, WB-3/WB-4);
+- provider remote-handle expiry, cancellation and reconciliation (`VA-11`,
+  WB-3);
+- measured performance on declared package targets (`VA-20`, WB-4).
+
+These are still required before the corresponding feature or release can be
+accepted. Deferring them does not advertise unsupported capabilities.

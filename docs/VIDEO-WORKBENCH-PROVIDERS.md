@@ -1,6 +1,7 @@
 # Video Editing Provider Extension Contract
 
-Date: 2026-09-18. Revision: 0.1. Status: Proposed, no adapters implemented here.
+Date: 2026-09-18. Revision: 0.2.
+Status: **Frozen WB-0 provider-neutral contract; no live edit adapter enabled.**
 Requirement: VW-13. Parent: [core contract](VIDEO-WORKBENCH-CONTRACT.md).
 
 ## Goal And Non-Goals
@@ -139,3 +140,36 @@ upload/status/output shapes, plus the first implemented real adapter. Fake
 coverage proves architectural separation, not support for a second live model.
 Adding another provider must not require changing project schema or existing
 generation requests unless an explicit versioned contract change is approved.
+
+## WB-0 Provider Freeze
+
+The following rules are frozen for the first-release workbench:
+
+1. `video_edit` is a capability, not a model-name category. A discovered model
+   or OpenAI-compatible endpoint cannot grant it.
+2. The browser submits the canonical intent and validated adapter options only.
+   The server resolves credentials, endpoint details and vendor request bodies.
+3. The first workbench release exposes no live online-edit provider by default.
+   Google Omni is a research candidate from W0.3; its source-video edit profile
+   remains `research_only/unavailable` until a dedicated adapter, privacy/
+   recovery contract and authorized evidence pass WB-3.
+4. Veo and the existing native Google generation adapter remain generation
+   capabilities. They do not inherit source-video editing from model names.
+5. Unsupported roles, settings and preservation requests return
+   `unsupported_capability`; they are never silently removed from the intent.
+6. The shared lifecycle, consent, idempotency and `submission_unknown` state
+   from the core contract applies equally to Google, future official APIs and
+   custom gateways.
+
+### Frozen capability states
+
+| Provider profile | Operation | WB-0 state | What would promote it |
+| --- | --- | --- | --- |
+| Google Gemini Omni Flash | uploaded source-video edit | `research_only/unavailable` | Implemented adapter, official request fixtures, privacy/recovery review and VA-17 |
+| Google Veo | text/image/video generation and extension profiles already in GenBox | outside workbench edit registry | Existing generation regression plus separate edit qualification |
+| Other online models | source-video edit | `unavailable` | Provider-specific official contract and adapter qualification |
+| Fake adapter A/B | interface tests only | `test_only` | WB-3 contract coverage; never user-visible support |
+
+This freeze intentionally lets WB-1 build local assets and projects without
+pretending that an online model is already supported. Provider-specific UI is
+deferred to WB-3 after capability data exists.

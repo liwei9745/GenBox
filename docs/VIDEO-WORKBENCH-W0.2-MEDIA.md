@@ -2,8 +2,8 @@
 
 Date: 2026-09-18. Revision: 0.1.
 Stage: G1 media feasibility.
-Status: Evidence collected; numeric limits and packaging decisions remain
-`PROPOSED` pending W0.5 review.
+Status: Evidence collected; conservative WB-1 planning matrix frozen in the
+core contract. Cross-target packaging and fault behavior remain later gates.
 
 This report is a bounded local media spike for the independent video workbench.
 It does not implement an importer, project store, proxy service or render job
