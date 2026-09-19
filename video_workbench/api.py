@@ -107,13 +107,13 @@ def build_router(get_service, get_admin_key, allowed_origins):
         if request.query_params:
             raise _fail("invalid_request", "admission")
 
-    async def library_body(request, *, preview=False):
+    async def json_body(request, limit):
         no_query(request)
         payload = bytearray()
         async for chunk in request.stream():
-            payload.extend(chunk)
-            if len(payload) > 4096:
+            if len(payload) + len(chunk) > limit:
                 raise _fail("invalid_request", "admission")
+            payload.extend(chunk)
         try:
             def unique_fields(pairs):
                 result = {}
@@ -122,14 +122,47 @@ def build_router(get_service, get_admin_key, allowed_origins):
                         raise ValueError
                     result[key] = value
                 return result
-            body = json.loads(payload, object_pairs_hook=unique_fields)
+
+            def reject_constant(value):
+                raise ValueError
+
+            return json.loads(payload, object_pairs_hook=unique_fields, parse_constant=reject_constant)
         except (ValueError, RecursionError):
             raise _fail("invalid_request", "admission") from None
+
+    async def library_body(request, *, preview=False):
+        body = await json_body(request, 4096)
         required = {"library_kind", "library_item_id"}
         allowed = required if preview else required | {"expected_sha256"}
         if not isinstance(body, dict) or set(body) - allowed or not required <= set(body):
             raise _fail("invalid_request", "admission")
         return body
+
+    @router.post("/projects")
+    async def create_project(request: Request):
+        body = await json_body(request, 4096)
+        if not isinstance(body, dict) or set(body) != {"title", "output_profile"}:
+            raise _fail("invalid_request", "admission")
+        result = await run_in_threadpool(
+            resolve_service().projects.create, WORKSPACE_OWNER, **body,
+        )
+        return JSONResponse(result, status_code=201, headers={"Cache-Control": "private, no-store"})
+
+    @router.get("/projects/{project_id}")
+    async def read_project(project_id: str, request: Request):
+        no_query(request)
+        result = await run_in_threadpool(resolve_service().projects.read, WORKSPACE_OWNER, project_id)
+        return JSONResponse(result, headers={"Cache-Control": "private, no-store"})
+
+    @router.put("/projects/{project_id}")
+    async def save_project(project_id: str, request: Request):
+        body = await json_body(request, 4 * 1024 * 1024 + 1024)
+        if not isinstance(body, dict) or set(body) != {"expected_revision", "document"}:
+            raise _fail("invalid_request", "admission")
+        result = await run_in_threadpool(
+            resolve_service().projects.save, WORKSPACE_OWNER, project_id, **body,
+        )
+        return JSONResponse(result, headers={"Cache-Control": "private, no-store"})
 
     @router.get("/diagnostics")
     async def media_diagnostics(request: Request):

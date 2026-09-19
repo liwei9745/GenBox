@@ -1,9 +1,9 @@
 # Current Project Status
 
-## Active Phase: WB-1 W1-2 Media (Candidate Backend Locally Verified)
+## Active Phase: WB-1 W1-3 Durable Projects (Backend Locally Verified)
 
-- **GOAL:** Implement and verify the approved candidate-library list,
-  lazy thumbnail and digest-bound exact registration before project persistence or UI.
+- **GOAL:** Implement and verify the frozen project shell's create/read/save,
+  optimistic revision conflicts, restart recovery and missing-reference safety.
   This is not the entire WB-1 asset/project/UI acceptance gate.
 - **CURRENT STAGE:** W1-0 and W1-1 passed on 2026-09-18. On 2026-09-18 the
   autonomous execution protocol was enabled in
@@ -16,44 +16,56 @@
   The user has approved the candidate boundary; additive API revision 0.1 is
   frozen in `docs/VIDEO-WORKBENCH-LIBRARY-PICKER-PROPOSAL.md`.
   Candidate routes are implemented and local regression has passed.
-  Project persistence and independent workbench UI remain
-  unimplemented.
+  The candidate backend checkpoint is preserved at `c012133`, with local and
+  remote SHA reverified on 2026-09-19 UTC. The user approved the next stage.
+  W1-3 storage and route integration are implemented; 381 workbench tests
+  pass and independent scoped review found no actionable issues.
+  Full regression passed with 2222 tests; dedicated-branch preservation follows
+  scoped final checks.
+  Independent workbench UI remains unimplemented.
 - **GUARDRAILS:** Use synthetic local fixtures only, make no paid generation
   calls, do not upload private media, keep existing generation routes unchanged,
   keep shared contracts/status/release files under coordinator ownership, and
   pause for the manual gates in the autonomous execution protocol.
-- **EXIT CONDITION:** Candidate focused/full regression and compile/diff
-  checks pass; preserve only the dedicated branch after scoped review. `WB1-MEDIA`
-  remains `running`. Browser journeys
-  and independent review remain their separate W1-4/W1-5 gates.
+- **EXIT CONDITION:** W1-3 focused/full regression, fault/process-interruption
+  tests, independent scoped code check and sanitization before dedicated-branch
+  preservation. Browser journeys and full integrated review remain W1-4/W1-5.
+- **CURRENT HANDOFF:** `docs/VIDEO-WORKBENCH-W1-3-PROJECTS.md` defines exact
+  operations and ownership. Project Agent owns storage/unit tests; coordinator
+  owns shared routes, integration tests and documents. W1-2 backend dependencies
+  are verified, not the entire media/browser/packaging acceptance matrix.
 
-## 2026-09-19 Candidate Library Backend Checkpoint (UTC)
+## 2026-09-19 Durable Project Backend Checkpoint (UTC)
 
-- **USER-CONFIRMED:** Continue the approved candidate-library scope within
-  bounded unattended development. Existing core DTOs/auth/limits stay frozen.
-- **IMPLEMENTED / LOCAL:** Minimal authenticated candidate pagination and
-  CSRF-protected lazy PNG/MP4 thumbnail preview with source SHA-256. Explicit
-  registration checks the preview digest; browsing alone publishes no asset.
-- **VERIFIED / FOCUSED:** Candidate/API/index subset: `80 passed in 15.65s`;
-  all workbench modules: **`230 passed in 76.36s`**. Compilation passed.
+- **USER-CONFIRMED:** Continue W1-3 with bounded collaboration. Existing
+  core DTOs/auth/limits remain frozen; no UI/timeline/provider work.
+- **IMPLEMENTED / LOCAL:** Authenticated project create/read/save, strict
+  schema-1 shell, optimistic revision checks, atomic snapshots, exact media
+  references and safe missing/changed-reference retention.
+- **VERIFIED / FOCUSED:** API/process suite `33 passed in 5.17s`;
+  all workbench modules **`381 passed in 81.98s`**. Actual process exits before
+  and after atomic replacement preserve respectively the old/new valid revision.
+- **VERIFIED / INDEPENDENT CHECK:** A separate read-only reviewer found no
+  actionable issues and ran **`154 passed in 6.97s`**. This is scoped W1-3
+  review, not complete W1-5 acceptance or a penetration test.
 - **VERIFIED / FULL:** `python -m pytest -q -W
   error::pytest.PytestUnhandledThreadExceptionWarning` ->
-  **`2071 passed in 332.93s`**.
-- **VERIFIED / REVIEW:** Fourteen explicit files pass staged diff and limited
-  added-line secret/private-path checks. No open branch PR or matching push
-  workflow trigger was found. Preservation is dedicated-branch-only; no
-  independent audit, release or service restart is claimed.
-- **COLLABORATION:** Coordinator-only for coupled media/router contracts.
-  `VIDEO-WORKBENCH-TEAM.md` revision 0.7 records dependency-ordered project/UI/
-  review assignments; no additional Agent or independent review is claimed.
-- **NEXT:** Verify preservation, then assess remaining
-  W1-2 acceptance and W1-3 project-store entry. Browser journey remains W1-4;
-  provider edits, packaging and release are not started.
-- **DETAILS / RESUME:** `docs/VIDEO-WORKBENCH-W1-2-PICKER.md`. Verify branch/
-  remote identity and leave all four existing debug directories untouched.
-  Private-data deployment still needs access-log redaction verification.
-- **PREVIOUS BASELINE:** `5923d55`: 182 workbench / 2023 full-suite tests passed;
-  see `docs/VIDEO-WORKBENCH-W1-2-BOUNDARIES.md` for the prior evidence.
+  **`2222 passed in 340.65s`**. Compilation and diff checks pass.
+- **VERIFIED / PRESERVATION REVIEW:** Sixteen explicit files pass staged diff
+  and limited secret/private-path checks. No open branch PR or matching push
+  workflow was found. Development-branch-only preservation; no release,
+  service restart or production change.
+- **COLLABORATION:** Project implementer owned storage/unit tests; coordinator
+  owned routes/integration/process tests/docs; reviewer made no code changes.
+- **NEXT:** Verify preserved checkpoint, then prepare W1-4 UI integration:
+  import/library selection, preview, project save states and refresh/reopen.
+  No timeline/online-edit/packaging/release work is started.
+- **DETAILS / RESUME:** `docs/VIDEO-WORKBENCH-W1-3-PROJECTS.md`. Verify branch/
+  remote identity; leave all four existing debug directories untouched.
+  Native POSIX, power-loss durability, browser workflows and deployment
+  access-log redaction retain their separate unverified boundaries.
+- **PREVIOUS BASELINE:** `c012133`: 230 workbench / 2071 full-suite tests passed;
+  see `docs/VIDEO-WORKBENCH-W1-2-PICKER.md`.
 
 ## 2026-09-18 Local Preview And Recovery Checkpoint (UTC)
 

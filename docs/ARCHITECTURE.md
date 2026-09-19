@@ -86,10 +86,13 @@ storage-fault behavior are tracked in
 Request-local library source indexing and bounded MP4 reference checks before
 native validation are tracked in
 [the boundary checkpoint](VIDEO-WORKBENCH-W1-2-BOUNDARIES.md).
-Unregistered-library candidate discovery requires the separate
-[proposed picker contract](VIDEO-WORKBENCH-LIBRARY-PICKER-PROPOSAL.md);
+Unregistered-library candidate discovery and lazy previews are locally verified
+under the separate [picker contract](VIDEO-WORKBENCH-LIBRARY-PICKER-PROPOSAL.md);
 the legacy rich gallery response is not the workbench asset DTO.
-Project/timeline/final-export/online-edit modules are still planned. Existing
+The [durable project shell](VIDEO-WORKBENCH-W1-3-PROJECTS.md) now has locally
+verified create/read/save, optimistic revisions, atomic replacement and
+restart recovery under the existing single-owner store boundary.
+Workbench UI/timeline/final-export/online-edit modules are still planned. Existing
 generation routes and transports remain unchanged.
 
 ## Future Message Channel Architecture

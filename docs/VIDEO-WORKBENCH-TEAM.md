@@ -1,18 +1,20 @@
 # Video Workbench Agent Collaboration Protocol
 
-Date: 2026-09-19 (UTC). Revision: 0.7.
-Status: **W1-0/W1-1 complete; WB1-MEDIA running; WB1-PROJECT ready but not started; unattended execution enabled.**
+Date: 2026-09-19 (UTC). Revision: 0.8.
+Status: **W1-2/W1-3 backends locally verified; W1-3 scoped review complete; UI not started.**
 
-Current execution is coordinator-only. No additional Agent was dispatched for
-the media integration or candidate-picker checkpoint. Shared wiring is coordinator-owned; an
-independent review has not occurred and must not be inferred from local tests.
+The prior media/candidate checkpoints were coordinator-only. Following user
+approval to continue the recommended next stage, W1-3 uses a project-storage
+Agent plus coordinator, with independent scoped review after integration.
+Shared wiring stays coordinator-owned. Full W1-5 review is not implied.
 
 ## Current Collaboration Decision
 
-The user asked whether the next development stage needs multiple Agents.
-For this tightly coupled W1-2 slice, keep candidate-contract, router/auth,
-staging/cleanup integration and evidence under one coordinator. Do not dispatch
-an Agent merely because a role exists.
+The user approved continuing the next development stage. W1-3 has disjoint
+ownership in `VIDEO-WORKBENCH-W1-3-PROJECTS.md`: the project Agent implements
+`video_workbench/projects/` and its unit tests; coordinator integrates routes,
+real asset/API/process tests and documents. A separate scoped reviewer reads
+the stable result. No Agent starts UI or AI work.
 
 After the media handoff is ready, the recommended bounded arrangement is:
 
@@ -25,11 +27,16 @@ After the media handoff is ready, the recommended bounded arrangement is:
 4. Independent reviewer: read-only review of a stable integrated commit;
    verify actual code/tests, not just worker reports.
 
-Project and UI implementation are dependency-ordered, not automatically started
+Project and UI implementation are dependency-ordered; UI is not started
 in parallel today. Disjoint test/UX work can overlap only with explicit task
 packets and delegation authorization. Maximum simultaneous implementers remains
 two, with shared-entry changes serialized. AI adapters stay deferred to WB-3.
-This is the strategy, not a claim that these Agents were started.
+The project implementer and a separate read-only reviewer were dispatched for
+W1-3. The implementer stayed within storage/unit-test ownership; coordinator
+owned shared wiring and API/process tests. The reviewer found no actionable
+issues in the final scope and independently ran 154 project/contract tests.
+Evidence and limits are in `VIDEO-WORKBENCH-W1-3-PROJECTS.md`. This does not
+replace full W1-5 integrated acceptance.
 
 ## Operating Model
 

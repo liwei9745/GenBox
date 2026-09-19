@@ -1,7 +1,7 @@
 # Video Workbench WB-1 Implementation Plan
 
-Date: 2026-09-19 (UTC). Revision: 0.8.
-Status: **W1-0/W1-1 complete; approved W1-2 candidate backend locally verified; full WB-1 acceptance outstanding.**
+Date: 2026-09-19 (UTC). Revision: 0.9.
+Status: **W1-2/W1-3 backends locally verified; W1-4 UI not started; full WB-1 acceptance outstanding.**
 
 This plan turns the frozen WB-0 contracts into an executable implementation
 strategy for the first vertical slice. It is subordinate to
@@ -278,14 +278,19 @@ The next source-index/real-boundary/interruption evidence is in
 The approved candidate-list/lazy-preview subgate is recorded in
 [the picker backend checkpoint](VIDEO-WORKBENCH-W1-2-PICKER.md):
 230 workbench and 2071 full-suite tests pass locally.
-Project persistence, UI and independent review
-remain outstanding. The single administrator owns the current workspace;
+W1-3 project persistence is now locally verified under
+[its task packet](VIDEO-WORKBENCH-W1-3-PROJECTS.md): 381 workbench and 2222
+full-suite tests pass, with a separate scoped code check. UI and full integrated
+independent review remain outstanding. The single administrator owns the current workspace;
 this implementation does not introduce multi-user tenancy.
 
 ## 11. Immediate Next Action
 
-Verify the preserved candidate backend checkpoint, then assess the W1-2
-acceptance handoff and readiness for W1-3 project persistence. Exact additive
+The candidate backend checkpoint `c012133` is preserved and its dependency
+handoff assessed. Verify the preserved W1-3 project-shell checkpoint, then
+prepare W1-4 UI integration for import/library/preview/save/reopen using
+the implemented interfaces and synthetic fixtures only.
+Do not report deferred media/browser/stress/review gates as accepted. Exact additive
 routes/DTO/preview ownership are frozen in appendix 0.1 of
 `VIDEO-WORKBENCH-LIBRARY-PICKER-PROPOSAL.md`. Keep existing
 asset/project/job DTOs and shared gallery behavior unchanged.

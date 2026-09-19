@@ -1,11 +1,12 @@
 # Video Workbench Development Plan
 
-Date: 2026-09-19. Revision: 0.5.
-Current primary objective: WB-1 W1-2 candidate-library backend verification.
+Date: 2026-09-19. Revision: 0.6.
+Current primary objective: preserve the verified W1-3 backend and hand off to W1-4 UI preparation.
 Authorization: W1-0/W1-1 are complete; WB1-MEDIA is running under the bounded
-unattended policy and approved candidate appendix 0.1. WB1-PROJECT is ready
-but not started. No provider work, paid calls, private-media upload, release,
-or deployment. Agent dispatch requires explicit authorization, not this roster.
+unattended policy and approved candidate appendix 0.1. Its backend handoff is
+verified and the user approved starting WB1-PROJECT with bounded collaboration.
+No provider work, paid calls, private-media upload, release or deployment.
+Agent dispatch is bounded by the current W1-3 ownership packet, not this roster.
 
 ## Reading And Authority
 
@@ -37,7 +38,7 @@ only after that phase's plan and evidence gates pass.
 | Phase | Status | Exit gate |
 | --- | --- | --- |
 | WB-0 | **Complete (2026-09-18): W0.2-W0.5 evidence and planning freeze accepted** | Approved scope, frozen schemas/limits, evidence-backed feasibility |
-| WB-1 | **In progress: W1-0/W1-1 complete; W1-2 backend subcases locally verified** | VA-01 through VA-04; applicable VA-12/13 |
+| WB-1 | **In progress: W1-2/W1-3 backend subcases verified; UI and integrated acceptance pending** | VA-01 through VA-04; applicable VA-12/13 |
 | WB-2 | Planned | VA-05 through VA-07, local part of VA-15/20 |
 | WB-3 | Planned | VA-08 through VA-11, VA-17 through VA-19; applicable VA-12/13 |
 | WB-4 | Planned | All required cases, regressions, packaging and independent review |
@@ -64,8 +65,9 @@ entry or fake adapter is not implementation evidence.
 | G8 Integrated delivery (WB-4) | Verify the complete workbench across supported targets and release boundaries | Independent review, regression, performance, packaging and clean-install evidence | Release or return to the failed stage |
 
 G1-G4 are complete. W1-0/W1-1 are now complete on the isolated WB-1 branch.
-The current objective is to verify/preserve the candidate-library backend,
-then assess the W1-2 handoff before starting the W1-3 project-store packet.
+The current objective is to preserve the verified W1-3 project-store packet
+and prepare W1-4 integration against its real interfaces.
+The W1-2 backend handoff is not full media/browser/packaged acceptance.
 No online Provider work or paid generation call is authorized.
 
 ## WB-0: Preparation

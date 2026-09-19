@@ -8,13 +8,13 @@ mock-based tests, UI, and live-environment verification are separate evidence.
 
 USER-CONFIRMED new direction on 2026-09-18; use separate WB phase IDs rather
 than renumbering extension phases. WB-0 is complete; current primary work is
-WB-1 W1-2 media implementation and authenticated integration.
+WB-1 W1-3 durable project backend, now locally verified after the media handoff.
 Existing extension and release obligations retain their recorded status.
 
 | Phase | Status | Gate |
 | --- | --- | --- |
 | WB-0: Scope, contracts and feasibility | **Complete (2026-09-18)** | W0.2-W0.5 evidence, frozen scope/contracts/limits/acceptance/ownership |
-| WB-1: Assets and projects | In Progress (W1-2 media slice) | External/library import and durable project acceptance |
+| WB-1: Assets and projects | In Progress (W1-3 backend verified; UI pending) | External/library import and durable project acceptance |
 | WB-2: Basic editing and export | Planned | Non-destructive timeline and real rendered output |
 | WB-3: Online editing and provider extensions | Planned | Qualified adapter, candidate workflow and authorized live edit |
 | WB-4: Integrated acceptance | Planned | Regression, independent review and packaged-runtime evidence |
@@ -36,8 +36,9 @@ and [media boundary/index evidence](VIDEO-WORKBENCH-W1-2-BOUNDARIES.md)
 track the subsequent backend subgates. The candidate scope is now approved;
 its additive API contract and [backend evidence](VIDEO-WORKBENCH-W1-2-PICKER.md)
 track implementation separately from the future picker UI. The phase is not
-complete: remaining media acceptance, durable projects, UI and independent
-integrated review are outstanding.
+complete: remaining media acceptance, project/browser journeys, UI and independent
+integrated review are outstanding. The [W1-3 project packet](VIDEO-WORKBENCH-W1-3-PROJECTS.md)
+records locally verified project persistence without declaring the broader phase complete.
 
 ## Phase 0: Project Fact And Documentation Baseline
 

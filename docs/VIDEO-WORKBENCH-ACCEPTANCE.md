@@ -1,27 +1,29 @@
 # Video Workbench Acceptance Matrix
 
-Date: 2026-09-19 (UTC). Revision: 0.7 (evidence update; case criteria unchanged).
-Status: **WB-0 planning gates PASS; W1-2 backend subcases have local evidence; full WB-1-WB-4 cases remain unaccepted.**
+Date: 2026-09-19 (UTC). Revision: 0.8 (evidence update; case criteria unchanged).
+Status: **WB-0 planning gates PASS; W1-2 media and W1-3 project backend subcases have local evidence; full WB-1-WB-4 cases remain unaccepted.**
 No historical generation test result counts as workbench acceptance.
 
-## W1-2 Local Evidence
+## WB-1 Backend Local Evidence
 
 See [the integration checkpoint](VIDEO-WORKBENCH-W1-2-INTEGRATION.md),
 [the local lifecycle checkpoint](VIDEO-WORKBENCH-W1-2-LIFECYCLE.md), and
 [diagnostics/catalogue/fault evidence](VIDEO-WORKBENCH-W1-2-USABILITY.md), and
 [boundary/index/interrupt evidence](VIDEO-WORKBENCH-W1-2-BOUNDARIES.md), and
-[candidate backend evidence](VIDEO-WORKBENCH-W1-2-PICKER.md) for
+[candidate backend evidence](VIDEO-WORKBENCH-W1-2-PICKER.md), and
+[project backend evidence](VIDEO-WORKBENCH-W1-3-PROJECTS.md) for
 commands, runtime, fixtures, ownership and limitations. These are subcase
 results, not phase acceptance:
 
 | Case | Observed subcase | Result | Still required |
 | --- | --- | --- | --- |
+| VA-01 | Create/read/save/reopen, optimistic revisions, simultaneous saves, real process exit before/after replace, invalid/corrupt-schema preservation | PASS locally (backend) | W1-4 browser refresh/reopen journey and full integrated review; no power-loss guarantee |
 | VA-02 | Synthetic external media API, hashes, repeated request and original preservation | PASS locally | File picker/drop UI and complete interrupted-upload recovery |
 | VA-03 | Exact registration, managed-asset thumbnails/index, authenticated candidate keyset pagination and lazy PNG/MP4 previews with digest-bound explicit import | PASS locally | W1-4 picker journey, browser object-URL lifecycle and latency |
 | VA-04 | Format/timing/display fixtures, real dimension/audio/stream boundaries, MP4 reference preflight, diagnostics and injected disk/journal failures | PASS locally | Physical maximum-byte stress, broader hostile-container corpus and independent review |
 | VA-12 | Cancellation, child termination, leases, disk recovery, multipart spool closure and actual pre-journal crash retention | PASS locally | Browser cancellation journey, operator-assisted orphan repair, remaining fault matrix and later upstream-unknown cases |
 | VA-13 | Auth/CSRF, single-workspace ownership, path/reparse guards, candidate input validation and bounded errors | PASS locally | Independent integrated review, private-data deployment access-log redaction and broader hostile-media coverage |
-| VA-01 / VA-15 / VA-16 | Project durability, workbench UI and packaged execution | NOT RUN | Implement and verify at their designated gates |
+| VA-15 / VA-16 | Workbench UI and packaged execution | NOT RUN | Implement and verify at their designated gates |
 
 The old-generation regression suite is compatibility evidence only. No online
 Provider acceptance or paid generation was performed.

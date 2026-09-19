@@ -22,6 +22,7 @@ from .media.proxy import ProxyRenderer
 from .media.fingerprint import change_token
 from .runtime import StoreRuntime
 from .library import list_candidates, validate_identity
+from .projects import ProjectStore
 
 
 WORKSPACE_OWNER = "genbox-admin"
@@ -49,6 +50,7 @@ class AssetService:
         self._recovered = False
         self.proxies = ProxyRenderer(self.media)
         self._listing_cache = OrderedDict()
+        self.projects = ProjectStore(self)
 
     def _ready(self, owner):
         self._owner(owner)
