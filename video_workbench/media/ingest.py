@@ -923,6 +923,17 @@ class MediaIngestManager:
         except (OSError, ValueError):
             return None
 
+    def _thumbnail_command(self, source: Path, suffix: str, output: Path) -> list[str]:
+        return [
+            self.ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+            *self._input_options(suffix),
+            "-i", str(source), "-frames:v", "1", "-threads", "1",
+            "-filter_threads", "1", "-vf",
+            "scale=320:180:force_original_aspect_ratio=decrease,"
+            "pad=320:180:(ow-iw)/2:(oh-ih)/2",
+            "-q:v", "5", str(output),
+        ]
+
     def derive_thumbnail(
         self,
         asset: AssetRecord,
@@ -967,28 +978,7 @@ class MediaIngestManager:
             temporary = Path(raw_temp)
             os.close(fd)
             result = run_media(
-                [
-                    self.ffmpeg,
-                    "-hide_banner",
-                    "-loglevel",
-                    "error",
-                    "-y",
-                    *self._input_options("." + asset.metadata.format),
-                    "-i",
-                    str(source),
-                    "-frames:v",
-                    "1",
-                    "-threads",
-                    "1",
-                    "-filter_threads",
-                    "1",
-                    "-vf",
-                    "scale=320:180:force_original_aspect_ratio=decrease,"
-                    "pad=320:180:(ow-iw)/2:(oh-ih)/2",
-                    "-q:v",
-                    "5",
-                    str(temporary),
-                ],
+                self._thumbnail_command(source, "." + asset.metadata.format, temporary),
                 cwd=derived_dir,
                 timeout=self.limits.probe_timeout_seconds,
             )
@@ -1019,6 +1009,45 @@ class MediaIngestManager:
                     temporary.unlink(missing_ok=True)
                 except OSError:
                     pass
+
+    def preview_staged(self, staged: StagedMedia) -> bytes:
+        """Preview a validated candidate without publishing a managed asset."""
+        self._owned_stage(staged, verify_bytes=True)
+        if staged.path not in self._probed or staged.kind not in {"image", "video"}:
+            raise _fail("invalid_request", "thumbnail")
+        temporary = None
+        try:
+            fd, raw = tempfile.mkstemp(prefix=".thumbnail-", suffix=".jpg", dir=staged.path.parent)
+            temporary = Path(raw)
+            os.close(fd)
+            result = run_media(
+                self._thumbnail_command(staged.path, Path(staged.filename).suffix.lower(), temporary),
+                cwd=staged.path.parent, timeout=self.limits.probe_timeout_seconds,
+            )
+            self._assert_confined(temporary, staged.path.parent)
+            if result.returncode != 0:
+                raise _fail("media_corrupt", "thumbnail")
+            if self._existing_thumbnail(temporary, "candidate", 1) is None:
+                raise _fail("invalid_result", "thumbnail")
+            self._owned_stage(staged, verify_bytes=True)
+            with temporary.open("rb") as handle:
+                content = handle.read(_MAX_THUMBNAIL_BYTES + 1)
+            if not 0 < len(content) <= _MAX_THUMBNAIL_BYTES:
+                raise _fail("invalid_result", "thumbnail")
+            return content
+        except FileNotFoundError:
+            raise _fail("dependency_missing", "thumbnail") from None
+        except subprocess.TimeoutExpired:
+            raise _fail("probe_timeout", "thumbnail", retryable=True) from None
+        except (OSError, WorkerLimitError):
+            raise _fail("internal", "thumbnail") from None
+        finally:
+            if temporary is not None:
+                try:
+                    self._assert_confined(temporary, staged.path.parent)
+                    temporary.unlink(missing_ok=True)
+                except (OSError, MediaIngestError):
+                    raise _fail("cleanup_pending", "cleanup", retryable=True) from None
 
     def import_content(
         self,

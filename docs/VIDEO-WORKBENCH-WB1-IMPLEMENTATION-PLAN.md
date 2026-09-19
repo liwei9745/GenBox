@@ -1,7 +1,7 @@
 # Video Workbench WB-1 Implementation Plan
 
-Date: 2026-09-19 (UTC). Revision: 0.7.
-Status: **W1-0/W1-1 complete; W1-2 media-boundary/source-index subgate locally verified; candidate contract pending approval.**
+Date: 2026-09-19 (UTC). Revision: 0.8.
+Status: **W1-0/W1-1 complete; approved W1-2 candidate backend locally verified; full WB-1 acceptance outstanding.**
 
 This plan turns the frozen WB-0 contracts into an executable implementation
 strategy for the first vertical slice. It is subordinate to
@@ -275,19 +275,21 @@ The subsequent diagnostics/catalogue/storage-fault subgate is recorded in
 [the usability checkpoint](VIDEO-WORKBENCH-W1-2-USABILITY.md).
 The next source-index/real-boundary/interruption evidence is in
 [the boundary checkpoint](VIDEO-WORKBENCH-W1-2-BOUNDARIES.md).
+The approved candidate-list/lazy-preview subgate is recorded in
+[the picker backend checkpoint](VIDEO-WORKBENCH-W1-2-PICKER.md):
+230 workbench and 2071 full-suite tests pass locally.
 Project persistence, UI and independent review
 remain outstanding. The single administrator owns the current workspace;
 this implementation does not introduce multi-user tenancy.
 
 ## 11. Immediate Next Action
 
-Verify the preserved boundary/source-index checkpoint: 182 workbench tests
-and 2023 full-suite tests passed locally.
-The managed-asset list cannot discover unregistered gallery candidates.
-Obtain approval for the additive candidate-list/lazy-preview contract in
-`VIDEO-WORKBENCH-LIBRARY-PICKER-PROPOSAL.md` before implementing new public
-fields/routes. Keep existing asset/project/job DTOs and shared gallery behavior
-unchanged. Implement the approved backend at W1-2; reserve picker/drop/focus/
+Verify the preserved candidate backend checkpoint, then assess the W1-2
+acceptance handoff and readiness for W1-3 project persistence. Exact additive
+routes/DTO/preview ownership are frozen in appendix 0.1 of
+`VIDEO-WORKBENCH-LIBRARY-PICKER-PROPOSAL.md`. Keep existing
+asset/project/job DTOs and shared gallery behavior unchanged.
+Reserve picker/drop/focus/
 viewport journeys for W1-4 and independent review for W1-5.
 Do not start W1-3/W1-4 merely to bypass those acceptance gaps. The coordinator
 has approval for the narrow new-router wiring; this does not authorize changes

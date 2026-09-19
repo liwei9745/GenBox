@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import suppress
 import json
 import os
 import re
@@ -17,7 +19,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.exceptions import HTTPException
 from starlette.formparsers import MultiPartException
-from starlette.responses import JSONResponse, StreamingResponse
+from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
 
 from .assets import WORKSPACE_OWNER
@@ -105,6 +107,30 @@ def build_router(get_service, get_admin_key, allowed_origins):
         if request.query_params:
             raise _fail("invalid_request", "admission")
 
+    async def library_body(request, *, preview=False):
+        no_query(request)
+        payload = bytearray()
+        async for chunk in request.stream():
+            payload.extend(chunk)
+            if len(payload) > 4096:
+                raise _fail("invalid_request", "admission")
+        try:
+            def unique_fields(pairs):
+                result = {}
+                for key, value in pairs:
+                    if key in result:
+                        raise ValueError
+                    result[key] = value
+                return result
+            body = json.loads(payload, object_pairs_hook=unique_fields)
+        except (ValueError, RecursionError):
+            raise _fail("invalid_request", "admission") from None
+        required = {"library_kind", "library_item_id"}
+        allowed = required if preview else required | {"expected_sha256"}
+        if not isinstance(body, dict) or set(body) - allowed or not required <= set(body):
+            raise _fail("invalid_request", "admission")
+        return body
+
     @router.get("/diagnostics")
     async def media_diagnostics(request: Request):
         no_query(request)
@@ -174,24 +200,54 @@ def build_router(get_service, get_admin_key, allowed_origins):
 
     @router.post("/library")
     async def register_library(request: Request):
-        no_query(request)
-        payload = bytearray()
-        async for chunk in request.stream():
-            payload.extend(chunk)
-            if len(payload) > 4096:
-                raise _fail("invalid_request", "admission")
-        try:
-            body = json.loads(payload)
-        except ValueError:
-            raise _fail("invalid_request", "admission") from None
-        if not isinstance(body, dict) or set(body) - {
-            "library_kind", "library_item_id", "expected_sha256",
-        } or not {"library_kind", "library_item_id"} <= set(body):
-            raise _fail("invalid_request", "admission")
+        body = await library_body(request)
         request_id = request.headers.get("x-request-id", "")
         return await run_in_threadpool(
             resolve_service().register_library, WORKSPACE_OWNER, request_id, **body,
         )
+
+    @router.get("/library/candidates")
+    async def library_candidates(request: Request):
+        parameters = request.query_params
+        if set(parameters) - {"cursor", "kind", "query", "limit"} or len(parameters.multi_items()) != len(parameters):
+            raise _fail("invalid_request", "admission")
+        raw_limit = parameters.get("limit", "20")
+        if not re.fullmatch(r"[0-9]{1,2}", raw_limit):
+            raise _fail("invalid_request", "admission", field="limit")
+        result = await run_in_threadpool(
+            resolve_service().library_candidates, WORKSPACE_OWNER,
+            cursor=parameters.get("cursor", ""), kind=parameters.get("kind"),
+            query=parameters.get("query", ""), limit=int(raw_limit),
+        )
+        return JSONResponse(result, headers={"Cache-Control": "private, no-store"})
+
+    @router.post("/library/preview")
+    async def library_preview(request: Request):
+        body = await library_body(request, preview=True)
+        cancelled = threading.Event()
+
+        async def observe_disconnect():
+            while not cancelled.is_set():
+                if await request.is_disconnected():
+                    cancelled.set()
+                    return
+                await asyncio.sleep(0.1)
+
+        observer = asyncio.create_task(observe_disconnect())
+        try:
+            content, digest = await run_in_threadpool(
+                resolve_service().library_preview, WORKSPACE_OWNER, **body, cancelled=cancelled,
+            )
+            return Response(content, media_type="image/jpeg", headers={
+                "Cache-Control": "private, no-store",
+                "Content-Disposition": 'inline; filename="candidate.jpg"',
+                "X-Content-SHA256": digest,
+            })
+        finally:
+            cancelled.set()
+            observer.cancel()
+            with suppress(asyncio.CancelledError):
+                await observer
 
     @router.get("/assets")
     async def list_assets(request: Request):

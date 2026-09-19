@@ -1,11 +1,35 @@
 # Video Workbench Agent Collaboration Protocol
 
-Date: 2026-09-18 (UTC). Revision: 0.6.
+Date: 2026-09-19 (UTC). Revision: 0.7.
 Status: **W1-0/W1-1 complete; WB1-MEDIA running; WB1-PROJECT ready but not started; unattended execution enabled.**
 
 Current execution is coordinator-only. No additional Agent was dispatched for
-the media integration checkpoint. Shared wiring is coordinator-owned; an
+the media integration or candidate-picker checkpoint. Shared wiring is coordinator-owned; an
 independent review has not occurred and must not be inferred from local tests.
+
+## Current Collaboration Decision
+
+The user asked whether the next development stage needs multiple Agents.
+For this tightly coupled W1-2 slice, keep candidate-contract, router/auth,
+staging/cleanup integration and evidence under one coordinator. Do not dispatch
+an Agent merely because a role exists.
+
+After the media handoff is ready, the recommended bounded arrangement is:
+
+1. Coordinator: shared interfaces, authoritative documents, integration and
+   scoped Git preservation.
+2. Project-storage implementer: W1-3 `video_workbench/projects/` and its tests,
+   consuming stable asset IDs without changing media admission.
+3. UI implementer: W1-4 isolated JS/CSS and browser tests, only after project
+   routes are frozen/available. Never invent working backend behavior.
+4. Independent reviewer: read-only review of a stable integrated commit;
+   verify actual code/tests, not just worker reports.
+
+Project and UI implementation are dependency-ordered, not automatically started
+in parallel today. Disjoint test/UX work can overlap only with explicit task
+packets and delegation authorization. Maximum simultaneous implementers remains
+two, with shared-entry changes serialized. AI adapters stay deferred to WB-3.
+This is the strategy, not a claim that these Agents were started.
 
 ## Operating Model
 

@@ -21,6 +21,7 @@ from .media.worker import check_cancelled, execution_scope
 from .media.proxy import ProxyRenderer
 from .media.fingerprint import change_token
 from .runtime import StoreRuntime
+from .library import list_candidates, validate_identity
 
 
 WORKSPACE_OWNER = "genbox-admin"
@@ -579,12 +580,7 @@ class AssetService:
             self._write_job(path, data)
 
     def _library_path(self, kind, item_id, *, index=None):
-        if kind not in {"image", "video"} or (
-            not isinstance(item_id, str) or not 0 < len(item_id) <= 255
-            or item_id in {".", ".."} or any(char in item_id for char in "/\\:\x00")
-            or any(ord(char) < 32 for char in item_id)
-        ):
-            raise _fail("invalid_request", "admission", field="library_item_id")
+        validate_identity(kind, item_id)
         root, suffix = (self.gallery, ".png") if kind == "image" else (self.videos, ".mp4")
         self.media._assert_confined(root, root)
         if not root.is_dir():
@@ -619,6 +615,48 @@ class AssetService:
         if not path.is_file():
             raise _fail("not_found", "lookup", field="library_item_id")
         return path
+
+    def library_candidates(self, owner, **parameters):
+        return list_candidates(self, owner, **parameters)
+
+    def library_preview(self, owner, *, library_kind, library_item_id, cancelled=None):
+        self._owner(owner)
+        validate_identity(library_kind, library_item_id)
+        event = cancelled if cancelled is not None else threading.Event()
+        operation_id = f"preview_{uuid.uuid4().hex}"
+        staged = None
+        cleanup_pending = False
+        with self._exclusive():
+            self._ready(owner)
+            with self.runtime.lock:
+                self._active[operation_id] = (owner, event)
+            try:
+                with execution_scope(operation_id, event):
+                    source = self._library_path(library_kind, library_item_id)
+                    with source.open("rb") as handle:
+                        staged = self.media.stage_stream(
+                            f"stage_{uuid.uuid4().hex}", "candidate" + source.suffix, handle,
+                        )
+                    with self.runtime.lease(staged.path):
+                        self.media.probe(staged)
+                        content = self.media.preview_staged(staged)
+                        current = self._library_path(library_kind, library_item_id)
+                        if self.media._hash_file(current) != (staged.byte_length, staged.content_sha256):
+                            raise _fail("conflict", "lookup", field="library_item_id")
+                    check_cancelled()
+                    return content, "sha256:" + staged.content_sha256
+            except MediaIngestError as error:
+                # A failed derivative cleanup retains its input reservation;
+                # never free the allowance while owned output remains on disk.
+                cleanup_pending = error.code == "cleanup_pending"
+                raise
+            finally:
+                try:
+                    if staged is not None and not cleanup_pending:
+                        self.media.cleanup_staged(staged)
+                finally:
+                    with self.runtime.lock:
+                        self._active.pop(operation_id, None)
 
     def register_library(self, owner, request_id, *, library_kind, library_item_id, expected_sha256=None):
         self._owner(owner)
