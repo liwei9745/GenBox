@@ -263,9 +263,9 @@ class AssetService:
                     self._listing_cache.popitem(last=False)
         return result
 
-    def _check_library_claim(self, intent, *, listing=False):
+    def _check_library_claim(self, intent, *, listing=False, source_index=None):
         source = intent["source"]
-        resolved = self._library_path(source["kind"], source["id"])
+        resolved = self._library_path(source["kind"], source["id"], index=source_index)
 
         def verify():
             return self.media._hash_file(resolved)[1]
@@ -578,7 +578,7 @@ class AssetService:
             )
             self._write_job(path, data)
 
-    def _library_path(self, kind, item_id):
+    def _library_path(self, kind, item_id, *, index=None):
         if kind not in {"image", "video"} or (
             not isinstance(item_id, str) or not 0 < len(item_id) <= 255
             or item_id in {".", ".."} or any(char in item_id for char in "/\\:\x00")
@@ -591,10 +591,27 @@ class AssetService:
             raise _fail("not_found", "lookup", field="library_item_id")
         # Compare actual names, including case, instead of resolving a guessed
         # filename on case-insensitive filesystems or using substring matching.
-        matches = [
-            item for item in root.iterdir()
-            if item.stem == item_id and item.suffix == suffix
-        ]
+        if index is None:
+            matches = [
+                item for item in root.iterdir()
+                if item.stem == item_id and item.suffix == suffix
+            ]
+        else:
+            # A list request shares only names, never a persistent ownership or
+            # content decision. Confine/recheck every selected file below.
+            info = root.stat()
+            stamp = (info.st_dev, info.st_ino, info.st_mtime_ns)
+            if kind not in index or index[kind][0] != stamp:
+                names = {}
+                for item in root.iterdir():
+                    if item.suffix == suffix:
+                        names[item.stem] = item if item.stem not in names else None
+                after = root.stat()
+                if stamp != (after.st_dev, after.st_ino, after.st_mtime_ns):
+                    raise _fail("conflict", "lookup", field="library_item_id")
+                index[kind] = (stamp, names)
+            candidate = index[kind][1].get(item_id)
+            matches = [candidate] if candidate is not None else []
         if len(matches) != 1:
             raise _fail("not_found", "lookup", field="library_item_id")
         path = matches[0]
@@ -677,6 +694,7 @@ class AssetService:
                         asset_id = _safe_id(item["asset_id"], field="asset_id")
                         claims.setdefault(asset_id, data["intent"])
         selected = []
+        source_index = {}
         for asset_id in sorted(claims):
             if asset_id <= cursor or query.casefold() not in asset_id.casefold():
                 continue
@@ -696,7 +714,7 @@ class AssetService:
                 if record is None or record != metadata:
                     continue
                 if claims[asset_id]["operation"] == "library":
-                    self._check_library_claim(claims[asset_id], listing=True)
+                    self._check_library_claim(claims[asset_id], listing=True, source_index=source_index)
             except MediaIngestError as error:
                 if error.code in {"not_found", "conflict"}:
                     continue

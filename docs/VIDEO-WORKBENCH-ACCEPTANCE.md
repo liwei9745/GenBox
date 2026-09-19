@@ -1,6 +1,6 @@
 # Video Workbench Acceptance Matrix
 
-Date: 2026-09-18 (UTC). Revision: 0.5 (evidence update; case criteria unchanged).
+Date: 2026-09-19 (UTC). Revision: 0.6 (evidence update; case criteria unchanged).
 Status: **WB-0 planning gates PASS; W1-2 backend subcases have local evidence; full WB-1-WB-4 cases remain unaccepted.**
 No historical generation test result counts as workbench acceptance.
 
@@ -8,16 +8,17 @@ No historical generation test result counts as workbench acceptance.
 
 See [the integration checkpoint](VIDEO-WORKBENCH-W1-2-INTEGRATION.md),
 [the local lifecycle checkpoint](VIDEO-WORKBENCH-W1-2-LIFECYCLE.md), and
-[diagnostics/catalogue/fault evidence](VIDEO-WORKBENCH-W1-2-USABILITY.md) for
+[diagnostics/catalogue/fault evidence](VIDEO-WORKBENCH-W1-2-USABILITY.md), and
+[boundary/index/interrupt evidence](VIDEO-WORKBENCH-W1-2-BOUNDARIES.md) for
 commands, runtime, fixtures, ownership and limitations. These are subcase
 results, not phase acceptance:
 
 | Case | Observed subcase | Result | Still required |
 | --- | --- | --- | --- |
 | VA-02 | Synthetic external media API, hashes, repeated request and original preservation | PASS locally | File picker/drop UI and complete interrupted-upload recovery |
-| VA-03 | Exact library API, changed/missing source rejection, lazy thumbnails, 1,000-record catalogue operation counts and warm-page cache invalidation | PASS locally | Library-picker browser journey and measured latency; source-name lookup indexing |
-| VA-04 | Format/display/timing fixtures, bounded workers, launch diagnostics, low-space admission and injected original/proxy/journal write failures | PASS locally | Broader near-limit stress and hostile-container matrix |
-| VA-12 | Authenticated cancellation, child termination, leases, process-crash and same-process disk-recovery cleanup | PASS locally | Browser cancellation journey, pre-journal orphan repair, remaining fault matrix and later upstream-unknown cases |
+| VA-03 | Exact registration, missing/changed-source rejection, managed-asset lazy thumbnails, 1,000-record catalogue counts and per-page exact source-name index | PASS locally | Approve/implement unregistered candidate discovery/preview contract; W1-4 picker journey and latency |
+| VA-04 | Format/timing/display fixtures, real dimension/audio/stream boundaries, MP4 reference preflight, diagnostics and injected disk/journal failures | PASS locally | Physical maximum-byte stress, broader hostile-container corpus and independent review |
+| VA-12 | Cancellation, child termination, leases, disk recovery, multipart spool closure and actual pre-journal crash retention | PASS locally | Browser cancellation journey, operator-assisted orphan repair, remaining fault matrix and later upstream-unknown cases |
 | VA-13 | Auth/CSRF, single-workspace ownership, path/reparse guards and bounded errors | PASS locally | Independent integrated review and broader hostile-media coverage |
 | VA-01 / VA-15 / VA-16 | Project durability, workbench UI and packaged execution | NOT RUN | Implement and verify at their designated gates |
 

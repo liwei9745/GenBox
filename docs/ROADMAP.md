@@ -32,7 +32,9 @@ WB-0 completion was a documentation and preparation gate. WB-1 now has a
 locally verified media-admission, authenticated import/library APIs and local
 proxy/cancellation/recovery slices on its isolated branch.
 [Diagnostics/catalogue/storage-fault evidence](VIDEO-WORKBENCH-W1-2-USABILITY.md)
-tracks the next bounded subgate. The phase is not complete: remaining media
+and [media boundary/index evidence](VIDEO-WORKBENCH-W1-2-BOUNDARIES.md)
+track the subsequent backend subgates. The phase is not complete: the candidate
+discovery contract needs approval, and remaining media
 acceptance, durable projects, UI and independent integrated review are outstanding.
 
 ## Phase 0: Project Fact And Documentation Baseline

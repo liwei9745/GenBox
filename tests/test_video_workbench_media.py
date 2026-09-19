@@ -252,13 +252,15 @@ def test_batch_count_and_total_limits_are_bounded(tmp_path: Path) -> None:
 
 def test_missing_probe_dependency_is_actionable(tmp_path: Path) -> None:
     manager = _manager(tmp_path, ffprobe="definitely-not-an-installed-ffprobe")
-    staged = manager.stage_stream("job-dependency", "clip.mp4", b"content")
+    staged = manager.stage_stream("job-dependency", "clip.mp4", (FIXTURES / "cfr-h264.mp4").read_bytes())
 
-    with pytest.raises(MediaIngestError) as caught:
-        manager.probe(staged)
-    assert caught.value.code == "dependency_missing"
-    assert caught.value.stage == "probe"
-    manager.cleanup_staged(staged)
+    try:
+        with pytest.raises(MediaIngestError) as caught:
+            manager.probe(staged)
+        assert caught.value.code == "dependency_missing"
+        assert caught.value.stage == "probe"
+    finally:
+        manager.cleanup_staged(staged)
 
 
 def test_probe_timeout_is_retryable_and_does_not_leak_details(
@@ -266,15 +268,17 @@ def test_probe_timeout_is_retryable_and_does_not_leak_details(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manager = _manager(tmp_path)
-    staged = manager.stage_stream("job-timeout", "clip.mp4", b"content")
+    staged = manager.stage_stream("job-timeout", "clip.mp4", (FIXTURES / "cfr-h264.mp4").read_bytes())
 
     def timeout(*args, **kwargs):
         raise subprocess.TimeoutExpired(cmd=["ffprobe"], timeout=0.01)
 
     monkeypatch.setattr(ingest_module, "run_media", timeout)
-    with pytest.raises(MediaIngestError) as caught:
-        manager.probe(staged)
-    assert caught.value.code == "probe_timeout"
-    assert caught.value.retryable is True
-    assert "ffprobe" not in caught.value.problem.message
-    manager.cleanup_staged(staged)
+    try:
+        with pytest.raises(MediaIngestError) as caught:
+            manager.probe(staged)
+        assert caught.value.code == "probe_timeout"
+        assert caught.value.retryable is True
+        assert "ffprobe" not in caught.value.problem.message
+    finally:
+        manager.cleanup_staged(staged)

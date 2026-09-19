@@ -1,7 +1,7 @@
 # Video Workbench WB-1 Implementation Plan
 
-Date: 2026-09-18 (UTC). Revision: 0.6.
-Status: **W1-0/W1-1 complete; W1-2 diagnostics/catalogue/fault subgate locally verified; remaining media criteria pending.**
+Date: 2026-09-19 (UTC). Revision: 0.7.
+Status: **W1-0/W1-1 complete; W1-2 media-boundary/source-index subgate locally verified; candidate contract pending approval.**
 
 This plan turns the frozen WB-0 contracts into an executable implementation
 strategy for the first vertical slice. It is subordinate to
@@ -273,17 +273,22 @@ Local proxy/cancellation/recovery now have synthetic evidence in
 [the lifecycle checkpoint](VIDEO-WORKBENCH-W1-2-LIFECYCLE.md).
 The subsequent diagnostics/catalogue/storage-fault subgate is recorded in
 [the usability checkpoint](VIDEO-WORKBENCH-W1-2-USABILITY.md).
+The next source-index/real-boundary/interruption evidence is in
+[the boundary checkpoint](VIDEO-WORKBENCH-W1-2-BOUNDARIES.md).
 Project persistence, UI and independent review
 remain outstanding. The single administrator owns the current workspace;
 this implementation does not introduce multi-user tenancy.
 
 ## 11. Immediate Next Action
 
-Verify the preserved diagnostics/catalogue/storage-fault checkpoint, whose
-final local checks passed 140 workbench tests and 1,981 full-suite tests.
-Audit remaining W1-2 media evidence: near-limit/hostile-media
-fixtures, pre-journal interruption handling and browser-ready library selection.
-Separate backend readiness from later W1-4 browser acceptance explicitly.
+Verify the preserved boundary/source-index checkpoint: 182 workbench tests
+and 2023 full-suite tests passed locally.
+The managed-asset list cannot discover unregistered gallery candidates.
+Obtain approval for the additive candidate-list/lazy-preview contract in
+`VIDEO-WORKBENCH-LIBRARY-PICKER-PROPOSAL.md` before implementing new public
+fields/routes. Keep existing asset/project/job DTOs and shared gallery behavior
+unchanged. Implement the approved backend at W1-2; reserve picker/drop/focus/
+viewport journeys for W1-4 and independent review for W1-5.
 Do not start W1-3/W1-4 merely to bypass those acceptance gaps. The coordinator
 has approval for the narrow new-router wiring; this does not authorize changes
 to existing Provider transports, authentication semantics elsewhere, frozen

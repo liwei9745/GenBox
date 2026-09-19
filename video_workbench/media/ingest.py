@@ -27,6 +27,7 @@ from typing import Any, BinaryIO, Iterable, Iterator, Mapping, Optional
 from .errors import MediaIngestError, media_error
 from .models import AssetRecord, DerivedMedia, MediaKind, MediaLimits, ProbeMetadata, StagedMedia
 from .worker import WorkerLimitError, check_cancelled, current_execution, run_media
+from .mp4_refs import MP4ReferenceError, check_self_contained_mp4
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
@@ -488,6 +489,15 @@ class MediaIngestManager:
 
     def probe(self, staged: StagedMedia) -> ProbeMetadata:
         self._owned_stage(staged, verify_bytes=True)
+        if Path(staged.filename).suffix.lower() == ".mp4":
+            try:
+                check_self_contained_mp4(staged.path, timeout=self.limits.probe_timeout_seconds)
+            except MP4ReferenceError as error:
+                raise _fail(
+                    error.code, "probe", field="file", retryable=error.code == "probe_timeout",
+                ) from None
+            except OSError:
+                raise _fail("media_corrupt", "probe", field="file") from None
         try:
             result = run_media(
                 self._probe_command(staged),

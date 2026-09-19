@@ -83,6 +83,12 @@ recovery are verified in [the lifecycle checkpoint](VIDEO-WORKBENCH-W1-2-LIFECYC
 Tool-launch diagnostics, short-lived browse-only validation caching and
 storage-fault behavior are tracked in
 [the usability checkpoint](VIDEO-WORKBENCH-W1-2-USABILITY.md).
+Request-local library source indexing and bounded MP4 reference checks before
+native validation are tracked in
+[the boundary checkpoint](VIDEO-WORKBENCH-W1-2-BOUNDARIES.md).
+Unregistered-library candidate discovery requires the separate
+[proposed picker contract](VIDEO-WORKBENCH-LIBRARY-PICKER-PROPOSAL.md);
+the legacy rich gallery response is not the workbench asset DTO.
 Project/timeline/final-export/online-edit modules are still planned. Existing
 generation routes and transports remain unchanged.
 

@@ -1,9 +1,10 @@
 # Current Project Status
 
-## Active Phase: WB-1 W1-2 Media (Usability Subgate Verified)
+## Active Phase: WB-1 W1-2 Media (Boundary Subgate Verified)
 
-- **GOAL:** The bounded diagnostics/catalogue/storage-fault subgate is verified.
-  Finish remaining W1-2 media criteria before project persistence or UI.
+- **GOAL:** Exact source indexing, real synthetic media boundaries,
+  external-reference rejection and before-journal interruption are locally verified.
+  Resolve the candidate-picker contract before project persistence or UI.
   This is not the entire WB-1 asset/project/UI acceptance gate.
 - **CURRENT STAGE:** W1-0 and W1-1 passed on 2026-09-18. On 2026-09-18 the
   autonomous execution protocol was enabled in
@@ -11,8 +12,8 @@
   `codex/wb1-baseline-20260918`, based on `origin/master` at `02ce25e`.
   The authenticated media/API checkpoint is committed at `a772d48`.
   Local proxy/cancellation/recovery are now implemented and locally verified.
-  The diagnostics/catalogue/fault slice starts from `0f8b817`; focused and full
-  regression now pass.
+  The diagnostics/catalogue/fault checkpoint is `ef04f1f`. The next boundary/
+  source-index slice has focused and full regression evidence.
   Project persistence and independent workbench UI remain
   unimplemented.
 - **GUARDRAILS:** Use synthetic local fixtures only, make no paid generation
@@ -20,32 +21,37 @@
   keep shared contracts/status/release files under coordinator ownership, and
   pause for the manual gates in the autonomous execution protocol.
 - **EXIT CONDITION:** Focused/full regression, compile/diff checks and the
-  15-file sanitization review passed; preserve only the dedicated branch.
-  `WB1-MEDIA`
-  remains `running` until full
-  VA-02/VA-03/VA-04/VA-12/VA-13 evidence are complete.
+  16-file sanitization review passed; preserve only the dedicated branch. `WB1-MEDIA`
+  remains `running`; candidate discovery is not implemented. Browser journeys
+  and independent review remain their separate W1-4/W1-5 gates.
 
-## 2026-09-18 Diagnostics And Storage-Fault Checkpoint (UTC)
+## 2026-09-19 Media Boundary And Library Readiness Checkpoint (UTC)
 
-- **USER-CONFIRMED:** Continue the next bounded stage in goal mode, unattended
-  within the existing safety protocol. No paid models or release.
-- **IMPLEMENTED / LOCAL:** Startup/authenticated tool-launch diagnostics;
-  single-pass journal lookup, bounded short-lived browsing validation cache;
-  sanitized background persistence failure and same-process recovery cleanup.
-- **VERIFIED / FOCUSED:** Final ten-module workbench run:
-  **`140 passed in 64.55s`**, treating uncaught worker-thread exceptions as failures.
-  A Windows restored-mtime cache defect was found and repaired; strict media
-  reads still perform byte verification.
+- **USER-CONFIRMED:** Continue the next development stage within the existing
+  bounded unattended policy. No paid models, production or release.
+- **IMPLEMENTED / LOCAL:** Request-local exact library-source index and bounded
+  MP4 data-reference preflight before the native probe/decode worker.
+- **VERIFIED / FOCUSED:** Final workbench suite:
+  **`182 passed in 70.68s`**; new-feature subset: `42 passed in 8.36s`.
+  It includes real short synthetic dimension/audio/
+  stream boundaries, native-worker exclusion for external references,
+  multipart spool closure and actual pre-journal process-crash retention.
 - **VERIFIED / FULL:** `python -m pytest -q -W
   error::pytest.PytestUnhandledThreadExceptionWarning` ->
-  **`1981 passed in 325.02s`**. Compilation and diff checks pass.
-- **VERIFIED / REVIEW:** Fifteen explicit source/test/document files; added-line
-  secret/private-path heuristics and staged diff checks pass. No independent
+  **`2023 passed in 328.42s`**; compile and diff checks pass.
+- **VERIFIED / REVIEW:** Sixteen explicit source/test/document files pass
+  staged diff and added-line secret/private-path heuristics. No independent
   security audit is claimed. No open branch PR or matching workflow push
   trigger was found; preservation is development-branch-only.
-- **DETAILS / RESUME:** `docs/VIDEO-WORKBENCH-W1-2-USABILITY.md`. Remain on
-  W1-2 and audit remaining media criteria; no project/UI or full-phase
-  completion is implied. Verify the report-containing commit and remote SHA.
+- **NEXT MANUAL GATE:** A separate minimal candidate-list/lazy-preview contract
+  needs approval. Existing managed-asset DTOs cannot represent unvalidated
+  gallery candidates; the old rich gallery response is not reused.
+- **DETAILS / RESUME:** `docs/VIDEO-WORKBENCH-W1-2-BOUNDARIES.md` and
+  `docs/VIDEO-WORKBENCH-LIBRARY-PICKER-PROPOSAL.md`. Verify Git/remote identity,
+  retain the four existing debug directories and do not implement new candidate
+  fields/routes before approval.
+- **PREVIOUS BASELINE:** `ef04f1f`: 140 workbench / 1981 full-suite tests passed;
+  see `docs/VIDEO-WORKBENCH-W1-2-USABILITY.md` for dated evidence.
 
 ## 2026-09-18 Local Preview And Recovery Checkpoint (UTC)
 
