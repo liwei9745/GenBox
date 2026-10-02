@@ -44,10 +44,16 @@
   `min-height`, which also removes the automatic min-content floor that blocked
   shrinking) and lets the input row take the rest, clamped by that row's 210px CSS
   minimum so the two rows cannot overflow the column.
-- **VERIFIED / LOCAL UI:** Headless Chromium against the real page
-  (`switchNav('generate', ...)`, then a drag dispatched on `#resizeBottom`): the
-  canvas row went 643px -> 683px on a +120px pull (bounded, still fitting) and
-  643px -> 523px on a -120px pull. Before the fix every measured delta was 0.
+- **REVISED / LOCAL:** The first splitter fix only resized the canvas row, so drag-
+  ging down grew it past the column (blank space below) and dragging up clipped the
+  preview instead of giving the space back. It now behaves as a splitter: the two
+  panes trade space (`newBottom = total - newTop`), each with an explicit
+  `height`/`minHeight`/`maxHeight` so the CSS `flex: 0 0 clamp(...)` and
+  `min-height: 210px` cannot fight the drag, and both keep a floor (180px / 200px).
+- **VERIFIED / LOCAL UI:** Headless Chromium on the real page (drag dispatched on
+  `#resizeBottom`): baseline 643 + 250 = 893; +120px pull -> 693 + 200 = 893;
+  -240px pull -> 453 + 440 = 893. The sum never changes and the column never
+  overflows, which the old code failed on both counts.
 - **VERIFIED / LOCAL:** `node tests/test_generate_resize_splitter.mjs` passes and
   guards the wiring, the explicit height, the inline minimum, the clamp and the
   removal of the grandchild flex; the horizontal splitter is covered too.

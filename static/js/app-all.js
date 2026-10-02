@@ -10533,19 +10533,25 @@ function startResize(e, direction) {
       left.style.minWidth = newW + 'px';
     } else if (direction === 'bottom') {
       var dy = ev.clientY - startY;
-      // Both rows are flex children of .generate-center, separated by its gap. The
-      // input row below keeps a 210px minimum, so the canvas row can only take the
-      // space that is left above it - otherwise the two rows overflow the column.
-      var gap = Math.max(0, startCenterH - startPreviewH - startBottomH);
-      var available = Math.max(240, startCenterH - gap);
-      var ceiling = Math.max(160, available - 210);
-      var newPreviewH = Math.max(160, Math.min(startPreviewH + dy, ceiling));
+      // A real splitter: whatever the upper pane gains, the lower pane gives up, so
+      // the two always fill the same space. Growing only the upper pane overflowed
+      // the column (blank space below); shrinking it clipped the preview instead of
+      // handing the space to its neighbour.
+      var total = startPreviewH + startBottomH;
+      var newTop = Math.max(180, Math.min(startPreviewH + dy, total - 200));
+      var newBottom = total - newTop;
       if (canvasRow) {
         canvasRow.style.flex = '0 0 auto';
-        canvasRow.style.height = Math.round(newPreviewH) + 'px';
-        canvasRow.style.minHeight = Math.round(newPreviewH) + 'px';
+        canvasRow.style.height = Math.round(newTop) + 'px';
+        canvasRow.style.minHeight = Math.round(newTop) + 'px';
+        canvasRow.style.maxHeight = Math.round(newTop) + 'px';
       }
-      if (bottomRow) bottomRow.style.flex = '1 1 auto';
+      if (bottomRow) {
+        bottomRow.style.flex = '0 0 auto';
+        bottomRow.style.height = Math.round(newBottom) + 'px';
+        bottomRow.style.minHeight = Math.round(newBottom) + 'px';
+        bottomRow.style.maxHeight = Math.round(newBottom) + 'px';
+      }
     }
   }
 

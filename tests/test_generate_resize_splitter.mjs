@@ -23,14 +23,16 @@ const body = js.slice(start, end + 2);
 // holds the preview) and the input row. Those are what a vertical drag has to size.
 assert.match(body, /center\.querySelector\('\.creator-canvas-row'\)/,
   'The vertical splitter must target the canvas row that holds the preview.');
-assert.match(body, /canvasRow\.style\.height = Math\.round\(newPreviewH\) \+ 'px'/,
+assert.match(body, /canvasRow\.style\.height = Math\.round\(newTop\) \+ 'px'/,
   'The canvas row must get an explicit height, or its content keeps forcing the old one.');
-assert.match(body, /canvasRow\.style\.minHeight = Math\.round\(newPreviewH\) \+ 'px'/,
-  'The inline minimum must drop the automatic min-content floor that blocked shrinking.');
-assert.match(body, /bottomRow\.style\.flex = '1 1 auto'/,
-  'The input row must take whatever height is left.');
-assert.match(body, /Math\.min\(startPreviewH \+ dy, ceiling\)/,
-  'The drag must be clamped so the two rows cannot overflow the column.');
+assert.match(body, /canvasRow\.style\.maxHeight = Math\.round\(newTop\) \+ 'px'/,
+  'An explicit maximum stops the CSS basis from fighting the drag.');
+assert.match(body, /bottomRow\.style\.height = Math\.round\(newBottom\) \+ 'px'/,
+  'The neighbour must be sized too, otherwise it never gives up any space.');
+assert.match(body, /var newBottom = total - newTop/,
+  'A splitter trades space: what one pane gains, the other loses, so the total is stable.');
+assert.match(body, /Math\.max\(180, Math\.min\(startPreviewH \+ dy, total - 200\)\)/,
+  'Both panes keep a floor, and the drag cannot overflow the column.');
 assert.doesNotMatch(body, /preview\.style\.flex = previewFlex/,
   'Flexing the grandchild .generate-preview is the bug that made the bar dead.');
 assert.match(body, /left\.style\.width = newW \+ 'px'/,
