@@ -2767,7 +2767,14 @@ function beginPrecisionCanvasResize(event) {
 function continuePrecisionCanvasResize(event) {
   var state = precisionCanvasResizeState;
   if (!state || state.pointerId !== event.pointerId) return;
-  applyPrecisionCanvasVisualSize(state.startWidth + event.clientX - state.startX);
+  var dx = event.clientX - state.startX;
+  var dy = event.clientY - state.startY;
+  // This grip sits on the canvas's bottom-right corner (44x44, cursor: nwse-resize),
+  // so a vertical drag is as intentional as a horizontal one. Driving the size only
+  // from dx ignored it, which made a down/up drag look like a sideways jump.
+  // Follow whichever axis the pointer actually moved along more.
+  var delta = Math.abs(dx) >= Math.abs(dy) ? dx : dy;
+  applyPrecisionCanvasVisualSize(state.startWidth + delta);
   event.preventDefault();
 }
 
@@ -2791,11 +2798,13 @@ function bindPrecisionCanvasResizeHandle() {
   handle.addEventListener('pointerdown', beginPrecisionCanvasResize);
   handle.addEventListener('lostpointercapture', endPrecisionCanvasResize);
   handle.addEventListener('keydown', function(event) {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    var grow = event.key === 'ArrowRight' || event.key === 'ArrowDown';
+    var shrink = event.key === 'ArrowLeft' || event.key === 'ArrowUp';
+    if (!grow && !shrink) return;
     var shell = document.getElementById('precisionCanvasShell');
     if (!shell || shell.classList.contains('is-empty')) return;
     var width = shell.getBoundingClientRect ? shell.getBoundingClientRect().width : shell.clientWidth;
-    applyPrecisionCanvasVisualSize(width + (event.key === 'ArrowRight' ? 24 : -24));
+    applyPrecisionCanvasVisualSize(width + (grow ? 24 : -24));
     event.preventDefault();
   });
   var shell = document.getElementById('precisionCanvasShell');

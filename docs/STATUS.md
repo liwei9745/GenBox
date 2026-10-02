@@ -1,5 +1,30 @@
 # Current Project Status
 
+## 2026-10-02 Precision Canvas Corner Grip Drag Axis
+
+- **REPORTED:** The canvas corner grip (bottom-right of
+  `precisionCanvasShell`, 44x44, `cursor: nwse-resize`) changed the canvas
+  width when dragged vertically: dragging down narrowed the canvas and
+  dragging up widened it, instead of resizing it the way the grip implies.
+- **FIXED / LOCAL:** `continuePrecisionCanvasResize` read only `dx`, so a
+  vertical drag was discarded and the pointer's incidental horizontal drift
+  did the resizing. It now follows the dominant axis
+  (`Math.abs(dx) >= Math.abs(dy) ? dx : dy`), and its keyboard path accepts
+  `ArrowUp`/`ArrowDown` beside `ArrowLeft`/`ArrowRight`. The `app-all.js` cache
+  stamp moved from `?v=59` to `?v=60`.
+- **VERIFIED / LOCAL UI:** `node tests/test_precision_canvas_resize_axis.mjs`
+  extracts and executes the shipped function body and asserts: straight down
+  `400 -> 440`, straight up `400 -> 360`, rightward `400 -> 440` (unchanged),
+  both diagonal dominances, and a motionless pointer that resizes nothing.
+  The same assertions run against `git show 02ce25e:static/js/app-all.js`
+  return `400` for both vertical drags, which is the reported symptom.
+- **VERIFIED / LOCAL:** `node --check static/js/app-all.js` passes. The other
+  eight resize handles were audited against their advertised cursors (canvas
+  bottom bar, inspector separator, cutout dock separator, generate-page
+  left/bottom handles, divider drag, provider column grip, modal
+  ew/ns/both); none had the mismatch, and the test now guards their axes too.
+- **BOUNDARY:** Not pushed. The change sits in the local checkout as commit
+  `a714b1e`; publishing it to `master` is the owner's call.
 ## 2026-09-18 v2.6.12 Release And WB-0 Readiness
 
 - **USER-CONFIRMED:** The latest video composer UI repair is ready to
