@@ -4466,6 +4466,19 @@ body.dock-auto-hide.dock-pinned .dock-reveal-handle span {
   min-height: 520px;
 }
 
+/* Measured at 1920x1080 and 1600x900: the generate action sat below its own scrollable
+   panel (button top 1076 against a panel that ends at 1038) and below the viewport
+   (bottom 1120 vs 1080), because the prompt column is taller than the row and the app
+   shell cannot scroll. Pin the action to the bottom of the panel so it stays visible
+   whatever the prompt grows to. */
+#pageGenerate #creatorGenerateAction.creator-generate-action {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: var(--bg-card, #fff);
+  padding-bottom: 4px;
+}
+
 #pageGenerate.precision-edit-active #panelPrecisionEdit {
   overflow: visible;
 }

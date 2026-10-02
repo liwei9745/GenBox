@@ -329,6 +329,21 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('upscaleOpts').style.display = this.checked ? '' : 'none';
   });
 
+  // Ctrl/Cmd+Enter starts a generation from anywhere on the create page - including from
+  // inside the prompt box, which the plain-Enter handler below deliberately skips. The
+  // button's own tooltip has advertised this shortcut all along.
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter' || e.isComposing || (!e.ctrlKey && !e.metaKey) || e.repeat) return;
+    // The create page is shown by dropping its 'hidden' class (it never carries 'active').
+    var page = document.getElementById('pageGenerate');
+    if (!page || page.classList.contains('hidden') || page.offsetParent === null) return;
+    var generateButton = document.getElementById('btnGen');
+    if (!generateButton || generateButton.disabled || typeof doGenerate !== 'function') return;
+    if (typeof genCurrentGenId !== 'undefined' && genCurrentGenId) return;
+    e.preventDefault();
+    doGenerate();
+  });
+
   // ESC 关闭弹窗
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.isComposing && !e.shiftKey && !e.altKey) {
