@@ -83,6 +83,13 @@
   this; it previously dispatched synthetic events, which bypassed the hit test and hid
   the clipping. At 768x900 the bar is not laid out in a hit-testable place and the
   harness reports a skip instead of a failure.
+- **AUDITED / HEALTHY:** The provider column handle (`.provider-col-resize`) still
+  works: a real pointer drag at x=717 grew its card from 454px to 534px. Its hit area
+  is narrower than it looks, though - scanning across the 8px strip with
+  `elementFromPoint()` shows only x=714..717 resolving to the handle, while x=718..722
+  resolve to the card and the grid. Raising the handle's `z-index` to 5 did not change
+  that (the strip is clipped by the card's `overflow: hidden`), so it is a usability
+  nit - roughly half the intended target - rather than a broken control.
 - **BOUNDARY:** Not pushed. The changes sit in the local checkout as commits
   `247f8f8` and the splitter commit; publishing to `master` is the owner's call.
 ## 2026-09-18 v2.6.12 Release And WB-0 Readiness
