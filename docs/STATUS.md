@@ -23,8 +23,20 @@
   bottom bar, inspector separator, cutout dock separator, generate-page
   left/bottom handles, divider drag, provider column grip, modal
   ew/ns/both); none had the mismatch, and the test now guards their axes too.
-- **BOUNDARY:** Not pushed. The change sits in the local checkout as commit
-  `a714b1e`; publishing it to `master` is the owner's call.
+- **FIXED / LOCAL:** `tests/test_precision_protocol_ui.mjs` failed on
+  `02ce25e` with `ReferenceError: modelSupportsGenerationMode is not defined`
+  (reproduced in a `git worktree` checkout of that commit, so it predates the
+  grip fix): its `vm` sandbox extracted `generationProviderModelIds` and
+  `generationProviderModelSettings` but none of the helpers the latter calls.
+  The sandbox now also loads `generationModelId`,
+  `getProviderModelCapabilityRecord`, `generationModelIsImage` and
+  `modelSupportsGenerationMode`, and defines `currentMode`; its original
+  assertions then pass unchanged, so the behaviour it checks was never broken -
+  only its harness was.
+- **VERIFIED / LOCAL:** All fifteen `tests/test_*.mjs` UI contract scripts pass,
+  the four new `tests/test_precision_canvas_resize_axis.mjs` guards included.
+- **BOUNDARY:** Not pushed. The change sits in the local checkout; publishing it
+  to `master` is the owner's call.
 ## 2026-09-18 v2.6.12 Release And WB-0 Readiness
 
 - **USER-CONFIRMED:** The latest video composer UI repair is ready to

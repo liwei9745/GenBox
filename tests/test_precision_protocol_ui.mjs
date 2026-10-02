@@ -39,11 +39,19 @@ const context = vm.createContext({
     { id: 'gateway-b', model: 'qwen-image-edit', models: ['qwen-image-edit'] },
   ],
   imageProviderModelSelections: { 'gateway-b': 'qwen-image-edit' },
+  // generationProviderModelSettings filters every candidate model through
+  // modelSupportsGenerationMode(provider, model, currentMode), so the sandbox needs
+  // the active mode and the image-model predicate as well.
+  currentMode: 't2i',
   findProvider: (id) => contextProviders.find((provider) => provider.id === id) || null,
 });
 const contextProviders = context.allProviders;
 vm.runInContext([
   extract('generationProviderModelIds'),
+  extract('generationModelId'),
+  extract('getProviderModelCapabilityRecord'),
+  extract('generationModelIsImage'),
+  extract('modelSupportsGenerationMode'),
   extract('generationProviderModelSettings'),
 ].join('\n'), context);
 
