@@ -60,6 +60,17 @@
 - **VERIFIED / LOCAL:** `node tests/test_generate_resize_splitter.mjs` passes and
   guards the wiring, the explicit height, the inline minimum, the clamp and the
   removal of the grandchild flex; the horizontal splitter is covered too.
+- **FIXED / LOCAL:** The canvas size limit was a viewport allowance
+  (\`viewportHeight - 120\`), so a tall canvas grew under the app status bar and its
+  44x44 bottom-right grip stopped receiving pointer events -
+  \`document.elementFromPoint()\` returned \`div.status-bar\` instead of the grip.
+  \`precisionCanvasResizeLimits\` now measures the space between the shell's own top and
+  the top of \`.status-bar\` (new \`precisionCanvasAvailableHeight\`).
+- **VERIFIED / LOCAL UI:** At 1920x1080 the canvas now caps at 733px instead of 760px,
+  the grip's bottom edge lands at 1049 against a status bar top of 1050, and
+  \`elementFromPoint\` at the grip centre returns
+  \`button#precisionCanvasResizeHandle\`. The measuring harness in the plugin
+  repository (\`scripts/browser/measure-splitters.cjs\`) asserts exactly that.
 - **BOUNDARY:** Not pushed. The changes sit in the local checkout as commits
   `247f8f8` and the splitter commit; publishing to `master` is the owner's call.
 ## 2026-09-18 v2.6.12 Release And WB-0 Readiness

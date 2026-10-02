@@ -2674,14 +2674,28 @@ function bindPrecisionDocsDialog() {
   });
 }
 
+/** Vertical room left for the canvas before it would slide under the app status bar. */
+function precisionCanvasAvailableHeight(shell) {
+  if (!shell || !shell.getBoundingClientRect) return 0;
+  var top = shell.getBoundingClientRect().top;
+  var statusBar = document.querySelector('.status-bar');
+  var boundary = statusBar && statusBar.getBoundingClientRect
+    ? statusBar.getBoundingClientRect().top
+    : Math.max(document.documentElement && document.documentElement.clientHeight || 0, window.innerHeight || 0);
+  return Math.floor(boundary - top);
+}
+
 function precisionCanvasResizeLimits(shell) {
   var stage = shell && shell.closest ? shell.closest('.precision-edit-stage-column') : null;
   var stageWidth = stage ? stage.clientWidth : 0;
   if (!stageWidth && stage && stage.getBoundingClientRect) stageWidth = stage.getBoundingClientRect().width;
   if (!stageWidth && shell && shell.parentElement) stageWidth = shell.parentElement.clientWidth;
   var viewportWidth = Math.max(document.documentElement && document.documentElement.clientWidth || 0, window.innerWidth || 0);
-  var viewportHeight = Math.max(document.documentElement && document.documentElement.clientHeight || 0, window.innerHeight || 0);
-  var maxHeight = viewportHeight ? Math.max(240, Math.min(760, viewportHeight - 120)) : 760;
+  // Measure the space that actually exists between the shell's top and the top of the
+  // app status bar. A viewport-based allowance let the shell grow under the status bar,
+  // where its bottom-right grip stopped receiving pointer events.
+  var availableHeight = precisionCanvasAvailableHeight(shell);
+  var maxHeight = availableHeight > 0 ? Math.max(240, Math.min(760, availableHeight)) : 760;
   var heightLimitedWidth = precisionEditSourceHeight
     ? maxHeight * precisionEditSourceWidth / precisionEditSourceHeight
     : 1600;

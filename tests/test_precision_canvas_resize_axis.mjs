@@ -61,4 +61,17 @@ assert.match(css, /\.precision-inspector-resize-handle[\s\S]{0,600}?cursor:\s*co
 assert.match(css, /\.precision-canvas-vertical-resize-handle\s*\{[\s\S]{0,600}?cursor:\s*row-resize/,
   'The canvas bottom bar must advertise a row resize.');
 
+// The canvas limit must be measured against the real space above the app status bar.
+// A viewport-based allowance let the shell grow under the status bar, where its
+// bottom-right grip stopped receiving pointer events (elementFromPoint returned the
+// status bar instead of the grip).
+assert.match(js, /function precisionCanvasAvailableHeight\(shell\) \{/,
+  'The canvas limit needs a measurement of the space that actually exists.');
+assert.match(js, /document\.querySelector\('\.status-bar'\)/,
+  'That boundary is the app status bar.');
+assert.match(js, /var availableHeight = precisionCanvasAvailableHeight\(shell\);/,
+  'precisionCanvasResizeLimits must use it.');
+assert.match(js, /var maxHeight = availableHeight > 0 \? Math\.max\(240, Math\.min\(760, availableHeight\)\) : 760;/,
+  'The limit must come from that measurement, not from the viewport.');
+
 console.log('precision canvas resize axis: OK');
