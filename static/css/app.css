@@ -3400,6 +3400,24 @@ body.ui-font-comfortable .nav-style-preset {
   grid-template-rows: minmax(145px, 1fr) minmax(130px, 150px) minmax(220px, 250px);
 }
 
+@media (max-width: 800px) {
+  /* Measured at 768x900: the three children kept their intrinsic heights
+     (canvas row 490 + task monitor 167 + input row 349 = 1006) inside a 721px
+     column, so the pane column scrolled and the vertical splitter was no longer
+     laid out where a pointer could reach it. Let them share the column instead. */
+  #pageGenerate .generate-center > .creator-canvas-row {
+    flex: 1 1 auto;
+    min-height: 180px;
+  }
+  #pageGenerate .generate-center > .creator-task-monitor {
+    flex: 0 0 auto;
+  }
+  #pageGenerate .generate-center > .creator-input-row {
+    flex: 1 1 auto;
+    min-height: 210px;
+  }
+}
+
 @media (max-height: 760px) and (min-width: 801px) {
   #pageGenerate .generate-center {
     grid-template-rows: minmax(170px, 1fr) 42px minmax(205px, 235px);

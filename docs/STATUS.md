@@ -90,6 +90,14 @@
   resolve to the card and the grid. Raising the handle's `z-index` to 5 did not change
   that (the strip is clipped by the card's `overflow: hidden`), so it is a usability
   nit - roughly half the intended target - rather than a broken control.
+- **FIXED / LOCAL:** At 768x900 the three children of `.generate-center` kept their
+  intrinsic heights (canvas row 490 + task monitor 167 + input row 349 = 1006) inside a
+  721px column, so the column scrolled and the vertical splitter was no longer laid out
+  where a pointer could reach it. The <=800px breakpoint now lets the canvas and input
+  rows share the column (`flex: 1 1 auto` with their 180px / 210px floors).
+- **VERIFIED / LOCAL UI:** The plugin repository's browser harness asserts the pane
+  sum against the column at 768x900: panes 490+349=839 (overflowing) became 312+222=534
+  against 721, and the check went from a reported upstream issue to `[ok]`.
 - **BOUNDARY:** Not pushed. The changes sit in the local checkout as commits
   `247f8f8` and the splitter commit; publishing to `master` is the owner's call.
 ## 2026-09-18 v2.6.12 Release And WB-0 Readiness
