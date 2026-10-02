@@ -10507,11 +10507,16 @@ function startResize(e, direction) {
   var center = layout.querySelector('.generate-center');
   var preview = center.querySelector('.generate-preview');
   var bottomRow = center.querySelector('.generate-bottom-row');
+  // The vertical splitter lives between the canvas row that holds the preview and
+  // .generate-bottom-row, and both are flex children of .generate-center. The old
+  // code flexed .generate-preview, a grandchild, so dragging the bar down did
+  // nothing at all.
+  var canvasRow = center.querySelector('.creator-canvas-row') || (preview ? preview.parentElement : null);
 
   var startX = e.clientX;
   var startY = e.clientY;
   var startLeftW = left ? left.offsetWidth : 260;
-  var startPreviewH = preview ? preview.offsetHeight : 0;
+  var startPreviewH = canvasRow ? canvasRow.offsetHeight : (preview ? preview.offsetHeight : 0);
   var startBottomH = bottomRow ? bottomRow.offsetHeight : 0;
   var startCenterH = center ? center.offsetHeight : 0;
 
@@ -10528,13 +10533,19 @@ function startResize(e, direction) {
       left.style.minWidth = newW + 'px';
     } else if (direction === 'bottom') {
       var dy = ev.clientY - startY;
-      var available = startCenterH - 24;
-      var newPreviewH = Math.max(120, Math.min(startPreviewH + dy, available - 100));
-      var newBottomH = available - newPreviewH;
-      var previewFlex = newPreviewH / available;
-      var bottomFlex = newBottomH / available;
-      preview.style.flex = previewFlex.toFixed(2);
-      bottomRow.style.flex = bottomFlex.toFixed(2);
+      // Both rows are flex children of .generate-center, separated by its gap. The
+      // input row below keeps a 210px minimum, so the canvas row can only take the
+      // space that is left above it - otherwise the two rows overflow the column.
+      var gap = Math.max(0, startCenterH - startPreviewH - startBottomH);
+      var available = Math.max(240, startCenterH - gap);
+      var ceiling = Math.max(160, available - 210);
+      var newPreviewH = Math.max(160, Math.min(startPreviewH + dy, ceiling));
+      if (canvasRow) {
+        canvasRow.style.flex = '0 0 auto';
+        canvasRow.style.height = Math.round(newPreviewH) + 'px';
+        canvasRow.style.minHeight = Math.round(newPreviewH) + 'px';
+      }
+      if (bottomRow) bottomRow.style.flex = '1 1 auto';
     }
   }
 

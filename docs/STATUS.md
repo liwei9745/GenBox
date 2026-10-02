@@ -35,8 +35,24 @@
   only its harness was.
 - **VERIFIED / LOCAL:** All fifteen `tests/test_*.mjs` UI contract scripts pass,
   the four new `tests/test_precision_canvas_resize_axis.mjs` guards included.
-- **BOUNDARY:** Not pushed. The change sits in the local checkout; publishing it
-  to `master` is the owner's call.
+- **REPORTED:** On the generate page the vertical splitter above the task monitor
+  did nothing: pulling it down never extended the preview area downward.
+- **FIXED / LOCAL:** `startResize(e, 'bottom')` flexed `.generate-preview`, a
+  grandchild of the flex container; the real flex children of `.generate-center`
+  are `#creatorCanvasRow` (which holds the preview) and `.generate-bottom-row`.
+  The handler now sizes the canvas row (explicit `height` plus a matching inline
+  `min-height`, which also removes the automatic min-content floor that blocked
+  shrinking) and lets the input row take the rest, clamped by that row's 210px CSS
+  minimum so the two rows cannot overflow the column.
+- **VERIFIED / LOCAL UI:** Headless Chromium against the real page
+  (`switchNav('generate', ...)`, then a drag dispatched on `#resizeBottom`): the
+  canvas row went 643px -> 683px on a +120px pull (bounded, still fitting) and
+  643px -> 523px on a -120px pull. Before the fix every measured delta was 0.
+- **VERIFIED / LOCAL:** `node tests/test_generate_resize_splitter.mjs` passes and
+  guards the wiring, the explicit height, the inline minimum, the clamp and the
+  removal of the grandchild flex; the horizontal splitter is covered too.
+- **BOUNDARY:** Not pushed. The changes sit in the local checkout as commits
+  `247f8f8` and the splitter commit; publishing to `master` is the owner's call.
 ## 2026-09-18 v2.6.12 Release And WB-0 Readiness
 
 - **USER-CONFIRMED:** The latest video composer UI repair is ready to
