@@ -31,16 +31,19 @@ assert.match(body, /bottomRow\.style\.height = Math\.round\(newBottom\) \+ 'px'/
   'The neighbour must be sized too, otherwise it never gives up any space.');
 assert.match(body, /var newBottom = total - newTop/,
   'A splitter trades space: what one pane gains, the other loses, so the total is stable.');
-assert.match(body, /Math\.max\(180, Math\.min\(startPreviewH \+ dy, total - 200\)\)/,
-  'Both panes keep a floor, and the drag cannot overflow the column.');
+assert.match(body, /Math\.max\(220, Math\.min\(startPreviewH \+ dy, total - 210\)\)/,
+  'Both panes keep the floor their stylesheet declares, and the drag cannot overflow the column.');
 assert.doesNotMatch(body, /preview\.style\.flex = previewFlex/,
   'Flexing the grandchild .generate-preview is the bug that made the bar dead.');
 assert.match(body, /left\.style\.width = newW \+ 'px'/,
   'The horizontal splitter must keep resizing the left column.');
 
-// The clamp mirrors this CSS floor.
+// The clamp mirrors the stylesheet floors: 220px for the canvas row, 210px for the
+// input row. If either changes, the splitter constants have to change with it.
 assert.match(css, /\.creator-input-row\s*\{[\s\S]{0,200}?min-height:\s*210px/,
   'The input row minimum the clamp mirrors must still be 210px.');
+assert.match(css, /\.creator-canvas-row\s*\{[\s\S]{0,200}?min-height:\s*220px/,
+  'The canvas row minimum the clamp mirrors must still be 220px.');
 assert.match(css, /\.generate-center\s*\{[\s\S]{0,200}?flex-direction:\s*column/,
   'The column flex container is the assumption the splitter is built on.');
 

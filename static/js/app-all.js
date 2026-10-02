@@ -10538,7 +10538,10 @@ function startResize(e, direction) {
       // the column (blank space below); shrinking it clipped the preview instead of
       // handing the space to its neighbour.
       var total = startPreviewH + startBottomH;
-      var newTop = Math.max(180, Math.min(startPreviewH + dy, total - 200));
+      // The floors mirror the stylesheet: .creator-canvas-row is min-height 220px
+      // and .creator-input-row is min-height 210px, so neither pane can be
+      // squeezed below what the design system already guarantees.
+      var newTop = Math.max(220, Math.min(startPreviewH + dy, total - 210));
       var newBottom = total - newTop;
       if (canvasRow) {
         canvasRow.style.flex = '0 0 auto';

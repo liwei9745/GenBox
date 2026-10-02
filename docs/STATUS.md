@@ -49,10 +49,13 @@
   preview instead of giving the space back. It now behaves as a splitter: the two
   panes trade space (`newBottom = total - newTop`), each with an explicit
   `height`/`minHeight`/`maxHeight` so the CSS `flex: 0 0 clamp(...)` and
-  `min-height: 210px` cannot fight the drag, and both keep a floor (180px / 200px).
-- **VERIFIED / LOCAL UI:** Headless Chromium on the real page (drag dispatched on
-  `#resizeBottom`): baseline 643 + 250 = 893; +120px pull -> 693 + 200 = 893;
-  -240px pull -> 453 + 440 = 893. The sum never changes and the column never
+  `min-height: 210px` cannot fight the drag. The floors mirror the stylesheet:
+  220px for the canvas row and 210px for the input row.
+- **VERIFIED / LOCAL UI:** The repository's own harness
+  (`scripts/browser/measure-splitters.cjs`) drives a real browser at two sizes:
+  1920x1080 -> 643+250=893, +120px pull 683+210=893, -240px pull 443+450=893;
+  1280x800 -> 363+250=613, +120px pull 403+210=613, -240px pull 220+393=613 - the top
+  pane lands exactly on its 220px floor. The sum never changes and the column never
   overflows, which the old code failed on both counts.
 - **VERIFIED / LOCAL:** `node tests/test_generate_resize_splitter.mjs` passes and
   guards the wiring, the explicit height, the inline minimum, the clamp and the
