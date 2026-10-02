@@ -71,6 +71,18 @@
   \`elementFromPoint\` at the grip centre returns
   \`button#precisionCanvasResizeHandle\`. The measuring harness in the plugin
   repository (\`scripts/browser/measure-splitters.cjs\`) asserts exactly that.
+- **FIXED / LOCAL:** The vertical splitter bar was parked at
+  `bottom: -6px` inside `.generate-preview`, which scrolls
+  (`overflow: auto`). Its centre - and the grip mark drawn at `top: 5px` - were
+  therefore clipped out of the panel, and only a few pixels along its top edge stayed
+  clickable: `elementFromPoint()` at the bar's centre returned
+  `div#previewPanel`. The bar now sits at `bottom: 0`, inside the panel.
+- **VERIFIED / LOCAL UI:** A real pointer sequence (no synthetic events) at 1920x1080
+  and 1280x800 now grabs the bar and trades space: 643+250=893 -> 683+210=893 and
+  363+250=613 -> 403+210=613. The browser harness in the plugin repository asserts
+  this; it previously dispatched synthetic events, which bypassed the hit test and hid
+  the clipping. At 768x900 the bar is not laid out in a hit-testable place and the
+  harness reports a skip instead of a failure.
 - **BOUNDARY:** Not pushed. The changes sit in the local checkout as commits
   `247f8f8` and the splitter commit; publishing to `master` is the owner's call.
 ## 2026-09-18 v2.6.12 Release And WB-0 Readiness

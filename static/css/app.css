@@ -743,7 +743,10 @@ textarea {
 
 .resize-handle-bottom {
   position: absolute;
-  bottom: -6px;
+  /* Inside the panel: .generate-preview scrolls (overflow: auto), so a handle parked
+     at bottom: -6px had its centre - and the grip mark drawn at top: 5px - clipped
+     away, where only a few pixels of its top edge remained clickable. */
+  bottom: 0;
   left: 0;
   right: 0;
   height: 12px;
